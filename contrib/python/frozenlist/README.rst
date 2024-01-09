@@ -1,4 +1,3 @@
-==========
 frozenlist
 ==========
 
@@ -27,7 +26,7 @@ frozenlist
    :alt: Matrix Space — #aio-libs-space:matrix.org
 
 Introduction
-============
+------------
 
 ``frozenlist.FrozenList`` is a list-like structure which implements
 ``collections.abc.MutableSequence``. The list is *mutable* until ``FrozenList.freeze``
@@ -84,29 +83,29 @@ The library requires Python 3.8 or newer.
 
 
 Documentation
-=============
+-------------
 
 https://frozenlist.aio-libs.org
 
 Communication channels
-======================
+----------------------
 
 We have a *Matrix Space* `#aio-libs-space:matrix.org
 <https://matrix.to/#/%23aio-libs-space:matrix.org>`_ which is
 also accessible via Gitter.
 
 Requirements
-============
+------------
 
 - Python >= 3.8
 
 License
-=======
+-------
 
 ``frozenlist`` is offered under the Apache 2 license.
 
 Source code
-===========
+-----------
 
 The project is hosted on GitHub_
 

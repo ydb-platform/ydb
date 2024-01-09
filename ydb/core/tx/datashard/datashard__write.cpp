@@ -9,17 +9,20 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
 
-TDataShard::TTxWrite::TTxWrite(TDataShard* self, NEvents::TDataEvents::TEvWrite::TPtr ev, TInstant receivedAt, ui64 tieBreakerIndex, bool delayed)
-    : TBase(self, std::move(ev->TraceId))
+TDataShard::TTxWrite::TTxWrite(TDataShard* self,
+                                    NEvents::TDataEvents::TEvWrite::TPtr ev,
+                                    TInstant receivedAt,
+                                    ui64 tieBreakerIndex,
+                                    bool delayed,
+                                    NWilson::TSpan &&datashardTransactionSpan)
+    : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
     , TieBreakerIndex(tieBreakerIndex)
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
-    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, TxSpan.GetTraceId(), "ProposeTransaction", NWilson::EFlags::AUTO_END)
-{
-    ProposeTransactionSpan.Attribute("Shard", std::to_string(self->TabletID()));
-}
+    , DatashardTransactionSpan(std::move(datashardTransactionSpan))
+{ }
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite:: execute at tablet# " << Self->TabletID());
@@ -54,9 +57,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
                 ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
 
-                if (ProposeTransactionSpan) {
-                    ProposeTransactionSpan.EndOk();
-                }
+                DatashardTransactionSpan.EndOk();
                 ctx.Send(target, result.release(), 0, cookie);
 
                 return true;
@@ -71,17 +72,14 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return true;
             }
 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, ProposeTransactionSpan.GetTraceId());
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
             TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_ABORT_UNLESS(writeOp->GetWriteResult());
-
-                if (ProposeTransactionSpan) {
-                    ProposeTransactionSpan.EndError("TTxWrite:: unsuccessful operation parse");
-                }
+                op->OperationSpan.EndError("Unsuccessful operation parse");
                 ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release());
                 return true;
             }
@@ -158,10 +156,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
 
 void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
-
-    if (ProposeTransactionSpan) {
-        ProposeTransactionSpan.End();
-    }
 
     if (Op) {
         Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());

@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_gateway.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -410,6 +411,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
         }
 
+        if (!write.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, write.Pos())
+                .World(write.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(write.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
         return result;
     }
@@ -442,6 +457,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             updateColumns.emplace(item->GetName());
         }
         txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
+        if (!update.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, update.Pos())
+                .World(update.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(update.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, update.Pos(), ctx));
         return result;
     }
@@ -625,6 +654,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     {
         txRes.Ops.insert(node.Raw());
         bool result = ExploreTx(TExprBase(node.Ref().ChildPtr(0)), ctx, dataSink, txRes, tablesData, types);
+        Cerr << KqpExprToPrettyString(*node.Raw(), ctx) << Endl;
         txRes.AddResult(node);
         return result;
     }

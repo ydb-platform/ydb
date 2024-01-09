@@ -514,28 +514,39 @@ private:
             return status;
         }
 
-        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-        if (TString(node.ReturningStar()) == "true") {
-            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
-                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
-        }
-
-        auto selectType = GetReadTableRowType(
-            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
-            node.ReturningColumns(), sysColumnsEnabled
-        );
-        if (!selectType) {
-            return TStatus::Error;
-        }
-
-        if (!node.ReturningColumns().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "It is not allowed to use returning"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
+    }
+
+    template<typename KiCallable>
+    TMaybe<TStatus> DoHandleReturningList(TKiReturningList node, TExprContext& ctx) {
+        if (auto maybeWrite = node.Update().Maybe<KiCallable>()) {
+            auto write = maybeWrite.Cast();
+
+            bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+            auto selectType = GetReadTableRowType(
+                ctx, SessionCtx->Tables(), TString(write.DataSink().Cluster()), TString(write.Table().Value()),
+                write.ReturningColumns(), sysColumnsEnabled
+            );
+            if (!selectType) {
+                return TStatus::Error;
+            }
+
+            node.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(selectType));
+
+            return TStatus::Ok;
+        }
+        return {};
+    }
+
+    virtual TStatus HandleReturningList(TKiReturningList node, TExprContext& ctx) override {
+        if (auto status = DoHandleReturningList<TKiWriteTable>(node, ctx)) {
+            return *status;
+        }
+        if (auto status = DoHandleReturningList<TKiUpdateTable>(node, ctx)) {
+            return *status;
+        }
+        return TStatus::Error;
     }
 
     virtual TStatus HandleUpdateTable(TKiUpdateTable node, TExprContext& ctx) override {
@@ -602,20 +613,6 @@ private:
                     << "Can't set NULL or optional value to not null column: " << column->Name));
                 return TStatus::Error;
             }
-        }
-
-        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-        if (TString(node.ReturningStar()) == "true") {
-            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
-                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
-        }
-
-        auto selectType = GetReadTableRowType(
-            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
-            node.ReturningColumns(), sysColumnsEnabled
-        );
-        if (!selectType) {
-            return TStatus::Error;
         }
 
         if (!node.ReturningColumns().Empty()) {

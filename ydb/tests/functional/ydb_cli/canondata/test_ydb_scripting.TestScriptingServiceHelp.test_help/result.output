@@ -14,8 +14,8 @@ Options:
   --flame-graph [Path]     Path for statistics flame graph image, works only with full stats
   {-s|--script} [String]   Text of script to execute
   {-f|--file} PATH         [Required] Script file
-  --explain                Explain query (default: 0)
-  --show-response-metadata Show response metadata for ydb call (default: 0)
+  --explain                Explain query
+  --show-response-metadata Show response metadata for ydb call
   --format STRING          Output format. Available options:
                              pretty
                                Human readable output

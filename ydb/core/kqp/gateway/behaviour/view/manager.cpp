@@ -152,7 +152,7 @@ TViewManager::TYqlConclusionStatus TViewManager::DoPrepare(NKqpProto::TKqpScheme
                                                            const NMetadata::IClassBehaviour::TPtr& manager,
                                                            TInternalModificationContext& context) const {
     Y_UNUSED(manager);
-    
+
     try {
         CheckFeatureFlag(context);
         switch (context.GetActivityType()) {
@@ -176,9 +176,10 @@ TViewManager::TYqlConclusionStatus TViewManager::DoPrepare(NKqpProto::TKqpScheme
 }
 
 NThreading::TFuture<TYqlConclusionStatus> TViewManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
+                                                                        const ui32 nodeId,
                                                                         const NMetadata::IClassBehaviour::TPtr& manager,
                                                                         const TExternalModificationContext& context) const {
-    Y_UNUSED(manager);
+    Y_UNUSED(manager, nodeId);
 
     auto proposal = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     proposal->Record.SetDatabaseName(context.GetDatabase());

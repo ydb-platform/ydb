@@ -133,7 +133,7 @@ public:
       for (BucketT *P = getBuckets(), *E = getBucketsEnd(); P != E; ++P)
         P->getFirst() = EmptyKey;
     } else {
-      unsigned NumEntries = getNumEntries();
+      [[maybe_unused]] unsigned NumEntries = getNumEntries();
       for (BucketT *P = getBuckets(), *E = getBucketsEnd(); P != E; ++P) {
         if (!KeyInfoT::isEqual(P->getFirst(), EmptyKey)) {
           if (!KeyInfoT::isEqual(P->getFirst(), TombstoneKey)) {

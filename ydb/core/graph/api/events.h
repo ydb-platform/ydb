@@ -21,6 +21,10 @@ struct TEvGraph {
         TEvSendMetrics() = default;
 
         TEvSendMetrics(const TString& name, double value) {
+            AddMetric(name, value);
+        }
+
+        void AddMetric(const TString& name, double value) {
             NKikimrGraph::TMetric* metric = Record.AddMetrics();
             metric->SetName(name);
             metric->SetValue(value);

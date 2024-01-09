@@ -1,4 +1,0 @@
-RECURSE(
-    gen
-    tools
-)

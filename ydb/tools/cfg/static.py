@@ -114,11 +114,13 @@ class StaticConfigGenerator(object):
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
         if "tracing" in template:
+            tracing = template["tracing"]
             self.__tracing = (
-                template["tracing"]["host"],
-                template["tracing"]["port"],
-                template["tracing"]["root_ca"],
-                template["tracing"]["service_name"],
+                tracing["host"],
+                tracing["port"],
+                tracing["root_ca"],
+                tracing["service_name"],
+                tracing.get("auth_config")
             )
         else:
             self.__tracing = None
@@ -1121,12 +1123,36 @@ class StaticConfigGenerator(object):
     def __generate_tracing_txt(self):
         pb = config_pb2.TAppConfig()
         if self.__tracing:
+            tracing_pb = pb.TracingConfig
             (
-                pb.TracingConfig.Host,
-                pb.TracingConfig.Port,
-                pb.TracingConfig.RootCA,
-                pb.TracingConfig.ServiceName,
+                tracing_pb.Host,
+                tracing_pb.Port,
+                tracing_pb.RootCA,
+                tracing_pb.ServiceName,
+                auth_config
             ) = self.__tracing
+
+            if auth_config:
+                auth_pb = tracing_pb.AuthConfig
+                if "tvm" in auth_config:
+                    tvm = auth_config.get("tvm")
+                    tvm_pb = auth_pb.Tvm
+
+                    if "host" in tvm:
+                        tvm_pb.Host = tvm["host"]
+                    if "port" in tvm:
+                        tvm_pb.Port = tvm["port"]
+                    tvm_pb.SelfTvmId = tvm["self_tvm_id"]
+                    tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
+                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+
+                    if "plain_text_secret" in tvm:
+                        tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
+                    elif "secret_file" in tvm:
+                        tvm_pb.SecretFile = tvm["secret_file"]
+                    elif "secret_environment_variable" in tvm:
+                        tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+
         self.__proto_configs["tracing.txt"] = pb
 
     def __generate_sys_txt_advanced(self):

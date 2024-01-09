@@ -202,7 +202,7 @@ TEST_F(TYPathTokenizerTest, InvalidEscapeSequences)
 TEST(TYPathHelpersTest, DirNameAndBaseName)
 {
     auto toPair = [] (auto lhs, auto rhs) {
-        return std::make_pair(TString(lhs), TString(rhs));
+        return std::pair(TString(lhs), TString(rhs));
     };
 
     EXPECT_EQ(DirNameAndBaseName("//path/to/smth"), toPair("//path/to", "smth"));

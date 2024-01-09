@@ -47,15 +47,11 @@ private:
         MiniKQLPoolStats.Update();
 
         TVector<std::tuple<TString, double, ui32>> pools;
-        double cpuUsage = 0;
         for (const auto& pool : PoolCounters) {
             pools.emplace_back(pool.Name, pool.Usage, pool.Threads);
-            cpuUsage += pool.Usage;
         }
 
         ctx.Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(pools));
-
-        ctx.Send(NGraph::MakeGraphServiceId(), new NGraph::TEvGraph::TEvSendMetrics("cpu_usage", cpuUsage));
     }
 
 private:

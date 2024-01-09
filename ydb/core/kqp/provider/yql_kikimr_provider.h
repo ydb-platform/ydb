@@ -445,11 +445,14 @@ public:
         TKikimrConfiguration::TPtr config,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
         : Configuration(config)
         , TablesData(MakeIntrusive<TKikimrTablesData>())
         , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
-        , TxCtx(txCtx) {}
+        , TxCtx(txCtx)
+        , UserToken(userToken)
+    {}
 
     TKikimrSessionContext(const TKikimrSessionContext&) = delete;
     TKikimrSessionContext& operator=(const TKikimrSessionContext&) = delete;
@@ -518,6 +521,10 @@ public:
         TempTablesState = tempTablesState;
     }
 
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {
+        return UserToken;
+    }
+
 private:
     TString UserName;
     TString Cluster;
@@ -527,6 +534,7 @@ private:
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<TKikimrTransactionContextBase> TxCtx;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(

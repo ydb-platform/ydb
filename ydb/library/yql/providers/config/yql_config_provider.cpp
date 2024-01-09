@@ -900,6 +900,15 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "OptimizerFlags") {
+                for (auto& arg : args) {
+                    if (arg.empty()) {
+                        ctx.AddError(TIssue(pos, "Empty flags are not supported"));
+                        return false;
+                    }
+                    Types.OptimizerFlags.insert(to_lower(ToString(arg)));
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,11 +32,21 @@
                                         "Node Type": "TopSort-Sort",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "argument._yql_RowNumber0"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    }
+                                                ],
                                                 "Name": "Sort",
                                                 "SortBy": "row.depname"
                                             }
@@ -47,6 +62,11 @@
                                                         "Node Type": "Sort",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 4
+                                                                    }
+                                                                ],
                                                                 "Name": "Sort",
                                                                 "SortBy": "row.depname"
                                                             }
@@ -76,9 +96,15 @@
                                                                                             {
                                                                                                 "Aggregation": "{_yql_agg_0: SUM(item.salary,state._yql_agg_0)}",
                                                                                                 "GroupBy": "item.depname",
+                                                                                                "Inputs": [
+                                                                                                    {
+                                                                                                        "InternalOperatorId": 1
+                                                                                                    }
+                                                                                                ],
                                                                                                 "Name": "Aggregate"
                                                                                             },
                                                                                             {
+                                                                                                "Inputs": [],
                                                                                                 "Name": "TableFullScan",
                                                                                                 "ReadColumns": [
                                                                                                     "depname",

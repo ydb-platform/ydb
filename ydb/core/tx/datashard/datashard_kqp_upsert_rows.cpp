@@ -169,13 +169,16 @@ private:
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {
-    MKQL_ENSURE_S(callable.GetInputsCount() >= 4);
+    MKQL_ENSURE_S(callable.GetInputsCount() >= 3);
 
     auto tableNode = callable.GetInput(0);
     auto rowsNode = callable.GetInput(1);
     auto upsertColumnsNode = callable.GetInput(2);
-    auto isUpdateNode = callable.GetInput(3);
-    bool isUpdate = AS_VALUE(TDataLiteral, isUpdateNode)->AsValue().Get<bool>();
+    bool isUpdate = false;
+    if (callable.GetInputsCount() >= 4) {
+        auto isUpdateNode = callable.GetInput(3);
+        isUpdate = AS_VALUE(TDataLiteral, isUpdateNode)->AsValue().Get<bool>();
+    }
     auto tableId = NKqp::ParseTableId(tableNode);
     auto tableInfo = computeCtx.GetTable(tableId);
     MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());

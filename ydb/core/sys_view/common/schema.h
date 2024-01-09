@@ -401,12 +401,7 @@ struct Schema : NIceDb::Schema {
         struct Activity : Column<13, NScheme::NTypeIds::Bool> {};
         struct TierName : Column<14, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<
-            PathId,
-            TabletId,
-            PortionId,
-            ChunkIdx
-            >;
+        using TKey = TableKey<PathId, TabletId, PortionId, InternalColumnId, ChunkIdx>;
         using TColumns = TableColumns<
             PathId,
             Kind,

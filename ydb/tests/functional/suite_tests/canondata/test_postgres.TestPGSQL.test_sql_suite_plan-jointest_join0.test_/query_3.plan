@@ -12,9 +12,19 @@
                         "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 1
+                                    }
+                                ],
                                 "Name": "Aggregate"
                             },
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
@@ -30,12 +40,30 @@
                                         "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.hundred)"
                                             }
@@ -60,10 +88,16 @@
                                                                         "Node Type": "Filter-TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "InternalOperatorId": 1
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "Filter",
                                                                                 "Predicate": "Exist(item.thousand) And item.fivethous % 10 < 10"
                                                                             },
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "fivethous",
@@ -97,6 +131,7 @@
                                                         "Node Type": "TableFullScan",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Name": "TableFullScan",
                                                                 "ReadColumns": [
                                                                     "fivethous",

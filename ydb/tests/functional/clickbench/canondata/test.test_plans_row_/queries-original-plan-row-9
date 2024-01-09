@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 10
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 8
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -49,6 +59,14 @@
                                                                 "Node Type": "Union",
                                                                 "Operators": [
                                                                     {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 6
+                                                                            },
+                                                                            {
+                                                                                "ExternalPlanNodeId": 4
+                                                                            }
+                                                                        ],
                                                                         "Name": "Union"
                                                                     }
                                                                 ],
@@ -68,9 +86,15 @@
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_1: SUM(state._yql_agg_1,1),_yql_agg_3: SUM(item.AdvEngineID,state._yql_agg_3)}",
                                                                                         "GroupBy": "item.RegionID",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "AdvEngineID",
@@ -109,6 +133,11 @@
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_2: COUNT(item.UserID,state._yql_agg_2)}",
                                                                                         "GroupBy": "item.RegionID",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "ExternalPlanNodeId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     }
                                                                                 ],
@@ -129,9 +158,15 @@
                                                                                                     {
                                                                                                         "Aggregation": "state",
                                                                                                         "GroupBy": "",
+                                                                                                        "Inputs": [
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
+                                                                                                            }
+                                                                                                        ],
                                                                                                         "Name": "Aggregate"
                                                                                                     },
                                                                                                     {
+                                                                                                        "Inputs": [],
                                                                                                         "Name": "TableFullScan",
                                                                                                         "ReadColumns": [
                                                                                                             "AdvEngineID",

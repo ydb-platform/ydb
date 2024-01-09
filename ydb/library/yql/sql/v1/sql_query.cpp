@@ -82,7 +82,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
     if (Mode == NSQLTranslation::ESqlMode::SUBQUERY && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
         altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore6 &&
-        altCase != TRule_sql_stmt_core::kAltSqlStmtCore17)) {
+        altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
         Error() << humanStatementName << " statement is not supported in subqueries";
         return false;
     }
@@ -347,26 +347,32 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore16: {
+            // alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*
             Ctx.BodyPart();
-            auto node = DoStatement(core.GetAlt_sql_stmt_core16().GetRule_do_stmt1(), false);
-            if (!node) {
+            const auto& rule = core.GetAlt_sql_stmt_core16().GetRule_alter_external_table_stmt1();
+            TTableRef tr;
+            if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
                 return false;
             }
 
-            blocks.push_back(node);
+            TAlterTableParameters params;
+            params.TableType = ETableType::ExternalTable;
+            if (!AlterExternalTableAction(rule.GetRule_alter_external_table_action5(), params)) {
+                return false;
+            }
+
+            for (auto& block : rule.GetBlock6()) {
+                if (!AlterExternalTableAction(block.GetRule_alter_external_table_action2(), params)) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterTable(Ctx.Pos(), tr, params, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore17: {
             Ctx.BodyPart();
-            if (!DefineActionOrSubqueryStatement(core.GetAlt_sql_stmt_core17().GetRule_define_action_or_subquery_stmt1())) {
-                return false;
-            }
-
-            break;
-        }
-        case TRule_sql_stmt_core::kAltSqlStmtCore18: {
-            Ctx.BodyPart();
-            auto node = IfStatement(core.GetAlt_sql_stmt_core18().GetRule_if_stmt1());
+            auto node = DoStatement(core.GetAlt_sql_stmt_core17().GetRule_do_stmt1(), false);
             if (!node) {
                 return false;
             }
@@ -374,9 +380,17 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             blocks.push_back(node);
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore18: {
+            Ctx.BodyPart();
+            if (!DefineActionOrSubqueryStatement(core.GetAlt_sql_stmt_core18().GetRule_define_action_or_subquery_stmt1())) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_sql_stmt_core::kAltSqlStmtCore19: {
             Ctx.BodyPart();
-            auto node = ForStatement(core.GetAlt_sql_stmt_core19().GetRule_for_stmt1());
+            auto node = IfStatement(core.GetAlt_sql_stmt_core19().GetRule_if_stmt1());
             if (!node) {
                 return false;
             }
@@ -386,9 +400,19 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore20: {
             Ctx.BodyPart();
+            auto node = ForStatement(core.GetAlt_sql_stmt_core20().GetRule_for_stmt1());
+            if (!node) {
+                return false;
+            }
+
+            blocks.push_back(node);
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore21: {
+            Ctx.BodyPart();
             TSqlValues values(Ctx, Mode);
             TPosition pos;
-            auto source = values.Build(core.GetAlt_sql_stmt_core20().GetRule_values_stmt1(), pos, {}, TPosition());
+            auto source = values.Build(core.GetAlt_sql_stmt_core21().GetRule_values_stmt1(), pos, {}, TPosition());
             if (!source) {
                 return false;
             }
@@ -397,10 +421,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore21: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore22: {
             // create_user_stmt: CREATE USER role_name create_user_option?;
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core21().GetRule_create_user_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core22().GetRule_create_user_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -429,10 +453,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore22: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore23: {
             // alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core22().GetRule_alter_user_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core23().GetRule_alter_user_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -478,10 +502,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, stmt);
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore23: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore24: {
             // create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core23().GetRule_create_group_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core24().GetRule_create_group_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -520,10 +544,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateGroup(pos, service, cluster, roleName, roleParams, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore24: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore25: {
             // alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core24().GetRule_alter_group_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core25().GetRule_alter_group_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -581,10 +605,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, stmt);
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore25: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore26: {
             // drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core25().GetRule_drop_role_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core26().GetRule_drop_role_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -623,9 +647,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropRoles(pos, service, cluster, roles, isUser, missingOk, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore26: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore27: {
             // create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? name (TYPE type [WITH k=v,...]);
-            auto& node = core.GetAlt_sql_stmt_core26().GetRule_create_object_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core27().GetRule_create_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
@@ -656,9 +680,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), objectId, typeId, existingOk, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore27: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore28: {
             // alter_object_stmt: ALTER OBJECT name (TYPE type [SET k=v,...]);
-            auto& node = core.GetAlt_sql_stmt_core27().GetRule_alter_object_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core28().GetRule_alter_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
@@ -674,12 +698,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), std::set<TString>(), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore28: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore29: {
             // drop_object_stmt: DROP OBJECT (IF EXISTS)? name (TYPE type [WITH k=v,...]);
-            auto& node = core.GetAlt_sql_stmt_core28().GetRule_drop_object_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core29().GetRule_drop_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
@@ -709,9 +733,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), objectId, typeId, missingOk, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore29: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore30: {
             // create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE (IF NOT EXISTS)? name WITH (k=v,...);
-            auto& node = core.GetAlt_sql_stmt_core29().GetRule_create_external_data_source_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core30().GetRule_create_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref6().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref6().GetBlock1().GetRule_cluster_expr1(),
@@ -739,9 +763,37 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", existingOk, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore30: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore31: {
+            // alter_external_data_source_stmt: ALTER EXTERNAL DATA SOURCE object_ref alter_external_data_source_action (COMMA alter_external_data_source_action)*
+            Ctx.BodyPart();
+            const auto& node = core.GetAlt_sql_stmt_core31().GetRule_alter_external_data_source_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref5().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref5().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref5().GetRule_id_or_at2(), *this).second;
+            std::map<TString, TDeferredAtom> kv;
+            std::set<TString> toReset;
+            if (!ParseExternalDataSourceSettings(kv, toReset, node.GetRule_alter_external_data_source_action6())) {
+                return false;
+            }
+
+            for (const auto& action : node.GetBlock7()) {
+                if (!ParseExternalDataSourceSettings(kv, toReset, action.GetRule_alter_external_data_source_action2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, "EXTERNAL_DATA_SOURCE", std::move(kv), std::move(toReset), context));
+            break;
+        }
+        case TRule_sql_stmt_core::kAltSqlStmtCore32: {
             // drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? name;
-            auto& node = core.GetAlt_sql_stmt_core30().GetRule_drop_external_data_source_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core32().GetRule_drop_external_data_source_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref6().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref6().GetBlock1().GetRule_cluster_expr1(),
@@ -763,9 +815,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx.Pos(), BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId), "EXTERNAL_DATA_SOURCE", missingOk, {}, context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore31: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore33: {
             // create_replication_stmt: CREATE ASYNC REPLICATION
-            auto& node = core.GetAlt_sql_stmt_core31().GetRule_create_replication_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core33().GetRule_create_replication_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
@@ -793,9 +845,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx.Pos(), id, std::move(targets), std::move(settings), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore32: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore34: {
             // drop_replication_stmt: DROP ASYNC REPLICATION
-            auto& node = core.GetAlt_sql_stmt_core32().GetRule_drop_replication_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core34().GetRule_drop_replication_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 const auto& cluster = node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1();
@@ -808,10 +860,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx.Pos(), id, node.HasBlock5(), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore33: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore35: {
             Ctx.BodyPart();
             // create_topic_stmt: CREATE TOPIC topic1 (CONSUMER ...)? [WITH (opt1 = val1, ...]?
-            auto& rule = core.GetAlt_sql_stmt_core33().GetRule_create_topic_stmt1();
+            auto& rule = core.GetAlt_sql_stmt_core35().GetRule_create_topic_stmt1();
             TTopicRef tr;
             if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
                 return false;
@@ -840,11 +892,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildCreateTopic(Ctx.Pos(), tr, params, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore34: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore36: {
 //            alter_topic_stmt: ALTER TOPIC topic_ref alter_topic_action (COMMA alter_topic_action)*;
 
             Ctx.BodyPart();
-            auto& rule = core.GetAlt_sql_stmt_core34().GetRule_alter_topic_stmt1();
+            auto& rule = core.GetAlt_sql_stmt_core36().GetRule_alter_topic_stmt1();
             TTopicRef tr;
             if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
                 return false;
@@ -865,10 +917,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildAlterTopic(Ctx.Pos(), tr, params, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore35: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore37: {
             // drop_topic_stmt: DROP TOPIC
             Ctx.BodyPart();
-            const auto& rule = core.GetAlt_sql_stmt_core35().GetRule_drop_topic_stmt1();
+            const auto& rule = core.GetAlt_sql_stmt_core37().GetRule_drop_topic_stmt1();
 
             TTopicRef tr;
             if (!TopicRefImpl(rule.GetRule_topic_ref3(), tr)) {
@@ -877,10 +929,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildDropTopic(Ctx.Pos(), tr, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore36: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore38: {
             // GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core36().GetRule_grant_permissions_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core38().GetRule_grant_permissions_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -919,11 +971,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildGrantPermissions(pos, service, cluster, permissions, schemaPaths, roleNames, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore37:
+        case TRule_sql_stmt_core::kAltSqlStmtCore39:
         {
             // REVOKE (GRANT OPTION FOR)? permission_name_target ON an_id_schema (COMMA an_id_schema)* FROM role_name (COMMA role_name)*;
             Ctx.BodyPart();
-            auto& node = core.GetAlt_sql_stmt_core37().GetRule_revoke_permissions_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core39().GetRule_revoke_permissions_stmt1();
 
             Ctx.Token(node.GetToken1());
             const TPosition pos = Ctx.Pos();
@@ -962,10 +1014,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildRevokePermissions(pos, service, cluster, permissions, schemaPaths, roleNames, Ctx.Scoped));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore38:
+        case TRule_sql_stmt_core::kAltSqlStmtCore40:
         {
             // ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
-            auto& node = core.GetAlt_sql_stmt_core38().GetRule_alter_table_store_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core40().GetRule_alter_table_store_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
 
             if (node.GetRule_object_ref3().HasBlock1()) {
@@ -982,13 +1034,13 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), std::set<TString>(), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore39:
+        case TRule_sql_stmt_core::kAltSqlStmtCore41:
         {
             // create_object_stmt: UPSERT OBJECT name (TYPE type [WITH k=v,...]);
-            auto& node = core.GetAlt_sql_stmt_core39().GetRule_upsert_object_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core41().GetRule_upsert_object_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
@@ -1009,9 +1061,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore40: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore42: {
             // create_view_stmt: CREATE VIEW name WITH (k = v, ...) AS select_stmt;
-            auto& node = core.GetAlt_sql_stmt_core40().GetRule_create_view_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core42().GetRule_create_view_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
@@ -1037,9 +1089,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                             context));
             break;
         }
-        case TRule_sql_stmt_core::kAltSqlStmtCore41: {
+        case TRule_sql_stmt_core::kAltSqlStmtCore43: {
             // drop_view_stmt: DROP VIEW name;
-            auto& node = core.GetAlt_sql_stmt_core41().GetRule_drop_view_stmt1();
+            auto& node = core.GetAlt_sql_stmt_core43().GetRule_drop_view_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
             if (node.GetRule_object_ref3().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
@@ -1272,6 +1324,62 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
     case TRule_alter_table_action::ALT_NOT_SET:
         AltNotImplemented("alter_table_action", node);
+        return false;
+    }
+    return true;
+}
+
+bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action& node, TAlterTableParameters& params) {
+    if (params.RenameTo) {
+        // rename action is followed by some other actions
+        Error() << "RENAME TO can not be used together with another table action";
+        return false;
+    }
+
+    switch (node.Alt_case()) {
+    case TRule_alter_external_table_action::kAltAlterExternalTableAction1: {
+        // ADD COLUMN
+        const auto& addRule = node.GetAlt_alter_external_table_action1().GetRule_alter_table_add_column1();
+        if (!AlterTableAddColumn(addRule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_external_table_action::kAltAlterExternalTableAction2: {
+        // DROP COLUMN
+        const auto& dropRule = node.GetAlt_alter_external_table_action2().GetRule_alter_table_drop_column1();
+        if (!AlterTableDropColumn(dropRule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_external_table_action::kAltAlterExternalTableAction3: {
+        // SET (uncompat)
+        const auto& setRule = node.GetAlt_alter_external_table_action3().GetRule_alter_table_set_table_setting_uncompat1();
+        if (!AlterTableSetTableSetting(setRule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_external_table_action::kAltAlterExternalTableAction4: {
+        // SET (compat)
+        const auto& setRule = node.GetAlt_alter_external_table_action4().GetRule_alter_table_set_table_setting_compat1();
+        if (!AlterTableSetTableSetting(setRule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_external_table_action::kAltAlterExternalTableAction5: {
+        // RESET
+        const auto& setRule = node.GetAlt_alter_external_table_action5().GetRule_alter_table_reset_table_setting1();
+        if (!AlterTableResetTableSetting(setRule, params)) {
+            return false;
+        }
+        break;
+    }
+
+    case TRule_alter_external_table_action::ALT_NOT_SET:
+        AltNotImplemented("alter_external_table_action", node);
         return false;
     }
     return true;

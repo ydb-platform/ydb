@@ -266,7 +266,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"}
+                {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "ResetFeatures", "Type": "TCoAtomList"}
             ]
         },
         {

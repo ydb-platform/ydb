@@ -994,41 +994,44 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     void CheckSeekRowId(const TPartStore& part) {
         for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
             for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
-                TTouchEnv env;
-                TPartBtreeIndexIt bTree(&part, &env, { });
-                TPartIndexIt flat(&part, &env, { });
+                TTouchEnv bTreeEnv, flatEnv;
+                TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
+                TPartIndexIt flat(&part, &flatEnv, { });
 
                 // checking initial seek:
                 {
                     TString message = TStringBuilder() << "SeekRowId< " << rowId1;
-                    EReady bTreeReady = SeekRowId(bTree, env, rowId1, message);
-                    EReady flatReady = SeekRowId(flat, env, rowId1, message);
+                    EReady bTreeReady = SeekRowId(bTree, bTreeEnv, rowId1, message);
+                    EReady flatReady = SeekRowId(flat, flatEnv, rowId1, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId1 < part.Stat.Rows ? EReady::Data : EReady::Gone);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                    AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                 }
 
                 // checking repositioning:
                 {
                     TString message = TStringBuilder() << "SeekRowId " << rowId1 << " -> " << rowId2;
-                    EReady bTreeReady = SeekRowId(bTree, env, rowId2, message);
-                    EReady flatReady = SeekRowId(flat, env, rowId2, message);
+                    EReady bTreeReady = SeekRowId(bTree, bTreeEnv, rowId2, message);
+                    EReady flatReady = SeekRowId(flat, flatEnv, rowId2, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId2 < part.Stat.Rows ? EReady::Data : EReady::Gone);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                    AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                 }
             }
         }
     }
 
     void CheckSeekLast(const TPartStore& part) {
-        TTouchEnv env;
-        TPartBtreeIndexIt bTree(&part, &env, { });
-        TPartIndexIt flat(&part, &env, { });
+        TTouchEnv bTreeEnv, flatEnv;
+        TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
+        TPartIndexIt flat(&part, &flatEnv, { });
 
         TString message = TStringBuilder() << "SeekLast";
-        EReady bTreeReady = SeekLast(bTree, env, message);
-        EReady flatReady = SeekLast(flat, env, message);
+        EReady bTreeReady = SeekLast(bTree, bTreeEnv, message);
+        EReady flatReady = SeekLast(flat, flatEnv, message);
         UNIT_ASSERT_VALUES_EQUAL(bTreeReady, EReady::Data);
         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
@@ -1038,19 +1041,20 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                     TVector<TCell> key{TCell::Make(keyId / 7), TCell::Make(keyId % 7)};
 
                     while (true) {
-                        TTouchEnv env;
-                        TPartBtreeIndexIt bTree(&part, &env, { });
-                        TPartIndexIt flat(&part, &env, { });
+                        TTouchEnv bTreeEnv, flatEnv;
+                        TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
+                        TPartIndexIt flat(&part, &flatEnv, { });
 
                         TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << ">(" << seek << ") ";
                         for (auto c : key) {
                             message << c.AsValue<ui32>() << " ";
                         }
                         
-                        EReady bTreeReady = SeekKey(bTree, env, seek, reverse, key, keyDefaults, message);
-                        EReady flatReady = SeekKey(flat, env, seek, reverse, key, keyDefaults, message);
+                        EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, keyDefaults, message);
+                        EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, message);
                         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
                         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
 
                         if (!key) {
                             break;
@@ -1065,15 +1069,15 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     void CheckNextPrev(const TPartStore& part) {
         for (bool next : {true, false}) {
             for (TRowId rowId : xrange(part.Stat.Rows)) {
-                TTouchEnv env;
-                TPartBtreeIndexIt bTree(&part, &env, { });
-                TPartIndexIt flat(&part, &env, { });
+                TTouchEnv bTreeEnv, flatEnv;
+                TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
+                TPartIndexIt flat(&part, &flatEnv, { });
 
                 // checking initial seek:
                 {
                     TString message = TStringBuilder() << "CheckNext " << rowId;
-                    EReady bTreeReady = SeekRowId(bTree, env, rowId, message);
-                    EReady flatReady = SeekRowId(flat, env, rowId, message);
+                    EReady bTreeReady = SeekRowId(bTree, bTreeEnv, rowId, message);
+                    EReady flatReady = SeekRowId(flat, flatEnv, rowId, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId < part.Stat.Rows ? EReady::Data : EReady::Gone);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
                 }
@@ -1082,13 +1086,15 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                 while (true)
                 {
                     TString message = TStringBuilder() << "CheckNext " << rowId << " -> " << rowId;
-                    EReady bTreeReady = NextPrev(bTree, env, next, message);
-                    EReady flatReady = NextPrev(flat, env, next, message);
+                    EReady bTreeReady = NextPrev(bTree, bTreeEnv, next, message);
+                    EReady flatReady = NextPrev(flat, flatEnv, next, message);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
                     if (flatReady == EReady::Gone) {
                         break;
                     }
                 }
+
+                AssertTouchedTheSame(part, bTreeEnv, flatEnv, "CheckNextPrev");
             }
         }
     }

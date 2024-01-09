@@ -56,7 +56,7 @@ namespace NTable {
 
             // First page to precharge (contains row1)
             auto first = index->LookupRow(row1);
-            if (Y_UNLIKELY(!first || row1 >= Part->Stat.Rows /* hack for v2 format */ )) {
+            if (Y_UNLIKELY(!first)) {
                 return { true, true }; // already out of bounds, nothing to precharge
             }
 

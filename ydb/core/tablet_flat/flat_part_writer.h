@@ -43,7 +43,6 @@ namespace NTable {
             : Final(conf.Final)
             , CutIndexKeys(conf.CutIndexKeys)
             , WriteBTreeIndex(conf.WriteBTreeIndex)
-            , WriteLastFlatIndexKey(conf.WriteLastFlatIndexKey)
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
             , MaxLargeBlob(conf.MaxLargeBlob)
@@ -816,10 +815,8 @@ namespace NTable {
                     SaveSlice(lastRowId, TSerializedCellVec(Key));
 
                     if (Phase == 1) {
-                        if (WriteLastFlatIndexKey) {
-                            Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
-                            g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
-                        }
+                        Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
+                        g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
                         Y_ABORT_UNLESS(std::exchange(Phase, 2) == 1);
                         PrevPageLastKey.clear(); // new index will be started
                         PrevPageData = { };
@@ -964,7 +961,7 @@ namespace NTable {
                 auto &prevCell = PrevPageLastKey[it];
                 auto &cell = Key[it];
 
-                Y_ABORT_UNLESS(!cell.IsNull(), "Keys should be in ascending order");
+                Y_ABORT_UNLESS(!cell.IsNull(), "Keys should be in ascendic order");
 
                 size_t index;
                 for (index = 0; index < Min(prevCell.Size(), cell.Size()); index++) {
@@ -1027,7 +1024,6 @@ namespace NTable {
         const bool Final = false;
         const bool CutIndexKeys;
         const bool WriteBTreeIndex;
-        const bool WriteLastFlatIndexKey;
         const ui32 SmallEdge;
         const ui32 LargeEdge;
         const ui32 MaxLargeBlob;

@@ -49,7 +49,7 @@ public:
         return DataOrGone();
     }
 
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const *) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -59,7 +59,7 @@ public:
         return DataOrGone();
     }
 
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const *) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;

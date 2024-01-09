@@ -142,7 +142,7 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
             // Special treatment for an empty key
             switch (seek) {
@@ -154,6 +154,10 @@ public:
             }
         }
 
+        if (slice && !slice->HasSearchKey(key, *keyDefaults)) {
+            return Exhaust();
+        }
+
         return DoSeek<TSeekKey>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
     }
 
@@ -162,7 +166,7 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
             // Special treatment for an empty key
             switch (seek) {
@@ -172,6 +176,10 @@ public:
                 case ESeek::Upper:
                     return Seek(GetEndRowId());
             }
+        }
+
+        if (slice && !slice->HasSearchKey(key, *keyDefaults)) {
+            return Exhaust();
         }
 
         return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});

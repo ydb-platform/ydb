@@ -2,7 +2,6 @@
 
 #include "flat_table_part.h"
 #include "flat_part_screen.h"
-#include "util_fmt_desc.h"
 
 #include <util/generic/list.h>
 #include <util/generic/set.h>
@@ -67,6 +66,13 @@ namespace NTable {
                 const TBounds& bounds,
                 TArrayRef<const TCell> key,
                 const TKeyCellDefaults& keyDefaults) noexcept;
+
+        /**
+         * Missing search key cells are treated as +inf
+         */
+        bool HasSearchKey(
+                TArrayRef<const TCell> key,
+                const TKeyCellDefaults& keyDefaults) const noexcept;
     };
 
     /**

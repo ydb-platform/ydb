@@ -932,13 +932,6 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     void AssertEqual(const TPartBtreeIndexIt& bTree, EReady bTreeReady, const TPartIndexIt& flat, EReady flatReady, const TString& message) {
-        // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
-        if (flatReady == EReady::Gone && bTreeReady == EReady::Data && 
-                (bTree.GetRowId() == 0 || bTree.GetNextRowId() == bTree.GetEndRowId())) {
-            UNIT_ASSERT_C(bTree.IsValid(), message);
-            return;
-        }
-
         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, flatReady, message);
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
         if (flat.IsValid()) {
@@ -974,9 +967,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     EReady SeekKey(IIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (reverse) {
-                return iter.SeekReverse(seek, key, keyDefaults);
+                return iter.SeekReverse(seek, key, keyDefaults, nullptr); // TODO
             } else {
-                return iter.Seek(seek, key, keyDefaults);
+                return iter.Seek(seek, key, keyDefaults, nullptr); // TODO
             }
         }, env, message, failsAllowed);
     }

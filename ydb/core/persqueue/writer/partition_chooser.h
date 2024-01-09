@@ -48,6 +48,25 @@ struct TEvPartitionChooser {
 
 };
 
+class IPartitionChooser {
+public:
+    struct TPartitionInfo {
+        TPartitionInfo(ui32 partitionId, ui64 tabletId)
+            : PartitionId(partitionId)
+            , TabletId(tabletId) {}
+
+        ui32 PartitionId;
+        ui64 TabletId;
+    };
+
+    virtual ~IPartitionChooser() = default;
+
+    virtual const TPartitionInfo* GetPartition(const TString& sourceId) const = 0;
+    virtual const TPartitionInfo* GetPartition(ui32 partitionId) const = 0;
+};
+
+std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash = false);
+
 NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                                              NPersQueue::TTopicConverterPtr& fullConverter,

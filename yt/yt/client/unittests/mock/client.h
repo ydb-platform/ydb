@@ -65,7 +65,7 @@ public:
     MOCK_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
-        i64 offset,
+        std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullConsumerOptions& options), (override));
@@ -553,6 +553,7 @@ public:
 
     MOCK_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options), (override));
 
@@ -620,7 +621,7 @@ public:
     MOCK_METHOD(TFuture<void>, AlterQuery, (
         NQueryTrackerClient::TQueryId queryId, const TAlterQueryOptions& options), (override));
 
-    MOCK_METHOD(TFuture<TBundleConfigDescriptor>, GetBundleConfig, (
+    MOCK_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const TString& bundleName,
         const TGetBundleConfigOptions& options), (override));
 };

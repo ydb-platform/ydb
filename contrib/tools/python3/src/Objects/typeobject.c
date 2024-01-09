@@ -2399,21 +2399,21 @@ subtype_getweakref(PyObject *obj, void *context)
 
 static PyGetSetDef subtype_getsets_full[] = {
     {"__dict__", subtype_dict, subtype_setdict,
-     PyDoc_STR("dictionary for instance variables (if defined)")},
+     PyDoc_STR("dictionary for instance variables")},
     {"__weakref__", subtype_getweakref, NULL,
-     PyDoc_STR("list of weak references to the object (if defined)")},
+     PyDoc_STR("list of weak references to the object")},
     {0}
 };
 
 static PyGetSetDef subtype_getsets_dict_only[] = {
     {"__dict__", subtype_dict, subtype_setdict,
-     PyDoc_STR("dictionary for instance variables (if defined)")},
+     PyDoc_STR("dictionary for instance variables")},
     {0}
 };
 
 static PyGetSetDef subtype_getsets_weakref_only[] = {
     {"__weakref__", subtype_getweakref, NULL,
-     PyDoc_STR("list of weak references to the object (if defined)")},
+     PyDoc_STR("list of weak references to the object")},
     {0}
 };
 
@@ -3421,6 +3421,11 @@ PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec, PyObject *bases)
     type->tp_flags = spec->flags | Py_TPFLAGS_HEAPTYPE;
 
     /* Set the type name and qualname */
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+    __msan_unpoison_string(spec->name);
+#  endif
+#endif
     const char *s = strrchr(spec->name, '.');
     if (s == NULL) {
         s = spec->name;
@@ -3531,6 +3536,11 @@ PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec, PyObject *bases)
                 type->tp_doc = NULL;
                 continue;
             }
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+            __msan_unpoison_string(slot->pfunc);
+#  endif
+#endif
             size_t len = strlen(slot->pfunc)+1;
             char *tp_doc = PyObject_Malloc(len);
             if (tp_doc == NULL) {

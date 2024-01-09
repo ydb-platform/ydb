@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build zos && s390x
-// +build zos,s390x
 
 // This test is based on mmap_unix_test, but tweaked for z/OS, which does not support memadvise
 // or anonymous mmapping.

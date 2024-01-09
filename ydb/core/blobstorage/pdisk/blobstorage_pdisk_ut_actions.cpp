@@ -974,7 +974,7 @@ void TTestChunkLock::TestFSM(const TActorContext &ctx) {
         break;
     case 30:
         TEST_RESPONSE(EvChunkLockResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 5, 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 5,
             "Unexpected LockedChunks.size() == " << LastResponse.ChunkIds.size());
         VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
         ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
@@ -1029,13 +1029,13 @@ void TTestChunkUnlock::TestFSM(const TActorContext &ctx) {
         break;
     case 40:
         TEST_RESPONSE(EvChunkUnlockResult, OK);
-        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumLog, "Expected" << LockedNumLog << 
+        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumLog, "Expected" << LockedNumLog <<
             " unlocked chunks, got " << LastResponse.UnlockedChunks);
         ctx.Send(Yard, new NPDisk::TEvChunkUnlock(EFrom::PERSONAL_QUOTA, Owner));
         break;
     case 50:
         TEST_RESPONSE(EvChunkUnlockResult, OK);
-        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumPersonal, "Expected" << LockedNumPersonal << 
+        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumPersonal, "Expected" << LockedNumPersonal <<
             " unlocked chunks, got " << LastResponse.UnlockedChunks);
         ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 10));
         break;

@@ -111,7 +111,7 @@ class DefaultConfigExtension(ExtensionPoint):
         kikimr.control_plane.config_generator.yaml_config['metering_config'] = {
             'metering_file_path': 'metering.bill'}
 
-        solomon_endpoint = os.environ.get('SOLOMON_ENDPOINT')
+        solomon_endpoint = os.environ.get('SOLOMON_URL')
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
 
@@ -222,6 +222,25 @@ class StatsModeExtension(ExtensionPoint):
     def apply_to_kikimr(self, request, kikimr):
         kikimr.control_plane.fq_config['control_plane_storage']['stats_mode'] = self.stats_mode
         kikimr.control_plane.fq_config['control_plane_storage']['dump_raw_statistics'] = True
+
+
+class BindingsModeExtension(ExtensionPoint):
+
+    def __init__(self, bindings_mode, yq_version):
+        YQv2Extension.__init__.__annotations__ = {
+            'bindings_mode': str,
+            'yq_version': str,
+            'return': None
+        }
+        super().__init__()
+        self.bindings_mode = bindings_mode
+        self.yq_version = yq_version
+
+    def is_applicable(self, request):
+        return self.yq_version == 'v2' and self.bindings_mode != ''
+
+    def apply_to_kikimr(self, request, kikimr):
+        kikimr.compute_plane.config_generator.yaml_config["table_service_config"]["bindings_mode"] = self.bindings_mode
 
 
 @contextmanager

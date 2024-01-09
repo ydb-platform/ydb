@@ -4,9 +4,12 @@
 #include "executor_thread.h"
 #include "mon_stats.h"
 #include "scheduler_queue.h"
+#include <ydb/library/actors/util/activation_queue.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
+
+//#define RING_ACTIVATION_QUEUE 
 
 namespace NActors {
     class TActorSystem;
@@ -43,12 +46,19 @@ namespace NActors {
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
+
+#ifdef RING_ACTIVATION_QUEUE
+        using TActivationQueue = TRingActivationQueue;
+#else
+        using TActivationQueue = TUnorderedCache<ui32, 512, 4>;
+#endif
+
         const i16 PoolThreads;
         TIntrusivePtr<TAffinity> ThreadsAffinity;
         TAtomic Semaphore = 0;
-        TUnorderedCache<ui32, 512, 4> Activations;
+        TActivationQueue Activations;
         TAtomic ActivationsRevolvingCounter = 0;
-        volatile bool StopFlag = false;
+        std::atomic_bool StopFlag = false;
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);
         ~TExecutorPoolBase();

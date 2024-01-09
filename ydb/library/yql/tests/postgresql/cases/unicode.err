@@ -1,0 +1,125 @@
+<sql-statement>
+SELECT U&'\0061\0308bc' <> U&'\00E4bc' COLLATE "C" AS sanity_check;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:25: Error: alternative is not implemented yet : 365
+    	SELECT U&'\0061\0308bc' <> U&'\00E4bc' COLLATE "C" AS sanity_check;
+	                        ^
+<sql-statement>
+SELECT normalize('');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT normalize('');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT normalize('');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc normalize with given argument types: (unknown)
+            	SELECT normalize('');
+	       ^
+<sql-statement>
+SELECT normalize(U&'\0061\0308\24D1c') = U&'\00E4\24D1c' COLLATE "C" AS test_default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:40: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\0061\0308\24D1c') = U&'\00E4\24D1c' COLLATE "C" AS test_default;
+	                                       ^
+<sql-statement>
+SELECT normalize(U&'\0061\0308\24D1c', NFC) = U&'\00E4\24D1c' COLLATE "C" AS test_nfc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:45: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\0061\0308\24D1c', NFC) = U&'\00E4\24D1c' COLLATE "C" AS test_nfc;
+	                                            ^
+<sql-statement>
+SELECT normalize(U&'\00E4bc', NFC) = U&'\00E4bc' COLLATE "C" AS test_nfc_idem;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:36: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\00E4bc', NFC) = U&'\00E4bc' COLLATE "C" AS test_nfc_idem;
+	                                   ^
+<sql-statement>
+SELECT normalize(U&'\00E4\24D1c', NFD) = U&'\0061\0308\24D1c' COLLATE "C" AS test_nfd;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:40: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\00E4\24D1c', NFD) = U&'\0061\0308\24D1c' COLLATE "C" AS test_nfd;
+	                                       ^
+<sql-statement>
+SELECT normalize(U&'\0061\0308\24D1c', NFKC) = U&'\00E4bc' COLLATE "C" AS test_nfkc;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:46: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\0061\0308\24D1c', NFKC) = U&'\00E4bc' COLLATE "C" AS test_nfkc;
+	                                             ^
+<sql-statement>
+SELECT normalize(U&'\00E4\24D1c', NFKD) = U&'\0061\0308bc' COLLATE "C" AS test_nfkd;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: alternative is not implemented yet : 365
+    	SELECT normalize(U&'\00E4\24D1c', NFKD) = U&'\0061\0308bc' COLLATE "C" AS test_nfkd;
+	                                        ^
+<sql-statement>
+SELECT "normalize"('abc', 'def');  -- run-time error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT "normalize"('abc', 'def');  -- run-time error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid normalization form: def
+
+        	SELECT "normalize"('abc', 'def');  -- run-time error
+	^
+<sql-statement>
+SELECT U&'\00E4\24D1c' IS NORMALIZED AS test_default;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT U&'\00E4\24D1c' IS NORMALIZED AS test_default;
+	^
+        -stdin-:<main>:1:24: Error: At function: PgCall
+        	SELECT U&'\00E4\24D1c' IS NORMALIZED AS test_default;
+	                       ^
+            -stdin-:<main>:1:24: Error: Unable to find an overload for proc is_normalized with given argument types: (unknown)
+            	SELECT U&'\00E4\24D1c' IS NORMALIZED AS test_default;
+	                       ^
+<sql-statement>
+SELECT U&'\00E4\24D1c' IS NFC NORMALIZED AS test_nfc;
+</sql-statement>
+<sql-statement>
+SELECT num, val,
+    val IS NFC NORMALIZED AS NFC,
+    val IS NFD NORMALIZED AS NFD,
+    val IS NFKC NORMALIZED AS NFKC,
+    val IS NFKD NORMALIZED AS NFKD
+FROM
+  (VALUES (1, U&'\00E4bc'),
+          (2, U&'\0061\0308bc'),
+          (3, U&'\00E4\24D1c'),
+          (4, U&'\0061\0308\24D1c'),
+          (5, '')) vals (num, val)
+ORDER BY num;
+</sql-statement>
+<sql-statement>
+SELECT is_normalized('abc', 'def');  -- run-time error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT is_normalized('abc', 'def');  -- run-time error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid normalization form: def
+
+        	SELECT is_normalized('abc', 'def');  -- run-time error
+	^

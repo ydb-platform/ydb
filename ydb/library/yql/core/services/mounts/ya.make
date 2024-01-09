@@ -19,6 +19,7 @@ RESOURCE(
     ydb/library/yql/mount/lib/yql/id.yql /lib/yql/id.yql
     ydb/library/yql/mount/lib/yql/sqr.yql /lib/yql/sqr.yql
     ydb/library/yql/mount/lib/yql/core.yql /lib/yql/core.yql
+    ydb/library/yql/mount/lib/yql/walk_folders.yql /lib/yql/walk_folders.yql
 )
 
 END()

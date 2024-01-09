@@ -5,6 +5,8 @@
 #include <ydb/library/yaml_config/validator/validator_builder.h>
 #include <ydb/library/yaml_config/validator/validator.h>
 
+namespace NKikimr {
+
 using namespace NYamlConfig::NValidator;
 using TIssue = TValidationResult::TIssue;
 
@@ -307,3 +309,5 @@ Y_UNIT_TEST_SUITE(Validator) {
             {"/", "Node value must be one of the following: a, b, c. (it was \"d\")"}));
     }
 }
+
+} // namespace NKikimr

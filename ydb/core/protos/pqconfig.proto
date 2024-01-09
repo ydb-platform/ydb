@@ -809,6 +809,8 @@ message TUserInfo {
     optional string Session = 4;
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
+    optional uint64 PartitionSessionId = 7;
+
 }
 
 message TPartitionClientInfo {
@@ -1010,23 +1012,6 @@ message TTransaction {
 };
 
 message TTabletTxInfo {
-    //
-    // использовать RangeRead. может венутьнеполный список
-    //
-    repeated uint64 TxIds = 1;
-
-    //
-    // оставить
-    //
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
-
-    //
-    // держать в памяти
-    //
-    optional uint64 ActiveTxId = 4;
-    //
-    // выкинуть
-    //
-    optional uint64 ReadSetSeqNo = 5 [ default = 1 ];
 }

@@ -69,6 +69,8 @@ struct TSettings {
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
+    static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
+    static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
     TControlWrapper BlobWriteGrouppingEnabled;
@@ -117,6 +119,7 @@ class TColumnShard
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
+    friend class TTxMonitoring;
 
     friend class NOlap::TCleanupColumnEngineChanges;
     friend class NOlap::TTTLColumnEngineChanges;
@@ -170,7 +173,7 @@ class TColumnShard
     void OnDetach(const TActorContext& ctx) override;
     //void OnTabletStop(TEvTablet::TEvTabletStop::TPtr& ev, const TActorContext& ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
-    //bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 
     void DefaultSignalTabletActive(const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -344,10 +347,10 @@ private:
             return TGuard(*this);
         }
 
-        TGuard FinishWrite(const ui64 dataSize) {
+        TGuard FinishWrite(const ui64 dataSize, const ui32 writesCount = 1) {
             Y_ABORT_UNLESS(WritesInFlight > 0);
             Y_ABORT_UNLESS(WritesSizeInFlight >= dataSize);
-            --WritesInFlight;
+            WritesInFlight -= writesCount;
             WritesSizeInFlight -= dataSize;
             return TGuard(*this);
         }
@@ -388,13 +391,14 @@ private:
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
-    TDuration ActivationPeriod = TDuration::Seconds(60);
+    const TDuration PeriodicWakeupActivationPeriod;
     TDuration FailActivationDelay = TDuration::Seconds(1);
-    TDuration StatsReportInterval = TDuration::Seconds(10);
+    const TDuration StatsReportInterval;
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
     TActorId ResourceSubscribeActor;
+    TActorId BufferizationWriteActorId;
     TActorId StatsReportPipe;
 
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -480,7 +484,16 @@ private:
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
+
     void SendPeriodicStats();
+    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats);
+    void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
+
+    static TDuration GetControllerPeriodicWakeupActivationPeriod();
+    static TDuration GetControllerStatsReportInterval();
+    
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;

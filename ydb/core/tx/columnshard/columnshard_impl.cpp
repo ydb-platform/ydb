@@ -84,11 +84,15 @@ bool ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
 
     for (const NKikimrSchemeOp::TOlapColumnDescription& column : schema.GetColumns()) {
         TString name = column.GetName();
-        keyColumns.erase(name);
-
+        /*
+        if (column.GetNotNull() && keyColumns.contains(name)) {
+            return false;
+        }
+        */
         if (name == firstKeyColumn && !supportedTypes.contains(column.GetTypeId())) {
             return false;
         }
+        keyColumns.erase(name);
     }
 
     if (!keyColumns.empty()) {
@@ -161,6 +165,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(std::make_unique<TTxController>(*this))
+    , PeriodicWakeupActivationPeriod(GetControllerPeriodicWakeupActivationPeriod())
+    , StatsReportInterval(GetControllerStatsReportInterval())
     , StoragesManager(std::make_shared<TStoragesManager>(*this))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager, info->TabletID)
@@ -515,6 +521,8 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     TTableInfo::TTableVersionInfo tableVerProto;
     tableVerProto.SetPathId(pathId);
 
+    // check schema changed
+
     if (tableProto.HasSchemaPreset()) {
         Y_ABORT_UNLESS(!tableProto.HasSchema(), "Tables has either schema or preset");
 
@@ -524,7 +532,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         tableVerProto.SetSchemaPresetId(preset.GetId());
 
         if (TablesManager.RegisterSchemaPreset(preset, db)) {
-            TablesManager.AddPresetVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
+            TablesManager.AddSchemaVersion(tableProto.GetSchemaPreset().GetId(), version, tableProto.GetSchemaPreset().GetSchema(), db);
         }
     } else {
         Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
@@ -567,7 +575,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     TTableInfo::TTableVersionInfo tableVerProto;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
-        TablesManager.AddPresetVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);
+        TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db);
     } else if (alterProto.HasSchema()) {
         *tableVerProto.MutableSchema() = alterProto.GetSchema();
     }
@@ -626,7 +634,7 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
         if (!TablesManager.HasPreset(presetProto.GetId())) {
             continue; // we don't update presets that we don't use
         }
-        TablesManager.AddPresetVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
+        TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
 }
 
@@ -674,7 +682,6 @@ protected:
     virtual bool DoExecute() override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         {
-            auto guard = TxEvent->PutResult->StartCpuGuard();
             NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
             Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
             if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
@@ -766,6 +773,10 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 }
 
 void TColumnShard::SetupIndexation() {
+    if (!AppDataVerified().ColumnShardConfig.GetIndexationEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "disabled");
+        return;
+    }
     BackgroundController.CheckDeadlinesIndexation();
     if (BackgroundController.GetIndexingActiveCount()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")
@@ -812,6 +823,10 @@ void TColumnShard::SetupIndexation() {
 }
 
 void TColumnShard::SetupCompaction() {
+    if (!AppDataVerified().ColumnShardConfig.GetCompactionEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
+        return;
+    }
     CSCounters.OnSetupCompaction();
 
     BackgroundController.CheckDeadlines();
@@ -839,6 +854,10 @@ void TColumnShard::SetupCompaction() {
 }
 
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, const bool force) {
+    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
+        return false;
+    }
     CSCounters.OnSetupTtl();
     if (BackgroundController.IsTtlActive()) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");

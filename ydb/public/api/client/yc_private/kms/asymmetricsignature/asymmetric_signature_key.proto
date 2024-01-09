@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.kms.v1.asymmetricsignature;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms/asymmetricsignature;kms";
+option java_outer_classname = "PASK";
+
+enum AsymmetricSignatureAlgorithm {
+  ASYMMETRIC_SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+  RSA_2048_SIGN_PSS_SHA_256 = 1;
+  RSA_2048_SIGN_PSS_SHA_384 = 2;
+  RSA_2048_SIGN_PSS_SHA_512 = 3;
+  RSA_3072_SIGN_PSS_SHA_256 = 4;
+  RSA_3072_SIGN_PSS_SHA_384 = 5;
+  RSA_3072_SIGN_PSS_SHA_512 = 6;
+  RSA_4096_SIGN_PSS_SHA_256 = 7;
+  RSA_4096_SIGN_PSS_SHA_384 = 8;
+  RSA_4096_SIGN_PSS_SHA_512 = 9;
+  ECDSA_NIST_P256_SHA_256 = 10;
+  ECDSA_NIST_P384_SHA_384 = 11;
+  ECDSA_NIST_P521_SHA_512 = 12;
+  ECDSA_SECP256_K1_SHA_256 = 13;
+
+  // Leaving space for new algorithms
+  // Some algorithms are commented out because HSM does not support it yet
+//  RSA_2048_SIGN_PSS_SHA_256_HSM = 65;
+//  RSA_2048_SIGN_PSS_SHA_384_HSM = 66;
+//  RSA_2048_SIGN_PSS_SHA_512_HSM = 67;
+//  RSA_3072_SIGN_PSS_SHA_256_HSM = 68;
+//  RSA_3072_SIGN_PSS_SHA_384_HSM = 69;
+//  RSA_3072_SIGN_PSS_SHA_512_HSM = 70;
+//  RSA_4096_SIGN_PSS_SHA_256_HSM = 71;
+//  RSA_4096_SIGN_PSS_SHA_384_HSM = 72;
+//  RSA_4096_SIGN_PSS_SHA_512_HSM = 73;
+  ECDSA_NIST_P256_SHA_256_HSM = 74;
+  ECDSA_NIST_P384_SHA_384_HSM = 75;
+//  ECDSA_NIST_P521_SHA_512_HSM = 76;
+//  ECDSA_SECP256_K1_SHA_256_HSM = 77;
+}
+
+message AsymmetricSignatureKey {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    INACTIVE = 3;
+    DELETED = 4;
+  }
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+  Status status = 7;
+  AsymmetricSignatureAlgorithm signature_algorithm = 8;
+  bool deletion_protection = 9;
+}

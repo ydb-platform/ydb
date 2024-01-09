@@ -848,9 +848,9 @@ TEST_W(TSchedulerTest, FiberTiming)
 
     CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(0), TDuration::MilliSeconds(100));
     Sleep(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
     TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
 }
 
 TEST_W(TSchedulerTest, CancelDelayedFuture)
@@ -1607,10 +1607,10 @@ INSTANTIATE_TEST_SUITE_P(
     Test,
     TFairShareSchedulerTest,
     ::testing::Values(
-        std::make_tuple(1, 5, 1, FSWorkTime),
-        std::make_tuple(1, 7, 3, FSWorkTime),
-        std::make_tuple(5, 7, 1, FSWorkTime),
-        std::make_tuple(5, 7, 3, FSWorkTime)
+        std::tuple(1, 5, 1, FSWorkTime),
+        std::tuple(1, 7, 3, FSWorkTime),
+        std::tuple(5, 7, 1, FSWorkTime),
+        std::tuple(5, 7, 3, FSWorkTime)
         ));
 
 ////////////////////////////////////////////////////////////////////////////////

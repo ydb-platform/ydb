@@ -1,0 +1,36 @@
+#library
+(
+(let AnyNodeDiveHandler
+    (lambda 
+        '(nodes state attrList level)
+        '((Map (ListExtract nodes 'Path) (lambda '(path) '(path attrList))) state)
+    )
+)
+
+(let AttrListType (ListType (DataType 'String)))
+
+(let YtFolderNodeType
+    (StructType '('"Attributes" (DataType 'Yson)) '('"Path" (DataType 'String)) '('"Type" (DataType 'String)))
+)
+
+(let TraverseLevelType (DataType 'Int32))
+
+(let MakePrePostHandlersType
+    (lambda '(stateType) 
+        (CallableType '() '(stateType) '((ListType YtFolderNodeType)) 
+        '(stateType) '(TraverseLevelType))
+    )
+)
+
+(let MakeResolveDiveHandlersType
+    (lambda '(stateType) 
+        (CallableType '() '((TupleType (ListType (TupleType (DataType 'String) AttrListType)) stateType)) 
+        '((ListType YtFolderNodeType)) '(stateType) '(AttrListType) '(TraverseLevelType))
+    )
+)
+
+(export AnyNodeDiveHandler)
+(export YtFolderNodeType)
+(export MakePrePostHandlersType)
+(export MakeResolveDiveHandlersType)
+)

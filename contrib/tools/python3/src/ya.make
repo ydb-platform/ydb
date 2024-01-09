@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.11.6)
+VERSION(3.11.7)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.11.7.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -128,7 +128,6 @@ SRCS(
     Python/formatter_unicode.c
     Python/frame.c
     Python/frozen.c
-    Python/frozenmain.c
     Python/future.c
     Python/getargs.c
     Python/getcompiler.c
@@ -171,8 +170,6 @@ SRCS(
 IF (OS_WINDOWS)
     SRCS(
         PC/WinMain.c
-        PC/dl_nt.c
-        PC/frozen_dllmain.c
         PC/invalid_parameter_handler.c
         PC/msvcrtmodule.c
         PC/winreg.c

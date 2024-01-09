@@ -32,7 +32,7 @@ class BOOST_SYMBOL_VISIBLE bad_any_cast :
 #endif
 {
 public:
-    const char * what() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
+    const char * what() const BOOST_NOEXCEPT_OR_NOTHROW override
     {
         return "boost::bad_any_cast: "
                "failed conversion using boost::any_cast";

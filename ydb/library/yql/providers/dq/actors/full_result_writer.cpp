@@ -95,6 +95,10 @@ private:
         }
         record.Data = std::move(request);
         if (record.Data.GetFinish()) {
+            ui64 reqSize = record.Data.GetData().ByteSizeLong() + record.Payload.size();
+            if (reqSize != 0) {
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSUPPORTED, TIssue("Non empty final write " + std::to_string(record.Data.ByteSizeLong()) + " " + std::to_string(record.Payload.size())) .SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR)));
+            }
             Finish();
         } else {
             Continue(std::move(record));

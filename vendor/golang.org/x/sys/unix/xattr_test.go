@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build darwin || freebsd || linux || netbsd
-// +build darwin freebsd linux netbsd
 
 package unix_test
 

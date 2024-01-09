@@ -89,6 +89,10 @@ static TMaybe<TPartitionKeyRange> GetPartitionKeyRange(const NKikimrPQ::TPQTable
     return TPartitionKeyRange::Parse(proto.GetKeyRange());
 }
 
+static bool IsDirectReadCmd(const auto& cmd) {
+    return cmd.GetDirectReadId() != 0;
+}
+
 /******************************************************* ReadProxy *********************************************************/
 //megaqc - remove it when LB will be ready
 class TReadProxy : public TActorBootstrapped<TReadProxy> {
@@ -97,28 +101,35 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
-    TReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request)
-    : Sender(sender)
-    , Tablet(tablet)
-    , Request(request)
-    , Response(new TEvPersQueue::TEvResponse)
+    TReadProxy(const TActorId& sender, const TActorId& tablet, ui64 tabletGeneration,
+               const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
+        : Sender(sender)
+        , Tablet(tablet)
+        , TabletGeneration(tabletGeneration)
+        , Request(request)
+        , Response(new TEvPersQueue::TEvResponse)
+        , DirectReadKey(directReadKey)
     {
         Y_ABORT_UNLESS(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
         Y_ABORT_UNLESS(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
         Y_ABORT_UNLESS(!Response->Record.HasPartitionResponse());
+        if (!directReadKey.SessionId.Empty()) {
+            DirectReadKey.ReadId = Request.GetPartitionRequest().GetCmdRead().GetDirectReadId();
+        }
     }
 
-    void Bootstrap(const TActorContext&)
+    void Bootstrap(const TActorContext& ctx)
     {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read proxy: bootstrap for direct read id: " << DirectReadKey.ReadId);
         Become(&TThis::StateFunc);
     }
 
 private:
-
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
         Y_ABORT_UNLESS(Response);
         const auto& record = ev->Get()->Record;
+
         if (!record.HasPartitionResponse() || !record.GetPartitionResponse().HasCmdReadResult() ||
             record.GetStatus() != NMsgBusProxy::MSTATUS_OK || record.GetErrorCode() != NPersQueue::NErrorCode::OK ||
             record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
@@ -127,43 +138,47 @@ private:
             Die(ctx);
             return;
         }
-
-
         Y_ABORT_UNLESS(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
-
-        const auto& res = record.GetPartitionResponse().GetCmdReadResult();
-
-        Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-        Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
-
-        Y_ABORT_UNLESS(res.ResultSize() > 0);
+        const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
+        auto isDirectRead = IsDirectReadCmd(Request.GetPartitionRequest().GetCmdRead());
+        if (isDirectRead) {
+            if (!PreparedResponse) {
+                PreparedResponse = std::make_shared<NKikimrClient::TResponse>();
+            }
+        }
+        
+        auto& responseRecord = isDirectRead ? *PreparedResponse : Response->Record;
+        responseRecord.SetStatus(NMsgBusProxy::MSTATUS_OK);
+        responseRecord.SetErrorCode(NPersQueue::NErrorCode::OK);        
+        
+        Y_ABORT_UNLESS(readResult.ResultSize() > 0);
         bool isStart = false;
-        if (!Response->Record.HasPartitionResponse()) {
-            Y_ABORT_UNLESS(!res.GetResult(0).HasPartNo() || res.GetResult(0).GetPartNo() == 0); //starts from begin of record
-            auto partResp = Response->Record.MutablePartitionResponse();
+        if (!responseRecord.HasPartitionResponse()) {
+            Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
+            auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
-            readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + res.GetBlobsFromDisk());
-            readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + res.GetBlobsFromCache());
+            readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());
+            readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
             isStart = true;
         }
         ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
-                                    ? (isStart ? res.GetReadFromTimestampMs()
-                                                : Response->Record.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
+                                    ? (isStart ? readResult.GetReadFromTimestampMs()
+                                                : responseRecord.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
                                     : 0;
 
         if (record.GetPartitionResponse().HasCookie())
-            Response->Record.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
+            responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
 
-        auto partResp = Response->Record.MutablePartitionResponse()->MutableCmdReadResult();
+        auto partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
 
-        partResp->SetMaxOffset(res.GetMaxOffset());
-        partResp->SetSizeLag(res.GetSizeLag());
-        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + res.GetWaitQuotaTimeMs());
+        partResp->SetMaxOffset(readResult.GetMaxOffset());
+        partResp->SetSizeLag(readResult.GetSizeLag());
+        partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + readResult.GetWaitQuotaTimeMs());
 
-        partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), res.GetRealReadOffset()));
+        partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), readResult.GetRealReadOffset()));
 
-        for (ui32 i = 0; i < res.ResultSize(); ++i) {
-            bool isNewMsg = !res.GetResult(i).HasPartNo() || res.GetResult(i).GetPartNo() == 0;
+        for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+            bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
             if (!isStart) {
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
                 auto& back = partResp->GetResult(partResp->ResultSize() - 1);
@@ -176,25 +191,26 @@ private:
             }
 
             if (isNewMsg) {
-                if (!isStart && res.GetResult(i).HasTotalParts() && res.GetResult(i).GetTotalParts() + i > res.ResultSize()) //last blob is not full
+                if (!isStart && readResult.GetResult(i).HasTotalParts() 
+                             && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
-                partResp->AddResult()->CopyFrom(res.GetResult(i));
+                partResp->AddResult()->CopyFrom(readResult.GetResult(i));
                 isStart = false;
             } else { //glue to last res
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
-                if (rr->GetSeqNo() != res.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != res.GetResult(i).GetPartNo()) {
+                if (rr->GetSeqNo() != readResult.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != readResult.GetResult(i).GetPartNo()) {
                     LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Handle TEvRead tablet: " << Tablet
                                     << " last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
-                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo()
+                                    << readResult.GetResult(i).GetSeqNo() << ", " << readResult.GetResult(i).GetPartNo()
                                     << " full request(now): " << Request);
                 }
-                Y_ABORT_UNLESS(rr->GetSeqNo() == res.GetResult(i).GetSeqNo());
-                (*rr->MutableData()) += res.GetResult(i).GetData();
-                rr->SetPartitionKey(res.GetResult(i).GetPartitionKey());
-                rr->SetExplicitHash(res.GetResult(i).GetExplicitHash());
-                rr->SetPartNo(res.GetResult(i).GetPartNo());
-                rr->SetUncompressedSize(rr->GetUncompressedSize() + res.GetResult(i).GetUncompressedSize());
-                if (res.GetResult(i).GetPartNo() + 1 == res.GetResult(i).GetTotalParts()) {
+                Y_ABORT_UNLESS(rr->GetSeqNo() == readResult.GetResult(i).GetSeqNo());
+                (*rr->MutableData()) += readResult.GetResult(i).GetData();
+                rr->SetPartitionKey(readResult.GetResult(i).GetPartitionKey());
+                rr->SetExplicitHash(readResult.GetResult(i).GetExplicitHash());
+                rr->SetPartNo(readResult.GetResult(i).GetPartNo());
+                rr->SetUncompressedSize(rr->GetUncompressedSize() + readResult.GetResult(i).GetUncompressedSize());
+                if (readResult.GetResult(i).GetPartNo() + 1 == readResult.GetResult(i).GetTotalParts()) {
                     Y_ABORT_UNLESS((ui32)rr->GetTotalSize() == (ui32)rr->GetData().size());
                 }
             }
@@ -216,10 +232,10 @@ private:
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
                 ctx.Send(Tablet, req.Release());
+
                 return;
             }
         }
-
         //filter old messages
         ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
         records.Swap(partResp->MutableResult());
@@ -231,8 +247,29 @@ private:
                 result->CopyFrom(rec);
             }
         }
+        if (isDirectRead) {
+            auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
+            prepareResponse->SetBytesSizeEstimate(readResult.GetSizeEstimate());
+            prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
+            prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
+            prepareResponse->SetLastOffset(readResult.GetLastOffset());
+            prepareResponse->SetEndOffset(readResult.GetEndOffset());
 
-        ctx.Send(Sender, Response.Release());
+            prepareResponse->SetSizeLag(readResult.GetSizeLag());
+            Response->Record.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
+            if (readResult.ResultSize()) {
+                prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
+            }
+            Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+            Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+            ctx.Send(Sender, Response.Release());
+            ctx.Send(
+                MakePQDReadCacheServiceActorId(),
+                new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)
+            );
+        } else {
+            ctx.Send(Sender, Response.Release());
+        }
         Die(ctx);
     }
 
@@ -246,15 +283,20 @@ private:
 
     const TActorId Sender;
     const TActorId Tablet;
+    ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;
     THolder<TEvPersQueue::TEvResponse> Response;
+    std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
+    TDirectReadKey DirectReadKey;
+
 };
 
 
-TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request,
+TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, ui32 tabletGeneration, 
+                         const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
                          const TActorContext& ctx)
 {
-    return ctx.Register(new TReadProxy(sender, tablet, request));
+    return ctx.Register(new TReadProxy(sender, tablet, tabletGeneration, directReadKey, request));
 }
 
 /******************************************************* AnswerBuilderProxy *********************************************************/
@@ -262,7 +304,8 @@ class TResponseBuilder {
 public:
 
     TResponseBuilder(const TActorId& sender, const TActorId& tablet, const TString& topicName, const ui32 partition, const ui64 messageNo,
-                     const TString& reqId, const TMaybe<ui64> cookie, NMetrics::TResourceMetrics* resourceMetrics, const TActorContext& ctx)
+                     const TString& reqId, const TMaybe<ui64> cookie, NMetrics::TResourceMetrics* resourceMetrics, 
+                     const TActorContext& ctx)
     : Sender(sender)
     , Tablet(tablet)
     , TopicName(topicName)
@@ -305,13 +348,13 @@ public:
         Y_ABORT_UNLESS(Response);
         --Waiting;
         bool skip = false;
-        if (WasSplit && ev->Get()->Response.GetPartitionResponse().CmdWriteResultSize() == 1) { //megaqc - remove this
-            const auto& x = ev->Get()->Response.GetPartitionResponse().GetCmdWriteResult(0);
+        if (WasSplit && ev->Get()->Response->GetPartitionResponse().CmdWriteResultSize() == 1) { //megaqc - remove this
+            const auto& x = ev->Get()->Response->GetPartitionResponse().GetCmdWriteResult(0);
             if (x.HasPartNo() && x.GetPartNo() > 0)
                 skip = true;
         }
         if (!skip) //megaqc - remove this
-            Response->Record.MergeFrom(ev->Get()->Response);
+            Response->Record.MergeFrom(*ev->Get()->Response);
 
         if (!Waiting) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer ok topic: '" << TopicName << "' partition: " << Partition
@@ -1611,29 +1654,41 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
     ctx.Send(partActor, event.Release());
 }
 
-void TPersQueue::HandleDeleteSessionRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
+void TPersQueue::HandleDeleteSessionRequest(
+        const ui64 responseCookie, const TActorId& partActor,
+        const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+        const TActorId& pipeClient, const TActorId&
+)
 {
     Y_ABORT_UNLESS(req.HasCmdDeleteSession());
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_DELETE_SESSION);
     const auto& cmd = req.GetCmdDeleteSession();
+    //To do : priority
+    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Got cmd delete session: " << cmd.DebugString());
 
     if (!cmd.HasClientId()){
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no clientId in DeleteSession request: " << ToString(req).data());
     } else if (!cmd.HasSessionId()) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "not sessionId in DeleteSession request: " << ToString(req).data());
     } else {
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
-                                                                0, cmd.GetSessionId(), 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION);
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+                responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), 0, 0, 0, pipeClient,
+                TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION
+        );
         ctx.Send(partActor, event.Release());
+    }
+    auto pipe = PipesInfo.find(pipeClient);
+    if (!pipe.IsEnd()) {
+        DestroySession(pipe->second);
     }
 }
 
 void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
-{
+                                            const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+                                            const TActorId& pipeClient, const TActorId&
+) {
     Y_ABORT_UNLESS(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
 
@@ -1650,9 +1705,31 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "not step in CreateSession request: " << ToString(req).data());
     } else {
+        bool isDirectRead = cmd.GetPartitionSessionId() > 0;
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
-                                                                0, cmd.GetSessionId(), cmd.GetGeneration(), cmd.GetStep(), TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+                responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
+                pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
+        );
+        if (isDirectRead) {
+            auto pipeIter = PipesInfo.find(pipeClient);
+            if (pipeIter.IsEnd()) {
+                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+                        TStringBuilder() << "Internal error - server pipe " << pipeClient.ToString() << " not found");
+                return;
+            }
+            pipeIter->second.ClientId = cmd.GetClientId();
+            pipeIter->second.SessionId = cmd.GetSessionId();
+            pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Created session " << cmd.GetSessionId() << " on pipe: " << pipeIter->first.ToString());
+            ctx.Send(MakePQDReadCacheServiceActorId(),
+                new TEvPQ::TEvRegisterDirectReadSession(
+                    TReadSessionKey{cmd.GetSessionId(), cmd.GetPartitionSessionId()},
+                    GetGeneration()
+                )
+            );
+
+        }
         ctx.Send(partActor, event.Release());
     }
 }
@@ -1674,10 +1751,10 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
             TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
-        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
-                                                                cmd.GetOffset(),
-                                                                cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0,
-                                                                TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict());
+        THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+            responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
+            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict()
+        );
         ctx.Send(partActor, event.Release());
     }
 }
@@ -1968,7 +2045,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
         return;
     }
 
-    it->second = {partActor, owner, it->second.ServerActors};
+    it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender, req.GetCmdGetOwnership().GetForce());
@@ -1976,9 +2053,11 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
 }
 
 
-void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& partActor,
-                                          const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
-{
+void TPersQueue::HandleReadRequest(
+        const ui64 responseCookie, const TActorId& partActor,
+        const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+        const TActorId& pipeClient, const TActorId&
+) {
     Y_ABORT_UNLESS(req.HasCmdRead());
 
     auto cmd = req.GetCmdRead();
@@ -2015,8 +2094,25 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
         ui32 bytes = Min<ui32>(MAX_BYTES, cmd.HasBytes() ? cmd.GetBytes() : MAX_BYTES);
         auto clientDC = cmd.HasClientDC() ? to_lower(cmd.GetClientDC()) : "unknown";
         clientDC.to_title();
+        if (IsDirectReadCmd(cmd)) {
+            auto pipeIter = PipesInfo.find(pipeClient);
+            if (pipeIter.IsEnd()) {
+                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                           TStringBuilder() << "Read prepare request from unknown(old?) pipe");
+                return;
+            } else if (cmd.GetSessionId().empty()) {
+                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                           TStringBuilder() << "Read prepare request with empty session id");
+                return;
+            } else if (pipeIter->second.SessionId != cmd.GetSessionId()) {
+                ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
+                           TStringBuilder() << "Read prepare request with unknown(old?) session id " << cmd.GetSessionId());
+                return;
+            } 
+        }
+
         THolder<TEvPQ::TEvRead> event =
-            MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(),
+            MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
                                        cmd.HasPartNo() ? cmd.GetPartNo() : 0,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
@@ -2024,9 +2120,115 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0, bytes,
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0, clientDC,
-                                       cmd.GetExternalOperation());
+                                       cmd.GetExternalOperation(),
+                                       pipeClient);
+
         ctx.Send(partActor, event.Release());
     }
+}
+
+template<class TRequest>
+bool ValidateDirectReadRequestBase(
+        const TRequest& cmd, const THashMap<TActorId, TPersQueue::TPipeInfo>::iterator& pipeIter,
+        TStringBuilder& error, TDirectReadKey& key
+) {
+    key = TDirectReadKey{cmd.GetSessionKey().GetSessionId(), cmd.GetSessionKey().GetPartitionSessionId(), cmd.GetDirectReadId()};
+    if (key.SessionId.Empty()) {
+        error << "no session id in publish read request: ";
+        return false;
+    } else if (key.PartitionSessionId == 0) {
+        error << "No or zero partition session id in publish read request: ";
+        return false;
+    } else if (key.ReadId == 0) {
+        error << "No or zero ReadId in publish read request: ";
+        return false;
+    }
+    if (pipeIter.IsEnd()) {
+        error << "Read prepare request from unknown(old?) pipe";
+        return false;
+    } else if (pipeIter->second.SessionId != key.SessionId) {
+        error << "Read prepare request with unknown(old?) session id " << key.SessionId;
+        return false;
+    }
+    return true;
+}
+
+void TPersQueue::HandlePublishReadRequest(
+        const ui64 responseCookie, const TActorId&,
+        const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+        const TActorId& pipeClient, const TActorId&
+) {
+    auto cmd = req.GetCmdPublishRead();
+    TDirectReadKey key;
+    TStringBuilder error;
+
+    if (!ValidateDirectReadRequestBase(cmd, PipesInfo.find(pipeClient), error, key)) {
+        error << req.DebugString();
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
+    }
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_PUBLISH_READ);
+    THolder<TEvPQ::TEvProxyResponse> publishDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
+    publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
+
+    publishDoneEvent->Response->MutablePartitionResponse()->MutableCmdPublishReadResult();
+    ctx.Send(SelfId(), publishDoneEvent.Release());
+
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE, "Publish direct read id " << key.ReadId << " for session " << key.SessionId
+    );
+    ctx.Send(
+            MakePQDReadCacheServiceActorId(),
+            new TEvPQ::TEvPublishDirectRead(key, GetGeneration())
+    );
+
+}
+
+void TPersQueue::HandleForgetReadRequest(
+        const ui64 responseCookie, const TActorId& ,
+        const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
+        const TActorId& pipeClient, const TActorId&
+) {
+    auto cmd = req.GetCmdForgetRead();
+    TDirectReadKey key;
+    TStringBuilder error;
+    if (!ValidateDirectReadRequestBase(cmd, PipesInfo.find(pipeClient), error, key)) {
+        error << req.DebugString();
+        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, error);
+    }
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_FORGET_READ);
+    THolder<TEvPQ::TEvProxyResponse> forgetDoneEvent = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+    forgetDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
+    forgetDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
+
+    forgetDoneEvent->Response->MutablePartitionResponse()->MutableCmdForgetReadResult();
+    ctx.Send(SelfId(), forgetDoneEvent.Release());
+
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE, "Forget direct read id " << key.ReadId << " for session " << key.SessionId
+    );
+    ctx.Send(
+            MakePQDReadCacheServiceActorId(),
+            new TEvPQ::TEvForgetDirectRead(key, GetGeneration())
+    );
+
+}
+
+void TPersQueue::DestroySession(TPipeInfo& pipeInfo) {
+    const auto& ctx = ActorContext();
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE, "PQ: Destroy direct read session " << pipeInfo.SessionId
+    );
+    if (pipeInfo.SessionId.Empty())
+        return;
+    ActorContext().Send(
+            MakePQDReadCacheServiceActorId(),
+            new TEvPQ::TEvDeregisterDirectReadSession(
+                TReadSessionKey{pipeInfo.SessionId, pipeInfo.PartitionSessionId},
+                GetGeneration()
+            )
+    );
+    pipeInfo.SessionId = TString{};
 }
 
 TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> TPersQueue::MakeRegisterMessageGroup(
@@ -2153,15 +2355,26 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     if (request.HasPartitionRequest() && request.GetPartitionRequest().HasCookie())
         c = request.GetPartitionRequest().GetCookie();
     TAutoPtr<TResponseBuilder> ans;
-    if (request.HasPartitionRequest() && request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
-        TActorId rr = CreateReadProxy(ev->Sender, ctx.SelfID, request, ctx);
+    ui64 responseCookie = ++NextResponseCookie;
+
+    auto& req = request.GetPartitionRequest();
+    TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+
+    if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
+        auto pipeIter = PipesInfo.find(pipeClient);
+        TDirectReadKey directKey{};
+        if (!pipeIter.IsEnd()) {
+            directKey.SessionId = pipeIter->second.SessionId;
+            directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
+        }
+        TActorId rr = CreateReadProxy(ev->Sender, ctx.SelfID, GetGeneration(), directKey, request, ctx);
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     }
-    ui64 responseCookie = ++NextResponseCookie;
     ResponseProxy[responseCookie] = ans;
     Counters->Simple()[COUNTER_PQ_TABLET_INFLIGHT].Set(ResponseProxy.size());
+  
     if (!ConfigInited) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::INITIALIZING, "tablet is not ready");
         return;
@@ -2177,13 +2390,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 
-    auto& req = request.GetPartitionRequest();
 
     if (!req.HasPartition()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "no partition number");
         return;
     }
-
+  
     ui32 partition = req.GetPartition();
     auto it = Partitions.find(partition);
 
@@ -2214,7 +2426,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdUpdateWriteTimestamp()
         + req.HasCmdRegisterMessageGroup()
         + req.HasCmdDeregisterMessageGroup()
-        + req.HasCmdSplitMessageGroup();
+        + req.HasCmdSplitMessageGroup()
+        + req.HasCmdPublishRead()
+        + req.HasCmdForgetRead();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2224,14 +2438,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     const TActorId& partActor = it->second.Actor;
 
-    TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
-
     if (req.HasCmdGetMaxSeqNo()) {
         HandleGetMaxSeqNoRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdDeleteSession()) {
-        HandleDeleteSessionRequest(responseCookie, partActor, req, ctx);
+        HandleDeleteSessionRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdCreateSession()) {
-        HandleCreateSessionRequest(responseCookie, partActor, req, ctx);
+        HandleCreateSessionRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdSetClientOffset()) {
         HandleSetClientOffsetRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdGetClientOffset()) {
@@ -2241,7 +2453,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdUpdateWriteTimestamp()) {
         HandleUpdateWriteTimestampRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdRead()) {
-        HandleReadRequest(responseCookie, partActor, req, ctx);
+        HandleReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+    } else if (req.HasCmdPublishRead()) {
+        HandlePublishReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
+    } else if (req.HasCmdForgetRead()) {
+        HandleForgetReadRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdGetOwnership()) {
         HandleGetOwnershipRequest(responseCookie, partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdReserveBytes()) {
@@ -2258,13 +2474,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
-    auto it = PipesInfo.find(ev->Get()->ClientId);
-
-    if (it == PipesInfo.end()) {
-        PipesInfo.insert({ev->Get()->ClientId, {TActorId(), "", 1}});
-    } else {
-        it->second.ServerActors++;
-    }
+    auto it = PipesInfo.insert({ev->Get()->ClientId, {}}).first;
+    it->second.ServerActors++;
 
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
 }
@@ -2279,7 +2490,12 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TA
             return;
         }
         if (it->second.PartActor != TActorId()) {
-            ctx.Send(it->second.PartActor, new TEvPQ::TEvPipeDisconnected(it->second.Owner, it->first));
+            ctx.Send(it->second.PartActor, new TEvPQ::TEvPipeDisconnected(
+                    it->second.Owner, it->first
+            ));
+        }
+        if (!it->second.SessionId.Empty()) {
+            DestroySession(it->second);
         }
         PipesInfo.erase(it);
         Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
@@ -2352,7 +2568,11 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
 
-
+    for (auto& pipe : PipesInfo) {
+        if (!pipe.second.SessionId.empty()) {
+            DestroySession(pipe.second);
+        }
+    }
     for (const auto& p : ResponseProxy) {
         THolder<TEvPQ::TEvError> ev = MakeHolder<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first);
         bool res = p.second->HandleError(ev.Get(), ctx);
@@ -3288,15 +3508,19 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
-
-                [[fallthrough]];
-
-            case NKikimrPQ::TTransaction::KIND_CONFIG:
                 SendEvReadSetToReceivers(ctx, tx);
 
                 WriteTx(tx, NKikimrPQ::TTransaction::WAIT_RS);
 
                 tx.State = NKikimrPQ::TTransaction::CALCULATED;
+                break;
+
+            case NKikimrPQ::TTransaction::KIND_CONFIG:
+                SendEvReadSetToReceivers(ctx, tx);
+
+                tx.State = NKikimrPQ::TTransaction::WAIT_RS;
+
+                CheckTxState(ctx, tx);
                 break;
 
             case NKikimrPQ::TTransaction::KIND_UNKNOWN:
@@ -3498,6 +3722,7 @@ TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
     return new TPartition(TabletID(),
                           partitionId,
                           ctx.SelfID,
+                          GetGeneration(),
                           CacheActor,
                           topicConverter,
                           DCId,
@@ -3692,6 +3917,13 @@ void TPersQueue::ProcessSourceIdRequests(ui32 partitionId) {
 
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
+}
+
+ui64 TPersQueue::GetGeneration() {
+    if (!TabletGeneration.Defined()) {
+        TabletGeneration = Executor()->Generation();
+    }
+    return *TabletGeneration;
 }
 
 bool TPersQueue::HandleHook(STFUNC_SIG)

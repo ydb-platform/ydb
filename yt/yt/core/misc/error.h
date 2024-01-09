@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/yson/string.h>
 
-#include <yt/yt/core/ytree/attributes.h>
+#include <yt/yt/core/ytree/public.h>
 
 #include <yt/yt/core/tracing/public.h>
 
@@ -41,6 +41,10 @@ public:
 
     constexpr operator int() const;
 
+    template <class E>
+    requires std::is_enum_v<E>
+    constexpr operator E() const;
+
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 
@@ -69,12 +73,16 @@ class TErrorSanitizerGuard
     : public TNonCopyable
 {
 public:
-    explicit TErrorSanitizerGuard(TInstant datetimeOverride);
+    using TLocalHostNameSanitizerSignature = TString (TStringBuf);
+    using THostNameSanitizer = TCallback<TLocalHostNameSanitizerSignature>;
+
+    explicit TErrorSanitizerGuard(TInstant datetimeOverride, THostNameSanitizer localHostNameSanitizer);
     ~TErrorSanitizerGuard();
 
 private:
     const bool SavedEnabled_;
     const TInstant SavedDatetimeOverride_;
+    const THostNameSanitizer SavedLocalHostNameSanitizer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,8 +154,10 @@ public:
     const TString& GetMessage() const;
     TError& SetMessage(TString message);
 
-    bool HasOriginAttributes() const;
+    bool HasHost() const;
     TStringBuf GetHost() const;
+
+    bool HasOriginAttributes() const;
     TProcessId GetPid() const;
     TStringBuf GetThreadName() const;
     NThreading::TThreadId GetTid() const;

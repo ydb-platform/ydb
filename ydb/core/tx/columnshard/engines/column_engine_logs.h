@@ -141,9 +141,7 @@ public:
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
 
-    void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
-
-
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const TPKRangesFilter& pkRangesFilter) const override;
@@ -189,6 +187,17 @@ public:
             return nullptr;
         }
         return it->second;
+    }
+
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+        std::vector<std::shared_ptr<TGranuleMeta>> result;
+        for (auto&& i : Tables) {
+            if (i.first < pathIdFrom || i.first > pathIdTo) {
+                continue;
+            }
+            result.emplace_back(i.second);
+        }
+        return result;
     }
 
     ui64 GetTabletId() const {

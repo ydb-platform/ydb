@@ -2071,15 +2071,15 @@ public:
         }
 
         TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_SYNC";
+        syncContext.Type = "NODES_TIME_DIFFERENCE";
         FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
         if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {
             syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }

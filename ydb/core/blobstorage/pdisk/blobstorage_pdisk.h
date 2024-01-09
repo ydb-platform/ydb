@@ -327,12 +327,9 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
 };
 
 struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog> {
-    TBatchedVec<THolder<TEvLog>> Logs;
-    TLsnSeg LsnSeg;
-
-    void AddLog(THolder<TEvLog> &&ev) {
-        Logs.emplace_back(std::move(ev));
-        auto &log = *Logs.back();
+    void AddLog(THolder<TEvLog> &&ev, NWilson::TTraceId traceId = {}) {
+        Logs.emplace_back(std::move(ev), std::move(traceId));
+        auto &log = *Logs.back().Event;
         if (Logs.size() == 1) {
             LsnSeg = TLsnSeg(log.LsnSegmentStart, log.Lsn);
         } else {
@@ -350,11 +347,24 @@ struct TEvMultiLog : public TEventLocal<TEvMultiLog, TEvBlobStorage::EvMultiLog>
         TStringBuilder str;
         str << '{';
         for (ui64 idx = 0; idx < record.Logs.size(); ++idx) {
-            str << (idx ? ", " : "") << idx << "# " << record.Logs[idx]->ToString();
+            str << (idx ? ", " : "") << idx << "# " << record.Logs[idx].Event->ToString();
         }
         str << '}';
         return str;
     }
+
+    struct TItem {
+        TItem(THolder<TEvLog>&& event, NWilson::TTraceId&& traceId)
+            : Event(std::move(event))
+            , TraceId(std::move(traceId))
+        {}
+
+        THolder<TEvLog> Event;
+        NWilson::TTraceId TraceId;
+    };
+
+    TBatchedVec<TItem> Logs;
+    TLsnSeg LsnSeg;
 };
 
 struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
@@ -608,7 +618,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
     TOwner Owner = 0;
     TVDiskID VDiskId = TVDiskID::InvalidId;
     bool IsGenerationSet = true;
-    
+
     TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom)
         : LockFrom(lockFrom)
     {
@@ -643,7 +653,7 @@ struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChu
         str << "{EvChunkLock LockFrom# " << TEvChunkLock::ELockFrom_Name(record.LockFrom);
         if (record.Owner) {
             str << " Owner# " << record.Owner;
-        } 
+        }
         if (record.ByVDiskId) {
             if (record.IsGenerationSet) {
                 str << " VDiskId# " << record.VDiskId.ToString();

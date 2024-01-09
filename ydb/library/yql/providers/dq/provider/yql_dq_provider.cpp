@@ -115,7 +115,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             }
         };
 
-        info.CloseSession = [dqGateway, metrics](const TString& sessionId) {
+        info.CloseSessionAsync = [dqGateway, metrics](const TString& sessionId) {
             if (metrics) {
                 metrics->IncCounter("dq", "CloseSession");
             }
@@ -123,7 +123,11 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             if (dqGateway) { // nullptr in yqlrun
                 YQL_CLOG(DEBUG, ProviderDq) << "CloseSession " << sessionId;
                 dqGateway->CloseSession(sessionId);
+
+                return dqGateway->CloseSessionAsync(sessionId);
             }
+
+            return NThreading::MakeFuture();
         };
 
         return info;

@@ -60,7 +60,15 @@ public:
 
     virtual NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) = 0;
 
-    virtual void CloseSession(const TString& sessionId) = 0;
+    // TODO(gritukan): Leave only CloseSessionAsync after Arcadia migration and make it pure virtual.
+    virtual void CloseSession(const TString& sessionId) {
+        Y_UNUSED(sessionId);
+    }
+
+    virtual NThreading::TFuture<void> CloseSessionAsync(const TString& sessionId) {
+        Y_UNUSED(sessionId);
+        return NThreading::MakeFuture();
+    }
 
     virtual NThreading::TFuture<TResult>
     ExecutePlan(const TString& sessionId, NDqs::TPlan&& plan, const TVector<TString>& columns,

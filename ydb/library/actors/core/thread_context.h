@@ -2,6 +2,9 @@
 
 #include "defs.h"
 
+#include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/util/mpmc_ring_queue.h>
+
 #include <util/system/tls.h>
 
 
@@ -11,6 +14,22 @@ namespace NActors {
 
     template <typename T>
     struct TWaitingStats;
+
+    struct TTimers {
+        NHPTimer::STime Elapsed = 0;
+        NHPTimer::STime Parked = 0;
+        NHPTimer::STime Blocked = 0;
+        NHPTimer::STime HPStart = GetCycleCountFast();
+        NHPTimer::STime HPNow;
+
+        void Reset() {
+            Elapsed = 0;
+            Parked = 0;
+            Blocked = 0;
+            HPStart = GetCycleCountFast();
+            HPNow = HPStart;
+        }
+    };
 
     struct TThreadContext {
         IExecutorPool *Pool = nullptr;
@@ -23,6 +42,8 @@ namespace NActors {
         ui16 LocalQueueSize = 0;
         TWaitingStats<ui64> *WaitingStats = nullptr;
         bool IsCurrentRecipientAService = false;
+        TTimers Timers;
+        TMPMCRingQueue<20>::EPopMode ActivationPopMode = TMPMCRingQueue<20>::EPopMode::ReallySlow;
     };
 
     extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp

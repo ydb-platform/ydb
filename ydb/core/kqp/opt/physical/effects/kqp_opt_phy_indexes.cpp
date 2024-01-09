@@ -228,4 +228,80 @@ TExprBase MakeRowsFromDict(const TDqPhyPrecompute& dict, const TVector<TString>&
         .Done();
 }
 
+TExprBase MakeRowsFromTupleDict(const TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
+    const THashSet<TStringBuf>& columns, TPositionHandle pos, TExprContext& ctx)
+{
+    THashSet<TString> dictKeysSet(dictKeys.begin(), dictKeys.end());
+    auto dictTupleArg = TCoArgument(ctx.NewArgument(pos, "dict_tuple"));
+
+    TVector<TExprBase> rowTuples;
+    for (const auto& column : columns) {
+        auto columnAtom = ctx.NewAtom(pos, column);
+        auto tupleIndex = dictKeysSet.contains(column)
+            ? 0  // Key
+            : 1; // Payload
+
+        auto extractor = Build<TCoNth>(ctx, pos)
+            .Tuple(dictTupleArg)
+            .Index().Build(tupleIndex)
+            .Done().Ptr();
+
+        if (tupleIndex) {
+            extractor = Build<TCoNth>(ctx, pos)
+                .Tuple(extractor)
+                .Index().Build(0)
+                .Done().Ptr();
+        }
+
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name(columnAtom)
+            .Value<TCoMember>()
+                .Struct(extractor)
+                .Name(columnAtom)
+                .Build()
+            .Done();
+
+        rowTuples.emplace_back(std::move(tuple));
+    }
+
+    auto computeRowsStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(dict)
+            .Build()
+        .Program()
+            .Args({"dict"})
+            .Body<TCoIterator>()
+                .List<TCoFlatMap>()
+                    .Input<TCoDictItems>()
+                        .Dict("dict")
+                        .Build()
+                    .Lambda()
+                        .Args(dictTupleArg)
+                        .Body<TCoOptionalIf>()
+                            .Predicate<TCoNth>()
+                                .Tuple<TCoNth>()
+                                    .Tuple(dictTupleArg)
+                                    .Index().Build(1)
+                                    .Build()
+                                .Index().Build(1)
+                                .Build()
+                             .Value<TCoAsStruct>()
+                                .Add(rowTuples)
+                                .Build()
+                             .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(computeRowsStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

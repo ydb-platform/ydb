@@ -58,4 +58,13 @@ Y_UNIT_TEST_SUITE(TRound) {
         UNIT_ASSERT_VALUES_EQUAL(*Rem(-14, -7), 0);
         UNIT_ASSERT(!Rem(-14, 0));
     }
+
+    Y_UNIT_TEST(NearbyInt) {
+        const i64 maxV = 9223372036854774784ll;
+        const i64 minV = -9223372036854774784ll;
+        UNIT_ASSERT_VALUES_EQUAL((i64)(double)(maxV), maxV);
+        UNIT_ASSERT_VALUES_EQUAL((i64)(double)(minV), minV);
+
+        UNIT_ASSERT_VALUES_UNEQUAL((i64)(double)(maxV + 1), maxV + 1);
+    }
 }

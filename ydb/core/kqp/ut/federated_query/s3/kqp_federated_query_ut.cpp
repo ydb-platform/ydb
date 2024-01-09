@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
@@ -308,6 +309,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     value Utf8 NOT NULL
                 )
             ) AS t1 JOIN `ydb_table` AS t2 ON t1.key = t2.key
+            ORDER BY key
         )"
         , "external_source"_a = externalDataSourceName
         , "ydb_table"_a = ydbTable)).ExtractValueSync();
@@ -447,6 +449,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     value Utf8 NOT NULL
                 )
             ) AS t1 JOIN `ydb_table` AS t2 ON t1.key = t2.key
+            ORDER BY key
         )"
         , "external_source"_a = externalDataSourceName
         , "ydb_table"_a = ydbTable)).ExtractValueSync();
@@ -1274,6 +1277,71 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("data").GetString(), "test");
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("year").GetUint32(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("month").GetUint32(), 2);
+    }
+
+    TString CreateSimpleGenericQuery(std::shared_ptr<TKikimrRunner> kikimr, const TString& bucket) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString object = "test_object";
+        const TString content = "key\n1";
+
+        CreateBucketWithObject(bucket, object, content);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        return fmt::format(R"(
+                SELECT * FROM `{external_source}`.`/` WITH (
+                    FORMAT="csv_with_names",
+                    SCHEMA (
+                        key Int NOT NULL
+                    )
+                )
+            )", "external_source"_a=externalDataSourceName);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithGenericAutoDetection) {
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_execute_generic_auto_detection");
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+
+        auto scriptResult = yqlScriptClient.ExecuteYqlScript(sql).GetValueSync();
+        UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+
+        TResultSetParser resultSet(scriptResult.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("key").GetInt32(), 1);
+    }
+
+    Y_UNIT_TEST(ExplainScriptWithGenericAutoDetection) {
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+        const TString sql = CreateSimpleGenericQuery(kikimr, "test_bucket_explain_generic_auto_detection");
+
+        auto driver = kikimr->GetDriver();
+        NScripting::TScriptingClient yqlScriptClient(driver);
+
+        NScripting::TExplainYqlRequestSettings settings;
+        settings.Mode(NScripting::ExplainYqlRequestMode::Plan);
+
+        auto scriptResult = yqlScriptClient.ExplainYqlScript(sql, settings).GetValueSync();
+        UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+        UNIT_ASSERT(scriptResult.GetPlan());
     }
 }
 

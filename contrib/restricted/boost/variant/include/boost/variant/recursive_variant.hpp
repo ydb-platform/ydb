@@ -45,8 +45,6 @@ namespace detail { namespace variant {
 // Handles embedded variant types when substituting for recursive_variant_.
 //
 
-#if !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
-
 template <
       BOOST_VARIANT_ENUM_PARAMS(typename T)
     , typename RecursiveVariant
@@ -115,9 +113,7 @@ struct substitute<
     , ::boost::recursive_variant_
       BOOST_MPL_AUX_LAMBDA_ARITY_PARAM(Arity)
     >
-{
-#if !defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
-    
+{   
     typedef ::boost::variant<
         typename enable_recursive<   
               T0              
@@ -130,40 +126,7 @@ struct substitute<
             , mpl::true_                     
         >::type...  
     > type;
-
-#else // defined(BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES)
-
-private: // helpers, for metafunction result (below)
-
-    #define BOOST_VARIANT_AUX_ENABLE_RECURSIVE_TYPEDEFS(z,N,_)  \
-        typedef typename enable_recursive<   \
-              BOOST_PP_CAT(T,N)              \
-            , RecursiveVariant               \
-            , mpl::true_                     \
-            >::type BOOST_PP_CAT(wknd_T,N);  \
-        /**/
-
-    BOOST_PP_REPEAT(
-          BOOST_VARIANT_LIMIT_TYPES
-        , BOOST_VARIANT_AUX_ENABLE_RECURSIVE_TYPEDEFS
-        , _
-        )
-
-    #undef BOOST_VARIANT_AUX_ENABLE_RECURSIVE_TYPEDEFS
-
-public: // metafunction result
-
-    typedef ::boost::variant< BOOST_VARIANT_ENUM_PARAMS(wknd_T) > type;
-#endif // BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES workaround
 };
-
-#else // defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
-
-//
-// no specializations: embedded variants unsupported on these compilers!
-//
-
-#endif // !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
 
 }} // namespace detail::variant
 

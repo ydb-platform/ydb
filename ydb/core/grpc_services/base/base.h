@@ -25,6 +25,8 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+
 #include <util/stream/str.h>
 
 namespace NKikimr {
@@ -46,7 +48,6 @@ using TYdbIssueMessageType = Ydb::Issue::IssueMessage;
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
-void RefreshToken(const TString& token, const TString& database, const TActorContext& ctx, TActorId id);
 
 struct TRpcServices {
     enum EServiceId {
@@ -96,13 +97,14 @@ struct TRpcServices {
         EvExplainDataQueryAst,
         EvReadColumns,
         EvBiStreamPing,
-        EvRefreshTokenRequest, // internal call
+        EvRefreshToken, // internal call, pair to EvStreamWriteRefreshToken
         EvGetShardLocations,
         EvExperimentalStreamQuery,
         EvStreamPQWrite,
         EvStreamPQMigrationRead,
         EvStreamTopicWrite,
         EvStreamTopicRead,
+        EvStreamTopicDirectRead,
         EvPQReadInfo,
         EvTopicCommitOffset,
         EvListOperations,
@@ -219,7 +221,9 @@ struct TRpcServices {
         EvDescribeYndxRateLimiterResource,
         EvAcquireYndxRateLimiterResource,
         EvGrpcRuntimeRequest,
-        EvNodeCheckRequest // !!! DO NOT ADD NEW REQUEST !!!
+        EvNodeCheckRequest,
+        EvStreamWriteRefreshToken    // internal call, pair to EvRefreshToken
+        // !!! DO NOT ADD NEW REQUEST !!!
     };
 
     struct TEvGrpcNextReply : public TEventLocal<TEvGrpcNextReply, TRpcServices::EvGrpcStreamIsReady> {
@@ -359,6 +363,10 @@ public:
     virtual void ReplyUnauthenticated(const TString& msg = "") = 0;
     virtual void ReplyUnavaliable() = 0;
 
+    //tracing
+    virtual void StartTracing(NWilson::TSpan&& span) = 0;
+    virtual void LegacyFinishSpan() = 0;
+
     // validation
     virtual bool Validate(TString& error) = 0;
 
@@ -458,9 +466,10 @@ struct TCommonResponseFiller<TResp, false> : private TCommonResponseFillerImpl {
     }
 };
 
+template <ui32 TRpcId>
 class TRefreshTokenImpl
     : public IRequestProxyCtx
-    , public TEventLocal<TRefreshTokenImpl, TRpcServices::EvRefreshTokenRequest>
+    , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
     TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
@@ -473,6 +482,9 @@ public:
     const TMaybe<TString> GetYdbToken() const override {
         return Token_;
     }
+
+    void StartTracing(NWilson::TSpan&& /*span*/) override {}
+    void LegacyFinishSpan() override {}
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         State_.State = state;
@@ -522,8 +534,7 @@ public:
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
-        Y_ABORT("Unimplemented");
-        return TMaybe<TString>{};
+        return {};
     }
 
     TVector<TStringBuf> FindClientCert() const override {
@@ -592,6 +603,10 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
+        return {};
+    }
+
+    NWilson::TTraceId GetWilsonTraceId() const override {
         return {};
     }
 
@@ -814,6 +829,10 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
+    }
+
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -846,9 +865,7 @@ public:
         return false;
     }
 
-    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
-        NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
-    }
+    void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id);
 
     void SetRespHook(TRespHook&&) override {
         /* cannot add hook to bidirect streaming */
@@ -861,6 +878,16 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TGRpcRequestBiStreamWrapper");
+    }
+
+    // IRequestProxyCtx
+    //
+    void StartTracing(NWilson::TSpan&& span) override {
+        Span_ = std::move(span);
+    }
+
+    void LegacyFinishSpan() override {
+        Span_.End();
     }
 
     // IRequestCtxBase
@@ -880,6 +907,7 @@ private:
     TMaybe<NRpcService::TRlPath> RlPath_;
     bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
+    NWilson::TSpan Span_;
 };
 
 template <typename TDerived>
@@ -1138,6 +1166,10 @@ public:
         return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return Span_.GetTraceId();
+    }
+
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -1264,6 +1296,12 @@ public:
         return AuditLogParts;
     }
 
+    void StartTracing(NWilson::TSpan&& span) override {
+        Span_ = std::move(span);
+    }
+
+    void LegacyFinishSpan() override {}
+
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
         Ctx_->ReplyError(code, msg, details);
     }
@@ -1303,6 +1341,8 @@ private:
         };
     }
 
+protected:
+    NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -1380,6 +1420,8 @@ public:
     { }
 
     void Pass(const IFacilityProvider& facility) override {
+        this->Span_.End();
+
         PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
     }
 

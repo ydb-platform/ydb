@@ -59,19 +59,17 @@ struct TSourceIdInfo {
 }; // TSourceIdInfo
 
 class THeartbeatProcessor {
-public:
-    THeartbeatProcessor() = default;
-    explicit THeartbeatProcessor(
-        const THashSet<TString>& sourceIdsWithHeartbeat,
-        const TMap<TRowVersion, THashSet<TString>>& sourceIdsByHeartbeat);
+protected:
+    using TSourceIdsByHeartbeat = TMap<TRowVersion, THashSet<TString>>;
 
+public:
     void ApplyHeartbeat(const TString& sourceId, const TRowVersion& version);
     void ForgetHeartbeat(const TString& sourceId, const TRowVersion& version);
     void ForgetSourceId(const TString& sourceId);
 
 protected:
     THashSet<TString> SourceIdsWithHeartbeat;
-    TMap<TRowVersion, THashSet<TString>> SourceIdsByHeartbeat;
+    TSourceIdsByHeartbeat SourceIdsByHeartbeat;
 
 }; // THeartbeatProcessor
 
@@ -151,12 +149,17 @@ class THeartbeatEmitter: private THeartbeatProcessor {
 public:
     explicit THeartbeatEmitter(const TSourceIdStorage& storage);
 
-    void Process(const TString& sourceId, const THeartbeat& heartbeat);
+    void Process(const TString& sourceId, THeartbeat&& heartbeat);
     TMaybe<THeartbeat> CanEmit() const;
 
 private:
+    TMaybe<THeartbeat> GetFromStorage(TSourceIdsByHeartbeat::const_iterator it) const;
+    TMaybe<THeartbeat> GetFromDiff(TSourceIdsByHeartbeat::const_iterator it) const;
+
+private:
     const TSourceIdStorage& Storage;
-    THashMap<TString, THeartbeat> LastHeartbeats;
+    THashSet<TString> NewSourceIdsWithHeartbeat;
+    THashMap<TString, THeartbeat> Heartbeats;
 
 }; // THeartbeatEmitter
 

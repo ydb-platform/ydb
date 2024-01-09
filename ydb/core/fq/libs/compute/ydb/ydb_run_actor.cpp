@@ -99,6 +99,12 @@ public:
 
     void Handle(const TEvYdbCompute::TEvStatusTrackerResponse::TPtr& ev) {
         auto& response = *ev->Get();
+        if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
+            LOG_I("StatusTrackerResponse (not found). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, Params.Status).release());
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StatusTrackerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
             ResignAndPassAway(response.Issues);
@@ -186,7 +192,7 @@ public:
         case FederatedQuery::QueryMeta::ABORTING_BY_USER:
         case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
-                Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
+                Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
                 Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, Params.Status).release());
             }
@@ -197,6 +203,7 @@ public:
     }
 
     void ResignAndPassAway(const NYql::TIssues& issues) {
+        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_transient_issues());
         pingTaskRequest.set_resign_query(true);
@@ -208,6 +215,7 @@ public:
     }
 
     void FinishAndPassAway() {
+        Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         Send(Connector, new NActors::TEvents::TEvPoisonPill());
         PassAway();
     }

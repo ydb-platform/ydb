@@ -57,6 +57,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
+        OPTION(std::optional<bool>, EnableServerlessExclusiveDynamicNodes, std::nullopt);
 
         #undef OPTION
     };
@@ -77,6 +78,8 @@ namespace NSchemeShardUT_Private {
         THolder<NYdb::TDriver> YdbDriver;
 
     public:
+        static bool ENABLE_SCHEMESHARD_LOG;
+
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
@@ -111,6 +114,10 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
+
+        void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path, 
+                                                      NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
+                                                      ui64 hive = TTestTxConfig::Hive);
 
         TEvSchemeShard::TEvInitRootShardResult::EStatus InitRoot(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes = {}, const TString& owner = {});
         void InitRootStoragePools(TTestActorRuntime& runtime, ui64 schemeRoot, const TActorId& sender, ui64 domainUid);

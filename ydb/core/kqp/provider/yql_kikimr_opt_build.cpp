@@ -1,6 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_gateway.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
@@ -126,7 +128,7 @@ struct TKiExploreTxResults {
         auto view = key.GetView();
         if (view && view->Name) {
             const auto& indexName = view->Name;
-            const auto indexTablePath = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, indexName);
+            const auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, indexName);
 
             auto indexIt = std::find_if(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [&indexName](const auto& index){
                 return index.Name == indexName;
@@ -176,7 +178,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
 
             ops[tableMeta->Name] |= TPrimitiveYdbOperation::Read;
             ops[indexTable] = TPrimitiveYdbOperation::Write;
@@ -198,7 +200,7 @@ struct TKiExploreTxResults {
                 continue;
             }
 
-            const auto indexTable = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, index.Name);
+            const auto indexTable = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableMeta->Name, index.Name);
             for (const auto& column : index.KeyColumns) {
                 if (updateColumns.contains(column)) {
                     // delete old index values and upsert rows into index table
@@ -409,6 +411,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             txRes.AddWriteOpToQueryBlock(node, tableData.Metadata, tableOp & KikimrReadOps());
         }
 
+        if (!write.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, write.Pos())
+                .World(write.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(write.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, write.Pos(), ctx));
         return result;
     }
@@ -441,6 +457,20 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
             updateColumns.emplace(item->GetName());
         }
         txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata, updateColumns);
+        if (!update.ReturningColumns().Empty()) {
+            txRes.AddResult(
+                Build<TResWrite>(ctx, update.Pos())
+                .World(update.World())
+                .DataSink<TResultDataSink>().Build()
+                .Key<TCoKey>().Build()
+                .Data<TKiReturningList>()
+                    .Update(node)
+                    .Columns(update.ReturningColumns())
+                    .Build()
+                .Settings().Build()
+                .Done());
+        }
+
         txRes.AddTableOperation(BuildTableOpNode(cluster, table, tableOp, update.Pos(), ctx));
         return result;
     }
@@ -563,6 +593,18 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         return result;
     }
 
+    if (auto maybeRenameGroup = node.Maybe<TKiRenameGroup>()) {
+        auto renameGroup = maybeRenameGroup.Cast();
+        if (!checkDataSink(renameGroup.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        auto result = ExploreTx(renameGroup.World(), ctx, dataSink, txRes, tablesData, types);
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::RenameGroup, renameGroup.Pos(), ctx));
+        return result;
+    }
+
     if (auto maybeDropGroup = node.Maybe<TKiDropGroup>()) {
         auto dropGroup = maybeDropGroup.Cast();
         if (!checkDataSink(dropGroup.DataSink())) {
@@ -612,6 +654,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     {
         txRes.Ops.insert(node.Raw());
         bool result = ExploreTx(TExprBase(node.Ref().ChildPtr(0)), ctx, dataSink, txRes, tablesData, types);
+        Cerr << KqpExprToPrettyString(*node.Raw(), ctx) << Endl;
         txRes.AddResult(node);
         return result;
     }

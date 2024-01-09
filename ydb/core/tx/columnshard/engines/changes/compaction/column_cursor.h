@@ -44,6 +44,7 @@ public:
         , ColumnLoader(loader)
         , PortionId(portionId)
     {
+        AFL_VERIFY(ColumnLoader);
         Y_UNUSED(PortionId);
         Y_ABORT_UNLESS(BlobChunks.size());
         Y_ABORT_UNLESS(ColumnChunks.size() == BlobChunks.size());

@@ -279,7 +279,6 @@ protected:
     ITransaction* CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event);
     ITransaction* CreateProcessPendingOperations();
     ITransaction* CreateProcessBootQueue();
-    ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey);
     ITransaction* CreateSeizeTablets(TEvHive::TEvSeizeTablets::TPtr event);
     ITransaction* CreateSeizeTabletsReply(TEvHive::TEvSeizeTabletsReply::TPtr event);
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
@@ -290,6 +289,7 @@ protected:
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
+    ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
 
 public:
     TDomainsView DomainsView;
@@ -362,7 +362,10 @@ protected:
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
+    TInstant ProcessBootQueuePostponedUntil;
+    TDuration MaxTimeBetweenConnects;
     bool WarmUp;
+    ui64 ExpectedNodes;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -549,6 +552,7 @@ protected:
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
+    void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -618,6 +622,7 @@ public:
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
+    const TDomainInfo* FindDomain(TSubDomainKey key) const;
     const TNodeLocation& GetNodeLocation(TNodeId nodeId) const;
     void DeleteTablet(TTabletId tabletId);
     void DeleteNode(TNodeId nodeId);
@@ -628,6 +633,8 @@ public:
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
     void AddToBootQueue(TTabletInfo* tablet);
+    void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
+    void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);
@@ -901,6 +908,7 @@ protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
+    TInstant GetAllowedBootingTime();
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;

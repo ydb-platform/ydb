@@ -74,7 +74,9 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (config.HasEnableLegacyRpcCodecs()) {
         connectionConfig->EnableLegacyRpcCodecs = config.GetEnableLegacyRpcCodecs();
     }
-
+    if (config.HasEnableSelectQueryTracingTag()) {
+        connectionConfig->EnableSelectQueryTracingTag = config.GetEnableSelectQueryTracingTag();
+    }
     if (config.HasRetryBackoffTime()) {
         connectionConfig->RetryingChannel->RetryBackoffTime = TDuration::MilliSeconds(config.GetRetryBackoffTime());
     }

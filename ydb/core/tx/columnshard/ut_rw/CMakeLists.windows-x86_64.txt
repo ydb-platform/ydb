@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-tx-columnshard-ut_rw PUBLIC
   core-testlib-default
   columnshard-hooks-abstract
   columnshard-hooks-testing
+  columnshard-common-tests
   ydb-services-metadata
   ydb-core-tx
   public-lib-yson_value

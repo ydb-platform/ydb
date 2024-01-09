@@ -195,17 +195,17 @@ public:
     virtual NThreading::TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
          TQueryData::TPtr, const TAstQuerySettings& settings, const NActors::TActorId& target,
          std::shared_ptr<NGRpcService::IRequestCtxMtSafe> rpcCtx) = 0;
+
+    virtual NThreading::TFuture<TQueryResult> ExecGenericQuery(const TString& cluster, const TString& query,
+        TQueryData::TPtr params, const TAstQuerySettings& settings,
+        const Ydb::Table::TransactionSettings& txSettings) = 0;
+
+    virtual NThreading::TFuture<TQueryResult> ExplainGenericQuery(const TString& cluster, const TString& query) = 0;
 };
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
-    ui32 nodeId, TKqpRequestCounters::TPtr counters);
-
-bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
-    TString& error, bool createDir);
-
-bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
-    const TString& database);
+    ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig());
 
 } // namespace NKikimr::NKqp
 

@@ -133,6 +133,7 @@ TRACING_SCHEMA = dict(
         port=dict(type="integer"),
         root_ca=dict(type="string"),
         service_name=dict(type="string"),
+        auth_config=dict(type="object"),
     ),
     required=[
         "host",
@@ -171,6 +172,7 @@ HOST_SCHEMA = {
         "ic_port": {
             "type": "integer",
         },
+        "node_id": {"type": "integer", "minLength": 1},
     },
     "required": [
         "name",
@@ -946,6 +948,7 @@ def _host_and_ic_port(host):
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):
     names = collections.Counter([_host_and_ic_port(host) for host in instance])
+    node_ids = collections.Counter([host["node_id"] for host in instance if host.get("node_id")])
 
     for name, count in names.items():
         if count > 1:
@@ -954,6 +957,15 @@ def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):
                 % (
                     instance,
                     name,
+                )
+            )
+    for node_id, count in node_ids.items():
+        if count > 1:
+            yield jsonschema.ValidationError(
+                "NodeId of items contains non-unique elements %r: %s. "
+                % (
+                    instance,
+                    node_id,
                 )
             )
 

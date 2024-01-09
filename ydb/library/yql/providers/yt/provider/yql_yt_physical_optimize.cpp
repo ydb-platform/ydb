@@ -89,7 +89,6 @@ public:
         AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
-        AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
         AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
@@ -3798,7 +3797,7 @@ private:
                     .Done();
                 break;
             case EYtSettingType::Skip:
-                res = Build<TCoMinus>(ctx, node.Pos())
+                res = Build<TCoSub>(ctx, node.Pos())
                     .Left<TCoMax>()
                         .Add(res)
                         .Add(s.Value().Cast())
@@ -6153,35 +6152,6 @@ private:
         return TExprBase(res);
     }
 
-    TMaybeNode<TExprBase> ZeroSample(TExprBase node, TExprContext& ctx) const {
-        auto op = node.Cast<TYtTransientOpBase>();
-
-        if (node.Ref().HasResult() && node.Ref().GetResult().Type() == TExprNode::World) {
-            return node;
-        }
-
-        bool hasUpdates = false;
-        TVector<TExprBase> updatedSections;
-        for (auto section: op.Input()) {
-            TMaybe<TSampleParams> sampling = NYql::GetSampleParams(section.Settings().Ref());
-            if (sampling && sampling->Percentage == 0.0) {
-                hasUpdates = true;
-                updatedSections.push_back(MakeEmptySection(section, op.DataSink(), true, State_, ctx));
-            } else {
-                updatedSections.push_back(section);
-            }
-        }
-
-        if (!hasUpdates) {
-            return node;
-        }
-
-        return ctx.ChangeChild(op.Ref(), TYtTransientOpBase::idx_Input,
-            Build<TYtSectionList>(ctx, op.Input().Pos())
-                .Add(updatedSections)
-                .Done().Ptr());
-    }
-
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {
         auto write = node.Cast<TStatWriteTable>();
         auto input = write.Input();
@@ -6964,6 +6934,18 @@ private:
                         continue;
                     }
 
+                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
+                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
+                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
+                        })) {
+                            continue;
+                        }
+                    }
+                    if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+                        continue;
+                    }
+
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                     auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
@@ -7490,6 +7472,12 @@ private:
         }
         if (NYql::HasNonEmptyKeyFilter(section)) {
             return node;
+        }
+        if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+            auto op = path.Table().Maybe<TYtOutput>().Operation().Cast();
+            if (!(op.Ref().HasResult() && op.Ref().GetResult().Type() == TExprNode::World || op.Maybe<TYtTouch>())) {
+                return node;
+            }
         }
         TYtOutTableInfo outTableInfo(merge.Output().Item(0));
         if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {

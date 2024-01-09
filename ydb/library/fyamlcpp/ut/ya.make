@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/yaml/fyamlcpp)
+UNITTEST_FOR(ydb/library/fyamlcpp)
 
 SRCS(
     fyamlcpp_ut.cpp

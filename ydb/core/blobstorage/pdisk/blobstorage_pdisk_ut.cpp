@@ -909,98 +909,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         SmallDisk(40);
     }
 
-    using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
-    void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible, bool suppressCompatibilityCheck = false) {
-        TCompatibilityInfoTest::Reset(&oldInfo);
-    
-        TActorTestContext testCtx({
-            .IsBad = false,
-            .SuppressCompatibilityCheck = suppressCompatibilityCheck,
-        });
-        TVDiskMock vdisk(&testCtx);
-        vdisk.InitFull();
-        vdisk.SendEvLogSync();
-        TCompatibilityInfoTest::Reset(&newInfo);
-
-        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
-        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
-        testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
-        const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
-        if (isCompatible) {
-            UNIT_ASSERT(evInitRes->Status == NKikimrProto::OK);
-        } else {
-            UNIT_ASSERT(evInitRes->Status != NKikimrProto::OK);
-        }
-    }
-
-    Y_UNIT_TEST(YdbVersionOldCompatible) {
-        TestRestartWithDifferentVersion(
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
-            }.ToPB(),
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 2, .Minor = 1, .Hotfix = 0 },
-            }.ToPB(),
-            true
-        );
-    }
-
-    Y_UNIT_TEST(YdbVersionIncompatible) {
-        TestRestartWithDifferentVersion(
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
-            }.ToPB(),
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 1, .Hotfix = 0 },
-            }.ToPB(),
-            false
-        );
-    }
-
-    Y_UNIT_TEST(YdbVersionNewIncompatibleWithDefault) {
-        TestRestartWithDifferentVersion(
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
-            }.ToPB(),
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 0 },
-            }.ToPB(),
-            true
-        );
-    }
-
-    Y_UNIT_TEST(YdbVersionTrunk) {
-        TestRestartWithDifferentVersion(
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-            }.ToPB(),
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-            }.ToPB(),
-            true
-        );
-    }
-
-    Y_UNIT_TEST(YdbVersionSuppressCompatibilityCheck) {
-        TestRestartWithDifferentVersion(
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "trunk",
-            }.ToPB(),
-            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "ydb",
-                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 8, .Hotfix = 0 },
-            }.ToPB(),
-            true,
-            true
-        );
-    }
-
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
         TActorTestContext testCtx({
             .IsBad=false,
@@ -1030,6 +938,148 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
 
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {
+    using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
+    THolder<NPDisk::TEvYardInitResult> RestartPDisk(TActorTestContext& testCtx, ui32 pdiskId, TVDiskMock& vdisk, TCurrent* newInfo) {
+        TCompatibilityInfoTest::Reset(newInfo);
+        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(pdiskId, testCtx.MainKey, nullptr));
+        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
+        return testCtx.Recv<NPDisk::TEvYardInitResult>();
+    }
+
+    void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible, bool suppressCompatibilityCheck = false) {
+        TCompatibilityInfoTest::Reset(&oldInfo);
+
+        TActorTestContext testCtx({
+            .IsBad = false,
+            .SuppressCompatibilityCheck = suppressCompatibilityCheck,
+        });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+
+        const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &newInfo);
+        if (isCompatible) {
+            UNIT_ASSERT(evInitRes->Status == NKikimrProto::OK);
+        } else {
+            UNIT_ASSERT(evInitRes->Status != NKikimrProto::OK);
+        }
+    }
+
+    void TestMajorVerionMigration(TCurrent oldInfo, TCurrent intermediateInfo, TCurrent newInfo) {
+        TCompatibilityInfoTest::Reset(&oldInfo);
+    
+        TActorTestContext testCtx({
+            .IsBad = false,
+            .SuppressCompatibilityCheck = false,
+        });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        auto pdiskId = testCtx.GetPDisk()->PDiskId;
+
+        {
+            const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &intermediateInfo);
+            UNIT_ASSERT(evInitRes->Status == NKikimrProto::OK);
+        }
+
+        {
+            const auto evInitRes = RestartPDisk(testCtx, pdiskId, vdisk, &newInfo);
+            UNIT_ASSERT(evInitRes->Status == NKikimrProto::OK);
+        }
+    }
+
+    Y_UNIT_TEST(OldCompatible) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 2, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(Incompatible) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            false
+        );
+    }
+
+    Y_UNIT_TEST(NewIncompatibleWithDefault) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(Trunk) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+            }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(SuppressCompatibilityCheck) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "trunk",
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 8, .Hotfix = 0 },
+            }.ToPB(),
+            true,
+            true
+        );
+    }
+
+    Y_UNIT_TEST(Migration) {
+        TestMajorVerionMigration(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 20, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 4, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 5, .Minor = 1, .Hotfix = 0 },
+            }.ToPB()
+        );
     }
 
 }

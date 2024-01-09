@@ -117,13 +117,22 @@ public:
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+
+        if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
+            LOG_I("Operation has been already removed");
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
+            CompleteAndPassAway();
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Can't get operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus, ComputeStatus));
+            LOG_E("Can't get operation: " << response.Issues.ToOneLineString());
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
             FailedAndPassAway();
             return;
         }
 
+        ReportPublicCounters(response.QueryStats);
         StartTime = TInstant::Now();
         LOG_D("Execution status: " << static_cast<int>(response.ExecStatus));
         switch (response.ExecStatus) {
@@ -150,6 +159,50 @@ public:
                 QueryStats = response.QueryStats;
                 Complete();
                 break;
+        }
+    }
+
+    void ReportPublicCounters(const Ydb::TableStats::QueryStats& stats) {
+        try {
+            auto stat = GetPublicStat(GetV1StatFromV2Plan(stats.query_plan()));
+            auto publicCounters = GetPublicCounters();
+
+            if (stat.MemoryUsageBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.memory_usage_bytes");
+                counter = *stat.MemoryUsageBytes;
+            }
+
+            if (stat.CpuUsageUs) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.cpu_usage_us", true);
+                counter = *stat.CpuUsageUs;
+            }
+
+            if (stat.InputBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.input_bytes", true);
+                counter = *stat.InputBytes;
+            }
+
+            if (stat.OutputBytes) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.output_bytes", true);
+                counter = *stat.OutputBytes;
+            }
+
+            if (stat.SourceInputRecords) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.source_input_records", true);
+                counter = *stat.SourceInputRecords;
+            }
+
+            if (stat.SinkOutputRecords) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.sink_output_records", true);
+                counter = *stat.SinkOutputRecords;
+            }
+
+            if (stat.RunningTasks) {
+                auto& counter = *publicCounters->GetNamedCounter("name", "query.running_tasks");
+                counter = *stat.RunningTasks;
+            }
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
         }
     }
 

@@ -1684,6 +1684,109 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         env.DestroyDefaultCmsPipe();
     }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailWhileSentinelIsDisabled)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ),
+            TStatus::ERROR
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnUnsupportedAction)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(0))
+            ),
+            TStatus::WRONG_REQUEST
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnMultipleActions)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000)
+            ),
+            TStatus::WRONG_REQUEST
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEviction)
+    {
+        auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        // ok
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP
+        );
+        // forbid another prepare request for same host
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::WRONG_REQUEST
+        );
+
+        // "move" vdisks
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        // prepared
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckRejectRequest("user", request1.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+
+        // allow immediately
+        auto request2 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::ALLOW
+        );
+        UNIT_ASSERT_VALUES_EQUAL(request2.PermissionsSize(), 1);
+
+        // check markers after restart
+        env.RestartCms();
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::WRONG_REQUEST
+        );
+
+        env.CheckRejectRequest("user", request2.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", request2.GetPermissions(0).GetId());
+
+        // restore vdisks
+        node.VDisksMoved = false;
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        // prepare
+        auto request3 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP
+        );
+
+        // reject until prepared
+        env.CheckRejectRequest("user", request3.GetRequestId());
+    }
 }
 
 }

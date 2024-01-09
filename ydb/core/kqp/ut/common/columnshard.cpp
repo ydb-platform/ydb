@@ -100,7 +100,12 @@ namespace NKqp {
         if (!Sharding.empty()) {
             str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
         }
-        str << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount << ");";
+        str << " WITH (STORE = COLUMN";
+        str << ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount;
+        if (TTLConf) {
+            str << ", TTL = " << TTLConf->second << " ON " << TTLConf->first;
+        }
+        str << ");";
         return str;
     }
 

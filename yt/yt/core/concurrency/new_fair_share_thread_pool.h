@@ -13,6 +13,7 @@ struct TNewTwoLevelFairShareThreadPoolOptions
     IPoolWeightProviderPtr PoolWeightProvider = nullptr;
     bool VerboseLogging = false;
     TDuration PollingPeriod = TDuration::MilliSeconds(10);
+    TDuration PoolRetentionTime = TDuration::Seconds(30);
 };
 
 ITwoLevelFairShareThreadPoolPtr CreateNewTwoLevelFairShareThreadPool(

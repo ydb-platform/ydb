@@ -157,7 +157,7 @@ std::optional<NKikimr::NOlap::TPortionInfoWithBlobs> TPortionInfoWithBlobs::Chan
 
         const TString blobOriginal = GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
         {
-            auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoader(rec.ColumnId)->Apply(blobOriginal));
+            auto rb = NArrow::TStatusValidator::GetValid(currentSchema->GetColumnLoaderVerified(rec.ColumnId)->Apply(blobOriginal));
             auto columnSaver = currentSchema->GetColumnSaver(rec.ColumnId, saverContext);
             const TString newBlob = columnSaver.Apply(rb);
             if (newBlob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {

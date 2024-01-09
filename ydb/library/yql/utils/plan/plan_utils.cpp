@@ -159,7 +159,7 @@ TString PrettyExprStr(const TExprBase& expr) {
         return AggrOpToStr(expr);
     } else if (aggregations.contains(expr.Ref().Content())) {
         return TStringBuilder() << aggregations.at(expr.Ref().Content()) << "("
-            << PrettyExprStr(TExprBase(expr.Ref().Child(0))) << ")";
+            << PrettyExprStr(TExprBase(expr.Ref().Child(0))) << ',' << PrettyExprStr(TExprBase(expr.Ref().Child(1))) << ")";
     } else if (expr.Maybe<TCoBinaryArithmetic>() || expr.Maybe<TCoCompare>()) {
         return BinaryOpToStr(expr);
     } else if (expr.Maybe<TCoAnd>() || expr.Maybe<TCoOr>() || expr.Maybe<TCoXor>()) {

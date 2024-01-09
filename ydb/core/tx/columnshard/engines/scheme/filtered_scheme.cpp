@@ -42,9 +42,9 @@ TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId, const 
     return OriginalSnapshot->GetColumnSaver(columnId, context);
 }
 
-std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoader(const ui32 columnId) const {
+std::shared_ptr<TColumnLoader> TFilteredSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
     Y_ABORT_UNLESS(ColumnIds.contains(columnId));
-    return OriginalSnapshot->GetColumnLoader(columnId);
+    return OriginalSnapshot->GetColumnLoaderOptional(columnId);
 }
 
 std::optional<ui32> TFilteredSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {

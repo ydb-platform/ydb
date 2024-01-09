@@ -46,54 +46,115 @@ class Factory:
                     ydb_type=Type.UINT8,
                     data_source_type=DataSourceType(ch=clickhouse.UInt8()),
                 ),
-                # TODO: check these data types more closely, a lot of possible overflow cases
-                # in ClickHouse Golang driver!
-                # Column(
-                #     name='col_1_date',
-                #     ydb_type=Type.DATE,
-                #     data_source_type=DataSourceType(ch=clickhouse.Date()),
-                # ),
-                # Column(
-                #     name='col_2_datetime',
-                #     ydb_type=Type.DATETIME,
-                #     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
-                # ),
                 Column(
-                    name='col_3_datetime64',
+                    name='col_1_date',
+                    ydb_type=Type.DATE,
+                    data_source_type=DataSourceType(ch=clickhouse.Date()),
+                ),
+                Column(
+                    name='col_2_date32',
+                    ydb_type=Type.DATE,
+                    data_source_type=DataSourceType(ch=clickhouse.Date32()),
+                ),
+                Column(
+                    name='col_3_datetime',
+                    ydb_type=Type.DATETIME,
+                    data_source_type=DataSourceType(ch=clickhouse.DateTime()),
+                ),
+                Column(
+                    name='col_4_datetime64',
                     ydb_type=Type.TIMESTAMP,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
             ),
         )
+
+        '''
+        ClickHouse values' bounds:
+        Date                    [1970-01-01, 2149-06-06]
+        Date32                  [1900-01-01, 2299-12-31]
+        Datetime                [1970-01-01 00:00:00, 2106-02-07 06:28:15]
+        Datetime64              [1900-01-01 00:00:00, 2299-12-31 23:59:59.99999999]
+
+        YQL datetime bounds:    [1970-01-01 00:00:00, 2106-01-01 00:00:00]
+        '''
+
         data_in = [
-            # Date is OK for CH, but too early for YQL
+            # Value is too early for both CH and YQL
+            # In this case ClickHouse behaviour is undefined
+            # Clickhouse cuts off only date part of value along ClickHouse bottom bound
             [
                 1,
-                '1950-05-27 12:23:45.678',
+                '1950-01-10',
+                '1850-01-10',
+                '1950-01-10 12:23:45',
+                '1850-01-10 12:23:45.678',
             ],
-            # Date is OK for both CH and YQL
+            # Value is OK for CH, but can be too early for YQL
             [
                 2,
-                '1988-11-20 12:23:45.678',
+                '1970-01-10',
+                '1950-01-10',
+                '1980-01-10 12:23:45',
+                '1950-01-10 12:23:45.678',
             ],
-            # Date is OK for CH, but too late for YQL
+            # Value is OK for both CH and YQL
             [
                 3,
-                '2108-01-01 12:23:45.678',
+                '2004-01-10',
+                '2004-01-10',
+                '2004-01-10 12:23:45',
+                '2004-01-10 12:23:45.678',
+            ],
+            # Value is OK for CH, but too late for YQL
+            [
+                4,
+                '2110-01-10',
+                '2110-01-10',
+                '2106-01-10 12:23:45',
+                '2110-01-10 12:23:45.678',
+            ],
+            # Value is too late for both OK for CH
+            # In this case ClickHouse behaviour is undefined
+            # "Natural" overflow for Datetime
+            # Cutting off along ClickHouse top bound for other types
+            [
+                5,
+                '2150-01-10',
+                '2300-01-10',
+                '2107-01-10 12:23:45',
+                '2300-01-10 12:23:45.678',
             ],
         ]
 
         data_out = [
             [
                 1,
+                datetime.date(1970, 1, 1),
+                None,
+                None,
+                None,
+            ],
+            [2, datetime.date(1970, 1, 10), None, datetime.datetime(1980, 1, 10, 12, 23, 45), None],
+            [
+                3,
+                datetime.date(2004, 1, 10),
+                datetime.date(2004, 1, 10),
+                datetime.datetime(2004, 1, 10, 12, 23, 45),
+                datetime.datetime(2004, 1, 10, 12, 23, 45, 678000),
+            ],
+            [
+                4,
+                None,
+                None,
+                None,
                 None,
             ],
             [
-                2,
-                datetime.datetime(1988, 11, 20, 12, 23, 45, 678000),
-            ],
-            [
-                3,
+                5,
+                None,
+                None,
+                datetime.datetime(1970, 12, 4, 5, 55, 29),
                 None,
             ],
         ]
@@ -101,7 +162,7 @@ class Factory:
         data_source_kind = EDataSourceKind.CLICKHOUSE
 
         return TestCase(
-            name=self._name + f'_{data_source_kind}_YQL',
+            name=self._name + '_ch_YQL',
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -163,7 +224,7 @@ class Factory:
         data_source_kind = EDataSourceKind.POSTGRESQL
 
         return TestCase(
-            name=self._name + f'_{data_source_kind}_YQL',
+            name=self._name + '_pg_YQL',
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -183,59 +244,96 @@ class Factory:
                     ydb_type=Type.UINT8,
                     data_source_type=DataSourceType(ch=clickhouse.UInt8()),
                 ),
-                # TODO: check these data types more closely, a lot of possible overflow cases
-                # in ClickHouse Golang driver!
-                # Column(
-                #     name='col_1_date',
-                #     ydb_type=Type.DATE,
-                #     data_source_type=DataSourceType(ch=clickhouse.Date()),
-                # ),
-                # Column(
-                #     name='col_2_datetime',
-                #     ydb_type=Type.DATETIME,
-                #     data_source_type=DataSourceType(ch=clickhouse.DateTime()),
-                # ),
                 Column(
-                    name='col_3_datetime64',
+                    name='col_1_date',
+                    ydb_type=Type.DATE,
+                    data_source_type=DataSourceType(ch=clickhouse.Date()),
+                ),
+                Column(
+                    name='col_2_date32',
+                    ydb_type=Type.DATE,
+                    data_source_type=DataSourceType(ch=clickhouse.Date32()),
+                ),
+                Column(
+                    name='col_3_datetime',
+                    ydb_type=Type.DATETIME,
+                    data_source_type=DataSourceType(ch=clickhouse.DateTime()),
+                ),
+                Column(
+                    name='col_4_datetime64',
                     ydb_type=Type.TIMESTAMP,
                     data_source_type=DataSourceType(ch=clickhouse.DateTime64()),
                 ),
             ),
         )
+
         data_in = [
+            # Value is too early for both CH and YQL
+            # In this case ClickHouse behaviour is undefined
+            # For Datetime Clickhouse returns bottom bound and
+            # cuts off only date part of value along ClickHouse bottom bound for other types
             [
                 1,
-                '1950-01-27 12:23:45.678',
+                '1950-01-10',
+                '1850-01-10',
+                '1950-01-10 12:23:45',
+                '1850-01-10 12:23:45.678',
             ],
+            # Value is OK for CH, but can be too early for YQL
             [
                 2,
-                '1988-11-20 12:23:45.678',
+                '1970-01-10',
+                '1950-01-10',
+                '1980-01-10 12:23:45',
+                '1950-01-10 12:23:45.678',
             ],
+            # Value is OK for both CH and YQL
             [
                 3,
-                '2108-01-01 12:23:45.678',
+                '2004-01-10',
+                '2004-01-10',
+                '2004-01-10 12:23:45',
+                '2004-01-10 12:23:45.678',
+            ],
+            # Value is OK for CH, but too late for YQL
+            [
+                4,
+                '2110-01-10',
+                '2110-01-10',
+                '2106-01-10 12:23:45',
+                '2110-01-10 12:23:45.678',
+            ],
+            # Value is too late for both OK for CH
+            # In this case ClickHouse behaviour is undefined
+            # "Natural" overflow for Datetime
+            # Cutting off along ClickHouse top bound for other types
+            [
+                5,
+                '2150-01-10',
+                '2300-01-10',
+                '2107-01-10 12:23:45',
+                '2300-01-10 12:23:45.678',
             ],
         ]
 
         data_out = [
+            [1, '1970-01-01', '1900-01-01', '1970-01-01T00:00:00Z', '1900-01-01T12:23:45.678Z'],
+            [2, '1970-01-10', '1950-01-10', '1980-01-10T12:23:45Z', '1950-01-10T12:23:45.678Z'],
+            [3, '2004-01-10', '2004-01-10', '2004-01-10T12:23:45Z', '2004-01-10T12:23:45.678Z'],
+            [4, '2110-01-10', '2110-01-10', '2106-01-10T12:23:45Z', '2110-01-10T12:23:45.678Z'],
             [
-                1,
-                '1950-01-27T12:23:45.678Z',
-            ],
-            [
-                2,
-                '1988-11-20T12:23:45.678Z',
-            ],
-            [
-                3,
-                '2108-01-01T12:23:45.678Z',
+                5,
+                '2149-06-06',
+                '2299-12-31',
+                '1970-12-04T05:55:29Z',
+                '1900-01-01T00:00:00.000Z',  # TODO: strange overflow under bottom bound for datetime64
             ],
         ]
 
         data_source_kind = EDataSourceKind.CLICKHOUSE
 
         return TestCase(
-            name=self._name + f'_{data_source_kind}_string',
+            name=self._name + '_ch_string',
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -293,7 +391,7 @@ class Factory:
         data_source_kind = EDataSourceKind.POSTGRESQL
 
         return TestCase(
-            name=self._name + f'_{data_source_kind}_string',
+            name=self._name + '_pg_string',
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,

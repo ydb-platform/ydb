@@ -1002,9 +1002,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseCanonicalNullRelations) {
-        req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
-    }
+    req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;
@@ -1067,7 +1065,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
                 THROW_ERROR_EXCEPTION("Duplicate tablet id in end replication row indexes")
                     << TErrorAttribute("tablet_id", tabletId);
             }
-            InsertOrCrash(result.EndReplicationRowIndexes, std::make_pair(tabletId, rowIndex));
+            InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }
 
         result.Rowset = DeserializeRowset(

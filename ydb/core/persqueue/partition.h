@@ -225,8 +225,11 @@ private:
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
-    TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize);
-    TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset);
+    TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset);
+    TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+                                                   const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
+                                                   ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
 
     ui64 GetUsedStorage(const TActorContext& ctx);
 
@@ -335,16 +338,21 @@ private:
     void ChangePlanStepAndTxId(ui64 step, ui64 txId);
 
     void ResendPendingEvents(const TActorContext& ctx);
+    void SendReadPreparedProxyResponse(const TReadAnswer& answer, const TReadInfo& readInfo, TUserInfo& user);
+
+    void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
+    // void DestroyReadSession(const TReadSessionKey& key);
 
     void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
+    
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
     }
 
-    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
+    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
@@ -566,6 +574,7 @@ private:
 
 private:
     ui64 TabletID;
+    ui32 TabletGeneration;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
@@ -746,7 +755,8 @@ private:
     TInstant LastUsedStorageMeterTimestamp;
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
+    TRowVersion LastEmittedHeartbeat;
 };
 
-
 } // namespace NKikimr::NPQ
+

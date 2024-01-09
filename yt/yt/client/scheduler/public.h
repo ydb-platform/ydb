@@ -74,6 +74,8 @@ DEFINE_ENUM(ESchemaInferenceMode,
     (FromOutput)
 );
 
+// NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
+// If you change it, you must bump the controller agent tracker service protocol version!
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))
@@ -128,6 +130,8 @@ DEFINE_ENUM(EAbortReason,
     ((Abandoned)                       ( 49))
     // TODO(ignat): is it actually a scheduling type of abortion?
     ((JobSettlementTimedOut)           ( 50))
+    ((NonexistentPoolTree)             ( 51))
+    ((WrongSchedulingSegmentModule)    ( 52))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

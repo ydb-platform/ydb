@@ -13,6 +13,7 @@ SRCS(
     filter_ut.cpp
     lexer_ut.cpp
     protobuf_scalar_type_ut.cpp
+    protobuf_yson_schema_ut.cpp
     protobuf_yson_ut.cpp
     ypath_designated_yson_consumer_ut.cpp
     yson_parser_ut.cpp
@@ -25,6 +26,7 @@ SRCS(
     proto/protobuf_yson_ut.proto
     proto/protobuf_yson_casing_ut.proto
     proto/protobuf_yson_casing_ext_ut.proto
+    proto/protobuf_yson_schema_ut.proto
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

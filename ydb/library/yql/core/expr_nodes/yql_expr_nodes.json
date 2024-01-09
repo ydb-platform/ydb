@@ -515,6 +515,23 @@
             ]
         },
         {
+            "Name": "TCoPgType",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgType"},
+            "Children": [
+                {"Index": 0, "Name": "TypeName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TCoPgConst",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgConst"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Type", "Type": "TCoPgType"}
+            ]
+        },
+        {
             "Name": "TCoExtendBase",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "CallableBase"}
@@ -705,6 +722,15 @@
             "Name": "TCoAggregateFinalize",
             "Base": "TCoAggregateBase",
             "Match": {"Type": "Callable", "Name": "AggregateFinalize"}
+        },
+        {
+            "Name": "TCoFold",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "Fold"},
+            "Children": [
+                {"Index": 1, "Name": "State",         "Type": "TExprBase"},
+                {"Index": 2, "Name": "UpdateHandler", "Type": "TCoLambda"}
+            ]
         },
         {
             "Name": "TCoFold1",
@@ -1275,12 +1301,12 @@
             "Match": {"Type": "Callable", "Name": "AggrAdd"}
         },
         {
-            "Name": "TCoMinus",
+            "Name": "TCoSub",
             "Base": "TCoBinaryArithmetic",
             "Match": {"Type": "Callable", "Name": "-"}
         },
         {
-            "Name": "TCoPlus",
+            "Name": "TCoAdd",
             "Base": "TCoBinaryArithmetic",
             "Match": {"Type": "Callable", "Name": "+"}
         },
@@ -2393,7 +2419,6 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         },
-
         {
             "Name": "TCoPgSelect",
             "Base": "TCallable",
@@ -2418,6 +2443,23 @@
                 {"Index": 0, "Name": "ExpandedColumns", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Type", "Type": "TCallable"},
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoPickle",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "Pickle"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoUnpickle",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "Unpickle"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TCallable"},
+                {"Index": 1, "Name": "Buffer", "Type": "TExprBase"}
             ]
         }
     ]

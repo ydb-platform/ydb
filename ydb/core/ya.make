@@ -4,6 +4,7 @@ RECURSE(
     blobstorage
     blob_depot
     blockstore
+    change_exchange
     client
     cms
     control
@@ -17,6 +18,7 @@ RECURSE(
     filestore
     fq
     formats
+    graph
     grpc_caching
     grpc_services
     grpc_streaming

@@ -5,10 +5,18 @@
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
+    Y_UNIT_TEST(Locking) {
+        auto res = PgSqlToYql("SELECT 1 FROM plato.Input FOR UPDATE");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().find("locking") != TString::npos);
+    }
+
     Y_UNIT_TEST(InsertStmt) {
         auto res = PgSqlToYql("INSERT INTO plato.Input VALUES (1, 1)");
         UNIT_ASSERT(res.Root);
-        res.Root->PrintTo(Cerr);
     }
 
     Y_UNIT_TEST(InsertStmt_DefaultValues) {
@@ -94,7 +102,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '())) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -110,7 +118,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -126,7 +134,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -142,7 +150,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'int4)))) '('primarykey '('a)) '('notnull '('a)) '('default 'b (PgConst '0 (PgType 'int4))))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'int4) '('columnConstraints '('('default (PgConst '0 (PgType 'int4)))))))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -158,7 +166,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '())))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -174,7 +182,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a)) '('notnull '('a 'b)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -190,7 +198,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
         (
             (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)) '('b (PgType 'text)))) '('primarykey '('a 'b)) '('notnull '('b 'a)))))
+            (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('not_null)))) '('b (PgType 'text) '('columnConstraints '('('not_null)))))) '('primarykey '('a 'b)))))
             (let world (CommitAll! world))
             (return world)
         )
@@ -224,7 +232,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))) '('serialColumns '('a)))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4) '('columnConstraints '('('serial)))))))))
                 (let world (CommitAll! world))
                 (return world))
         )";
@@ -397,7 +405,6 @@ SELECT COUNT(*) FROM public.t;");
 
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
-        Cerr << res.Root->ToString();
         TString updateStmtProg = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
@@ -427,5 +434,26 @@ SELECT COUNT(*) FROM public.t;");
         UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
         UNIT_ASSERT_C(res.Root, "Failed to parse statement, root is nullptr");
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(BlockEngine) {
+        auto res = PgSqlToYql("set blockEngine='auto'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'auto))");
+
+        res = PgSqlToYql("set Blockengine='force'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(res.Root->ToString(), "(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))");
+
+        res = PgSqlToYql("set BlockEngine='disable'; select 1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT(!res.Root->ToString().Contains("BlockEngine"));
+
+        res = PgSqlToYql("set BlockEngine='foo'; select 1;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_EQUAL(res.Issues.Size(), 1);
+
+        auto issue = *(res.Issues.begin());
+        UNIT_ASSERT(issue.GetMessage().Contains("VariableSetStmt, not supported BlockEngine option value: foo"));
     }
 }

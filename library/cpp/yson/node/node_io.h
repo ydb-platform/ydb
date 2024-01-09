@@ -33,6 +33,12 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, ::NYson
 TNode NodeFromJsonString(const TStringBuf input);
 bool TryNodeFromJsonString(const TStringBuf input, TNode& dst);
 
+// Parse TNode from string in JSON format using an iterative JSON parser.
+// Iterative JSON parsers still use the stack, but allocate it on the heap (instead of using the system call stack).
+// Needed to mitigate stack overflow with short stacks on deeply nested JSON strings
+//  (e.g. 256kb of stack when parsing "[[[[[[...]]]]]]" crashes the whole binary).
+TNode NodeFromJsonStringIterative(const TStringBuf input, ui64 maxDepth = 1024);
+
 // Convert TJsonValue to TNode
 TNode NodeFromJsonValue(const ::NJson::TJsonValue& input);
 

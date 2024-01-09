@@ -2,8 +2,6 @@
 
 #include "harmonizer.h"
 #include "executor_pool.h"
-#include "executor_pool_united_workers.h"
-#include "balancer.h"
 
 namespace NActors {
     struct TActorSystemSetup;
@@ -11,8 +9,6 @@ namespace NActors {
     class TCpuManager : public TNonCopyable {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
-        THolder<TUnitedWorkers> UnitedWorkers;
-        THolder<IBalancer> Balancer;
         THolder<IHarmonizer> Harmonizer;
         TCpuManagerConfig Config;
 

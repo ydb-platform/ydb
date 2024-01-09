@@ -18,10 +18,20 @@
                                 "Node Type": "Limit-Offset",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     },
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 6
+                                            }
+                                        ],
                                         "Name": "Offset",
                                         "Offset": "1000"
                                     }
@@ -37,7 +47,12 @@
                                                 "Node Type": "Limit",
                                                 "Operators": [
                                                     {
-                                                        "Limit": "10 + 1000",
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 4
+                                                            }
+                                                        ],
+                                                        "Limit": "SUM(10,1000)",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -52,7 +67,12 @@
                                                                 "Node Type": "TopSort",
                                                                 "Operators": [
                                                                     {
-                                                                        "Limit": "10 + 1000",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 2
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,1000)",
                                                                         "Name": "TopSort",
                                                                         "TopSortBy": "argument.Count0"
                                                                     }
@@ -71,15 +91,26 @@
                                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
                                                                                         "GroupBy": "item.URL",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Filter",
                                                                                         "Predicate": "item.EventDate >= \"15887\" And item.EventDate <= \"15917\""
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "CounterID",

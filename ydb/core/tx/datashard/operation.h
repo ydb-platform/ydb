@@ -398,7 +398,7 @@ public:
         ResetFlag(TTxFlags::AcquiredSnapshotReference);
     }
 
-    bool IsMvccSnapshotRead() { return !MvccSnapshot.IsMax(); }
+    bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
     bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
@@ -806,6 +806,9 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
+    NWilson::TTraceId GetTraceId() const noexcept {
+        return OperationSpan.GetTraceId();
+    }
 
 protected:
     TOperation()
@@ -885,6 +888,8 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
+    
+    NWilson::TSpan OperationSpan;
 };
 
 inline IOutputStream &operator <<(IOutputStream &out,

@@ -1,4 +1,4 @@
-#include <library/cpp/monlib/service/pages/templates.h> 
+#include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/vector.h>
@@ -459,7 +459,15 @@ public:
         // out << "<script>$('.container').css('width', 'auto');</script>";
         out << "<table class='table table-sortable'>";
         out << "<thead>";
-        out << "<tr><th>TenantId</th><th>Name</th><th>Hive</th><th>Status</th></tr>";
+        out << "<tr>";
+        out << "<th>TenantId</th>";
+        out << "<th>Name</th>";
+        out << "<th>Hive</th>";
+        out << "<th>Status</th>";
+        out << "<th>TabletsAliveInTenantDomain</th>";
+        out << "<th>TabletsAliveInOtherDomains</th>";
+        out << "<th>TabletsTotal</th>";
+        out << "</tr>";
         out << "</thead>";
         out << "<tbody>";
         for (const auto& [domainKey, domainInfo] : Self->Domains) {
@@ -482,6 +490,18 @@ public:
                 out << "<td>-</td>";
                 out << "<td>-</td>";
             }
+            if (domainInfo.TabletsTotal > 0) {
+                out << "<td>" << std::round(domainInfo.TabletsAliveInObjectDomain * 100.0 / domainInfo.TabletsTotal) << "%"
+                    << " (" << domainInfo.TabletsAliveInObjectDomain << " of " << domainInfo.TabletsTotal << ")" << "</td>";
+
+                const ui64 tabletsAliveInOtherDomains = domainInfo.TabletsAlive - domainInfo.TabletsAliveInObjectDomain;
+                out << "<td>" << std::round(tabletsAliveInOtherDomains * 100.0 / domainInfo.TabletsTotal) << "%"
+                    << " (" << tabletsAliveInOtherDomains << " of " << domainInfo.TabletsTotal << ")" << "</td>";
+            } else {
+                out << "<td>-</td>";
+                out << "<td>-</td>";
+            }
+            out << "<td>" << domainInfo.TabletsTotal << "</td>";
             out << "</tr>";
         }
         out << "</tbody>";
@@ -747,7 +767,8 @@ public:
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard}) {
+             TTabletTypes::ColumnShard,
+             TTabletTypes::GraphShard}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -1280,6 +1301,8 @@ public:
             return "BD";
         case TTabletTypes::StatisticsAggregator:
             return "SA";
+        case TTabletTypes::GraphShard:
+            return "GS";
         default:
             return Sprintf("%d", (int)type);
         }
@@ -1869,7 +1892,7 @@ function fillDataShort(result) {
         if ("TotalTablets" in result) {
             var percent = Math.floor(result.RunningTablets * 100 / result.TotalTablets) + '%';
             var values = result.RunningTablets + ' of ' + result.TotalTablets;
-            var warmup = result.Warmup ? "<span class='glyphicon glyphicon-fire' style='color:red; margin-right:4px'></span>" : "";
+            var warmup = result.WarmUp ? "<span class='glyphicon glyphicon-fire' style='color:red; margin-right:4px'></span>" : "";
             $('#runningTablets').html(warmup + percent + ' (' + values + ')');
             $('#aliveNodes').html(result.AliveNodes);
             $('#bootQueue').html(result.BootQueueSize);
@@ -3261,6 +3284,16 @@ public:
         return result;
     }
 
+    template<typename Type>
+    static NJson::TJsonValue MakeFrom(const TArrayRef<Type>& arrayRef) {
+        NJson::TJsonValue result;
+        result.SetType(NJson::JSON_ARRAY);
+        for (const auto& item : arrayRef) {
+            result.AppendValue(MakeFrom(item));
+        }
+        return result;
+    }
+
     static NJson::TJsonValue MakeFrom(const TIntrusivePtr<TTabletStorageInfo>& info) {
         NJson::TJsonValue result;
         if (info == nullptr) {
@@ -3369,7 +3402,8 @@ public:
         result["KnownGeneration"] = tablet.KnownGeneration;
         result["BootMode"] = NKikimrHive::ETabletBootMode_Name(tablet.BootMode);
         result["Owner"] = TStringBuilder() << tablet.Owner;
-        result["EffectiveAllowedDomain"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
+        result["AllowedDomains"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
+        result["EffectiveAllowedDomains"] = MakeFrom(tablet.NodeFilter.GetEffectiveAllowedDomains());
         result["StorageInfoSubscribers"] = MakeFrom(tablet.StorageInfoSubscribers);
         result["LockedToActor"] = MakeFrom(tablet.LockedToActor);
         result["LockedReconnectTimeout"] = tablet.LockedReconnectTimeout.ToString();

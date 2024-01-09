@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const {
-    auto loader = SchemaInfo->GetColumnLoader(SchemaInfo->GetFieldByColumnIdVerified(Record.ColumnId)->name());
+    auto loader = SchemaInfo->GetColumnLoaderVerified(Record.ColumnId);
     auto rb = NArrow::TStatusValidator::GetValid(loader->Apply(Data));
 
     auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(rb, Data, splitSizes);
@@ -73,7 +73,7 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
 bool TColumnPortion::FlushBuffer() {
     if (Builder->length()) {
         auto newArrayChunk = NArrow::TStatusValidator::GetValid(Builder->Finish());
-        Chunks.emplace_back(std::make_shared<TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetField()), newArrayChunk, Context.GetColumnId(), Context.GetSchemaInfo()));
+        Chunks.emplace_back(std::make_shared<TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetResultField()), newArrayChunk, Context.GetColumnId(), Context.GetSchemaInfo()));
         Builder = Context.MakeBuilder();
         CurrentChunkRawSize = 0;
         PredictedPackedBytes = 0;

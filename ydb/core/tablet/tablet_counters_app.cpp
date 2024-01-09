@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/protos/counters_kesus.pb.h>
+#include <ydb/core/graph/shard/protos/counters_shard.pb.h>
 
 namespace NKikimr {
 
@@ -34,6 +35,12 @@ THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType t
             NKesus::ESimpleCounters_descriptor,
             NKesus::ECumulativeCounters_descriptor,
             NKesus::EPercentileCounters_descriptor
+        >>();
+    case TTabletTypes::GraphShard:
+        return MakeHolder<TAppProtobufTabletCounters<
+            NGraphShard::ESimpleCounters_descriptor,
+            NGraphShard::ECumulativeCounters_descriptor,
+            NGraphShard::EPercentileCounters_descriptor
         >>();
     default:
         return {};

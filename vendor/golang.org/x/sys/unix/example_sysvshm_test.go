@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build (darwin && !ios) || (linux && !android)
-// +build darwin,!ios linux,!android
 
 package unix_test
 

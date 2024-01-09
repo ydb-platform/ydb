@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
+#include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -159,7 +160,16 @@ public:
             return false;
         }
 
-        NCommon::WriteStatistics(writer, totalOnly, State_->Statistics);
+        writer.OnBeginMap();
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false);
+            writer.OnKeyedItem("Hybrid");
+            writer.OnBeginMap();
+                for (const auto& [opName, stats] : State_->HybridStatistics) {
+                    writer.OnKeyedItem(opName);
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}});
+                }
+            writer.OnEndMap();
+        writer.OnEndMap();
 
         return true;
     }
@@ -250,7 +260,9 @@ public:
     }
 
     void PostRewriteIO() final {
-        State_->TablesData->CleanupCompiledSQL();
+        if (!State_->Types->EvaluationInProgress) {
+            State_->TablesData->CleanupCompiledSQL();
+        }
     }
 
     void Reset() final {
@@ -497,6 +509,15 @@ public:
         }
 
         return TString{node.Content()};
+    }
+
+    bool WriteSchemaHeader(NYson::TYsonWriter& writer) override {
+        writer.OnKeyedItem("YtSchema");
+        return true;
+    }
+
+    void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override {
+        writer.OnStringScalar(GetTypeV3String(type));
     }
 
     ITrackableNodeProcessor& GetTrackableNodeProcessor() override {

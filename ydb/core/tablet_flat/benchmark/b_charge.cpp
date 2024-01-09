@@ -1,8 +1,8 @@
 #include <benchmark/benchmark.h>
-#include <random>
 
 #include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/core/tablet_flat/flat_part_charge.h>
+#include <ydb/core/tablet_flat/flat_part_charge_range.h>
+#include <ydb/core/tablet_flat/flat_part_charge_create.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -32,35 +32,10 @@ namespace {
         ui64 TouchedCount = 0;
     };
 
-    struct TCooker {
-        TCooker(const TRowScheme &scheme)
-            : Tool(scheme)
-            , Writer(new TPartScheme(scheme.Cols), { }, NPage::TGroupId(0))
-        {
-
-        }
-
-        TCooker& Add(const NTest::TRow &row, ui64 offset, ui32 page)
-        {
-            const TCelled key(Tool.LookupKey(row), *Tool.Scheme.Keys, false);
-
-            return Writer.Add(key, offset, page), *this;
-        }
-
-        TSharedData Flush()
-        {
-            return Writer.Flush();
-        }
-
-    private:
-        const NTest::TRowTool Tool;
-        NPage::TIndexWriter Writer;
-    };
-
-    struct TModel : public benchmark::Fixture {
+    struct TPrechargeFixture : public benchmark::Fixture {
         using TGroupId = NPage::TGroupId;
 
-        TModel()
+        TPrechargeFixture()
             : Tool(*Mass.Model->Scheme)
         {
             Y_ABORT_UNLESS(NTest::IndexTools::CountMainPages(*Eggs.Lone()) > 120);
@@ -125,7 +100,7 @@ namespace {
     };
 }
 
-BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPrechargeFixture, PrechargeByKeys)(benchmark::State& state) {
     ui64 items = state.range(0);
 
     const auto &keyDefaults = *Tool.Scheme.Keys;
@@ -138,13 +113,13 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
         const auto from = Tool.KeyCells(Mass.Saved[lower]);
         const auto to = Tool.KeyCells(Mass.Saved[upper]);
 
-        TCharge::Range(Env.Get(), from, to, *Run.Get(), keyDefaults, Tags, items, Max<ui64>());
+        ChargeRange(Env.Get(), from, to, *Run.Get(), keyDefaults, Tags, items, Max<ui64>());
     }
 
     state.counters["Touched"] = benchmark::Counter(Env->TouchedCount, benchmark::Counter::kAvgIterations);
 }
 
-BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPrechargeFixture, PrechargeByRows)(benchmark::State& state) {
     ui64 items = state.range(0);
 
     const auto &keyDefaults = *Tool.Scheme.Keys;
@@ -154,18 +129,24 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
         ui32 lower = ++it % 50;
         ui32 upper = lower + items;
 
-        TCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false).Do(lower, upper, keyDefaults, items, Max<ui64>());
+        CreateCharge(Env.Get(), *(Run.Get())->begin()->Part, Tags, false)->Do(lower, upper, keyDefaults, items, Max<ui64>());
     }
 
     state.counters["Touched"] = Env->TouchedCount / it;
 }
 
-BENCHMARK_REGISTER_F(TModel, PrechargeByKeys)
-    ->ArgsProduct({/*items:*/ {0, 100, 1000}, /*fail:*/{0, 1}, /*groups:*/ {0, 1, 2}})
+BENCHMARK_REGISTER_F(TPrechargeFixture, PrechargeByKeys)
+    ->ArgsProduct({
+        /* items: */ {0, 100, 1000}, 
+        /* fail: */ {0, 1}, 
+        /* groups: */ {0, 1, 2}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TModel, PrechargeByRows)
-    ->ArgsProduct({/*items:*/ {0, 100, 1000}, /*fail:*/{0, 1}, /*groups:*/ {0, 1, 2}})
+BENCHMARK_REGISTER_F(TPrechargeFixture, PrechargeByRows)
+    ->ArgsProduct({
+        /* items: */ {0, 100, 1000}, 
+        /* fail: */{0, 1}, 
+        /* groups: */ {0, 1, 2}})
     ->Unit(benchmark::kMicrosecond);
 
 }

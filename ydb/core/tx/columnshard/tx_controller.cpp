@@ -174,9 +174,9 @@ NEvents::TDataEvents::TCoordinatorInfo TTxController::GetCoordinatorInfo(const u
     auto txInfo = BasicTxInfo.FindPtr(txId);
     Y_ABORT_UNLESS(txInfo);
     if (Owner.ProcessingParams) {
-        return NEvents::TDataEvents::TCoordinatorInfo(Owner.TabletID(), txInfo->MinStep, txInfo->MaxStep, Owner.ProcessingParams->GetCoordinators());
+        return NEvents::TDataEvents::TCoordinatorInfo(txInfo->MinStep, txInfo->MaxStep, Owner.ProcessingParams->GetCoordinators());
     }
-    return NEvents::TDataEvents::TCoordinatorInfo(Owner.TabletID(), txInfo->MinStep, txInfo->MaxStep, {});
+    return NEvents::TDataEvents::TCoordinatorInfo(txInfo->MinStep, txInfo->MaxStep, {});
 }
 
 size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc) {

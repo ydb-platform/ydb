@@ -40,8 +40,6 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <type_traits>
-
 namespace NFq {
 
 using namespace NActors;
@@ -881,7 +879,7 @@ private:
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters.IncOk();
             }
-            requestCounters.IncInFly();
+            requestCounters.DecInFly();
             requestCounters.Common->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
             requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());

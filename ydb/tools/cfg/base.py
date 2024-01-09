@@ -293,6 +293,7 @@ class ClusterDetailsProvider(object):
         self.static_cpu_count = self.__cluster_description.get("static_cpu_count", 20)
         self.dynamic_cpu_count = self.__cluster_description.get("dynamic_cpu_count", 8)
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
+        self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 

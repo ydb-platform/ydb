@@ -165,9 +165,11 @@ private:
                     Col("execution_id", NScheme::NTypeIds::Text),
                     Col("lease_deadline", NScheme::NTypeIds::Timestamp),
                     Col("lease_generation", NScheme::NTypeIds::Int64),
+                    Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
                 },
                 { "database", "execution_id" },
-                NKikimrServices::KQP_PROXY
+                NKikimrServices::KQP_PROXY,
+                TtlCol("expire_at")
             )
         );
     }
@@ -261,15 +263,15 @@ public:
             DECLARE $syntax AS Int32;
             DECLARE $meta AS JsonDocument;
             DECLARE $lease_duration AS Interval;
-            DECLARE $max_run_time AS Interval;
+            DECLARE $execution_meta_ttl AS Interval;
 
             UPSERT INTO `.metadata/script_executions`
                 (database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts, query_text, syntax, meta, expire_at)
-            VALUES ($database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax, $meta, CurrentUtcTimestamp() + $max_run_time);
+            VALUES ($database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax, $meta, CurrentUtcTimestamp() + $execution_meta_ttl);
 
             UPSERT INTO `.metadata/script_execution_leases`
-                (database, execution_id, lease_deadline, lease_generation)
-            VALUES ($database, $execution_id, CurrentUtcTimestamp() + $lease_duration, 1);
+                (database, execution_id, lease_deadline, lease_generation, expire_at)
+            VALUES ($database, $execution_id, CurrentUtcTimestamp() + $lease_duration, 1, CurrentUtcTimestamp() + $execution_meta_ttl);
         )";
 
         NKikimrKqp::TScriptExecutionOperationMeta meta;
@@ -305,8 +307,8 @@ public:
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build()
-            .AddParam("$max_run_time")
-                .Interval(static_cast<i64>(MaxRunTime.MicroSeconds()))
+            .AddParam("$execution_meta_ttl")
+                .Interval(2 * std::min(static_cast<i64>(MaxRunTime.MicroSeconds()), std::numeric_limits<i64>::max() / 2))
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -401,7 +403,8 @@ public:
             DECLARE $execution_id AS Text;
 
             SELECT lease_deadline FROM `.metadata/script_execution_leases`
-                WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
         )";
 
         NYdb::TParamsBuilder params;
@@ -706,7 +709,8 @@ public:
 
             SELECT lease_deadline
             FROM `.metadata/script_execution_leases`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
         )";
 
         NYdb::TParamsBuilder params;
@@ -1032,25 +1036,32 @@ public:
     )
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
-            return;
-        }
+        ExecutionEntryExists = ev->Get()->Status != Ydb::StatusIds::NOT_FOUND;
+        if (ExecutionEntryExists) {
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
+                return;
+            }
 
-        if (!ev->Get()->OperationStatus) {
-            Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Operation is still running");
-            return;
+            if (!ev->Get()->OperationStatus) {
+                Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Operation is still running");
+                return;
+            }
         }
 
         Register(new TForgetScriptExecutionOperationQueryActor(ExecutionId, Request->Get()->Database));
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
-        Send(Request->Sender, ev->Release());
-        PassAway();
+        Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
+        if (!ExecutionEntryExists && status == Ydb::StatusIds::SUCCESS) {
+            status = Ydb::StatusIds::NOT_FOUND;
+            issues.AddIssue("No such execution");   
+        }
+
         Send(Request->Sender, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
         PassAway();
     }
@@ -1062,6 +1073,7 @@ public:
 private:
     TEvForgetScriptExecutionOperation::TPtr Request;
     TString ExecutionId;
+    bool ExecutionEntryExists = true;
 };
 
 class TGetScriptExecutionOperationQueryActor : public TQueryBase {
@@ -1098,7 +1110,8 @@ public:
             SELECT
                 lease_deadline
             FROM `.metadata/script_execution_leases`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                  (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
         )";
 
         TMaybe<TString> maybeExecutionId = ScriptExecutionIdFromOperation(OperationId);
@@ -2271,11 +2284,13 @@ public:
                 script_sinks,
                 script_secret_names
             FROM `.metadata/script_executions`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
             SELECT lease_generation
             FROM `.metadata/script_execution_leases`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
         )";
 
         NYdb::TParamsBuilder params;
@@ -2567,7 +2582,8 @@ public:
 
             SELECT finalization_status
             FROM `.metadata/script_executions`
-            WHERE database = $database AND execution_id = $execution_id;
+            WHERE database = $database AND execution_id = $execution_id AND
+                (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
         )";
 
         NYdb::TParamsBuilder params;

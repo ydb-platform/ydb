@@ -21,7 +21,7 @@ struct TBlobInfo {
     TBlobInfo(const TBlobInfo& other) = default;
     TBlobInfo(TBlobInfo&& other) = default;
     TBlobInfo(TString data, ui64 tablet, ui32 cookie, ui32 gen = 1, ui32 step = 1, ui32 channel = 0)
-        : Status(EStatus::NONEXISTENT) 
+        : Status(EStatus::NONEXISTENT)
         , Id(tablet, gen, step, channel, data.size(), cookie)
         , Data(data)
     {
@@ -38,7 +38,7 @@ struct TBlobInfo {
         } else {
             status = "COLLECTED";
         }
-        return TStringBuilder() << "Status# " << status << " Id# {" << Id.ToString() << "} Data# " << Data << 
+        return TStringBuilder() << "Status# " << status << " Id# {" << Id.ToString() << "} Data# " << Data <<
             " Keep# " << Keep << " DoNotKeep# " << DoNotKeep;
     }
 
@@ -142,14 +142,14 @@ struct MultiTEvGetArgs : public TEvArgs {
         , IndexOnly(indexOnly)
     {
     }
-    
+
     bool MustRestoreFirst = false;
     bool IndexOnly = false;
 };
 
 struct TEvDiscoverArgs : public TEvArgs {
     TEvDiscoverArgs() = default;
-    TEvDiscoverArgs(ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader) 
+    TEvDiscoverArgs(ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, ui32 forceBlockedGeneration, bool fromLeader)
         : TEvArgs(EEventType::DISCOVER)
         , MinGeneration(minGeneration)
         , ReadBody(readBody)
@@ -162,13 +162,13 @@ struct TEvDiscoverArgs : public TEvArgs {
     ui32 MinGeneration = 0;
     bool ReadBody = true;
     bool DiscoverBlockedGeneration = false;
-    ui32 ForceBlockedGeneration = 0; 
+    ui32 ForceBlockedGeneration = 0;
     bool FromLeader = false;
 };
 
 struct TEvRangeArgs : public TEvArgs {
     TEvRangeArgs() = default;
-    TEvRangeArgs(bool mustRestoreFirst, bool indexOnly) 
+    TEvRangeArgs(bool mustRestoreFirst, bool indexOnly)
         : TEvArgs(EEventType::RANGE)
         , MustRestoreFirst(mustRestoreFirst)
         , IndexOnly(indexOnly)
@@ -182,14 +182,14 @@ struct TEvRangeArgs : public TEvArgs {
 struct TBlobDepotTestEnvironment {
     TMersenne<ui32> Mt;
     TMersenne<ui64> Mt64;
-    
+
     std::unique_ptr<TEnvironmentSetup> Env;
     std::vector<ui32> RegularGroups;
     ui32 BlobDepot;
     ui32 BlobDepotTabletId;
 
-    TBlobDepotTestEnvironment(ui32 seed = 0, ui32 numGroups = 1, ui32 nodeCount = 8, 
-            TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) 
+    TBlobDepotTestEnvironment(ui32 seed = 0, ui32 numGroups = 1, ui32 nodeCount = 8,
+            TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4)
         : Mt(seed)
         , Mt64(seed) {
         Cerr << "Mersenne random seed " << seed << Endl;
@@ -197,7 +197,7 @@ struct TBlobDepotTestEnvironment {
         BlobDepotTabletId = 0;
     }
 
-    void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot, 
+    void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot,
             ui32 nodeCount = 8, TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) {
         envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
             .NodeCount = nodeCount,
@@ -270,7 +270,7 @@ struct TBlobDepotTestEnvironment {
     template <class T>
     T& Rand(std::vector<T>& v) {
         return v[Rand(v.size())];
-    } 
+    }
 
     ui32 SeedRand(ui32 a, ui32 b, ui32 seed) {
         TMersenne<ui32> temp(seed);

@@ -53,6 +53,7 @@ private:
     virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRenameGroup(NNodes::TKiRenameGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleWrite(NNodes::TExprBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0;
@@ -63,6 +64,8 @@ private:
     virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {

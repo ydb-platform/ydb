@@ -4,6 +4,7 @@ import re
 import json
 import os
 import sys
+import urllib.parse
 from xml.etree import ElementTree as ET
 from mute_utils import mute_target, pattern_to_re
 from junit_utils import add_junit_link_property, is_faulty_testcase
@@ -16,34 +17,34 @@ def log_print(*args, **kwargs):
 class YaMuteCheck:
     def __init__(self):
         self.regexps = set()
+        self.regexps = []
 
-    def add_unittest(self, fn):
+    def load(self, fn):
         with open(fn, "r") as fp:
             for line in fp:
                 line = line.strip()
-                path, rest = line.split("/")
-                path = path.replace("-", "/")
-                rest = rest.replace("::", ".")
-                self.populate(f"{path}/{rest}")
+                try:
+                    testsuite, testcase = line.split(" ", maxsplit=1)
+                except ValueError:
+                    log_print(f"SKIP INVALID MUTE CONFIG LINE: {line!r}")
+                    continue
+                self.populate(testsuite, testcase)
 
-    def add_functest(self, fn):
-        with open(fn, "r") as fp:
-            for line in fp:
-                line = line.strip()
-                line = line.replace("::", ".")
-                self.populate(line)
+    def populate(self, testsuite, testcase):
+        check = []
 
-    def populate(self, line):
-        pattern = pattern_to_re(line)
+        for p in (pattern_to_re(testsuite), pattern_to_re(testcase)):
+            try:
+                check.append(re.compile(p))
+            except re.error:
+                log_print(f"Unable to compile regex {p!r}")
+                return
 
-        try:
-            self.regexps.add(re.compile(pattern))
-        except re.error:
-            log_print(f"Unable to compile regex {pattern!r}")
+        self.regexps.append(tuple(check))
 
-    def __call__(self, suitename, testname):
-        for r in self.regexps:
-            if r.match(f"{suitename}/{testname}"):
+    def __call__(self, suite_name, test_name):
+        for ps, pt in self.regexps:
+            if ps.match(suite_name) and pt.match(test_name):
                 return True
         return False
 
@@ -57,7 +58,7 @@ class YTestReportTrace:
         test_results_dir = os.path.join(self.out_root, f"{subdir}/test-results/")
 
         if not os.path.isdir(test_results_dir):
-            print(f"Directory {test_results_dir} doesn't exist")
+            log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
         for folder in os.listdir(test_results_dir):
@@ -100,7 +101,7 @@ class YTestReportTrace:
 def filter_empty_logs(logs):
     result = {}
     for k, v in logs.items():
-        if os.stat(v).st_size == 0:
+        if not os.path.isfile(v) or os.stat(v).st_size == 0:
             continue
         result[k] = v
     return result
@@ -130,8 +131,8 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                         out_fp.write(buf)
         else:
             os.symlink(fn, out_fn)
-
-    return f"{log_url_prefix}{fpath}"
+    quoted_fpath = urllib.parse.quote(fpath)
+    return f"{log_url_prefix}{quoted_fpath}"
 
 
 def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size):
@@ -175,8 +176,7 @@ def main():
     parser.add_argument(
         "-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place"
     )
-    parser.add_argument("--mu", help="unittest mute config")
-    parser.add_argument("--mf", help="functional test mute config")
+    parser.add_argument("-m", help="muted test list")
     parser.add_argument("--log-url-prefix", default="./", help="url prefix for logs")
     parser.add_argument("--log-out-dir", help="symlink logs to specific directory")
     parser.add_argument(
@@ -193,11 +193,8 @@ def main():
 
     mute_check = YaMuteCheck()
 
-    if args.mu:
-        mute_check.add_unittest(args.mu)
-
-    if args.mf:
-        mute_check.add_functest(args.mf)
+    if args.m:
+        mute_check.load(args.m)
 
     transform(
         args.in_file,

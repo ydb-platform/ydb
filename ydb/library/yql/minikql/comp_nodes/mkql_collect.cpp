@@ -1,6 +1,6 @@
 #include "mkql_collect.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -15,7 +15,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        for (NUdf::TUnboxedValue list = ctx.HolderFactory.GetEmptyContainer();;) {
+        for (NUdf::TUnboxedValue list = ctx.HolderFactory.GetEmptyContainerLazy();;) {
             auto item = Flow->GetValue(ctx);
             if (item.IsFinish()) {
                 return list.Release();
@@ -32,7 +32,7 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto empty = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainer));
+        const auto empty = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainerLazy));
         const auto append = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::Append));
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);

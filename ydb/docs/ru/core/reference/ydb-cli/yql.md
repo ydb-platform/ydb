@@ -19,13 +19,26 @@
 
 ## Параметры подкоманды {#options}
 
-Имя | Описание
----|---
-`--timeout` | Время, в течение которого должна быть выполнена операция на сервере.
-`--stats` | Режим сбора статистики.<br>Возможные значения:<ul><li>`none` (по умолчанию) — не собирать;</li><li>`basic` — собирать по основным событиям;</li><li>`full` — собирать по всем событиям.</li></ul>
-`-s`, `--script` | Текст YQL-скрипта для выполнения.
-`-f`, `--file` | Путь к файлу с текстом YQL-скрипта для выполнения.
-`--format` | Формат вывода.<br>Возможные значения:<ul><li>`pretty` (по умолчанию) — человекочитаемый формат;</li><li>`json-unicode` — вывод в формате [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, бинарные строки закодированы в [Юникод]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Юникод){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unicode){% endif %}, каждая строка JSON выводится в отдельной строке;</li><li>`json-unicode-array` — вывод в формате JSON, бинарные строки закодированы в Юникод, результат выводится в виде массива строк JSON, каждая строка JSON выводится в отдельной строке;</li><li>`json-base64` — вывод в формате JSON, бинарные строки закодированы в [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}, каждая строка JSON выводится в отдельной строке;</li><li>`json-base64-array` — вывод в формате JSON, бинарные строки закодированы в Base64, результат выводится в виде массива строк JSON, каждая строка JSON выводится в отдельной строке;</li><li>`csv` —вывод в формате [CSV](https://ru.wikipedia.org/wiki/CSV);</li><li>`tsv` —вывод в формате [TSV](https://ru.wikipedia.org/wiki/TSV).</li></ul>
+#|
+|| **Имя** | **Описание** ||
+|| `--timeout` | Время, в течение которого должна быть выполнена операция на сервере. ||
+|| `--stats` | Режим сбора статистики.
+Возможные значения:
+* `none` (по умолчанию) — не собирать;
+* `basic` — собирать по основным событиям;
+* `full` — собирать по всем событиям.
+||
+|| `-s`, `--script` | Текст YQL-скрипта для выполнения. ||
+|| `-f`, `--file` | Путь к файлу с текстом YQL-скрипта для выполнения. ||
+|| `--format` | Формат вывода.
+Возможные значения:
+
+{% include notitle [format](./_includes/result_format_common.md) %}
+
+{% include notitle [format](./_includes/result_format_csv_tsv.md) %}
+
+||
+|#
 
 ### Работа с параметризованными запросами {#parameterized-query}
 

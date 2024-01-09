@@ -204,7 +204,7 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "DefaultConstraintColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
             ]
         },
@@ -223,6 +223,16 @@
             "Base": "TExprBase",
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TKqlReturningList",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlReturningList"},
+            "Children": [
+                {"Index": 0, "Name": "Update", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Table", "Type": "TKqpTable"}
+            ]
         },
         {
             "Name": "TKqlTableEffect",
@@ -247,7 +257,8 @@
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRows"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -255,7 +266,8 @@
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -282,7 +294,8 @@
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"}
+                {"Index": 3, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert"},
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -291,7 +304,8 @@
             "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 1, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -304,7 +318,7 @@
             "Base": "TKqlUpdateRowsBase",
             "Match": {"Type": "Callable", "Name": "TKqlUpdateRowsIndex"},
             "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -461,7 +475,7 @@
             "Children": [
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "DefaultConstraintColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
             ]
         },
@@ -546,9 +560,9 @@
             "Match": {"Type": "Callable", "Name": "KqpOlapXor"}
         },
         {
-            "Name": "TKqpOlapFilterCompare",
+            "Name": "TKqpOlapFilterBinaryOp",
             "Base": "TExprBase",
-            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterCompare"},
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterBinaryOp"},
             "Children": [
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Left", "Type": "TExprBase"},

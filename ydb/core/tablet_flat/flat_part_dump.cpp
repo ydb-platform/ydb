@@ -1,6 +1,6 @@
 #include "flat_part_dump.h"
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_iface.h"
 #include "flat_page_data.h"
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
@@ -52,10 +52,10 @@ namespace {
         BTreeIndex(part);
 
         if (depth > 2) {
-            auto index = TPartIndexIt(&part, Env, { });
+            auto index = CreateIndexIter(&part, Env, { });
             
             for (ssize_t i = 0; ; i++) {
-                auto ready = i == 0 ? index.Seek(0) : index.Next();
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
                 if (ready != EReady::Data) {
                     if (ready == EReady::Page) {
                         Out << " | -- the rest of the index rows aren't loaded" << Endl;
@@ -65,7 +65,7 @@ namespace {
 
                 Out << Endl;
 
-                DataPage(part, index.GetPageId());
+                DataPage(part, index->GetPageId());
             }
         }
     }
@@ -168,7 +168,7 @@ namespace {
     {
         if (part.IndexPages.BTreeGroups) {
             auto meta = part.IndexPages.BTreeGroups.front();
-            if (meta.LevelsCount) {
+            if (meta.LevelCount) {
                 BTreeIndexNode(part, meta);
             } else {
                 Out

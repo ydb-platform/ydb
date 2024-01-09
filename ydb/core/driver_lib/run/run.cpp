@@ -1093,6 +1093,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
+        AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1371,16 +1375,13 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableBasicServices) {
-        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
+        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig, ModuleFactories));
     }
     if (serviceMask.EnableIcbService) {
         sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));
     }
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
-    }
-    if (serviceMask.EnableNodeIdentifier) {
-        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig));
     }
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
@@ -1443,6 +1444,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnablePersQueueClusterTracker) {
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
+    }
+
+    if (serviceMask.EnablePersQueueDirectReadCache) {
+        sil->AddServiceInitializer(new TPersQueueDirectReadCacheInitializer(runConfig));
     }
 
     if (serviceMask.EnableIcNodeCacheService) {
@@ -1607,6 +1612,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableDatabaseMetadataCache) {
         sil->AddServiceInitializer(new TDatabaseMetadataCacheInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGraphService) {
+        sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
     return sil;

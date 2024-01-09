@@ -124,7 +124,7 @@ struct TIndexInfo;
 
 class TColumnFeatures {
 private:
-    const ui32 ColumnId;
+    ui32 ColumnId;
     std::optional<NArrow::TCompression> Compression;
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;

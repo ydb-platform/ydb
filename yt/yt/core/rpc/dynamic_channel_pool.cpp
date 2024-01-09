@@ -67,9 +67,9 @@ public:
             BIND(&TImpl::CreateChannel, Unretained(this)),
             Logger))
        , RandomPeerRotationExecutor_(New<TPeriodicExecutor>(
-           TDispatcher::Get()->GetLightInvoker(),
-           BIND(&TDynamicChannelPool::TImpl::MaybeEvictRandomPeer, MakeWeak(this)),
-           Config_->RandomPeerEvictionPeriod))
+            TDispatcher::Get()->GetLightInvoker(),
+            BIND(&TDynamicChannelPool::TImpl::MaybeEvictRandomPeer, MakeWeak(this)),
+            Config_->RandomPeerEvictionPeriod))
     {
         RandomPeerRotationExecutor_->Start();
     }

@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         for (ui32 idx = 0; idx < 8; ++idx) {
             const ui32 orderNumber = nums[idx];
             Cerr << idx << ' ' << orderNumber << Endl;
-            
+
             std::vector<ui32> v;
             if (idx < 6) {
                 v.push_back(idx + 1);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         for (ui32 idx = 0; idx < 8; ++idx) {
             const ui32 orderNumber = nums[idx];
             Cerr << idx << ' ' << orderNumber << Endl;
-            
+
             std::vector<ui32> v;
             if (idx < 6) {
                 v.push_back(idx + 1);

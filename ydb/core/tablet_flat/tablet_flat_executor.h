@@ -5,6 +5,8 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
@@ -24,6 +26,7 @@ namespace NTabletFlatExecutor {
 class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
+struct TSeat;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -200,13 +203,14 @@ class TTransactionContext : public TTxMemoryProviderBase {
 
 public:
     TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
-                        ui64 memoryLimit, ui64 taskId)
+                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan)
         : TTxMemoryProviderBase(memoryLimit, taskId)
         , Tablet(tablet)
         , Generation(gen)
         , Step(step)
         , Env(env)
         , DB(db)
+        , TransactionSpan(transactionSpan)
     {}
 
     ~TTransactionContext() {}
@@ -224,12 +228,22 @@ public:
         return Rescheduled_;
     }
 
+    void StartExecutionSpan() noexcept {
+        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::Tablet, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
+    }
+
+    void FinishExecutionSpan() noexcept {
+        TransactionExecutionSpan.EndOk();
+    }
+
 public:
     const ui64 Tablet = Max<ui32>();
     const ui32 Generation = Max<ui32>();
     const ui32 Step = Max<ui32>();
     IExecuting &Env;
     NTable::TDatabase &DB;
+    NWilson::TSpan &TransactionSpan;
+    NWilson::TSpan TransactionExecutionSpan;
 
 private:
     bool Rescheduled_ = false;
@@ -274,6 +288,10 @@ public:
         : Orbit(std::move(orbit))
     { }
 
+    ITransaction(NWilson::TTraceId &&traceId)
+        : TxSpan(NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction"))
+    { }
+
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
@@ -289,8 +307,19 @@ public:
         out << TypeName(*this);
     }
 
+    virtual void SetupTxSpanName() noexcept {
+        TxSpan.Attribute("Type", TypeName(*this));
+    }
+
+    void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
+        TxSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction");
+        TxSpan.Attribute("Type", TypeName(*this));
+    }
+
 public:
     NLWTrace::TOrbit Orbit;
+
+    NWilson::TSpan TxSpan;
 };
 
 template<typename T>
@@ -307,6 +336,11 @@ public:
 
     TTransactionBase(T *self, NLWTrace::TOrbit &&orbit)
         : ITransaction(std::move(orbit))
+        , Self(self)
+    { }
+
+    TTransactionBase(T *self, NWilson::TTraceId &&traceId)
+        : ITransaction(std::move(traceId))
         , Self(self)
     { }
 };

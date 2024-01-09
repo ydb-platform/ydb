@@ -450,7 +450,7 @@ public:
             positions.emplace_back(*position);
         }
         TSaverContext saverContext(StoragesManager->GetOperator(IStoragesManager::DefaultStorageId), StoragesManager);
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(CompactionLimits, granule, portions, saverContext);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(CompactionLimits.GetSplitSettings(), granule, portions, saverContext);
         for (auto&& i : positions) {
             result->AddCheckPoint(i);
         }
@@ -472,19 +472,9 @@ protected:
         return {};
     }
 
-    virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
+    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) override {
         const TInstant currentInstant = TInstant::Now();
-        for (auto&& i : add) {
-            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
-                continue;
-            }
-            if (!i->GetMeta().RecordSnapshotMax) {
-                LMax->AddPortion(i, currentInstant);
-            } else {
-                LStart->AddPortion(i, currentInstant);
-            }
-        }
-        for (auto&& i : remove) {
+        for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
             }
@@ -492,6 +482,16 @@ protected:
                 LMax->RemovePortion(i, currentInstant);
             } else {
                 LStart->RemovePortion(i, currentInstant);
+            }
+        }
+        for (auto&& [_, i] : add) {
+            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
+                continue;
+            }
+            if (!i->GetMeta().RecordSnapshotMax) {
+                LMax->AddPortion(i, currentInstant);
+            } else {
+                LStart->AddPortion(i, currentInstant);
             }
         }
     }

@@ -42,6 +42,19 @@ private:
             LastPK = nullptr;
         }
     }
+
+    bool EmptyFiltersOnly() const {
+        for (auto&& [_, i] : Sources) {
+            if (!i->GetFilterStageData().GetBatch() || !i->GetFilterStageData().GetBatch()->num_rows()) {
+                continue;
+            }
+            auto f = i->GetFilterStageData().GetNotAppliedEarlyFilter();
+            if (!f || !f->IsTotalDenyFilter()) {
+                return false;
+            }
+        }
+        return true;
+    }
 protected:
     virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
@@ -64,6 +77,10 @@ protected:
             }
             Sources.clear();
             AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+            return true;
+        }
+        if (EmptyFiltersOnly()) {
+            ResultBatch = NArrow::MakeEmptyBatch(Context->GetProgramInputColumns()->GetSchema());
             return true;
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
@@ -119,11 +136,15 @@ public:
         , MergingContext(std::move(mergingContext))
         , IntervalIdx(MergingContext->GetIntervalIdx())
     {
+        for (auto&& s : Sources) {
+            AFL_VERIFY(s.second->IsDataReady());
+        }
+
     }
 };
 
 void TFetchingInterval::ConstructResult() {
-    if (!IsSourcesReady() || !ResourcesGuard) {
+    if (ReadySourcesCount.Val() != WaitSourcesCount || !ReadyGuards.Val()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_construct_result")("interval_idx", IntervalIdx);
         return;
     } else {
@@ -141,11 +162,13 @@ void TFetchingInterval::OnInitResourcesGuard(const std::shared_ptr<NResourceBrok
     AFL_VERIFY(guard);
     AFL_VERIFY(!ResourcesGuard);
     ResourcesGuard = guard;
+    AFL_VERIFY(ReadyGuards.Inc() <= 1);
     ConstructResult();
 }
 
 void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetched")("interval_idx", IntervalIdx);
+    AFL_VERIFY(ReadySourcesCount.Inc() <= WaitSourcesCount);
     ConstructResult();
 }
 
@@ -161,6 +184,9 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
 {
     Y_ABORT_UNLESS(Sources.size());
     for (auto&& [_, i] : Sources) {
+        if (!i->IsDataReady()) {
+            ++WaitSourcesCount;
+        }
         i->RegisterInterval(*this);
     }
 }

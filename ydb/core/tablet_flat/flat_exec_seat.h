@@ -17,12 +17,10 @@ namespace NTabletFlatExecutor {
 
         TSeat(const TSeat&) = delete;
 
-        TSeat(ui32 uniqId, TAutoPtr<ITransaction> self, NWilson::TTraceId txTraceId)
+        TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
             : UniqID(uniqId)
             , Self(self)
-            , TxSpan(NWilson::TSpan(TWilsonTablet::Tablet, std::move(txTraceId), "Tablet.Transaction"))
         {
-
         }
 
         void Describe(IOutputStream &out) const noexcept
@@ -36,22 +34,29 @@ namespace NTabletFlatExecutor {
 
         void Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept;
 
-        void CreateEnqueuedSpan() noexcept {
-            EnqueuedSpan = NWilson::TSpan(TWilsonTablet::Tablet, TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
+        void StartEnqueuedSpan() noexcept {
+            WaitingSpan = NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
         }
 
         void FinishEnqueuedSpan() noexcept {
-            EnqueuedSpan.EndOk();
+            WaitingSpan.EndOk();
+        }
+
+        void CreatePendingSpan() noexcept {
+            WaitingSpan = NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Pending");
+        }
+
+        void FinishPendingSpan() noexcept {
+            WaitingSpan.EndOk();
         }
 
         NWilson::TTraceId GetTxTraceId() const noexcept {
-            return TxSpan.GetTraceId();
+            return Self->TxSpan.GetTraceId();
         }
 
         const ui64 UniqID = Max<ui64>();
         const TAutoPtr<ITransaction> Self;
-        NWilson::TSpan TxSpan;
-        NWilson::TSpan EnqueuedSpan;
+        NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
         TPinned Pinned;
 

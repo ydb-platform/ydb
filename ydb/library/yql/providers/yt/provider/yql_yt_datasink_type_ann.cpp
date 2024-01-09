@@ -445,6 +445,31 @@ private:
             }
         }
 
+        TMaybe<TColumnOrder> contentColumnOrder;
+        if (content) {
+            contentColumnOrder = State_->Types->LookupColumnOrder(*content);
+            if (content->IsCallable("AssumeColumnOrder")) {
+                YQL_ENSURE(contentColumnOrder);
+                YQL_CLOG(INFO, ProviderYt) << "Dropping top level " << content->Content() << " from WriteTable input";
+                content = content->HeadPtr();
+            }
+        }
+
+        if (content && TCoPgSelect::Match(content.Get())) {
+            auto pgSelect = TCoPgSelect(content);
+            if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
+                TExprNode::TPtr output;
+                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, contentColumnOrder, ctx, *State_->Types);
+                if (!result) {
+                    return TStatus::Error;
+                }
+                if (output != content) {
+                    content = output;
+                    return TStatus::Repeat;
+                }
+            }
+        }
+
         if (checkLayout) {
             auto rowSpec = description.RowSpec;
             TString modeStr = EYtWriteMode::RenewKeepMeta == mode ? "truncate with keep meta" : ToString(mode);
@@ -493,16 +518,6 @@ private:
                     << "Table " << outTableInfo.Name.Quote() << " row type differs from the written row type: "
                     << GetTypeDiff(*description.RowType, *itemType)));
                 return TStatus::Error;
-            }
-        }
-
-        TMaybe<TColumnOrder> contentColumnOrder;
-        if (content) {
-            contentColumnOrder = State_->Types->LookupColumnOrder(*content);
-            if (content->IsCallable("AssumeColumnOrder")) {
-                YQL_ENSURE(contentColumnOrder);
-                YQL_CLOG(INFO, ProviderYt) << "Dropping top level " << content->Content() << " from WriteTable input";
-                content = content->HeadPtr();
             }
         }
 

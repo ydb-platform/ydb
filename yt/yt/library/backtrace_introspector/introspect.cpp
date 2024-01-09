@@ -2,6 +2,7 @@
 
 #include "private.h"
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/proc.h>
 

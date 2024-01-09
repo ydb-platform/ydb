@@ -64,14 +64,18 @@ ENDIF()
         ydb/library/yql/utils/backtrace
         ydb/library/yql/utils/bindings
         ydb/library/yql/utils/log
+        ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/yt/gateway/file
         ydb/library/yql/providers/yt/gateway/native
+        ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/yt/provider
+        ydb/library/yql/providers/yt/codec/codegen
+        ydb/library/yql/providers/yt/comp_nodes/llvm
         ydb/library/yql/providers/yt/lib/yt_download
         ydb/library/yql/providers/yt/lib/yt_url_lister
         ydb/library/yql/providers/yt/lib/config_clusters

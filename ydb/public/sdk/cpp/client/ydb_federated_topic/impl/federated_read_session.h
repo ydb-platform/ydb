@@ -55,15 +55,7 @@ private:
 
     void OnFederatedStateUpdateImpl();
 
-    void Abort();
     void CloseImpl();
-
-    void ClearAllEvents();
-
-    // TODO Counters
-    // void MakeCountersIfNeeded();
-    // void DumpCountersToLog(size_t timeNumber = 0);
-    // void ScheduleDumpCountersToLog(size_t timeNumber = 0);
 
 private:
     TFederatedReadSessionSettings Settings;
@@ -86,8 +78,6 @@ private:
 
     std::vector<TSubSession> SubSessions;
     size_t SubsessionIndex = 0;
-
-    // NYdbGrpc::IQueueClientContextPtr DumpCountersContext;
 
     // Exiting.
     bool Closing = false;

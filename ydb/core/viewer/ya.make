@@ -22,6 +22,7 @@ SRCS(
     json_describe.h
     json_local_rpc.h
     json_getblob.h
+    json_graph.h
     json_handlers_vdisk.cpp
     json_handlers_viewer.cpp
     json_healthcheck.h
@@ -35,6 +36,7 @@ SRCS(
     json_nodes.h
     json_pdiskinfo.h
     json_query.h
+    json_render.h
     json_storage.h
     json_sysinfo.h
     json_tabletcounters.h
@@ -259,6 +261,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/server
+    ydb/core/graph/api
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check

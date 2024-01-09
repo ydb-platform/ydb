@@ -1,5 +1,5 @@
-#include "flat_part_charge.h"
 #include <ydb/core/tablet_flat/flat_part_dump.h>
+#include "ydb/core/tablet_flat/flat_part_charge_range.h"
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -97,9 +97,9 @@ namespace {
         }
 
         if constexpr (Direction == EDirection::Forward) {
-            TCharge::Range(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+            ChargeRange(env, from, to, run, *keyDefaults, tags, 0, 0, true);
         } else {
-            TCharge::RangeReverse(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+            ChargeRangeReverse(env, from, to, run, *keyDefaults, tags, 0, 0, true);
         }
 
         env->PrechargePhase = false;
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         { /*_  Ensure that B-Tree index has enough layers */
             if (part.IndexPages.BTreeGroups.size()) {
-                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelsCount, 3);
+                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, 3);
             }
         }
 

@@ -51,8 +51,9 @@ TDataProviderInitializer GetPgDataProviderInitializer() {
             return NThreading::MakeFuture();
         };
 
-        info.CloseSession = [](const TString& sessionId) {
+        info.CloseSessionAsync = [](const TString& sessionId) {
             Y_UNUSED(sessionId);
+            return NThreading::MakeFuture();
         };
 
         return info;

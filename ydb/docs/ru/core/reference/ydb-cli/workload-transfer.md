@@ -133,6 +133,8 @@ Window  Write speed     Write time      Inflight        Lag             Lag time
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` - параметры подкоманды.
 
+Посмотреть описание команды:
+
 ```bash
 {{ ydb-cli }} workload transfer topic-to-table clean --help
 ```
@@ -147,4 +149,4 @@ Window  Write speed     Write time      Inflight        Lag             Lag time
 ```bash
 {{ ydb-cli }} --profile quickstart workload transfer topic-to-table clean
 ```
-удалит топик `transfer-topic`, его читателей и таблицу `transfer-table`
+удалит топик `transfer-topic`, его читателей и таблицу `transfer-table`.

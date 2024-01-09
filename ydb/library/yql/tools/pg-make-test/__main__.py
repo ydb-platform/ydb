@@ -91,12 +91,13 @@ class TestCaseBuilder:
 
         ressqlfile = self.config.dstdir / sqlfile.name
         resoutfile = ressqlfile.with_suffix('.out')
+        reserrfile_base = resoutfile.with_suffix('.err')
 
         max_stmts_run = 0
         ressql = None
         resout = None
 
-        for outfile in get_out_files(sqlfile):
+        for outfile_idx, outfile in enumerate(get_out_files(sqlfile)):
             test_name = Path(sqlfile).name
             LOGGER.info("Processing (%d) %s -> %s", os.getpid(), test_name, Path(outfile).name)
             if is_split_logging:
@@ -135,6 +136,8 @@ class TestCaseBuilder:
                             '\n'.join(str(sql_line) for sql_line in s_sql),
                             '\n'.join(str(out_line) for out_line in s_out),
                         )
+                reserrfile = reserrfile_base if outfile_idx == 0 else reserrfile_base.with_suffix(reserrfile_base.suffix + ".{0}".format(outfile_idx))
+                shutil.move(test_err_name, reserrfile)
 
             stmts_run = 0
             stmts = []
@@ -157,13 +160,20 @@ class TestCaseBuilder:
                 ressql = stmts
                 resout = outs
 
+        if ressql is not None and resout is not None:
             LOGGER.info('Case built: %s', sqlfile.name)
             if is_split_logging:
                 logger.info('Case built: %s', sqlfile.name)
 
-        if ressql is not None and resout is not None:
             save_strings(ressqlfile, ressql)
             save_strings(resoutfile, resout)
+        else:
+            LOGGER.warning('Case is empty: %s', sqlfile.name)
+            if is_split_logging:
+                logger.warning('Case is empty: %s', sqlfile.name)
+
+            ressqlfile.unlink(missing_ok=True)
+            resoutfile.unlink(missing_ok=True)
 
         return Path(sqlfile).stem, stmts_count, stmts_run, round(stmts_run * 100 / stmts_count, 2)
 

@@ -24,4 +24,10 @@ IServiceDiscoveryPtr CreateServiceDiscovery(TServiceDiscoveryConfigPtr config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Returns whether YPSD should be enabled by default, i.e. it is not
+//! specified explicitely in the config.
+bool GetServiceDiscoveryEnableDefault();
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NServiceDiscovery::NYP

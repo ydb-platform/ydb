@@ -46,8 +46,8 @@ void TDeleting::OnModificationFinished(const TString& /*modificationId*/) {
     NMetadata::NRequest::TYQLRequestExecutor::Execute(BuildDeleteRequest(), NACLib::TSystemUsers::Metadata(), SelfContainer);
 }
 
-void TDeleting::OnModificationFailed(const TString& errorMessage, const TString& /*modificationId*/) {
-    ExternalController->OnDeletingFailed(errorMessage, RequestId);
+void TDeleting::OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& /*modificationId*/) {
+    ExternalController->OnDeletingFailed(status, errorMessage, RequestId);
     SelfContainer = nullptr;
 }
 

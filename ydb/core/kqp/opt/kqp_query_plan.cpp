@@ -23,6 +23,7 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
+#include <unordered_map>
 #include <regex>
 
 namespace NKikimr {
@@ -239,9 +240,39 @@ public:
     }
 
 private:
+    struct TArgContext {
+        TVector<TExprNode*> stack;
+
+        TArgContext(){}
+
+        TArgContext AddArg(TExprNode* a) {
+            TArgContext res;
+            res.stack = stack;
+            res.stack.push_back(a);
+            return res;
+        }
+
+        bool operator==(const TArgContext& other) const
+        {
+            return stack == other.stack;
+        }
+
+        struct HashFunction
+        {
+            size_t operator()(const TArgContext& e) const
+            {
+                size_t res = 0;
+                for (auto el : e.stack) {
+                    res += std::hash<TExprNode*>{}(el);
+                }
+                return res;
+            }
+        };    
+    };
+
     struct TOperator {
         TMap<TString, NJson::TJsonValue> Properties;
-        TSet<ui32> Inputs;
+        TVector<std::variant<ui32, TArgContext>> Inputs;
     };
 
     enum class EPlanNodeType {
@@ -300,16 +331,38 @@ private:
                     writer.WriteJsonValue(&value, true);
                 }
 
-                if (op.Inputs.size() > 1) {
-                    writer.WriteKey("Inputs");
-                    writer.BeginList();
+                writer.WriteKey("Inputs");
+                writer.BeginList();
 
-                    for (const auto& input : op.Inputs) {
-                        writer.WriteInt(input);
+                for (const auto& input : op.Inputs) {
+
+                    if (std::holds_alternative<ui32>(input)) {
+                        writer.BeginObject();
+                        writer.WriteKey("InternalOperatorId");
+                        writer.WriteInt(std::get<ui32>(input));
+                        writer.EndObject();
                     }
-
-                    writer.EndList();
+                    else {
+                        TArgContext c = std::get<TArgContext>(input);
+                        writer.BeginObject();
+                        auto input = LambdaInputs.find(c);
+                        if (input != LambdaInputs.end()){
+                            if (std::holds_alternative<ui32>(input->second)) {
+                                writer.WriteKey("InternalOperatorId");
+                                writer.WriteInt(std::get<ui32>(input->second));
+                            } else {
+                                writer.WriteKey("ExternalPlanNodeId");
+                                writer.WriteInt(std::get<TQueryPlanNode*>(input->second)->NodeId);
+                            }
+                        } else {
+                            writer.WriteKey("Other");
+                            writer.WriteString("ConstantExpression");
+                        }
+                        writer.EndObject();
+                    }
                 }
+
+                writer.EndList();
 
                 writer.EndObject();
             }
@@ -824,21 +877,14 @@ private:
             YQL_ENSURE(stagePlanNode.StageProto, "Could not find a stage with id " << stageGuid);
             SerializerCtx.StageGuidToId[stageGuid] = SerializerCtx.PlanNodeId;
             VisitedStages.insert(expr.Raw());
-            auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
-            Visit(node, stagePlanNode);
 
-            /* is that collect stage? */
-            if (stagePlanNode.TypeName.Empty()) {
-                if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
-                    stagePlanNode.TypeName = "Collect";
-                } else {
-                    stagePlanNode.TypeName = "Stage";
-                }
-            }
+            TVector<TQueryPlanNode*> inputIds;
 
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
-                    Visit(source.Cast(), stagePlanNode);
+                    auto& inputSourceNode = AddPlanNode(stagePlanNode);
+                    Visit(source.Cast(), inputSourceNode);
+                    inputIds.emplace_back(&inputSourceNode);
                 } else {
                     auto inputCn = input.Cast<TDqConnection>();
 
@@ -846,6 +892,30 @@ private:
                     FillConnectionPlanNode(inputCn, inputPlanNode);
 
                     Visit(inputCn.Output().Stage(), inputPlanNode);
+                    inputIds.emplace_back(&inputPlanNode);
+                }
+            }
+
+            CurrentArgContext.stack.push_back(expr.Ptr().Get());
+
+            if (inputIds.size() == expr.Cast<TDqStageBase>().Program().Args().Size()) {
+                for (const auto& arg : expr.Cast<TDqStageBase>().Program().Args()) {
+                    LambdaInputs[CurrentArgContext.AddArg(arg.Ptr().Get())] = inputIds[0];
+                    inputIds.erase(inputIds.begin());
+                }
+            }
+
+            auto node = expr.Cast<TDqStageBase>().Program().Body().Ptr();
+            Visit(node, stagePlanNode);
+
+            CurrentArgContext.stack.pop_back();
+
+            /* is that collect stage? */
+            if (stagePlanNode.TypeName.Empty()) {
+                if (expr.Cast<TDqStageBase>().Program().Body().Maybe<TCoArgument>()) {
+                    stagePlanNode.TypeName = "Collect";
+                } else {
+                    stagePlanNode.TypeName = "Stage";
                 }
             }
 
@@ -865,8 +935,9 @@ private:
         }
     }
 
-    TVector<ui32> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
-        TMaybe<ui32> operatorId;
+    TVector<std::variant<ui32, TArgContext>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
+        TMaybe<std::variant<ui32, TArgContext>> operatorId;
+
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             operatorId = Visit(maybeRead.Cast(), planNode);
         } else if (auto maybeReadRanges = TMaybeNode<TKqlReadTableRangesBase>(node)) {
@@ -926,6 +997,8 @@ private:
             operatorId = Visit(maybeSkip.Cast(), planNode);
         } else if (auto maybeExtend = TMaybeNode<TCoExtendBase>(node)) {
             operatorId = Visit(maybeExtend.Cast(), planNode);
+        } else if (auto maybeToFlow = TMaybeNode<TCoToFlow>(node)) {
+            operatorId = Visit(maybeToFlow.Cast(), planNode);
         } else if (auto maybeIter = TMaybeNode<TCoIterator>(node)) {
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
@@ -934,44 +1007,85 @@ private:
             operatorId = Visit(maybeUpsert.Cast(), planNode);
         } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
             operatorId = Visit(maybeDelete.Cast(), planNode);
+        } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
+            return {CurrentArgContext.AddArg(node.Get())};
         }
 
-        TVector<ui32> inputIds;
+        TVector<std::variant<ui32, TArgContext>> inputIds;
         if (auto maybeEffects = TMaybeNode<TKqpEffects>(node)) {
             for (const auto& effect : maybeEffects.Cast().Args()) {
                 auto ids = Visit(effect, planNode);
                 inputIds.insert(inputIds.end(), ids.begin(), ids.end());
             }
         } else {
-            for (const auto& child : node->Children()) {
-                auto ids = Visit(child, planNode);
-                inputIds.insert(inputIds.end(), ids.begin(), ids.end());
+            if (TMaybeNode<TCoFlatMapBase>(node)) {
+
+                auto flatMap = TExprBase(node).Cast<TCoFlatMapBase>();
+                auto flatMapInputs = Visit(flatMap, planNode);
+
+                inputIds.insert(inputIds.end(), flatMapInputs.begin(), flatMapInputs.end());
+
+                auto flatMapLambdaInputs = Visit(flatMap.Lambda().Body().Ptr(), planNode);
+                inputIds.insert(inputIds.end(), flatMapLambdaInputs.begin(), flatMapLambdaInputs.end());
+
+            }
+            else { 
+                for (const auto& child : node->Children()) {
+                    if(!child->IsLambda()) {
+                        auto ids = Visit(child, planNode);
+                        inputIds.insert(inputIds.end(), ids.begin(), ids.end());
+                    }
+                }
             }
         }
 
         if (operatorId) {
-            planNode.Operators[*operatorId].Inputs.insert(inputIds.begin(), inputIds.end());
-            return {*operatorId};
+            if (std::holds_alternative<ui32>(*operatorId)) {
+                TVector<std::variant<ui32, TArgContext>>& opInputs = planNode.Operators[std::get<ui32>(*operatorId)].Inputs;
+                opInputs.insert(opInputs.begin(), inputIds.begin(), inputIds.end());
+                return {std::get<ui32>(*operatorId)};
+            }
+            else {
+                return {std::get<TArgContext>(*operatorId)};
+            }
         }
 
         return inputIds;
     }
 
-    ui32 Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
+    TVector<std::variant<ui32, TArgContext>> Visit(const TCoFlatMapBase& flatMap, TQueryPlanNode& planNode) {
+        auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
+
+        if (flatMapInputs.size() == 1) {
+            auto input = flatMapInputs[0];
+            auto newContext = CurrentArgContext.AddArg(flatMap.Lambda().Args().Arg(0).Ptr().Get());
+
+            if (std::holds_alternative<ui32>(input)) {
+                LambdaInputs[newContext] = std::get<ui32>(input);
+            } else {
+                auto content = std::get<TArgContext>(input);
+                LambdaInputs[newContext] = LambdaInputs.at(std::get<TArgContext>(input));
+            }
+        }
+
+        return flatMapInputs;
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
@@ -980,7 +1094,7 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TCoSort& sort, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoSort& sort, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Sort";
         op.Properties["SortBy"] = NPlanUtils::PrettyExprStr(sort.KeySelectorLambda());
@@ -988,7 +1102,7 @@ private:
         return AddOperator(planNode, "Sort", std::move(op));
     }
 
-    ui32 Visit(const TCoTop& top, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Top";
         op.Properties["TopBy"] = NPlanUtils::PrettyExprStr(top.KeySelectorLambda());
@@ -997,7 +1111,7 @@ private:
         return AddOperator(planNode, "Top", std::move(op));
     }
 
-    ui32 Visit(const TCoTopSort& topSort, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoTopSort& topSort, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "TopSort";
         op.Properties["TopSortBy"] = NPlanUtils::PrettyExprStr(topSort.KeySelectorLambda());
@@ -1006,7 +1120,7 @@ private:
         return AddOperator(planNode, "TopSort", std::move(op));
     }
 
-    ui32 Visit(const TCoTake& take, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoTake& take, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Limit";
         op.Properties["Limit"] = NPlanUtils::PrettyExprStr(take.Count());
@@ -1014,7 +1128,7 @@ private:
         return AddOperator(planNode, "Limit", std::move(op));
     }
 
-    ui32 Visit(const TCoSkip& skip, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoSkip& skip, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Offset";
         op.Properties["Offset"] = NPlanUtils::PrettyExprStr(skip.Count());
@@ -1022,14 +1136,36 @@ private:
         return AddOperator(planNode, "Offset", std::move(op));
     }
 
-    ui32 Visit(const TCoExtendBase& /*extend*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoExtendBase& /*extend*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Union";
 
         return AddOperator(planNode, "Union", std::move(op));
     }
 
-    ui32 Visit(const TCoIterator& iter, TQueryPlanNode& planNode) {
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoToFlow& toflow, TQueryPlanNode& planNode) {
+        const auto toflowValue = NPlanUtils::PrettyExprStr(toflow.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "ToFlow";
+
+        if (auto maybeResultBinding = ContainResultBinding(toflowValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["ToFlow"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoIterator& iter, TQueryPlanNode& planNode) {
         const auto iterValue = NPlanUtils::PrettyExprStr(iter.List());
 
         TOperator op;
@@ -1046,7 +1182,7 @@ private:
         return AddOperator(planNode, "ConstantExpr", std::move(op));
     }
 
-    ui32 Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
         const auto inputValue = NPlanUtils::PrettyExprStr(partitionByKey.Input());
 
         TOperator op;
@@ -1063,7 +1199,7 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    ui32 Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
         const auto table = upsert.Table().Path().StringValue();
 
         TOperator op;
@@ -1082,7 +1218,7 @@ private:
         return AddOperator(planNode, "Upsert", std::move(op));
     }
 
-    ui32 Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
         const auto table = del.Table().Path().StringValue();
 
         TOperator op;
@@ -1098,7 +1234,7 @@ private:
         return AddOperator(planNode, "Delete", std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
@@ -1108,12 +1244,12 @@ private:
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
-        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        Visit(flatMap, planNode);
+        
         return operatorId;
     }
 
-    ui32 Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
@@ -1124,7 +1260,7 @@ private:
         return AddOperator(planNode, name, std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoJoinDict& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoJoinDict& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
 
         TOperator op;
@@ -1134,12 +1270,12 @@ private:
 
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
-        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        Visit(flatMap, planNode);
+
         return operatorId;
     }
 
-    ui32 Visit(const TCoJoinDict& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoJoinDict& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
 
         TOperator op;
@@ -1150,7 +1286,7 @@ private:
         return AddOperator(planNode, name, std::move(op));
     }
 
-    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
 
         TOperator op;
@@ -1159,12 +1295,12 @@ private:
 
         AddOptimizerEstimates(op, join);
 
-        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
-        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        Visit(flatMap, planNode);
+ 
         return operatorId;
     }
 
-    ui32 Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
 
         TOperator op;
@@ -1191,7 +1327,7 @@ private:
         }
     }
 
-    ui32 Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
 
@@ -1207,7 +1343,7 @@ private:
         return AddOperator(planNode, "Filter", std::move(op));
     }
 
-    ui32 Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {
         auto table = TString(lookup.Table().Path().Value());
         auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
 
@@ -1246,7 +1382,7 @@ private:
         return AddOperator(planNode, readName, std::move(op));
     }
 
-    ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
         const auto table = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
 
@@ -1352,7 +1488,7 @@ private:
         return operatorId;
     }
 
-    ui32 Visit(const TKqlReadTableBase& read, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TKqlReadTableBase& read, TQueryPlanNode& planNode) {
         auto table = TString(read.Table().Path());
         auto range = read.Range();
 
@@ -1493,6 +1629,8 @@ private:
 
     TMap<ui32, TQueryPlanNode> QueryPlanNodes;
     TNodeSet VisitedStages;
+    std::unordered_map<TArgContext, std::variant<ui32, TQueryPlanNode*>, TArgContext::HashFunction> LambdaInputs;
+    TArgContext CurrentArgContext;
 };
 
 using ModifyFunction = std::function<void (NJson::TJsonValue& node)>;
@@ -1794,16 +1932,24 @@ void FillAsyncAggrStat(NJson::TJsonValue& node, const NYql::NDqProto::TDqAsyncSt
         FillAggrStat(node, asyncAggr.GetActiveTimeUs(), "ActiveTimeUs");
     }
     if (asyncAggr.HasFirstMessageMs() && asyncAggr.HasLastMessageMs()) {
-        auto& aggrStat = node.InsertValue("ActiveMessageMs", NJson::JSON_MAP);
-        aggrStat["Min"] = asyncAggr.GetFirstMessageMs().GetMin();
-        aggrStat["Max"] = asyncAggr.GetLastMessageMs().GetMax();
-        aggrStat["Count"] = asyncAggr.GetFirstMessageMs().GetCnt();
+        auto firstMessageMs = asyncAggr.GetFirstMessageMs().GetMin();
+        auto lastMessageMs = asyncAggr.GetLastMessageMs().GetMax();
+        if (firstMessageMs && lastMessageMs > firstMessageMs) {
+            auto& aggrStat = node.InsertValue("ActiveMessageMs", NJson::JSON_MAP);
+            aggrStat["Min"] = firstMessageMs;
+            aggrStat["Max"] = lastMessageMs;
+            aggrStat["Count"] = asyncAggr.GetFirstMessageMs().GetCnt();
+        }
     }
     if (asyncAggr.HasPauseMessageMs() && asyncAggr.HasResumeMessageMs()) {
-        auto& aggrStat = node.InsertValue("WaitMessageMs", NJson::JSON_MAP);
-        aggrStat["Min"] = asyncAggr.GetPauseMessageMs().GetMin();
-        aggrStat["Max"] = asyncAggr.GetResumeMessageMs().GetMax();
-        aggrStat["Count"] = asyncAggr.GetPauseMessageMs().GetCnt();
+        auto firstMessageMs = asyncAggr.GetPauseMessageMs().GetMin();
+        auto lastMessageMs = asyncAggr.GetResumeMessageMs().GetMax();
+        if (firstMessageMs && lastMessageMs > firstMessageMs) {
+            auto& aggrStat = node.InsertValue("WaitMessageMs", NJson::JSON_MAP);
+            aggrStat["Min"] = firstMessageMs;
+            aggrStat["Max"] = lastMessageMs;
+            aggrStat["Count"] = asyncAggr.GetPauseMessageMs().GetCnt();
+        }
     }
 }
 
@@ -1852,11 +1998,13 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "InputBytes", taskStats.GetInputBytes());
         SetNonZero(node, "OutputRows", taskStats.GetOutputRows());
         SetNonZero(node, "OutputBytes", taskStats.GetOutputBytes());
+        SetNonZero(node, "ResultRows", taskStats.GetResultRows());
+        SetNonZero(node, "ResultBytes", taskStats.GetResultBytes());
+        SetNonZero(node, "IngressRows", taskStats.GetIngressRows());
+        SetNonZero(node, "IngressBytes", taskStats.GetIngressBytes());
+        SetNonZero(node, "EgressRows", taskStats.GetEgressRows());
+        SetNonZero(node, "EgressBytes", taskStats.GetEgressBytes());
 
-        // equals to max if there was no first row
-        if(taskStats.GetFirstRowTimeMs() != std::numeric_limits<ui64>::max()) {
-            SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs()); // need to be reviewed
-        }
         SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());   // need to be reviewed
         SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs()); // need to be reviewed
 
@@ -1913,22 +2061,55 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     stats["UseLlvm"] = "undefined";
                 }
 
-                stats["TotalTasks"] = (*stat)->GetTotalTasksCount();
-                stats["TotalDurationMs"] = (*stat)->GetDurationUs() / 1000;
-                stats["TotalCpuTimeUs"] = (*stat)->GetCpuTimeUs().GetSum();
-                stats["TotalInputRows"] = (*stat)->GetInputRows().GetSum();
-                stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
-                stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
-                stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
+                stats["Tasks"] = (*stat)->GetTotalTasksCount();
+                
+                stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
+                if ((*stat)->HasDurationUs()) {
+                    FillAggrStat(stats, (*stat)->GetDurationUs(), "DurationUs");
+                }
+                if ((*stat)->HasWaitInputTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetWaitInputTimeUs(), "WaitInputTimeUs");
+                }
+                if ((*stat)->HasWaitOutputTimeUs()) {
+                    FillAggrStat(stats, (*stat)->GetWaitOutputTimeUs(), "WaitOutputTimeUs");
+                }
+                if ((*stat)->HasInputRows()) {
+                    FillAggrStat(stats, (*stat)->GetInputRows(), "InputRows");
+                }
+                if ((*stat)->HasInputBytes()) {
+                    FillAggrStat(stats, (*stat)->GetInputBytes(), "InputBytes");
+                }
+                if ((*stat)->HasOutputRows()) {
+                    FillAggrStat(stats, (*stat)->GetOutputRows(), "OutputRows");
+                }
+                if ((*stat)->HasOutputBytes()) {
+                    FillAggrStat(stats, (*stat)->GetOutputBytes(), "OutputBytes");
+                }
+                if ((*stat)->HasResultRows()) {
+                    FillAggrStat(stats, (*stat)->GetResultRows(), "ResultRows");
+                }
+                if ((*stat)->HasResultBytes()) {
+                    FillAggrStat(stats, (*stat)->GetResultBytes(), "ResultBytes");
+                }
+                if ((*stat)->HasIngressRows()) {
+                    FillAggrStat(stats, (*stat)->GetIngressRows(), "IngressRows");
+                }
+                if ((*stat)->HasIngressBytes()) {
+                    FillAggrStat(stats, (*stat)->GetIngressBytes(), "IngressBytes");
+                }
+                if ((*stat)->HasEgressRows()) {
+                    FillAggrStat(stats, (*stat)->GetEgressRows(), "EgressRows");
+                }
+                if ((*stat)->HasEgressBytes()) {
+                    FillAggrStat(stats, (*stat)->GetEgressBytes(), "EgressBytes");
+                }
                 if ((*stat)->HasCpuTimeUs()) {
                     FillAggrStat(stats, (*stat)->GetCpuTimeUs(), "CpuTimeUs");
                 }
-
                 if ((*stat)->HasSourceCpuTimeUs()) {
                     FillAggrStat(stats, (*stat)->GetSourceCpuTimeUs(), "SourceCpuTimeUs");
                 }
-
                 if ((*stat)->HasMaxMemoryUsage()) {
                     FillAggrStat(stats, (*stat)->GetMaxMemoryUsage(), "MaxMemoryUsage");
                 }

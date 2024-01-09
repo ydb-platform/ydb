@@ -2,6 +2,7 @@
 
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 
 namespace NYql::NNative {
@@ -170,11 +171,11 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
     folderResult.SetSuccess();
 
     for (const auto& folder : execCtx->Options_.Folders()) {
-        YQL_CLOG(INFO, ProviderYt) << "Executing list command with prefix: " << folder.Prefix;
         const auto cacheKey = std::accumulate(folder.AttrKeys.begin(), folder.AttrKeys.end(), folder.Prefix,
             [] (TString&& str, const TString& arg) {
             return str + "&" + arg;
         });
+        YQL_CLOG(INFO, ProviderYt) << "Executing list command with prefix: " << folder.Prefix << " , cacheKey = " << cacheKey;
 
         auto maybeCached = MaybeGetFolderFromCache(entry, cacheKey);
         if (maybeCached) {
@@ -217,7 +218,15 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
             })
         );
     }
-    batchList->ExecuteBatch();
+
+    TExecuteBatchOptions batchOptions;
+    if (batchRes.size() > 1) {
+        const size_t concurrency = execCtx->Options_.Config()->BatchListFolderConcurrency
+            .Get().GetOrElse(DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY);
+        batchOptions.Concurrency(concurrency);
+    }
+    batchList->ExecuteBatch(batchOptions);
+
     try {
         WaitExceptionOrAll(batchRes).Wait();
         for (auto& res : batchRes) {

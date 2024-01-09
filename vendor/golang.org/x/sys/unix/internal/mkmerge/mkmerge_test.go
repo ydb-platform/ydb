@@ -100,7 +100,6 @@ func TestMerge(t *testing.T) {
 // build directives for arch{{.}}
 
 //go:build goos && arch{{.}}
-// +build goos,arch{{.}}
 
 package main
 
@@ -186,7 +185,6 @@ const (
 // build directives for arch{{.}}
 
 //go:build goos && arch{{.}}
-// +build goos,arch{{.}}
 
 package main
 
@@ -317,7 +315,7 @@ const (
 		expectedElems := []codeElem{
 			{token.COMMENT, "Package comments\n"},
 			{token.COMMENT, "build directives for archA\n"},
-			{token.COMMENT, "+build goos,archA\n"},
+			{token.COMMENT, "go:build goos && archA\n"},
 			{token.CONST, `COMMON_INDEPENDENT = 1234`},
 			{token.CONST, `UNIQUE_INDEPENDENT_A = "UNIQUE_INDEPENDENT_A"`},
 			{token.CONST, `COMMON_GROUP = "COMMON_GROUP"`},

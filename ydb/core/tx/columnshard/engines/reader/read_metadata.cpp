@@ -42,6 +42,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
     SelectInfo = dataAccessor.Select(readDescription);
+    StatsMode = readDescription.StatsMode;
     return true;
 }
 
@@ -68,7 +69,7 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
 std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    for (auto&& i : indexInfo.GetPrimaryKey()) {
+    for (auto&& i : indexInfo.GetPrimaryKeyColumns()) {
         Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
     }
     return result;
@@ -94,10 +95,12 @@ void TReadStats::PrintToLog() {
         ("schema_columns", SchemaColumns)
         ("filter_columns", FilterColumns)
         ("additional_columns", AdditionalColumns)
-        ("portions_bytes", PortionsBytes)
+        ("compacted_portions_bytes", CompactedPortionsBytes)
+        ("inserted_portions_bytes", InsertedPortionsBytes)
+        ("committed_portions_bytes", CommittedPortionsBytes)
         ("data_filter_bytes", DataFilterBytes)
         ("data_additional_bytes", DataAdditionalBytes)
-        ("delta_bytes", PortionsBytes - DataFilterBytes - DataAdditionalBytes)
+        ("delta_bytes", CompactedPortionsBytes + InsertedPortionsBytes + CommittedPortionsBytes - DataFilterBytes - DataAdditionalBytes)
         ("selected_rows", SelectedRows)
         ;
 }

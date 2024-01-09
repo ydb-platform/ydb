@@ -2,7 +2,7 @@ PY2_LIBRARY()
 
 LICENSE(PSF-2.0)
 
-VERSION(2.2.4)
+VERSION(2.2.5)
 
 PEERDIR(
     contrib/deprecated/python/backports.functools-lru-cache

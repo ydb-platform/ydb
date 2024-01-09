@@ -37,7 +37,7 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDi
 
 // Creates key selector using PK of given table
 NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableMetadataPtr tableMeta, NYql::TPositionHandle pos,
-    NYql::TExprContext& ctx);
+    NYql::TExprContext& ctx, TMaybe<int> tupleId = {});
 
 // Creates key selector using user provided index columns.
 // It is important to note. This function looks at the _user_prvided_ set of columns.
@@ -56,6 +56,10 @@ NYql::NNodes::TCoLambda MakeRowsPayloadSelector(const NYql::NNodes::TCoAtomList&
 NYql::NNodes::TExprBase MakeRowsFromDict(const NYql::NNodes::TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
     const THashSet<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
+// Same as MakeRowsFromDict but skip rows which marked as non changed (true in second tuple)
+NYql::NNodes::TExprBase MakeRowsFromTupleDict(const NYql::NNodes::TDqPhyPrecompute& dict, const TVector<TString>& dictKeys,
+    const THashSet<TStringBuf>& columns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqCnUnionAll> MakeConditionalInsertRows(const NYql::NNodes::TExprBase& input,
     const NYql::TKikimrTableDescription& table, bool abortOnError, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
@@ -65,8 +69,20 @@ enum class TKqpPhyUpsertIndexMode {
 };
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode,
-    const NYql::NNodes::TExprBase& inputRows, const NYql::NNodes::TCoAtomList& inputColumns,
-    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, 
+    const NYql::NNodes::TExprBase& inputRows,
+    const NYql::NNodes::TCoAtomList& inputColumns,
+    const NYql::NNodes::TCoAtomList& returningColumns,
+
+    const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+
+struct TDictAndKeysResult {
+    NYql::NNodes::TDqPhyPrecompute DictPrecompute;
+    NYql::NNodes::TDqPhyPrecompute KeysPrecompute;
+};
+
+TDictAndKeysResult PrecomputeDictAndKeys(const TCondenseInputResult& condenseResult, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

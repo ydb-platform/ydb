@@ -73,7 +73,7 @@ public:
     void Register(ui32 table) override {
         Send(new NSharedCache::TEvMemTableRegister(table));
     }
-    
+
     void Unregister(ui32 table) override {
         Send(new NSharedCache::TEvMemTableUnregister(table));
     }
@@ -195,7 +195,7 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
             auto &seat = xpair.second->Seat;
             xpair.second->WaitingSpan.EndOk();
             LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-            seat->CreateEnqueuedSpan();
+            seat->StartEnqueuedSpan();
             ActivationQueue->Push(seat.Release());
             ActivateTransactionWaiting++;
         }
@@ -518,8 +518,9 @@ void TExecutor::PlanTransactionActivation() {
     const ui64 limitTxInFly = Scheme().Executor.LimitInFlyTx;
     while (PendingQueue->Head() && (!limitTxInFly || (Stats->TxInFly - Stats->TxPending < limitTxInFly))) {
         TAutoPtr<TSeat> seat = PendingQueue->Pop();
+        seat->FinishPendingSpan();
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->CreateEnqueuedSpan();
+        seat->StartEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         --Stats->TxPending;
@@ -540,7 +541,7 @@ void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueue
                 it->second->WaitingSpan.EndOk();
                 auto &seat = it->second->Seat;
                 LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-                seat->CreateEnqueuedSpan();
+                seat->StartEnqueuedSpan();
                 ActivationQueue->Push(seat.Release());
                 ActivateTransactionWaiting++;
                 TransactionWaitPads.erase(waitPad);
@@ -1578,9 +1579,8 @@ bool TExecutor::CanExecuteTransaction() const {
 void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
     Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
 
-    NWilson::TTraceId traceId;
-
-    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self, std::move(traceId));
+    TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
+    seat->Self->SetupTxSpanName();
 
     LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
 
@@ -1617,6 +1617,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     {
         LWTRACK(TransactionPending, seat->Self->Orbit, seat->UniqID,
                 CanExecuteTransaction() ? "tx limit reached" : "transactions paused");
+        seat->CreatePendingSpan();
         PendingQueue->Push(seat.Release());
         ++Stats->TxPending;
         return;
@@ -1624,7 +1625,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
 
     if (ActiveTransaction || ActivateTransactionWaiting || !allowImmediate) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->CreateEnqueuedSpan();
+        seat->StartEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         PlanTransactionActivation();
@@ -1653,17 +1654,17 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     PrivatePageCache->ResetTouchesAndToLoad(true);
     TPageCollectionTxEnv env(*Database, *PrivatePageCache);
 
-    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId);
+    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
 
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
     
-    NWilson::TSpan txExecuteSpan(TWilsonTablet::Tablet, seat->GetTxTraceId(), "Tablet.Transaction.Execute");
+    txc.StartExecutionSpan();
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
-    txExecuteSpan.EndOk();
-    
+    txc.FinishExecutionSpan();
+
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
 
     seat->CPUExecTime += cpuTimer.PassedReset();
@@ -1857,7 +1858,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     // then tx may be re-activated.
     if (!PrivatePageCache->GetStats().CurrentCacheMisses) {
         LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-        seat->CreateEnqueuedSpan();
+        seat->StartEnqueuedSpan();
         ActivationQueue->Push(seat.Release());
         ActivateTransactionWaiting++;
         PlanTransactionActivation();
@@ -2945,7 +2946,7 @@ void TExecutor::StartSeat(ui64 task, TResource *cookie_) noexcept
     PostponedTransactions.erase(it);
     Memory->AcquiredMemory(*seat, task);
     LWTRACK(TransactionEnqueued, seat->Self->Orbit, seat->UniqID);
-    seat->CreateEnqueuedSpan();
+    seat->StartEnqueuedSpan();
     ActivationQueue->Push(seat.Release());
     ActivateTransactionWaiting++;
     PlanTransactionActivation();

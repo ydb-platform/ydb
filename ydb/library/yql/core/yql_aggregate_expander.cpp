@@ -25,7 +25,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
-    EffectiveCompact = (HaveDistinct && CompactForDistinct && !TypesCtx.UseBlocks) || ForceCompact || HasSetting(*settings, "compact");
+    EffectiveCompact = (HaveDistinct && CompactForDistinct && !TypesCtx.IsBlockEngineEnabled()) || ForceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : Traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
@@ -56,7 +56,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate()
         return GeneratePhases();
     }
 
-    if (TypesCtx.UseBlocks) {
+    if (TypesCtx.IsBlockEngineEnabled()) {
         if (Suffix == "Combine") {
             auto ret = TryGenerateBlockCombine();
             if (ret) {
@@ -2776,7 +2776,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         streams.push_back(SerializeIdxSet(indicies));
     }
 
-    if (TypesCtx.UseBlocks) {
+    if (TypesCtx.IsBlockEngineEnabled()) {
         for (ui32 i = 0; i < unionAllInputs.size(); ++i) {
             unionAllInputs[i] = Ctx.Builder(Node->Pos())
                 .Callable("Map")
@@ -2797,7 +2797,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     }
 
     auto settings = Node->ChildPtr(3);
-    if (TypesCtx.UseBlocks) {
+    if (TypesCtx.IsBlockEngineEnabled()) {
         settings = AddSetting(*settings, Node->Pos(), "many_streams", Ctx.NewList(Node->Pos(), std::move(streams)), Ctx);
     }
 
@@ -2830,7 +2830,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombine() {
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
-    if (UsePartitionsByKeys || !TypesCtx.UseBlocks) {
+    if (UsePartitionsByKeys || !TypesCtx.IsBlockEngineEnabled()) {
         return nullptr;
     }
 
@@ -2919,13 +2919,13 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
 TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (NNodes::TCoAggregate::Match(node.Get())) {
         NNodes::TCoAggregate self(node);
-        auto ret = TAggregateExpander::CountAggregateRewrite(self, ctx, typesCtx.UseBlocks);
+        auto ret = TAggregateExpander::CountAggregateRewrite(self, ctx, typesCtx.IsBlockEngineEnabled());
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "CountAggregateRewrite on peephole";
             return ret;
         }
     }
-    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.UseBlocks);
+    return ExpandAggregatePeepholeImpl(node, ctx, typesCtx, false, typesCtx.IsBlockEngineEnabled());
 }
 
 } // namespace NYql

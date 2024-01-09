@@ -32,13 +32,16 @@ TExprNode::TPtr BuildMultiplyLimit(TMaybe<size_t> limit, TExprContext& ctx, TPos
     }
 }
 
-const TTypeAnnotationNode* GetBaseDataType(const TTypeAnnotationNode *type) {
+const TTypeAnnotationNode* GetBasePgOrDataType(const TTypeAnnotationNode* type) {
+    if (type && type->GetKind() == ETypeAnnotationKind::Pg) {
+        return type;
+    }
     type = RemoveAllOptionals(type);
     return (type && type->GetKind() == ETypeAnnotationKind::Data) ? type : nullptr;
 }
 
-bool IsDataOrMultiOptionalOfData(const TTypeAnnotationNode* type) {
-    return GetBaseDataType(type) != nullptr;
+bool IsPgOrDataOrMultiOptionalOfData(const TTypeAnnotationNode* type) {
+    return GetBasePgOrDataType(type) != nullptr;
 }
 
 TMaybe<size_t> GetSqlInCollectionSize(const TExprNode::TPtr& collection) {
@@ -171,13 +174,13 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
 
                 for (size_t i = 0; i < keyTypes.size(); ++i) {
                     result.emplace_back();
-                    result.back().KeyBaseType = GetBaseDataType(keyTypes[i]);
-                    result.back().ValueBaseType = GetBaseDataType(valueTypes[i]);
+                    result.back().KeyBaseType = GetBasePgOrDataType(keyTypes[i]);
+                    result.back().ValueBaseType = GetBasePgOrDataType(valueTypes[i]);
                 }
             } else {
                 result.emplace_back();
-                result.back().KeyBaseType = GetBaseDataType(keyType);
-                result.back().ValueBaseType = GetBaseDataType(valueType);
+                result.back().KeyBaseType = GetBasePgOrDataType(keyType);
+                result.back().ValueBaseType = GetBasePgOrDataType(valueType);
             }
 
             return result;
@@ -204,6 +207,16 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
     for (auto& item : types) {
         YQL_ENSURE(item.KeyBaseType);
         YQL_ENSURE(item.ValueBaseType);
+        const auto keyKind = item.KeyBaseType->GetKind();
+        const auto valueKind = item.ValueBaseType->GetKind();
+        if (keyKind != ETypeAnnotationKind::Data || valueKind != ETypeAnnotationKind::Data) {
+            YQL_ENSURE(keyKind == valueKind);
+            YQL_ENSURE(keyKind == ETypeAnnotationKind::Pg);
+            if (!IsSameAnnotation(*item.KeyBaseType, *item.ValueBaseType)) {
+                return false;
+            }
+            continue;
+        }
 
         EDataSlot valueSlot = item.ValueBaseType->Cast<TDataExprType>()->GetSlot();
         EDataSlot keySlot = item.KeyBaseType->Cast<TDataExprType>()->GetSlot();
@@ -225,7 +238,7 @@ bool IsRoundingSupported(const TExprNode& op, bool negated) {
 }
 
 bool IsSupportedMemberNode(const TExprNode& node, const TExprNode& row) {
-    return node.IsCallable("Member") && node.Child(0) == &row && IsDataOrMultiOptionalOfData(node.GetTypeAnn());
+    return node.IsCallable("Member") && node.Child(0) == &row && IsPgOrDataOrMultiOptionalOfData(node.GetTypeAnn());
 }
 
 bool IsValidForRange(const TExprNode& node, const TExprNode* otherNode, const TExprNode& row) {
@@ -417,8 +430,8 @@ TExprNode::TPtr ExpandTupleBinOp(const TExprNode& node, TExprContext& ctx) {
     if (node.IsCallable({"<=", ">="})) {
         return ctx.Builder(node.Pos())
             .Callable("Or")
-                .Add(0, ctx.RenameNode(node, "=="))
-                .Add(1, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(0, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(1, ctx.RenameNode(node, "=="))
             .Seal()
             .Build();
     }
@@ -572,14 +585,14 @@ bool IsListOfMembers(const TExprNode& node) {
     }
 
     return AllOf(node.ChildrenList(), [](const auto& child) {
-        return child->IsCallable("Member") && IsDataOrMultiOptionalOfData(child->GetTypeAnn());
+        return child->IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(child->GetTypeAnn());
     });
 }
 
 bool IsMemberBinOpNode(const TExprNode& node) {
     YQL_ENSURE(node.ChildrenSize() == 2);
-    return node.Head().IsCallable("Member") && IsDataOrMultiOptionalOfData(node.Head().GetTypeAnn()) ||
-           node.Tail().IsCallable("Member") && IsDataOrMultiOptionalOfData(node.Tail().GetTypeAnn());
+    return node.Head().IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(node.Head().GetTypeAnn()) ||
+           node.Tail().IsCallable("Member") && IsPgOrDataOrMultiOptionalOfData(node.Tail().GetTypeAnn());
 }
 
 bool IsMemberListBinOpNode(const TExprNode& node) {
@@ -738,6 +751,33 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
                     .Add(1, MakeBool(node->Pos(), true, ctx))
                 .Seal()
                 .Build();
+        }
+    }
+
+    if (node->IsCallable("FromPg") && node->Head().IsCallable("PgResolvedOp")) {
+        auto opNode = node->HeadPtr();
+        TStringBuf op = opNode->Head().Content();
+        if (SupportedBinOps.contains(op) || op == "<>" || op == "=") {
+            auto left = opNode->ChildPtr(2);
+            auto right = opNode->ChildPtr(3);
+            if (IsSameAnnotation(*left->GetTypeAnn(), *right->GetTypeAnn())) {
+                TStringBuf newOp;
+                if (op == "=") {
+                    newOp = "==";
+                } else if (op == "<>") {
+                    newOp = "!=";
+                } else {
+                    newOp = op;
+                }
+                YQL_ENSURE(opNode->ChildrenSize() == 4);
+                YQL_CLOG(DEBUG, Core) << "Replace PgResolvedOp(" << op << ") with corresponding plain binary operation";
+                return ctx.Builder(node->Pos())
+                    .Callable(newOp)
+                        .Add(0, opNode->ChildPtr(2))
+                        .Add(1, opNode->ChildPtr(3))
+                    .Seal()
+                    .Build();
+            }
         }
     }
 
@@ -1502,15 +1542,15 @@ TMaybe<TRangeBoundHint> CompareBounds(
             return Nothing();
         }
         if (auto cmp = TryCompareColumns(hint1.Columns[i], hint2.Columns[i])) {
-            if ((cmp < 0) == min) {
+            if (cmp == 0) {
+                continue;
+            } else if ((cmp < 0) == min) {
                 hint = hint1;
             } else {
                 hint = hint2;
             }
 
-            if (cmp != 0) {
-                break;
-            }
+            break;
         } else {
             return Nothing();
         }
@@ -1559,7 +1599,7 @@ TMaybe<TRangeHint> RangeHintExtend(const TMaybe<TRangeHint>& hint1, size_t hint1
     }
 }
 
-bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acceptExclusivePoint = true) {
+bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right) {
     for (size_t i = 0; ; ++i) {
         if (i >= left.Columns.size() || i >= right.Columns.size()) {
             // ok, we have +-inf and sure that it's valid
@@ -1568,15 +1608,12 @@ bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acc
         auto cmp = TryCompareColumns(left.Columns[i], right.Columns[i]);
         if (!cmp) {
             return false;
-        } else {
-            if (*cmp < 0) {
-                return true;
-            } else if (*cmp > 0) {
-                return false;
-            }
+        } else if (*cmp < 0) {
+            return true;
+        } else if (*cmp > 0) {
+            return false;
         }
     }
-    return acceptExclusivePoint || left.Inclusive || right.Inclusive;
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hint2) {
@@ -1590,11 +1627,33 @@ TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hin
     if (!left || !right || !intersection) {
         return Nothing();
     }
-    if (IsValid(intersection->Left, intersection->Right, false)) {
-        return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
-    } else {
-        return Nothing();
+
+    { // check if there is no gap between ranges
+        for (size_t i = 0; ; ++i) {
+            bool leftFinished = i >= intersection->Left.Columns.size();
+            bool rightFinished = i >= intersection->Right.Columns.size();
+            if (leftFinished || rightFinished) {
+                if (leftFinished && intersection->Left.Inclusive) {
+                    break;
+                }
+                if (rightFinished && intersection->Right.Inclusive) {
+                    break;
+                }
+                return {};
+            }
+
+            auto cmp = TryCompareColumns(intersection->Left.Columns[i], intersection->Right.Columns[i]);
+            if (!cmp) {
+                return {};
+            } else if (*cmp < 0) {
+                break;
+            } else if (*cmp > 0) {
+                return {};
+            }
+        }
     }
+
+    return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TMaybe<TRangeHint>& hint1, const TMaybe<TRangeHint>& hint2) {
@@ -2177,8 +2236,8 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
     for (size_t i = 0; i < effectiveIndexKeys.size(); ++i) {
         TMaybe<ui32> idx = RowType->FindItem(effectiveIndexKeys[i]);
         if (idx) {
-            auto keyBaseType = RemoveAllOptionals(RowType->GetItems()[*idx]->GetItemType());
-            if (!(keyBaseType->GetKind() == ETypeAnnotationKind::Data && keyBaseType->IsComparable() && keyBaseType->IsEquatable())) {
+            auto keyBaseType = GetBasePgOrDataType(RowType->GetItems()[*idx]->GetItemType());
+            if (!(keyBaseType && keyBaseType->IsComparable() && keyBaseType->IsEquatable())) {
                 idx = {};
             }
         }

@@ -135,6 +135,7 @@ message TConfigItem {
         QueryServiceConfigItem = 73;
         InsertConveyorConfigItem = 74;
         AllowEditYamlInUiItem = 75;
+        S3ProxyResolverConfigItem = 76;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <type_traits>
 
 #include "float_common.h"
@@ -115,7 +116,7 @@ FASTFLOAT_SIMD_RESTORE_WARNINGS
 #if defined(_MSC_VER) && _MSC_VER <= 1900
 template <typename UC>
 #else
-template <typename UC, FASTFLOAT_ENABLE_IF(!has_simd_opt<UC>())>
+template <typename UC, FASTFLOAT_ENABLE_IF(!has_simd_opt<UC>()) = 0>
 #endif
 // dummy for compile
 uint64_t simd_read8_to_u64(UC const*) {
@@ -223,7 +224,7 @@ FASTFLOAT_SIMD_RESTORE_WARNINGS
 #if defined(_MSC_VER) && _MSC_VER <= 1900
 template <typename UC>
 #else
-template <typename UC, FASTFLOAT_ENABLE_IF(!has_simd_opt<UC>())>
+template <typename UC, FASTFLOAT_ENABLE_IF(!has_simd_opt<UC>()) = 0>
 #endif
 // dummy for compile
 bool simd_parse_if_eight_digits_unrolled(UC const*, uint64_t&) {
@@ -231,7 +232,7 @@ bool simd_parse_if_eight_digits_unrolled(UC const*, uint64_t&) {
 }
 
 
-template <typename UC, FASTFLOAT_ENABLE_IF(!std::is_same<UC, char>::value)>
+template <typename UC, FASTFLOAT_ENABLE_IF(!std::is_same<UC, char>::value) = 0>
 fastfloat_really_inline FASTFLOAT_CONSTEXPR20
 void loop_parse_if_eight_digits(const UC*& p, const UC* const pend, uint64_t& i) {
   if (!has_simd_opt<UC>()) {
@@ -436,6 +437,106 @@ parsed_number_string_t<UC> parse_number_string(UC const *p, UC const * pend, par
   }
   answer.exponent = exponent;
   answer.mantissa = i;
+  return answer;
+}
+
+template <typename T, typename UC>
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20
+from_chars_result_t<UC> parse_int_string(UC const* p, UC const* pend, T& value, int base)
+{
+  from_chars_result_t<UC> answer;
+  
+  UC const* const first = p;
+
+  bool negative = (*p == UC('-'));
+  if (!std::is_signed<T>::value && negative) {
+    answer.ec = std::errc::invalid_argument;
+    answer.ptr = first;
+    return answer;
+  }
+#ifdef FASTFLOAT_ALLOWS_LEADING_PLUS // disabled by default
+  if ((*p == UC('-')) || (*p == UC('+'))) {
+#else
+  if (*p == UC('-')) {
+#endif
+    ++p;
+  }
+
+  UC const* const start_num = p;
+  while (*p == UC('0')) { 
+    ++p; 
+  }
+  const bool has_leading_zeros = p > start_num;
+
+  UC const* const start_digits = p;
+
+  uint64_t i = 0;
+  if (base == 10) {
+    loop_parse_if_eight_digits(p, pend, i); // use SIMD if possible
+  }
+  while (p != pend) {
+    uint8_t digit = ch_to_digit(*p);
+    if (digit >= base) {
+      break;
+    }
+    i = uint64_t(base) * i + digit; // might overflow, check this later
+    p++; 
+  }
+  
+  size_t digit_count = size_t(p - start_digits);
+
+  if (digit_count == 0) {
+    if (has_leading_zeros) {
+      value = 0;
+      answer.ec = std::errc();
+      answer.ptr = p;
+    }
+    else {
+      answer.ec = std::errc::invalid_argument;
+      answer.ptr = first;
+    }
+    return answer; 
+  }
+
+  answer.ptr = p;
+
+  // check u64 overflow
+  size_t max_digits = max_digits_u64(base);
+  if (digit_count > max_digits) {
+    answer.ec = std::errc::result_out_of_range;
+    return answer;
+  }
+  // this check can be eliminated for all other types, but they will all require a max_digits(base) equivalent
+  if (digit_count == max_digits && i < min_safe_u64(base)) {
+    answer.ec = std::errc::result_out_of_range;
+    return answer;
+  }
+
+  // check other types overflow
+  if (!std::is_same<T, uint64_t>::value) {
+    if (i > uint64_t(std::numeric_limits<T>::max()) + uint64_t(negative)) {
+      answer.ec = std::errc::result_out_of_range;
+      return answer;
+    }
+  }
+
+  if (negative) {
+#ifdef FASTFLOAT_VISUAL_STUDIO
+#pragma warning(push)
+#pragma warning(disable: 4146) 
+#endif
+    // this weird workaround is required because:
+    // - converting unsigned to signed when its value is greater than signed max is UB pre-C++23.
+    // - reinterpret_casting (~i + 1) would work, but it is not constexpr
+    // this is always optimized into a neg instruction.
+    value = T(-std::numeric_limits<T>::max() - T(i - std::numeric_limits<T>::max()));
+#ifdef FASTFLOAT_VISUAL_STUDIO
+#pragma warning(pop)
+#endif
+  }
+  else { value = T(i); }
+
+  answer.ec = std::errc();
   return answer;
 }
 

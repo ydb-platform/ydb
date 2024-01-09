@@ -32,7 +32,7 @@ public:
 
 public:
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
-    void CloseSession(const TString& sessionId) override;
+    NThreading::TFuture<void> CloseSession(const TString& sessionId) override;
 
     ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
         const TString& sessionId,

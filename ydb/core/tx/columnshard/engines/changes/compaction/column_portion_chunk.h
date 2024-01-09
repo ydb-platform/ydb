@@ -110,20 +110,14 @@ protected:
     std::vector<std::shared_ptr<IPortionColumnChunk>> Chunks;
     ui64 CurrentPortionRecords = 0;
     const ui32 ColumnId;
-    std::string ColumnName;
     ui64 PackedSize = 0;
 public:
     ui64 GetPackedSize() const {
         return PackedSize;
     }
 
-    const std::string& GetColumnName() const {
-        return ColumnName;
-    }
-
-    TColumnPortionResult(const std::string& columnName, const ui32 columnId)
-        : ColumnId(columnId)
-        , ColumnName(columnName) {
+    TColumnPortionResult(const ui32 columnId)
+        : ColumnId(columnId) {
 
     }
 
@@ -150,7 +144,7 @@ private:
     double PredictedPackedBytes = 0;
 public:
     TColumnPortion(const TColumnMergeContext& context)
-        : TBase(context.GetField()->name(), context.GetColumnId())
+        : TBase(context.GetColumnId())
         , Context(context) {
         Builder = Context.MakeBuilder();
     }

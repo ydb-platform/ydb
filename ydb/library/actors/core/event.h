@@ -77,10 +77,6 @@ namespace NActors {
 
         template <typename TEv>
         inline TEv* StaticCastAsLocal() const noexcept {  // blind cast
-            if constexpr (!std::is_same_v<TEv, IEventBase>) {
-                Y_DEBUG_ABORT_UNLESS(GetTypeRewrite() == TEv::EventType);
-            };
-
             return static_cast<TEv*>(Event.Get());
         }
 

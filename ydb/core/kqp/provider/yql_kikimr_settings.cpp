@@ -70,6 +70,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
+    REGISTER_SETTING(*this, OptEnableConstantFolding);
+
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -142,6 +144,10 @@ bool TKikimrSettings::HasOptUseFinalizeByKey() const {
 
 bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
     return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
+}
+
+bool TKikimrSettings::HasOptEnableConstantFolding() const {
+    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
 }
 
 

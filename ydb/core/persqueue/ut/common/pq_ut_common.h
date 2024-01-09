@@ -411,6 +411,62 @@ void WritePartDataWithBigMsg(
 //
 TVector<TString> CmdSourceIdRead(TTestContext& tc);
 
+struct TPQCmdSettingsBase {
+    ui32 Partition = 0;
+    TString User;
+    TString Session;
+    ui64 PartitionSessionId = 0;
+    i64 Offset = 0;
+    bool ToFail = false;
+};
+
+struct TPQCmdSettings : public TPQCmdSettingsBase {
+    ui32 Generation = 0;
+    ui32 Step = 0;
+    TPQCmdSettings() = default;
+    TPQCmdSettings(ui32 partition, const TString& user, const TString& session, i64 offset = 0, ui32 generation = 0,
+                   ui32 step = 0, bool error = false)
+        : TPQCmdSettingsBase{partition, user, session, 0, offset, error}
+        , Generation(generation)
+        , Step(step)
+    {}
+};
+
+struct TPQCmdReadSettings : public TPQCmdSettingsBase {
+    ui32 Count = 0;
+    ui32 Size = 0;
+    ui32 ResCount = 0;
+    bool Timeout = false;
+    TVector<i32> Offsets;
+    ui32 MaxTimeLagMs = 0;
+    ui32 ReadTimestampMs = 0;
+    ui64 DirectReadId = 0;
+    TActorId Pipe;
+    TPQCmdReadSettings() = default;
+    TPQCmdReadSettings(const TString& session, ui32 partition, i64 offset, ui32 count, ui32 size, ui32 resCount, bool timeout = false,
+                       TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0,
+                       const TString user = "user")
+    
+        : TPQCmdSettingsBase{partition, user, session, 0, offset, false}
+        , Count(count)
+        , Size(size)
+        , ResCount(resCount)
+        , Timeout(timeout)
+        , Offsets (offsets)
+        , MaxTimeLagMs(maxTimeLagMs)
+        , ReadTimestampMs(readTimestampMs)
+    {}
+};
+
+struct TCmdDirectReadSettings {
+    ui32 Partition;
+    TString Session;
+    ui64 PartitionSessionId; 
+    ui64 DirectReadId;
+    TActorId Pipe;
+    bool Fail = false;
+};
+
 std::pair<TString, TActorId> CmdSetOwner(
     const ui32 partition,
     TTestContext& tc,
@@ -425,15 +481,7 @@ std::pair<TString, TActorId> CmdSetOwner(
     const TString& owner = "default",
     bool force = true);
 
-void CmdCreateSession(
-    const ui32 partition,
-    const TString& user,
-    const TString& session,
-    TTestContext& tc,
-    const i64 offset = 0,
-    const ui32 gen = 0,
-    const ui32 step = 0,
-    bool error = false);
+TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc);
 
 void CmdGetOffset(
     const ui32 partition,
@@ -447,7 +495,8 @@ void CmdKillSession(
     const ui32 partition,
     const TString& user,
     const TString& session,
-    TTestContext& tc);
+    TTestContext& tc,
+    const TActorId& pipe = {});
 
 void CmdRead(
     const ui32 partition,
@@ -461,6 +510,13 @@ void CmdRead(
     const ui32 maxTimeLagMs = 0,
     const ui64 readTimestampMs = 0,
     const TString user = "user");
+
+void CmdRead(
+    const TPQCmdReadSettings& settings,
+    TTestContext& tc);
+
+void CmdPublishRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
+void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
 
 void CmdReserveBytes(
     const ui32 partition,

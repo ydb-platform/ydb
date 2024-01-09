@@ -108,7 +108,7 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vecto
         if (!recordsCount) {
             recordsCount = column.GetRecordsCount();
         } else {
-            Y_ABORT_UNLESS(*recordsCount == column.GetRecordsCount());
+            AFL_VERIFY(*recordsCount == column.GetRecordsCount())("records_count", *recordsCount)("column", column.GetRecordsCount());
         }
         Size += column.GetSize();
         Columns.emplace_back(std::move(column));

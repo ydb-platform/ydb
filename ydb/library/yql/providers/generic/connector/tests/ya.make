@@ -3,25 +3,29 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-SIZE(LARGE)
+SIZE(MEDIUM)
 
-# TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
-TAG(
-    ya:external
-    ya:force_sandbox
-    ya:fat
-)
+IF (AUTOCHECK) 
+    # Split tests to chunks only when they're running on different machines with distbuild,
+    # otherwise this directive will slow down local test execution.
+    # Look through https://st.yandex-team.ru/DEVTOOLSSUPPORT-39642 for more information.
+    FORK_SUBTESTS()
 
-REQUIREMENTS(
-    container:4467981730
-    cpu:all
-    dns:dns64
-)
+    # TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
+    TAG(
+        ya:external
+        ya:force_sandbox
+        ya:fat
+    )
+
+    REQUIREMENTS(
+        container:4467981730
+        cpu:all
+        dns:dns64
+    )
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/providers/generic/connector/recipe/recipe.inc)
-
-FORK_SUBTESTS()
 
 TEST_SRCS(
     conftest.py
@@ -47,9 +51,13 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/library/yql/providers/generic/connector/app
     ydb/library/yql/tools/dqrun
     ydb/tests/tools/kqprun
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    test_cases
+    utils
+)

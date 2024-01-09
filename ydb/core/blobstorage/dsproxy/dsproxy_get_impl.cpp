@@ -44,11 +44,13 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             const TBlobState &blobState = Blackboard.GetState(query.Id);
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
-            outResponse.Keep = blobState.Keep;
-            outResponse.DoNotKeep = blobState.DoNotKeep;
             outResponse.LooksLikePhantom = PhantomCheck
                 ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
                 : std::nullopt;
+
+            // fill in keep/doNotKeep flags
+            const auto it = BlobFlags.find(query.Id);
+            std::tie(outResponse.Keep, outResponse.DoNotKeep) = it != BlobFlags.end() ? it->second : std::make_tuple(false, false);
 
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;
@@ -374,7 +376,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
                 }
                 bytes += put.Buffer.size();
                 lastItemCount++;
-                vMultiPut->AddVPut(put.Id, TRcBuf(TRope(put.Buffer)), &cookie, put.ExtraBlockChecks, NWilson::TTraceId());
+                vMultiPut->AddVPut(put.Id, TRcBuf(TRope(put.Buffer)), &cookie, nullptr, NWilson::TTraceId());
             }
             vMultiPut->Record.SetCookie(TVMultiPutCookie(diskOrderNumber, lastItemCount, VMultiPutRequests));
             ++VMultiPutRequests;
@@ -388,12 +390,14 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
 }
 
 EStrategyOutcome TGetImpl::RunBoldStrategy(TLogContext &logCtx) {
-    EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, TBoldStrategy(PhantomCheck));
-    if (outcome == EStrategyOutcome::DONE && MustRestoreFirst) {
-        Blackboard.ChangeAll();
-        outcome = Blackboard.RunStrategy(logCtx, TRestoreStrategy());
+    TStackVec<IStrategy*, 1> strategies;
+    TBoldStrategy s1(PhantomCheck);
+    strategies.push_back(&s1);
+    TRestoreStrategy s2;
+    if (MustRestoreFirst) {
+        strategies.push_back(&s2);
     }
-    return outcome;
+    return Blackboard.RunStrategies(logCtx, strategies);
 }
 
 EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
@@ -403,13 +407,14 @@ EStrategyOutcome TGetImpl::RunMirror3dcStrategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
-    // run basic get strategy and, if blob restoration is required and we have successful get, restore the blob to full amount of parts
-    EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, TMirror3of4GetStrategy());
-    if (outcome == EStrategyOutcome::DONE && MustRestoreFirst) {
-        Blackboard.ChangeAll();
-        outcome = Blackboard.RunStrategy(logCtx, TPut3of4Strategy(TEvBlobStorage::TEvPut::TacticMaxThroughput));
+    TStackVec<IStrategy*, 1> strategies;
+    TMirror3of4GetStrategy s1;
+    strategies.push_back(&s1);
+    TPut3of4Strategy s2(TEvBlobStorage::TEvPut::TacticMaxThroughput);
+    if (MustRestoreFirst) {
+        strategies.push_back(&s2);
     }
-    return outcome;
+    return Blackboard.RunStrategies(logCtx, strategies);
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {

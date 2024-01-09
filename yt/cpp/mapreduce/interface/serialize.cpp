@@ -216,12 +216,12 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
             auto simplify = [&](const TNode& typeV3) -> TMaybe<std::pair<TString, bool>> {
                 auto simple = getSimple(typeV3);
                 if (simple) {
-                    return std::make_pair(*simple, isRequired(*simple));
+                    return std::pair(*simple, isRequired(*simple));
                 }
                 if (typeV3.IsMap() && typeV3["type_name"] == "optional") {
                     auto simpleItem = getSimple(typeV3["item"]);
                     if (simpleItem && isRequired(*simpleItem)) {
-                        return std::make_pair(*simpleItem, false);
+                        return std::pair(*simpleItem, false);
                     }
                 }
                 return {};

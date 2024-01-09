@@ -122,4 +122,8 @@ message TFeatureFlags {
     optional bool EnableUuidAsPrimaryKey = 107 [default = false];
     optional bool EnableTablePgTypes = 108 [default = false];
     optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
+    optional bool UseVDisksBalancing = 111 [default = false];
+    optional bool EnableViews = 112 [default = false];
+    optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
 }

@@ -607,11 +607,29 @@ NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExp
 
     TVector<TExprBase> branches;
     branches.reserve(dqReplicate.Args().Count() - 1);
+    const auto inputKind = dqReplicate.Arg(0).Ref().GetTypeAnn()->GetKind();
+    YQL_ENSURE(inputKind == ETypeAnnotationKind::Stream || inputKind == ETypeAnnotationKind::Flow);
 
     auto inputIndex = NDq::BuildAtomList("0", dqReplicate.Pos(), ctx);
     for (size_t i = 1; i < dqReplicate.Args().Count(); ++i) {
         branches.emplace_back(inputIndex);
-        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Args().Get(i).Ref()));
+        const auto lambdaOutputKind = dqReplicate.Arg(i).Ref().GetTypeAnn()->GetKind();
+        YQL_ENSURE(lambdaOutputKind == ETypeAnnotationKind::Stream || lambdaOutputKind == ETypeAnnotationKind::Flow);
+        if (lambdaOutputKind != inputKind) {
+            branches.emplace_back(ctx.Builder(dqReplicate.Arg(i).Pos())
+                .Lambda()
+                    .Param("arg")
+                    .Callable(lambdaOutputKind == ETypeAnnotationKind::Stream ? "ToFlow" : "FromFlow")
+                        .Apply(0, dqReplicate.Arg(i).Ptr())
+                            .With(0, "arg")
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build()
+            );
+        } else {
+            branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Arg(i).Ref()));
+        }
     }
 
     return Build<TCoSwitch>(ctx, dqReplicate.Pos())
@@ -681,7 +699,7 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
     }
 
     auto dqPhyLength = node.Cast<TDqPhyLength>();
-    if (typesCtx.UseBlocks) {
+    if (typesCtx.IsBlockEngineEnabled()) {
         return NNodes::TExprBase(ctx.Builder(node.Pos())
             .Callable("NarrowMap")
                 .Callable(0, "BlockCombineAll")

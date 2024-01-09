@@ -272,6 +272,7 @@ public:
         : AstParseResult(astParseResult)
         , Settings(settings)
         , DqEngineEnabled(Settings.DqDefaultAuto->Allow())
+        , BlockEngineEnabled(Settings.BlockDefaultAuto->Allow())
     {
         Positions.push_back({});
         ScanRows(query);
@@ -281,6 +282,10 @@ public:
                 DqEngineEnabled = true;
             } else if (flag == "DqEngineForce") {
                 DqEngineForce = true;
+            } else if (flag == "BlockEngineEnable") {
+                BlockEngineEnabled = true;
+            } else if (flag == "BlockEngineForce") {
+                BlockEngineForce = true;
             }
         }
 
@@ -300,6 +305,7 @@ public:
                 typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : DEFAULT_PARAM_TYPE;
             ParamNameToPgTypeName[paramName] = typeName;
         }
+
     }
 
     void OnResult(const List* raw) {
@@ -319,6 +325,8 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
 
+        ui32 blockEnginePgmPos = Statements.size();
+        Statements.push_back(configSource);
         ui32 costBasedOptimizerPos = Statements.size();
         Statements.push_back(configSource);
         ui32 dqEnginePgmPos = Statements.size();
@@ -356,6 +364,13 @@ public:
                 QA("CostBasedOptimizer"), QA(CostBasedOptimizer)));
         } else {
             Statements.erase(Statements.begin() + costBasedOptimizerPos);
+        }
+
+        if (BlockEngineEnabled) {
+            Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("BlockEngine"), QA(BlockEngineForce ? "force" : "auto")));
+        } else {
+            Statements.erase(Statements.begin() + blockEnginePgmPos);
         }
 
         return VL(Statements.data(), Statements.size());
@@ -411,7 +426,7 @@ public:
         case T_VariableShowStmt:
             return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
-            return true;
+            return ParseTransactionStmt(CAST_NODE(TransactionStmt, node));
         case T_IndexStmt:
             return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
         default:
@@ -452,7 +467,7 @@ public:
         Y_ABORT_UNLESS(rawValuesLists);
         size_t rows = ListLength(rawValuesLists);
 
-        if (rows == 0 || !Settings.AutoParametrizeEnabled) {
+        if (rows == 0 || !Settings.AutoParametrizeEnabled || !Settings.AutoParametrizeValuesStmt) {
             return false;
         }
 
@@ -580,8 +595,8 @@ public:
         }
 
         TVector<TPgConst> pgConsts;
-        bool allValsAreLiteral = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
-        if (allValsAreLiteral) {
+        bool canAutoparametrize = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
+        if (canAutoparametrize) {
             auto maybeColumnTypes = InferColumnTypesForValuesStmt(pgConsts, valNames.size());
             if (maybeColumnTypes) {
                 auto valuesNode = MakeValuesStmtAutoParam(std::move(pgConsts), std::move(maybeColumnTypes.GetRef()));
@@ -690,6 +705,7 @@ public:
             }
         }
 
+        bool hasCombiningQueries = (1 < setItems.size());
 
         TAstNode* sort = nullptr;
         if (ListLength(value->sortClause) > 0) {
@@ -701,7 +717,7 @@ public:
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), setItems.size() == 1, true);
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, true);
                 if (!sort) {
                     return nullptr;
                 }
@@ -713,7 +729,7 @@ public:
         }
 
         TVector<TAstNode*> setItemNodes;
-        for (size_t id = 0; id < setItems.size(); id++) {
+        for (size_t id = 0; id < setItems.size(); ++id) {
             const auto& x = setItems[id];
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
@@ -946,11 +962,10 @@ public:
                     AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)x->limitOption);
                     return nullptr;
                 }
-            }
 
-            if (ListLength(x->lockingClause) > 0) {
-                AddError("SelectStmt: not supported lockingClause");
-                return nullptr;
+                if (ListLength(x->lockingClause) > 0) {
+                    AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
+                }
             }
 
             TVector<TAstNode*> res;
@@ -992,7 +1007,8 @@ public:
             }
             if (!targetColumns.empty()) {
                 setItemOptions.push_back(QL(QA("target_columns"), QVL(targetColumns.data(), targetColumns.size())));
-            } else if (fillTargetColumns) {
+            }
+            if (fillTargetColumns) {
                 setItemOptions.push_back(QL(QA("fill_target_columns")));
             }
             if (ListLength(x->targetList) > 0) {
@@ -1036,11 +1052,11 @@ public:
                 setItemOptions.push_back(QL(QA("distinct_on"), distinctOn));
             }
 
-            if (setItems.size() == 1 && sort) {
+            if (!hasCombiningQueries && sort) {
                 setItemOptions.push_back(QL(QA("sort"), sort));
             }
 
-            if (unknownsAllowed) {
+            if (unknownsAllowed || hasCombiningQueries) {
                 setItemOptions.push_back(QL(QA("unknowns_allowed")));
             }
 
@@ -1054,8 +1070,7 @@ public:
         }
 
         if (ListLength(value->lockingClause) > 0) {
-            AddError("SelectStmt: not supported lockingClause");
-            return nullptr;
+            AddWarning(TIssuesIds::PG_NO_LOCKING_SUPPORT, "SelectStmt: lockingClause is ignored");
         }
 
         TAstNode* limit = nullptr;
@@ -1092,7 +1107,7 @@ public:
         selectOptions.push_back(QL(QA("set_items"), QVL(setItemNodes.data(), setItemNodes.size())));
         selectOptions.push_back(QL(QA("set_ops"), QVL(setOpsNodes.data(), setOpsNodes.size())));
 
-        if (setItems.size() > 1 && sort) {
+        if (hasCombiningQueries && sort) {
             selectOptions.push_back(QL(QA("sort"), sort));
         }
 
@@ -1462,16 +1477,21 @@ public:
 
 #pragma region CreateTable
 private:
+
+    struct TColumnInfo {
+        TString Name;
+        TString Type;
+        bool Serial = false;
+        bool NotNull = false;
+        TAstNode* Default = nullptr;
+    };
+
     struct TCreateTableCtx {
-        std::vector<TAstNode*> Columns;
-        std::unordered_set<TString> ColumnsSet;
+        std::unordered_map<TString, TColumnInfo> ColumnsSet;
+        std::vector<TString> ColumnOrder;
         std::vector<TAstNode*> PrimaryKey;
-        std::vector<TAstNode*> NotNullColumns;
         std::vector<std::vector<TAstNode*>> UniqConstr;
-        std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
-        std::vector<TAstNode*> SerialColumns;
-        std::unordered_map<TString, TAstNode*> Defaults;
         bool ifNotExists;
     };
 
@@ -1519,11 +1539,12 @@ private:
             auto node = ListNodeNth(pk->keys, i);
             auto nodeName = StrVal(node);
 
-            if (!ctx.ColumnsSet.contains(nodeName)) {
+            auto it = ctx.ColumnsSet.find(nodeName);
+            if (it == ctx.ColumnsSet.end()) {
                 AddError("PK column does not belong to table");
                 return false;
             }
-            AddNonNullColumn(ctx, nodeName);
+            it->second.NotNull = true;
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
@@ -1557,14 +1578,6 @@ private:
         return true;
     }
 
-    bool AddNonNullColumn(TCreateTableCtx& ctx, const char* colName) {
-        auto [it, inserted] = ctx.NotNullColSet.insert(colName);
-        if (inserted)
-            ctx.NotNullColumns.push_back(QA(colName));
-
-        return inserted;
-    }
-
     const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
         const static std::unordered_map<TString, TString> aliasMap {
             {"smallserial", "int2"},
@@ -1584,6 +1597,8 @@ private:
     }
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
+        TColumnInfo cinfo{.Name = node->colname};
+
         if (node->constraints) {
             for (ui32 i = 0; i < ListLength(node->constraints); ++i) {
                 auto constraintNode =
@@ -1591,7 +1606,7 @@ private:
 
                 switch (constraintNode->contype) {
                     case CONSTR_NOTNULL:
-                        AddNonNullColumn(ctx, node->colname);
+                        cinfo.NotNull = true;
                         break;
 
                     case CONSTR_PRIMARY: {
@@ -1599,7 +1614,7 @@ private:
                             AddError("Only a single PK is allowed per table");
                             return false;
                         }
-                        AddNonNullColumn(ctx, node->colname);
+                        cinfo.NotNull = true;
                         ctx.PrimaryKey.push_back(QA(node->colname));
                     } break;
 
@@ -1611,11 +1626,10 @@ private:
                         TExprSettings settings;
                         settings.AllowColumns = false;
                         settings.Scope = "DEFAULT";
-                        auto expr = ParseExpr(constraintNode->raw_expr, settings);
-                        if (!expr) {
+                        cinfo.Default = ParseExpr(constraintNode->raw_expr, settings);
+                        if (!cinfo.Default) {
                             return false;
                         }
-                        ctx.Defaults[node->colname] = expr;
                     } break;
 
                     default:
@@ -1624,26 +1638,19 @@ private:
                 }
             }
         }
-        auto [it, inserted] = ctx.ColumnsSet.insert(node->colname);
+
+        // for now we pass just the last part of the type name
+        auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
+                                           ListLength(node->typeName->names) - 1));
+
+        cinfo.Type = FindColumnTypeAlias(colTypeVal, cinfo.Serial);
+        auto [it, inserted] = ctx.ColumnsSet.emplace(node->colname, cinfo);
         if (!inserted) {
             AddError("duplicated column names found");
             return false;
         }
 
-        // for now we pass just the last part of the type name
-        auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
-                                           ListLength(node->typeName->names) - 1));
-        bool isTypeSerial = false;
-        const auto colType = FindColumnTypeAlias(colTypeVal, isTypeSerial);
-
-        if (isTypeSerial) {
-            ctx.SerialColumns.push_back(QA(node->colname));
-        }
-
-        ctx.Columns.push_back(
-                QL(QA(node->colname), L(A("PgType"), QA(colType)))
-                );
-
+        ctx.ColumnOrder.push_back(node->colname);
         return true;
     }
 
@@ -1675,20 +1682,42 @@ private:
         return true;
     }
 
+    TAstNode* BuildColumnsOptions(TCreateTableCtx& ctx) {
+        std::vector<TAstNode*> columns;
+
+        for(const auto& name: ctx.ColumnOrder) {
+            auto it = ctx.ColumnsSet.find(name);
+            Y_ENSURE(it != ctx.ColumnsSet.end());
+
+            const auto& cinfo = it->second;
+
+            std::vector<TAstNode*> constraints;
+            if (cinfo.Serial) {
+                constraints.push_back(QL(QA("serial")));
+            }
+
+            if (cinfo.NotNull) {
+                constraints.push_back(QL(QA("not_null")));   
+            }
+
+            if (cinfo.Default) {
+                constraints.push_back(QL(QA("default"), cinfo.Default));
+            }
+
+            columns.push_back(QL(QA(cinfo.Name), L(A("PgType"), QA(cinfo.Type)), QL(QA("columnConstraints"), QVL(constraints.data(), constraints.size()))));
+        }
+
+        return QVL(columns.data(), columns.size());
+    }
+
     TAstNode* BuildCreateTableOptions(TCreateTableCtx& ctx) {
         std::vector<TAstNode*> options;
 
         TString mode = (ctx.ifNotExists) ? "create_if_not_exists" : "create";
         options.push_back(QL(QA("mode"), QA(mode)));
-        options.push_back(QL(QA("columns"), QVL(ctx.Columns.data(), ctx.Columns.size())));
+        options.push_back(QL(QA("columns"), BuildColumnsOptions(ctx)));
         if (!ctx.PrimaryKey.empty()) {
             options.push_back(QL(QA("primarykey"), QVL(ctx.PrimaryKey.data(), ctx.PrimaryKey.size())));
-        }
-        if (!ctx.NotNullColumns.empty()) {
-            options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
-        }
-        if (!ctx.SerialColumns.empty()) {
-            options.push_back(QL(QA("serialColumns"), QVL(ctx.SerialColumns.data(), ctx.SerialColumns.size())));
         }
         for (auto& uniq : ctx.UniqConstr) {
             auto columns = QVL(uniq.data(), uniq.size());
@@ -1697,9 +1726,6 @@ private:
                                   QL(QA("indexType"), QA("syncGlobalUnique")),
                                   QL(QA("dataColumns"), QL()),
                                   QL(QA("indexColumns"), columns))));
-        }
-        for (auto& def : ctx.Defaults) {
-            options.push_back(QL(QA("default"), QA(def.first), def.second));
         }
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));
@@ -1990,7 +2016,7 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-        } else if (name == "dqengine") {
+        } else if (name == "dqengine" || name == "blockengine") {
             if (ListLength(value->args) != 1) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
                 return nullptr;
@@ -2000,17 +2026,20 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto str = to_lower(TString(rawStr));
+                const bool isDqEngine = name == "dqengine";
+                auto& enable = isDqEngine ? DqEngineEnabled : BlockEngineEnabled;
+                auto& force =  isDqEngine ? DqEngineForce   : BlockEngineForce;
                 if (str == "auto") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = false;
+                    enable = true;
+                    force = false;
                 } else if (str == "force") {
-                    DqEngineEnabled = true;
-                    DqEngineForce = true;
+                    enable = true;
+                    force = true;
                 } else if (str == "disable") {
-                    DqEngineEnabled = false;
-                    DqEngineForce = false;
+                    enable = false;
+                    force = false;
                 } else {
-                    AddError(TStringBuilder() << "VariableSetStmt, not supported DqEngine option value: " << rawStr);
+                    AddError(TStringBuilder() << "VariableSetStmt, not supported " << value->name << " option value: " << rawStr);
                     return nullptr;
                 }
             } else {
@@ -2237,6 +2266,26 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
         return Statements.back();
+    }
+
+    [[nodiscard]]
+    bool ParseTransactionStmt(const TransactionStmt* value) {
+        switch (value->kind) {
+        case TRANS_STMT_BEGIN: [[fallthrough]] ;
+        case TRANS_STMT_START:
+            return true;
+        case TRANS_STMT_COMMIT:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"))));
+            return true;
+        case TRANS_STMT_ROLLBACK:
+            Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+                A("world"), QL(QL(QA("mode"), QA("rollback"))))));
+            return true;
+        default:
+            AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
+            return false;
+        }
     }
 
     [[nodiscard]]
@@ -2898,11 +2947,10 @@ public:
         typedValue.mutable_type()->mutable_pg_type()->set_oid(oid);
 
         auto* value = typedValue.mutable_value();
-        if (valueNType.value) {
-            value->set_text_value(std::move(valueNType.value.GetRef()));
-        } else {
-            Y_ABORT_UNLESS(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
+        if (valueNType.type == TPgConst::Type::nil) {
             value->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        } else {
+            value->set_text_value(std::move(valueNType.value.GetRef()));
         }
 
         const auto& paramName = AddAutoParam(std::move(typedValue));
@@ -2925,8 +2973,7 @@ public:
             ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
             : L(A("PgType"), QA("unknown"));
 
-        if (Settings.AutoParametrizeEnabled &&
-            Settings.AutoParametrizeEnabledScopes.contains(settings.Scope)) {
+        if (Settings.AutoParametrizeEnabled && !Settings.AutoParametrizeExprDisabledScopes.contains(settings.Scope)) {
             return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
         }
 
@@ -4218,6 +4265,8 @@ private:
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
     TString CostBasedOptimizer;
+    bool BlockEngineEnabled = false;
+    bool BlockEngineForce = false;
     TVector<TAstNode*> Statements;
     ui32 ReadIndex = 0;
     TViews Views;

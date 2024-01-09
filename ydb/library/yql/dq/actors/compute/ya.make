@@ -26,7 +26,7 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/actors/spilling
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/public/issue
     ydb/core/quoter/public
 )

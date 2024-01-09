@@ -1,6 +1,7 @@
 #include "helpers.h"
 
 #include <yt/yt/client/api/rowset.h>
+#include <yt/yt/client/api/table_client.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -34,6 +35,9 @@ void ThrowUnimplemented(const TString& method)
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
+
+using NYT::ToProto;
+using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 // OPTIONS
@@ -1273,6 +1277,56 @@ void FromProto(
     if (proto.has_data_weight_per_row_hint()) {
         result->DataWeightPerRowHint = proto.data_weight_per_row_hint();
     }
+}
+
+void ToProto(
+    NProto::TTableBackupManifest* protoManifest,
+    const NApi::TTableBackupManifestPtr& manifest)
+{
+    protoManifest->set_source_path(manifest->SourcePath);
+    protoManifest->set_destination_path(manifest->DestinationPath);
+    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+}
+
+void FromProto(
+    NApi::TTableBackupManifestPtr* manifest,
+    const NProto::TTableBackupManifest& protoManifest)
+{
+    *manifest = New<NApi::TTableBackupManifest>();
+
+    (*manifest)->SourcePath = protoManifest.source_path();
+    (*manifest)->DestinationPath = protoManifest.destination_path();
+    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+}
+
+void ToProto(
+    NProto::TBackupManifest::TClusterManifest* protoEntry,
+    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry)
+{
+    protoEntry->set_cluster(entry.first);
+    ToProto(protoEntry->mutable_table_manifests(), entry.second);
+}
+
+void FromProto(
+    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    const NProto::TBackupManifest::TClusterManifest& protoEntry)
+{
+    entry->first = protoEntry.cluster();
+    FromProto(&entry->second, protoEntry.table_manifests());
+}
+
+void ToProto(
+    NProto::TBackupManifest* protoManifest,
+    const NApi::TBackupManifest& manifest)
+{
+    ToProto(protoManifest->mutable_clusters(), manifest.Clusters);
+}
+
+void FromProto(
+    NApi::TBackupManifest* manifest,
+    const NProto::TBackupManifest& protoManifest)
+{
+    FromProto(&manifest->Clusters, protoManifest.clusters());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

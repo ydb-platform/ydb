@@ -374,12 +374,28 @@ message TKqpPhyResult {
     optional uint32 QueryResultIndex = 5;
 }
 
+message TKqpPhyMetadataOperation {
+    message TColumnValue {
+        string Column = 1;
+        Ydb.Value Value = 2;
+    }
+    repeated TColumnValue ColumnValues = 1;
+
+    optional bool SuccessOnNotExist = 2;
+    optional bool SuccessOnAlreadyExists = 3;
+}
+
 message TKqpSchemeOperation {
     enum EFlags {
         FLAG_UNSPECIFIED = 0;
         FLAG_PG_MODE = 1; // set if pg compatible mode
         FLAG_IF_NOT_EXISTS = 2; // set if IF_NOT_EXISTS modificator present
     };
+
+    // If the object is modified, this field is not empty
+    // and in that case modification will be through
+    // NMetadata::IClassBehaviour way
+    string ObjectType = 100;
 
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
@@ -389,9 +405,25 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateUser = 5;
         NKikimrSchemeOp.TModifyScheme AlterUser = 6;
         NKikimrSchemeOp.TModifyScheme DropUser = 7;
-
-        string Type = 9;
-        uint64 Flags = 10;
+        NKikimrSchemeOp.TModifyScheme CreateGroup = 8;
+        NKikimrSchemeOp.TModifyScheme AddGroupMembership = 9;
+        NKikimrSchemeOp.TModifyScheme RemoveGroupMembership = 10;
+        NKikimrSchemeOp.TModifyScheme DropGroup = 11;
+        NKikimrSchemeOp.TModifyScheme RenameGroup = 12;
+        NKikimrSchemeOp.TModifyScheme CreateExternalDataSource = 13;
+        NKikimrSchemeOp.TModifyScheme AlterExternalDataSource = 14;
+        NKikimrSchemeOp.TModifyScheme DropExternalDataSource = 15;
+        NKikimrSchemeOp.TModifyScheme CreateExternalTable = 16;
+        NKikimrSchemeOp.TModifyScheme AlterExternalTable = 17;
+        NKikimrSchemeOp.TModifyScheme DropExternalTable = 18;
+        NKikimrSchemeOp.TModifyScheme ModifyPermissions = 19;
+        NKikimrSchemeOp.TModifyScheme CreateView = 20;
+        NKikimrSchemeOp.TModifyScheme AlterView = 21;
+        NKikimrSchemeOp.TModifyScheme DropView = 22;
+        TKqpPhyMetadataOperation CreateObject = 23;
+        TKqpPhyMetadataOperation UpsertObject = 24;
+        TKqpPhyMetadataOperation AlterObject = 25;
+        TKqpPhyMetadataOperation DropObject = 26;
     }
 }
 

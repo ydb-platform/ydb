@@ -125,7 +125,7 @@ message StreamWriteMessage {
 
     }
 
-    // Response for handshake.
+    // Response to the handshake.
     message InitResponse {
         // Last persisted message's sequence number for this producer.
         // Zero for new producer.
@@ -234,13 +234,12 @@ message StreamWriteMessage {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // StreamRead
 
-
 // Messages for bidirectional streaming rpc StreamRead
 message StreamReadMessage {
     // Within a StreamRead session delivered messages are separated by partition.
     // Reads from a single partition are represented by a partition session.
     message PartitionSession {
-        // Identitifier of partition session. Unique inside one RPC call.
+        // Identifier of partition session. Unique inside one RPC call.
         int64 partition_session_id = 1;
         // Topic path of partition.
         string path = 2;
@@ -254,6 +253,7 @@ message StreamReadMessage {
     //     CommitOffsetRequest - request for commit of some read data.
     //     PartitionSessionStatusRequest - request for session status
     //     UpdateTokenRequest - request to update auth token
+    //     DirectReadAck - client signals it has finished direct reading from the partition node.
     //
     //     StartPartitionSessionResponse - Response to StreamReadServerMessage.StartPartitionSessionRequest.
     //         Client signals it is ready to get data from partition.
@@ -267,10 +267,12 @@ message StreamReadMessage {
             CommitOffsetRequest commit_offset_request = 3;
             PartitionSessionStatusRequest partition_session_status_request = 4;
             UpdateTokenRequest update_token_request = 5;
+            DirectReadAck direct_read_ack = 8;
 
             // Responses to respective server commands.
             StartPartitionSessionResponse start_partition_session_response = 6;
             StopPartitionSessionResponse stop_partition_session_response = 7;
+
         }
     }
 
@@ -283,6 +285,7 @@ message StreamReadMessage {
     //
     //     StartPartitionSessionRequest - command from server to create a partition session.
     //     StopPartitionSessionRequest - command from server to destroy a partition session.
+    //     UpdatePartitionSession - command from server to update a partition session.
     message FromServer {
         // Server status of response.
         Ydb.StatusIds.StatusCode status = 1;
@@ -301,6 +304,8 @@ message StreamReadMessage {
             // Server commands.
             StartPartitionSessionRequest start_partition_session_request = 8;
             StopPartitionSessionRequest stop_partition_session_request = 9;
+
+            UpdatePartitionSession update_partition_session = 10;
         }
     }
 
@@ -313,6 +318,8 @@ message StreamReadMessage {
         string consumer = 2;
         // Optional name. Will be shown in debug stat.
         string reader_name = 3;
+        // Direct reading from a partition node.
+        bool direct_read = 4;
 
         message TopicReadSettings {
             // Topic path.
@@ -331,7 +338,7 @@ message StreamReadMessage {
 
     // Handshake response.
     message InitResponse {
-        // Read session identifier for debug purposes.
+        // Read session identifier.
         string session_id = 1;
     }
 
@@ -355,7 +362,7 @@ message StreamReadMessage {
         // 4) Server is free to send up to 50 + 100 = 150 bytes. But the next read message is too big,
         //    and it sends 160 bytes ReadResponse.
         // 5) Let's assume client somehow processes it, and its 200 bytes buffer is free again.
-        //    It shoud account for excess 10 bytes and send ReadRequest with bytes_size = 210.
+        //    It should account for excess 10 bytes and send ReadRequest with bytes_size = 210.
         int64 bytes_size = 1;
     }
 
@@ -364,7 +371,7 @@ message StreamReadMessage {
         // One client message representation.
         message MessageData {
             // Partition offset in partition that assigned for message.
-            int64 offset = 1; //unique value for clientside deduplication - Topic:Partition:Offset
+            int64 offset = 1; //unique value for client side deduplication - Topic:Partition:Offset
             // Sequence number that provided with message on write from client.
             int64 seq_no = 2;
             // Timestamp of creation of message provided on write from client.
@@ -379,7 +386,6 @@ message StreamReadMessage {
             // Filled if message_group_id was set on message write.
             string message_group_id = 7 [(Ydb.length).le = 2048];
             repeated MetadataItem metadata_items = 8;
-
         }
 
         // Representation of sequence of client messages from one write session.
@@ -448,7 +454,7 @@ message StreamReadMessage {
         int64 partition_session_id = 1;
     }
 
-    // Response for status request.
+    // Response to status request.
     message PartitionSessionStatusResponse {
         // Identifier of partition session whose status was requested.
         int64 partition_session_id = 1;
@@ -474,6 +480,9 @@ message StreamReadMessage {
 
         // Partition contains messages with offsets in range [start, end).
         OffsetsRange partition_offsets = 3;
+
+        // Partition location, filled only when InitRequest.direct_read is true.
+        PartitionLocation partition_location = 4;
     }
 
     // Signal for server that cient is ready to recive data for partition.
@@ -490,6 +499,7 @@ message StreamReadMessage {
         // Server will return data starting from offset that is maximum of actual committed offset, read_offset (if set)
         // and offsets calculated from InitRequest.max_lag and InitRequest.read_from.
         optional int64 read_offset = 2;
+
         // All messages with offset less than commit_offset are processed by client.
         // Server will commit this position if this is not done yet.
         optional int64 commit_offset = 3;
@@ -510,6 +520,9 @@ message StreamReadMessage {
 
         // Upper bound for committed offsets.
         int64 committed_offset = 3;
+
+        // Upper bound for read request identifiers, filled only when InitRequest.direct_read is true and graceful is true.
+        int64 last_direct_read_id = 4;
     }
 
     // Signal for server that client finished working with this partition.
@@ -518,7 +531,124 @@ message StreamReadMessage {
     message StopPartitionSessionResponse {
         // Partition session identifier of partition session that is released by client.
         int64 partition_session_id = 1;
+
+        // Flag of graceful stop, used only when InitRequest.direct_read is true
+        // Client must pass this value unchanged from the StopPartitionSessionRequest.
+        // Server can sent two StopPartitionSessionRequests, the first with graceful=true, the second with graceful=false. The client must answer both of them. 
+        bool graceful = 2;
     }
+
+    // Command from server to notify about a partition session update.
+    // Client should not send a response to the command.
+    message UpdatePartitionSession {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+
+        // Partition location, filled only when InitRequest.direct_read is true.
+        PartitionLocation partition_location = 2;
+    }
+
+    // Signal for server that client has finished direct reading.
+    // Server should not send a response to the command.
+    message DirectReadAck {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+
+        // Identifier of the successfully completed read request.
+        int64 direct_read_id = 2;
+    }
+
+}
+
+// Messages for bidirectional streaming rpc StreamDirectRead
+message StreamDirectReadMessage {
+
+    // Client-server message for direct read session. 
+    //     InitDirectRead - command from client to create and start a direct read session.
+    //     StartDirectReadPartitionSession - command from client to create and start a direct read partition session.
+    //     UpdateTokenRequest - request to update auth token    
+    message FromClient {
+        oneof client_message {
+            InitDirectRead init_direct_read = 1;
+            StartDirectReadPartitionSession start_direct_read_partition_session = 2;
+            UpdateTokenRequest update_token_request = 3;            
+        }
+    }
+
+    // Server-client message for direct read session. 
+    //     DirectReadResponse - portion of message data.
+    //     StopDirectReadPartitionSession - command from server to stop a direct read partition session.
+    //     UpdateTokenResponse - acknowledgment of token update.    
+    message FromServer {
+        // Server status of response.
+        Ydb.StatusIds.StatusCode status = 1;
+
+        // Issues if any.
+        repeated Ydb.Issue.IssueMessage issues = 2;
+
+
+        oneof server_message {
+            StopDirectReadPartitionSession stop_direct_read_partition_session = 3;
+            DirectReadResponse direct_read_response = 4;
+            UpdateTokenResponse update_token_response = 5;
+        }
+    }
+
+    // Command from client to create and start a direct read session.
+    // Server should not send a response to the command.
+    message InitDirectRead {
+        // Read session identifier.
+        string session_id = 1;
+        // Topics that will be read by this session.
+        repeated TopicReadSettings topics_read_settings = 2;
+        // Path of consumer that is used for reading by this session.
+        string consumer = 3;
+
+        message TopicReadSettings {
+            // Topic path.
+            string path = 1;
+        }
+    }
+
+    // Command from client to create and start a direct read partition session.
+    // Server should not send a response to the command.
+    message StartDirectReadPartitionSession {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+
+        // Upper bound for read request identifiers.
+        int64 last_direct_read_id = 2;
+
+        // Partition generation.
+        int64 generation = 3;
+    }
+
+    // Command from server to stop a direct read partition session.
+    // Client should not send a response to the command.
+    message StopDirectReadPartitionSession {
+        // The reason for the stop.
+        Ydb.StatusIds.StatusCode status = 1;
+
+        // Issues if any.
+        repeated Ydb.Issue.IssueMessage issues = 2;
+
+        // Partition session identifier.
+        int64 partition_session_id = 3;
+    }
+
+
+    // Messages that have been read directly from the partition node.
+    // It's a response to StreamRead.ReadRequest
+    message DirectReadResponse {
+        // Partition session identifier.
+        int64 partition_session_id = 1;
+        
+        // Read request identifier.
+        int64 direct_read_id = 2;
+
+        // Messages data
+        StreamReadMessage.ReadResponse.PartitionData partition_data = 3;
+    }    
 }
 
 message TransactionIdentity {
@@ -602,7 +732,7 @@ message CommitOffsetResult {
 // Control messages
 
 
-// message representing statistics by seleveral windows
+// message representing statistics by several windows
 message MultipleWindowsStat {
     int64 per_minute = 1;
     int64 per_hour = 2;
@@ -639,7 +769,7 @@ message Consumer {
         google.protobuf.Duration max_read_time_lag = 2;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 3;
-        // Bytes read stastics.
+        // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
 }
@@ -964,7 +1094,7 @@ message DescribeConsumerResult {
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 7;
 
-        // How much bytes were read during several windows statistics from this partiton.
+        // How much bytes were read during several windows statistics from this partition.
         MultipleWindowsStat bytes_read = 8;
 
         // Read session name, provided by client.

@@ -98,7 +98,7 @@ TFuture<NQueueClient::IQueueRowsetPtr> TDelegatingClient::PullQueue(
 TFuture<NQueueClient::IQueueRowsetPtr> TDelegatingClient::PullConsumer(
     const NYPath::TRichYPath& consumerPath,
     const NYPath::TRichYPath& queuePath,
-    i64 offset,
+    std::optional<i64> offset,
     int partitionIndex,
     const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
     const TPullConsumerOptions& options)
@@ -885,10 +885,11 @@ TFuture<TDisableChunkLocationsResult> TDelegatingClient::DisableChunkLocations(
 
 TFuture<TDestroyChunkLocationsResult> TDelegatingClient::DestroyChunkLocations(
     const TString& nodeAddress,
+    bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& options)
 {
-    return Underlying_->DestroyChunkLocations(nodeAddress, locationUuids, options);
+    return Underlying_->DestroyChunkLocations(nodeAddress, recoverUnlinkedDisks, locationUuids, options);
 }
 
 TFuture<TResurrectChunkLocationsResult> TDelegatingClient::ResurrectChunkLocations(
@@ -1004,7 +1005,7 @@ TFuture<void> TDelegatingClient::AlterQuery(
     return Underlying_->AlterQuery(queryId, options);
 }
 
-TFuture<TBundleConfigDescriptor> TDelegatingClient::GetBundleConfig(
+TFuture<TBundleConfigDescriptorPtr> TDelegatingClient::GetBundleConfig(
     const TString& bundleName,
     const TGetBundleConfigOptions& options)
 {

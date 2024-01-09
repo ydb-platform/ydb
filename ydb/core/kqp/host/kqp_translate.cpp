@@ -65,9 +65,7 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
 
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = isEnablePgConstsToParams;
-        settings.AutoParametrizeEnabledScopes = {"WHERE", "VALUES", "DISTINCT ON", "JOIN ON", "GROUP BY", 
-            "HAVING", "SELECT", "LIMIT", "OFFSET", "RANGE FUNCTION", "GROUPING", "SUBLINK TEST",
-            "PARTITITON BY", "FRAME", "ORDER BY"};
+        settings.AutoParametrizeValuesStmt = isEnablePgConstsToParams;
     }
 
     if (queryType == NYql::EKikimrQueryType::Scan || queryType == NYql::EKikimrQueryType::Query) {

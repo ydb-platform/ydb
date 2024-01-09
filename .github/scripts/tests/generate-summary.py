@@ -144,6 +144,10 @@ class TestSummary:
         self.is_failed |= line.is_failed
         self.lines.append(line)
 
+    @property
+    def is_empty(self):
+        return len(self.lines) == 0
+
     def render_line(self, items):
         return f"| {' | '.join(items)} |"
 
@@ -249,8 +253,12 @@ def write_summary(summary: TestSummary):
     else:
         fp = sys.stdout
 
-    for line in summary.render(add_footnote=True):
-        fp.write(f"{line}\n")
+    if summary.is_empty:
+        fp.write(":red_circle: Test run completed, no test results found. Please check build logs.")
+    else:
+        for line in summary.render(add_footnote=True):
+            fp.write(f"{line}\n")
+
     fp.write("\n")
 
     if summary_fn:
@@ -267,6 +275,9 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
             test_result = TestResult.from_junit(case)
             summary_line.add(test_result)
 
+        if not summary_line.tests:
+            continue
+
         report_url = f"{summary_url_prefix}{html_fn}"
 
         render_testlist_html(summary_line.tests, os.path.join(summary_out_folder, html_fn))
@@ -277,8 +288,12 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
 
 
 def get_comment_text(pr: PullRequest, summary: TestSummary, build_preset: str, test_history_url: str):
-
-    if summary.is_failed:
+    if summary.is_empty:
+        return [
+            f":red_circle: **{build_preset}**: Test run completed, no test results found for commit {pr.head.sha}. "
+            f"Please check build logs."
+        ]
+    elif summary.is_failed:
         result = f":red_circle: **{build_preset}**: some tests FAILED"
     else:
         result = f":green_circle: **{build_preset}**: all tests PASSED"

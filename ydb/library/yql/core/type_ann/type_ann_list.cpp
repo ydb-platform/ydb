@@ -4689,7 +4689,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (isMany && ctx.Types.UseBlocks) {
+        if (isMany && ctx.Types.IsBlockEngineEnabled()) {
             auto streamIndex = inputStructType->FindItem("_yql_group_stream_index");
             if (streamIndex) {
                 const TTypeAnnotationNode* streamIndexType = inputStructType->GetItems()[*streamIndex]->GetItemType();

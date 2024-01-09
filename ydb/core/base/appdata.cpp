@@ -74,6 +74,7 @@ TAppData::TAppData(
     , DomainsConfigPtr(new NKikimrConfig::TDomainsConfig())
     , BootstrapConfigPtr(new NKikimrConfig::TBootstrap())
     , AwsCompatibilityConfigPtr(new NKikimrConfig::TAwsCompatibilityConfig())
+    , S3ProxyResolverConfigPtr(new NKikimrConfig::TS3ProxyResolverConfig())
     , StreamingConfig(*StreamingConfigPtr.get())
     , PQConfig(*PQConfigPtr.get())
     , PQClusterDiscoveryConfig(*PQClusterDiscoveryConfigPtr.get())
@@ -94,6 +95,7 @@ TAppData::TAppData(
     , DomainsConfig(*DomainsConfigPtr.get())
     , BootstrapConfig(*BootstrapConfigPtr.get())
     , AwsCompatibilityConfig(*AwsCompatibilityConfigPtr.get())
+    , S3ProxyResolverConfig(*S3ProxyResolverConfigPtr.get())
     , KikimrShouldContinue(kikimrShouldContinue)
     
 {}

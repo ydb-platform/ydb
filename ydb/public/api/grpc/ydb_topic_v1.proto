@@ -53,9 +53,9 @@ service TopicService {
     //         StopPartitionSessionResponse(PartitionSessionID1, ...)
     //             only after this response server will give this parittion to other session.
     //        ---------------->
-    //         StartPartitionSessionResponse(PartitionSession2, ...)
+    //         StartPartitionSessionResponse(PartitionSessionID2, ...)
     //        ---------------->
-    //         ReadResponse(data, ...)
+    //         ReadResponse(MessageData, ...)
     //        <----------------
     //         CommitRequest(PartitionCommit1, ...)
     //        ---------------->
@@ -63,7 +63,50 @@ service TopicService {
     //        <----------------
     //         [something went wrong] (status != SUCCESS, issues not empty)
     //        <----------------
+    //
+    // Pipeline for direct reading is similar, but the client receives data directly from the partition node
+    // The following is an excerpt from the pipeline for direct reading:
+    // client                  server
+    //         InitRequest(Topics, ClientID, ..., direct_read = true)
+    //        ---------------->
+    //         InitResponse(SessionID1)
+    //        <----------------
+    //         ReadRequest
+    //        ---------------->
+    //         StartPartitionSessionRequest(Topic1, Partition1, PartitionSessionID1, PartitionLocation1, Secret1,...)
+    //        <----------------
+    //         StartPartitionSessionResponse(PartitionSessionID1, ...)
+    //        ---------------->
+    //
+    //          Start data session to the partition node using StreamDirectRead.StartDirectReadSession
+    //
+    //          Get data from the partition node using StreamDirectRead.DirectReadResponse
+    //
+    //         DirectReadAck(PartitionSessionID1, DirectReadID1, ...)
+    //        ---------------->
+    //         ReadRequest
+    //        ---------------->
+    //
+    //         Get data the partition node using StreamDirectRead.DirectReadResponse
+    //
+    //         DirectReadAckRequest(PartitionSessionID1,DirectReadID2, ...)
+    //        ---------------->
     rpc StreamRead(stream StreamReadMessage.FromClient) returns (stream StreamReadMessage.FromServer);
+
+    // Create DirectRead Session
+    // Pipeline:
+    // client                  server
+    //         StartDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
+    //        ---------------->
+    //         DirectReadResponse(PartitionSessionID1, DirectReadID1, Secret1, ...)
+    //        <----------------
+    //         DirectReadResponse(PartitionSessionID1, DirectReadID2, Secret1, ...)
+    //        <----------------
+    //         UpdateDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
+    //        ---------------->
+    //         StopDirectReadPartitionSession(SessionID1, PartitionSessionID1, TabletGeneration1, Secret1,...)
+    //        <----------------
+    rpc StreamDirectRead(stream StreamDirectReadMessage.FromClient) returns (stream StreamDirectReadMessage.FromServer);
 
     // Single commit offset request.
     rpc CommitOffset(CommitOffsetRequest) returns (CommitOffsetResponse);

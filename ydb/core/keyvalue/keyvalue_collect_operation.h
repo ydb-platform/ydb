@@ -11,12 +11,8 @@ struct TCollectOperationHeader {
     ui32 CollectGeneration;
     ui32 CollectStep;
 
-    ui64 GetCollectGeneration() const {
-        return ReadUnaligned<ui64>(&CollectGeneration);
-    }
-    ui64 GetCollectStep() const {
-        return ReadUnaligned<ui64>(&CollectStep);
-    }
+    ui32 GetCollectGeneration() const { return CollectGeneration; }
+    ui32 GetCollectStep() const { return CollectStep; }
 
     TCollectOperationHeader(ui32 collectGeneration, ui32 collectStep);
 };

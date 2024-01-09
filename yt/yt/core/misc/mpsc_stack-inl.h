@@ -39,22 +39,24 @@ TMpscStack<T>::~TMpscStack()
 template <class T>
 void TMpscStack<T>::Enqueue(const T& value)
 {
-    DoEnqueue(new TNode(value));
+    auto node = new TNode(value);
+    DoEnqueue(node, node);
 }
 
 template <class T>
 void TMpscStack<T>::Enqueue(T&& value)
 {
-    DoEnqueue(new TNode(std::move(value)));
+    auto node = new TNode(std::move(value));
+    DoEnqueue(node, node);
 }
 
 template <class T>
-void TMpscStack<T>::DoEnqueue(TNode* node)
+void TMpscStack<T>::DoEnqueue(TNode* head, TNode* tail)
 {
     auto* expected = Head_.load(std::memory_order::relaxed);
     do {
-        node->Next = expected;
-    } while (!Head_.compare_exchange_weak(expected, node));
+        tail->Next = expected;
+    } while (!Head_.compare_exchange_weak(expected, head));
 }
 
 template <class T>
@@ -84,7 +86,7 @@ std::vector<T> TMpscStack<T>::DequeueAll(bool reverse)
 
 template <class T>
 template <class F>
-bool TMpscStack<T>::DequeueAll(bool reverse, F&& functor)
+bool TMpscStack<T>::DoDequeueAll(bool reverse, F&& functor)
 {
     auto* current = Head_.exchange(nullptr);
     if (!current) {
@@ -101,12 +103,47 @@ bool TMpscStack<T>::DequeueAll(bool reverse, F&& functor)
         }
     }
     while (current) {
-        functor(current->Value);
         auto* next = current->Next;
-        delete current;
+        functor(current);
         current = next;
     }
     return true;
+}
+
+template <class T>
+template <class F>
+bool TMpscStack<T>::DequeueAll(bool reverse, F&& functor)
+{
+    return DoDequeueAll(reverse, [&] (TNode* node) {
+        functor(node->Value);
+        delete node;
+    });
+}
+
+template <class T>
+template <class F>
+void TMpscStack<T>::FilterElements(F&& functor)
+{
+    TNode* filteredHead = nullptr;
+    TNode* filteredTail = nullptr;
+
+    DoDequeueAll(false, [&] (TNode* node) {
+        if (functor(node->Value)) {
+            node->Next = nullptr;
+            if (filteredTail) {
+                filteredTail->Next = node;
+            } else {
+                filteredHead = node;
+            }
+            filteredTail = node;
+        } else {
+            delete node;
+        }
+    });
+
+    if (filteredHead) {
+        DoEnqueue(filteredHead, filteredTail);
+    }
 }
 
 template <class T>

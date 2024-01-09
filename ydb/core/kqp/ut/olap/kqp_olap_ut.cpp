@@ -5261,6 +5261,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(output, R"([[10u;]])");
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(DuplicatesInIncomingBatch) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrSettings runnerSettings;
@@ -5330,6 +5331,60 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
     }
 
+=======
+    Y_UNIT_TEST(OlapInsert_Simple) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/TestSrc` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            );
+
+            CREATE TABLE `/Root/TestDst` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto prepareResult = session.ExecuteDataQuery(R"(
+            INSERT INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
+                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12)
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        const TString sql = R"(
+            INSERT INTO `/Root/TestDst`
+            SELECT * FROM `/Root/TestSrc`
+        )";
+        auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/TestDst`;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString output = StreamResultToYson(it);
+        Cout << output << Endl;
+        CompareYson(output, R"([[3u;]])");
+    }
+>>>>>>> f6eaaed3a2 (simple test)
 }
 
 } // namespace NKqp

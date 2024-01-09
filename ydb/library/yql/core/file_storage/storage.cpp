@@ -369,7 +369,7 @@ private:
         CurrentSize = actualSize;
     }
 
-    bool NeedToCleanup() {
+    bool NeedToCleanup() const {
         return Dirty.load()
             || static_cast<ui64>(CurrentFiles.load()) > MaxFiles
             || static_cast<ui64>(CurrentSize.load()) > MaxSize;

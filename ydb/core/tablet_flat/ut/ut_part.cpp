@@ -1208,7 +1208,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         NPage::TConf conf{ true, 8192 };
         conf.Group(0).PageRows = 3;
 
-        UNIT_ASSERT_VALUES_EQUAL_C(conf.WriteLastFlatIndexKey, true, "Should be true by default");
+        UNIT_ASSERT_C(conf.WriteLastFlatIndexKey, "Should be true by default");
 
         TPartCook cook(lay, conf);
 

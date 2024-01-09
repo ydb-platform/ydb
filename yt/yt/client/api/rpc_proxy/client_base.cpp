@@ -858,7 +858,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     }));
 }
 
-TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {

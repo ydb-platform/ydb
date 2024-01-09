@@ -42,12 +42,13 @@
                                                 "TopSortBy": "argument.yy.pkyy"
                                             },
                                             {
+                                                "Condition": "_equijoin_column_0 = pkxx",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

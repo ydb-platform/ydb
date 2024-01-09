@@ -1064,8 +1064,10 @@ private:
             if (std::holds_alternative<ui32>(input)) {
                 LambdaInputs[newContext] = std::get<ui32>(input);
             } else {
-                auto content = std::get<TArgContext>(input);
-                LambdaInputs[newContext] = LambdaInputs.at(std::get<TArgContext>(input));
+                auto context = std::get<TArgContext>(input);
+                if (LambdaInputs.contains(context)){
+                    LambdaInputs[newContext] = LambdaInputs.at(context);
+                }
             }
         }
 

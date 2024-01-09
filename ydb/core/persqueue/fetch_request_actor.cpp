@@ -99,7 +99,7 @@ public:
     }
 
     TPQFetchRequestActor(const TFetchRequestSettings& settings, const TActorId& schemeCacheId, const TActorId& requesterId)
-        : TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1)) //savnik: check duration
+        : TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1))
         , Settings(settings)
         , CanProcessFetchRequest(false)
         , FetchRequestReadsDone(0)

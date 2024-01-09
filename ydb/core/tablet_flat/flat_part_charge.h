@@ -56,7 +56,7 @@ namespace NTable {
 
             // First page to precharge (contains row1)
             auto first = index->LookupRow(row1);
-            if (Y_UNLIKELY(!first)) {
+            if (Y_UNLIKELY(!first || row1 >= Part->Stat.Rows /* hack for v2 format */ )) {
                 return { true, true }; // already out of bounds, nothing to precharge
             }
 
@@ -98,7 +98,7 @@ namespace NTable {
                 auto key2PageExt = key2Page + 1;
                 if (key2PageExt && key2PageExt <= last) {
                     last = Max(key2PageExt, firstExt);
-                    endRow = Min(endRow, last->GetRowId()); // may load the first row of key2PageExt
+                    endRow = Min(endRow, last ? last->GetRowId() : Max<TRowId>()); // may load the first row of key2PageExt
                 } else {
                     overshot = true; // may find first key > key2 on row > row2
                 }
@@ -140,7 +140,7 @@ namespace NTable {
             auto last = index->LookupRow(row2, first);
             if (Y_UNLIKELY(last > first)) {
                 last = first; // will not go past the first page
-                endRow = Max(endRow, last->GetRowId());
+                endRow = Max(endRow, last->GetRowId()); // TODO: 0?
             }
 
             TIter key1Page;
@@ -415,7 +415,7 @@ namespace NTable {
             const auto& scheme = Part->Scheme->HistoryGroup;
             Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
 
-            // Directly use the histroy key defaults with correct sort order
+            // Directly use the history key defaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
             auto first = index->LookupKey(startKey, scheme, ESeek::Lower, keyDefaults);

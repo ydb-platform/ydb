@@ -24,13 +24,13 @@ namespace {
             return nullptr;
         }
 
-        static void LoadTouched(IPages& env, bool clearHas) {
+        static void LoadTouched(IPages& env, bool clearLoaded) {
             auto touchEnv = dynamic_cast<TTouchEnv*>(&env);
             if (touchEnv) {
                 auto &loaded = touchEnv->Loaded;
                 auto &touched = touchEnv->Touched;
 
-                if (clearHas) {
+                if (clearLoaded) {
                     loaded.clear();
                 }
                 for (const auto &g : touched) {
@@ -887,7 +887,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 
         const auto part = eggs.Lone();
 
-        Cerr << DumpPart(*part, 2) << Endl;
+        Cerr << DumpPart(*part, 3) << Endl;
 
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
@@ -1209,24 +1209,42 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
+        auto makeKey = [](ui32 firstCell, ui32 secondCell) -> TVector<TCell> {
+            if (secondCell <= 11) {
+                // valid second cell [0 .. 11]
+                return {TCell::Make(firstCell), TCell::Make(secondCell)};
+            }
+            if (secondCell == 12) {
+                return {TCell::Make(firstCell)};
+            }
+            if (secondCell == 13) {
+                return { };
+            }
+            Y_UNREACHABLE();
+        };
+
         for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-            for (ui32 secondCellKey1 : xrange<ui32>(0, 12)) {
+            for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                 for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                    for (ui32 secondCellKey2 : xrange<ui32>(0, 12)) {
-                        TVector<TCell> key1{TCell::Make(firstCellKey1), TCell::Make(secondCellKey1)};
-                        TVector<TCell> key2{TCell::Make(firstCellKey2), TCell::Make(secondCellKey2)};
+                    for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                        TVector<TCell> key1 = makeKey(firstCellKey1, secondCellKey1);
+                        TVector<TCell> key2 = makeKey(firstCellKey2, secondCellKey2);
 
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
 
-                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ");
+                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
                         for (auto c : key1) {
                             message << c.AsValue<ui32>() << " ";
                         }
+                        message << ") (";
                         for (auto c : key2) {
                             message << c.AsValue<ui32>() << " ";
                         }
+                        message << ")";
+
+                        Cerr << message << Endl;
                             
                         bool bTreeOvershot = DoChargeKeys(bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         bool flatOvershot = DoChargeKeys(flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
@@ -1251,6 +1269,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             .Key({0, 1});
 
         conf.WriteBTreeIndex = true;
+        conf.WriteLastFlatIndexKey = false; // because we don't have it in B-tree index
         TPartCook cook(lay, conf);
         
         // making part with key gaps
@@ -1263,7 +1282,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         const auto part = *eggs.Lone();
 
-        Cerr << DumpPart(part, 1) << Endl;
+        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
@@ -1274,7 +1293,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
-        // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
         // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
         // TODO: mixed
     }

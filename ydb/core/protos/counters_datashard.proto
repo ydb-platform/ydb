@@ -135,14 +135,13 @@ enum ECumulativeCounters {
     COUNTER_WRITE_REQUEST = 102                           [(CounterOpts) = {Name: "WriteRequests"}];
     COUNTER_WRITE_IMMEDIATE = 103                         [(CounterOpts) = {Name: "WriteImmediate"}];
     COUNTER_WRITE_COMPLETE = 104                          [(CounterOpts) = {Name: "WriteComplete"}];
-    COUNTER_WRITE_DIRTY = 105                             [(CounterOpts) = {Name: "WriteDirty"}];
-    COUNTER_WRITE_SUCCESS = 106                           [(CounterOpts) = {Name: "WriteSuccess"}];
-    COUNTER_WRITE_ERROR = 107                             [(CounterOpts) = {Name: "WriteError"}];   
-    COUNTER_WRITE_OVERLOADED = 108                        [(CounterOpts) = {Name: "WriteOverloaded"}];   
-    COUNTER_WRITE_OUT_OF_SPACE = 109                      [(CounterOpts) = {Name: "WriteOutOfSpace"}];
-    COUNTER_WRITE_CANCELLED = 110                         [(CounterOpts) = {Name: "WriteCancelled"}];
-    COUNTER_WRITE_ROWS = 111                              [(CounterOpts) = {Name: "WriteRows"}];
-    COUNTER_WRITE_BYTES = 112                             [(CounterOpts) = {Name: "WriteBytes"}];
+    COUNTER_WRITE_SUCCESS = 105                           [(CounterOpts) = {Name: "WriteSuccess"}];
+    COUNTER_WRITE_ERROR = 106                             [(CounterOpts) = {Name: "WriteError"}];   
+    COUNTER_WRITE_OVERLOADED = 107                        [(CounterOpts) = {Name: "WriteOverloaded"}];   
+    COUNTER_WRITE_OUT_OF_SPACE = 108                      [(CounterOpts) = {Name: "WriteOutOfSpace"}];
+    COUNTER_WRITE_CANCELLED = 109                         [(CounterOpts) = {Name: "WriteCancelled"}];
+    COUNTER_WRITE_ROWS = 110                              [(CounterOpts) = {Name: "WriteRows"}];
+    COUNTER_WRITE_BYTES = 111                             [(CounterOpts) = {Name: "WriteBytes"}];
 }
 
 enum EPercentileCounters {

@@ -2,7 +2,7 @@ package NYT.NDiscoveryClient.NProto;
 
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/discovery_client";
+option go_package = "a.yandex-team.ru/yt/go/proto/client/discovery_client";
 
 ////////////////////////////////////////////////////////////////////////////////
 

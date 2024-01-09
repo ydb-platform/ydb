@@ -4,6 +4,8 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
+
 #include <unordered_set>
 
 namespace NYdb::NFederatedTopic {
@@ -397,9 +399,18 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
     //! Discards previously set ReadOriginal and ReadMirrored settings.
     TSelf& ReadMirrored(TString database);
 
+    bool IsReadMirroredEnabled() {
+        return ReadMirroredEnabled;
+    }
+
+    auto GetDatabasesToReadFrom() {
+        return DatabasesToReadFrom;
+    }
+
+private:
     // Read policy settings, set via helpers above
     bool ReadMirroredEnabled = false;
-    std::unordered_set<TString> Databases;
+    std::unordered_set<TString> DatabasesToReadFrom;
 };
 
 

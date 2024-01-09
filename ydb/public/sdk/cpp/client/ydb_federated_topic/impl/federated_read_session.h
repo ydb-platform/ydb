@@ -46,12 +46,13 @@ public:
     }
 
 private:
-    // TODO logging
     TStringBuilder GetLogPrefix() const;
 
     void Start();
     bool ValidateSettings();
     void OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos);
+
+    std::vector<TString> GetAllFederationLocations();
 
     bool IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db);
 
@@ -70,8 +71,7 @@ private:
     NThreading::TFuture<void> AsyncInit;
     std::shared_ptr<TFederatedDbState> FederationState;
 
-    // TODO
-    // TLog Log;
+    TLog Log;
 
     const TString SessionId;
     const TInstant StartSessionTime = TInstant::Now();

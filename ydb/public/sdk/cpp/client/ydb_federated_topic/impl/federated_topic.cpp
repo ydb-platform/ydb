@@ -23,14 +23,17 @@ TReadOriginalSettings& TReadOriginalSettings::AddLocal() {
 }
 
 TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadOriginal(TReadOriginalSettings settings) {
-    std::swap(Databases, settings.Databases);
+    std::swap(DatabasesToReadFrom, settings.Databases);
     ReadMirroredEnabled = false;
     return *this;
 }
 
 TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(TString database) {
-    Databases.clear();
-    Databases.insert(std::move(database));
+    if (database == "_local") {
+        ythrow TContractViolation("Reading from local database not supported, use specific database");
+    }
+    DatabasesToReadFrom.clear();
+    DatabasesToReadFrom.insert(std::move(database));
     ReadMirroredEnabled = true;
     return *this;
 }

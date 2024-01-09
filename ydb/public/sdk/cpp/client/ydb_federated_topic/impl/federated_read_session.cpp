@@ -64,6 +64,7 @@ TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSession
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , Log(Connections->GetLog())
     , SessionId(CreateGuidAsString())
 {
 }
@@ -101,15 +102,17 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         CloseImpl();
         return;
     }
-    if (Settings.ReadMirroredEnabled) {
-        Y_ABORT_UNLESS(Settings.Databases.size() == 1);
-        // add -mirrored-from- topics to Settings
+    if (Settings.IsReadMirroredEnabled()) {
+        Y_ABORT_UNLESS(Settings.GetDatabasesToReadFrom().size() == 1);
+        auto dbToReadFrom = *Settings.GetDatabasesToReadFrom().begin();
 
-        // how to get mirrors in general case???
-        std::vector<TString> dcNames = {"sas", "vla", "klg", "vlx"};
+        std::vector<TString> dcNames = GetAllFederationLocations();
         auto topics = Settings.Topics_;
         for (const auto& topic : topics) {
             for (const auto& dc : dcNames) {
+                if (AsciiEqualsIgnoreCase(dc, dbToReadFrom)) {
+                    continue;
+                }
                 auto mirroredTopic = topic;
                 mirroredTopic.PartitionIds_.clear();
                 mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + dc);
@@ -134,17 +137,25 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     OpenSubSessionsImpl(databases);
 }
 
+std::vector<TString> TFederatedReadSessionImpl::GetAllFederationLocations() {
+    std::vector<TString> result;
+    for (const auto& db : FederationState->DbInfos) {
+        result.push_back(db->location());
+    }
+    return result;
+}
+
 bool TFederatedReadSessionImpl::IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db) {
     if (db->status() != TDbInfo::Status::DatabaseInfo_Status_AVAILABLE &&
         db->status() != TDbInfo::Status::DatabaseInfo_Status_READ_ONLY) {
         return false;
     }
 
-    if (Settings.Databases.empty()) {
+    if (Settings.GetDatabasesToReadFrom().empty()) {
         return true;
     }
 
-    for (const auto& dbFromSettings : Settings.Databases) {
+    for (const auto& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
         if (AsciiEqualsIgnoreCase(db->name(), dbFromSettings) ||
             AsciiEqualsIgnoreCase(db->id(), dbFromSettings)) {
             return true;

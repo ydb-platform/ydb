@@ -33,6 +33,7 @@ SRCS(
     follower_group.h
     follower_tablet_info.cpp
     follower_tablet_info.h
+    storage_balancer.cpp
     storage_group_info.cpp
     storage_group_info.h
     storage_pool_info.cpp

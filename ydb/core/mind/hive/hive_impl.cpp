@@ -350,6 +350,12 @@ void THive::Handle(TEvPrivate::TEvBalancerOut::TPtr&) {
     BLOG_D("Handle BalancerOut");
 }
 
+
+void THive::Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev) {
+    BLOG_D("Handle StartStorageBalancer");
+    StartHiveStorageBalancer(std::move(ev->Get()->Settings));
+}
+
 void THive::Handle(TEvHive::TEvBootTablet::TPtr& ev) {
     TTabletId tabletId = ev->Get()->Record.GetTabletID();
     TTabletInfo* tablet = FindTablet(tabletId);
@@ -2650,6 +2656,7 @@ TDuration THive::GetBalancerCooldown() const {
         case EBalancerType::ScatterMemory:
         case EBalancerType::ScatterNetwork:
         case EBalancerType::SpreadNeighbours:
+        case EBalancerType::Storage:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
@@ -2860,6 +2867,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
         hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
+        hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
     }
 }
@@ -2958,6 +2966,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshStorageInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:

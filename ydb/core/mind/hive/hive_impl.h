@@ -169,6 +169,7 @@ protected:
     friend class TQueryMigrationWaitActor;
     friend class TReleaseTabletsWaitActor;
     friend class TDrainNodeWaitActor;
+    friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
 
     friend class TTxInitScheme;
@@ -204,6 +205,7 @@ protected:
     friend class TTxMonEvent_QueryMigration;
     friend class TTxMonEvent_RebalanceFromScratch;
     friend class TTxMonEvent_ObjectStats;
+    friend class TTxMonEvent_StorageRebalance;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -239,6 +241,7 @@ protected:
     void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
+    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -551,6 +554,7 @@ protected:
     void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
+    void Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
 
@@ -899,6 +903,14 @@ public:
 
     NKikimrConfig::THiveConfig::EHiveBootStrategy GetBootStrategy() const {
         return CurrentConfig.GetBootStrategy();
+    }
+
+    NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {
+        return CurrentConfig.GetChannelBalanceStrategy();
+    }
+
+    ui64 GetMaxChannelHistorySize() const {
+        return CurrentConfig.GetMaxChannelHistorySize();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

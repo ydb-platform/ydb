@@ -202,6 +202,7 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
         }
     }
     TMetricsValues metricValues;
+    BLOG_D("Querying from " << minTime << " to " << maxTime);
     auto rowset = db.Table<Schema::MetricsValues>().GreaterOrEqual(minTime).LessOrEqual(maxTime).Select();
     if (!rowset.IsReady()) {
         return false;
@@ -220,7 +221,7 @@ bool TLocalBackend::GetMetrics(NTabletFlatExecutor::TTransactionContext& txc, co
         ui64 id = rowset.GetValue<Schema::MetricsValues::Id>();
         auto itIdx = metricIdx.find(id);
         if (itIdx != metricIdx.end()) {
-            metricValues.Values.back()[itIdx->second] = rowset.GetValue<Schema::MetricsValues::Value>();
+            metricValues.Values[itIdx->second].back() = rowset.GetValue<Schema::MetricsValues::Value>();
         }
         if (!rowset.Next()) {
             return false;
@@ -237,18 +238,21 @@ bool TLocalBackend::ClearData(NTabletFlatExecutor::TTransactionContext& txc, TIn
     if (!rowset.IsReady()) {
         return false;
     }
+    ui64 prevTimestamp = 0;
     while (!rowset.EndOfSet()) {
         ui64 timestamp = rowset.GetValue<Schema::MetricsValues::Timestamp>();
         ui64 id = rowset.GetValue<Schema::MetricsValues::Id>();
         db.Table<Schema::MetricsValues>().Key(timestamp, id).Delete();
         newStartTimestamp = TInstant::Seconds(timestamp);
-        if (++rows >= MAX_ROWS_TO_DELETE) {
-            break;
+        if (timestamp != prevTimestamp && ++rows >= MAX_ROWS_TO_DELETE) { // we count as a logical row every unique timestamp
+            break;                                                        // so for database it will be MAX_ROWS * NUM_OF_METRICS rows
         }
+        prevTimestamp = timestamp;
         if (!rowset.Next()) {
             return false;
         }
     }
+    BLOG_D("Cleared " << rows << " logical rows");
     return true;
 }
 

@@ -800,9 +800,11 @@ void RegisterRotLeft(IBuiltinFunctionRegistry& registry);
 void RegisterRotRight(IBuiltinFunctionRegistry& registry);
 void RegisterPlus(IBuiltinFunctionRegistry& registry);
 void RegisterMinus(IBuiltinFunctionRegistry& registry);
+void RegisterMinus(TKernelFamilyMap& kernelFamilyMap);
 void RegisterBitNot(IBuiltinFunctionRegistry& registry);
 void RegisterCountBits(IBuiltinFunctionRegistry& registry);
 void RegisterAbs(IBuiltinFunctionRegistry& registry);
+void RegisterAbs(TKernelFamilyMap& kernelFamilyMap);
 void RegisterConvert(IBuiltinFunctionRegistry& registry);
 void RegisterConcat(IBuiltinFunctionRegistry& registry);
 void RegisterSubstring(IBuiltinFunctionRegistry& registry);
@@ -1087,6 +1089,54 @@ private:
     const arrow::compute::ScalarKernel ArrowKernel;
 };
 
+template<typename TInput, typename TOutput, class TFuncInstance>
+struct TUnaryKernelExecs : TUnaryKernelExecsBase<TUnaryKernelExecs<TInput, TOutput, TFuncInstance>>
+{
+    static arrow::Status ExecScalar(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        if (const auto& arg = batch.values.front(); !arg.scalar()->is_valid) {
+            *res = arrow::MakeNullScalar(GetPrimitiveDataType<TOutput>());
+        } else {
+            const auto val = GetPrimitiveScalarValue<TInput>(*arg.scalar());
+            *res = MakeScalarDatum<TOutput>(TFuncInstance::Do(val));
+        }
+        return arrow::Status::OK();
+    }
+
+    static arrow::Status ExecArray(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        static_assert(!std::is_same<TOutput, bool>::value);
+
+        const auto& arg = batch.values.front();
+        auto& resArr = *res->array();
+
+        const auto& arr = *arg.array();
+        auto length = arr.length;
+        const auto values = arr.GetValues<TInput>(1);
+        auto resValues = resArr.GetMutableValues<TOutput>(1);
+        for (int64_t i = 0; i < length; ++i) {
+            resValues[i] = TFuncInstance::Do(values[i]);
+        }
+
+        return arrow::Status::OK();
+    }
+};
+
+template<typename TInput, typename TOutput,
+    template<typename, typename> class TFunc>
+void AddUnaryKernel(TKernelFamilyBase& owner) {
+    using TInputLayout = typename TInput::TLayout;
+    using TOutputLayout = typename TOutput::TLayout;
+
+    using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
+    using TExecs = TUnaryKernelExecs<TInputLayout, TOutputLayout, TFuncInstance>;
+
+    std::vector<NUdf::TDataTypeId> argTypes({ TInput::Id });
+    NUdf::TDataTypeId returnType = TOutput::Id;
+
+    arrow::compute::ScalarKernel k({ GetPrimitiveInputArrowType<TInputLayout>() }, GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
+    k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+    owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+}
+
 template<typename TInput1, typename TInput2, typename TOutput,
     template<typename, typename, typename> class TFunc>
 void AddBinaryKernel(TKernelFamilyBase& owner) {
@@ -1123,6 +1173,19 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
                                    GetPrimitiveOutputArrowType<TOutputLayout>(), &TExecs::Exec);
     k.null_handling = owner.NullMode == TKernelFamily::ENullMode::Default ? arrow::compute::NullHandling::INTERSECTION : arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, k));
+}
+
+template<template<typename, typename> class TFunc>
+void AddUnaryIntegralKernels(TKernelFamilyBase& owner) {
+    AddUnaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddUnaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
 }
 
 template<template<typename, typename, typename> class TFunc>
@@ -1207,6 +1270,16 @@ public:
         : TKernelFamilyBase(nullMode)
     {
         AddBinaryIntegralKernels<TFunc>(*this);
+    }
+};
+
+template<template<typename, typename> class TFunc>
+class TUnaryNumericKernelFamily : public TKernelFamilyBase {
+public:
+    TUnaryNumericKernelFamily(TKernelFamily::ENullMode nullMode = TKernelFamily::ENullMode::Default)
+        : TKernelFamilyBase(nullMode)
+    {
+        AddUnaryIntegralKernels<TFunc>(*this);
     }
 };
 

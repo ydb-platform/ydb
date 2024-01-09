@@ -7,7 +7,10 @@ option java_package = "com.yandex.ydb.rate_limiter";
 option java_outer_classname = "RateLimiterProtos";
 option java_multiple_files = true;
 
+import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
+
+import "google/protobuf/struct.proto";
 
 //
 // Rate Limiter control API.
@@ -16,6 +19,71 @@ import "ydb/public/api/protos/ydb_operation.proto";
 //
 // Resource properties.
 //
+
+message MeteringConfig {
+    // Meter consumed resources and send billing metrics.
+    // Default value is false (not inherited).
+    bool enabled = 1;
+
+    // Period to report consumption history from clients to kesus
+    // Default value is inherited from parent or equals 5000 ms for root.
+    uint64 report_period_ms = 2;
+
+    // Consumption history period that is sent in one message to metering actor.
+    // Default value is inherited from parent or equals 1000 ms for root.
+    uint64 meter_period_ms = 3;
+
+    // Time window to collect data from every client.
+    // Any client metering message that is `collect_period` late is discarded (not metered or billed).
+    // Default value is inherited from parent or equals 30 seconds for root.
+    uint64 collect_period_sec = 4;
+
+    // Provisioned consumption limit in units per second.
+    // Effective value is limited by corresponding `max_units_per_second`.
+    // Default value is 0 (not inherited).
+    double provisioned_units_per_second = 5;
+
+    // Provisioned allowed burst equals `provisioned_coefficient * provisioned_units_per_second` units.
+    // Effective value is limited by corresponding PrefetchCoefficient.
+    // Default value is inherited from parent or equals 60 for root.
+    double provisioned_coefficient = 6;
+
+    // On-demand allowed burst equals `overshoot_coefficient * prefetch_coefficient * max_units_per_second` units.
+    // Should be greater or equal to 1.0
+    // Default value is inherited from parent or equals 1.1 for root
+    double overshoot_coefficient = 7;
+
+    // Billing metric description.
+    message Metric {
+        // Send this metric to billing.
+        // Default value is false (not inherited).
+        bool enabled = 1;
+
+        // Billing metric period (aligned to hour boundary).
+        // Default value is inherited from parent or equals 60 seconds for root.
+        uint64 billing_period_sec = 2;
+
+        // Billing metric JSON fields (inherited from parent if not set)
+        google.protobuf.Struct metric_fields = 10;
+    }
+
+    // Consumption within provisioned limit.
+    // Informative metric that should be sent to billing (not billed).
+    Metric provisioned = 8;
+
+    // Consumption that exceeds provisioned limit is billed as on-demand.
+    Metric on_demand = 9;
+
+    // Consumption that exceeds even on-demand limit.
+    // Normally it is free and should not be billed.
+    Metric overshoot = 10;
+}
+
+message ReplicatedBucketSettings {
+    // Interval between syncs from kesus and between consumption reports in Ms
+    // Default value equals 5000 ms and not inherited
+    optional uint64 report_interval_ms = 1 [(Ydb.value) = "> 0"];
+}
 
 // Settings for hierarchical deficit round robin (HDRR) algorithm.
 message HierarchicalDrrSettings {
@@ -43,6 +111,21 @@ message HierarchicalDrrSettings {
     // Default value is inherited from parent or 0.75 for root.
     // Must be nonnegative and less than or equal to 1.
     double prefetch_watermark = 4;
+
+    // NOTE: This API is experimental
+    // Prevents bucket from going too deep in negative values. If somebody reports value that will exceed
+    // this limit the final amount in bucket will be equal to this limit
+    // Should be negative value
+    // Unset means no limit
+    optional double immediately_fill_up_to = 5 [(Ydb.value) = "< 0"];
+
+    // NOTE: This API is experimental
+    // Behavior of leafs in tree
+    // Not inherited
+    oneof leaf_behavior {
+        // Make leafs behave as single bucket replicated from kesus
+        ReplicatedBucketSettings replicated_bucket = 6;
+    }
 }
 
 // Rate limiter resource description.
@@ -57,6 +140,8 @@ message Resource {
         // Settings for Hierarchical DRR algorithm.
         HierarchicalDrrSettings hierarchical_drr = 2;
     }
+
+    MeteringConfig metering_config = 3;
 }
 
 //

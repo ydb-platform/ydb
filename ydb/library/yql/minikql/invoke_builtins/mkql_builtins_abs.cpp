@@ -79,5 +79,9 @@ void RegisterAbs(IBuiltinFunctionRegistry& registry) {
     NDecimal::RegisterUnaryFunction<TDecimalAbs, TUnaryArgsOpt>(registry, "Abs");
 }
 
+void RegisterAbs(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Abs"] = std::make_unique<TUnaryNumericKernelFamily<TAbs>>();
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

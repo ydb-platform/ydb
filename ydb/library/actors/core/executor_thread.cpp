@@ -523,7 +523,7 @@ namespace NActors {
         std::vector<TExecutorPoolBaseMailboxed*> pools;
         do {
             if (NeedToReloadPools.load() == EState::NeedToReloadPools) {
-                otherPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OtherExecutorPool.load());
+                // otherPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OtherExecutorPool.load());
                 NeedToReloadPools = EState::Running;
             }
             bool wasWorking = true;

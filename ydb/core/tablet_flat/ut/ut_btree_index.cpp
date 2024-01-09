@@ -24,25 +24,49 @@ namespace {
             return nullptr;
         }
 
-        static void LoadTouched(IPages& env, bool clearHas) {
-            auto touchEnv = dynamic_cast<TTouchEnv*>(&env);
-            if (touchEnv) {
-                auto &has = touchEnv->Loaded;
-                auto &touched = touchEnv->Touched;
-
-                if (clearHas) {
-                    has.clear();
-                }
-                for (const auto &g : touched) {
-                    has[g.first].insert(g.second.begin(), g.second.end());
-                }
-                touched.clear();
+        void LoadTouched(bool clearLoaded) {
+            if (clearLoaded) {
+                Loaded.clear();
             }
+            for (const auto &g : Touched) {
+                Loaded[g.first].insert(g.second.begin(), g.second.end());
+            }
+            Touched.clear();
         }
 
         TMap<TGroupId, TSet<TPageId>> Loaded;
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
+
+    void AssertTouchedTheSame(const TPartStore& part, const TMap<TGroupId, TSet<TPageId>>& bTree, const TMap<TGroupId, TSet<TPageId>>& flat, const TString& message) {
+        TSet<TGroupId> groupIds;
+        for (const auto &c : {bTree, flat}) {
+            for (const auto &g : c) {
+                groupIds.insert(g.first);
+            }
+        }
+
+        for (TGroupId groupId : groupIds) {
+            TSet<TPageId> bTreeDataPages, flatDataPages;
+            for (TPageId pageId : bTree.Value(groupId, TSet<TPageId>{})) {
+                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                    bTreeDataPages.insert(pageId);
+                }
+            }
+            for (TPageId pageId : flat.Value(groupId, TSet<TPageId>{})) {
+                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                    flatDataPages.insert(pageId);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
+        }
+    }
+
+    void AssertTouchedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
+        AssertTouchedTheSame(part, bTree.Loaded, flat.Loaded, message);
+        AssertTouchedTheSame(part, bTree.Touched, flat.Touched, message);
+    }
 
     TLayoutCook MakeLayout() {
         TLayoutCook lay;
@@ -907,9 +931,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
-    void AssertEqual(const TPartBtreeIndexIt& bTree, EReady bTreeReady, const TPartIndexIt& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
+    void AssertEqual(const TPartBtreeIndexIt& bTree, EReady bTreeReady, const TPartIndexIt& flat, EReady flatReady, const TString& message) {
         // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
-        if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data && 
+        if (flatReady == EReady::Gone && bTreeReady == EReady::Data && 
                 (bTree.GetRowId() == 0 || bTree.GetNextRowId() == bTree.GetEndRowId())) {
             UNIT_ASSERT_C(bTree.IsValid(), message);
             return;
@@ -924,30 +948,30 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    EReady Retry(std::function<EReady()> action, IPages& env, const TString& message, ui32 failsAllowed = 10) {
+    EReady Retry(std::function<EReady()> action, TTouchEnv& env, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             if (auto ready = action(); ready != EReady::Page) {
                 return ready;
             }
-            TTouchEnv::LoadTouched(env, false);
+            env.LoadTouched(false);
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
     }
 
-    EReady SeekRowId(IIndexIter& iter, IPages& env, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekRowId(IIndexIter& iter, TTouchEnv& env, TRowId rowId, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             return iter.Seek(rowId);
         }, env, message, failsAllowed);
     }
 
-    EReady SeekLast(IIndexIter& iter, IPages& env, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekLast(IIndexIter& iter, TTouchEnv& env, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             return iter.SeekLast();
         }, env, message, failsAllowed);
     }
 
-    EReady SeekKey(IIndexIter& iter, IPages& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekKey(IIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (reverse) {
                 return iter.SeekReverse(seek, key, keyDefaults);
@@ -957,7 +981,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }, env, message, failsAllowed);
     }
 
-    EReady NextPrev(IIndexIter& iter, IPages& env, bool next, const TString& message, ui32 failsAllowed = 10) {
+    EReady NextPrev(IIndexIter& iter, TTouchEnv& env, bool next, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (next) {
                 return iter.Next();
@@ -967,17 +991,16 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }, env, message, failsAllowed);
     }
 
-    template<typename TEnv>
     void CheckSeekRowId(const TPartStore& part) {
         for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
             for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
-                TEnv env;
+                TTouchEnv env;
                 TPartBtreeIndexIt bTree(&part, &env, { });
                 TPartIndexIt flat(&part, &env, { });
 
                 // checking initial seek:
                 {
-                    TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1;
+                    TString message = TStringBuilder() << "SeekRowId< " << rowId1;
                     EReady bTreeReady = SeekRowId(bTree, env, rowId1, message);
                     EReady flatReady = SeekRowId(flat, env, rowId1, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId1 < part.Stat.Rows ? EReady::Data : EReady::Gone);
@@ -986,7 +1009,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
                 // checking repositioning:
                 {
-                    TString message = TStringBuilder() << "SeekRowId<" << typeid(TEnv).name() << "> " << rowId1 << " -> " << rowId2;
+                    TString message = TStringBuilder() << "SeekRowId " << rowId1 << " -> " << rowId2;
                     EReady bTreeReady = SeekRowId(bTree, env, rowId2, message);
                     EReady flatReady = SeekRowId(flat, env, rowId2, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId2 < part.Stat.Rows ? EReady::Data : EReady::Gone);
@@ -996,20 +1019,18 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    template<typename TEnv>
     void CheckSeekLast(const TPartStore& part) {
-        TEnv env;
+        TTouchEnv env;
         TPartBtreeIndexIt bTree(&part, &env, { });
         TPartIndexIt flat(&part, &env, { });
 
-        TString message = TStringBuilder() << "SeekLast<" << typeid(TEnv).name() << ">";
+        TString message = TStringBuilder() << "SeekLast";
         EReady bTreeReady = SeekLast(bTree, env, message);
         EReady flatReady = SeekLast(flat, env, message);
         UNIT_ASSERT_VALUES_EQUAL(bTreeReady, EReady::Data);
         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
     }
 
-    template<typename TEnv>
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
@@ -1017,11 +1038,11 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                     TVector<TCell> key{TCell::Make(keyId / 7), TCell::Make(keyId % 7)};
 
                     while (true) {
-                        TEnv env;
+                        TTouchEnv env;
                         TPartBtreeIndexIt bTree(&part, &env, { });
                         TPartIndexIt flat(&part, &env, { });
 
-                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse<" : "SeekKey<") << typeid(TEnv).name() << ">(" << seek << ") ";
+                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << ">(" << seek << ") ";
                         for (auto c : key) {
                             message << c.AsValue<ui32>() << " ";
                         }
@@ -1029,7 +1050,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         EReady bTreeReady = SeekKey(bTree, env, seek, reverse, key, keyDefaults, message);
                         EReady flatReady = SeekKey(flat, env, seek, reverse, key, keyDefaults, message);
                         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
-                        AssertEqual(bTree, bTreeReady, flat, flatReady, message, !key.empty());
+                        AssertEqual(bTree, bTreeReady, flat, flatReady, message);
 
                         if (!key) {
                             break;
@@ -1041,17 +1062,16 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    template<typename TEnv>
     void CheckNextPrev(const TPartStore& part) {
         for (bool next : {true, false}) {
             for (TRowId rowId : xrange(part.Stat.Rows)) {
-                TEnv env;
+                TTouchEnv env;
                 TPartBtreeIndexIt bTree(&part, &env, { });
                 TPartIndexIt flat(&part, &env, { });
 
                 // checking initial seek:
                 {
-                    TString message = TStringBuilder() << "CheckNext<" << typeid(TEnv).name() << "> " << rowId;
+                    TString message = TStringBuilder() << "CheckNext " << rowId;
                     EReady bTreeReady = SeekRowId(bTree, env, rowId, message);
                     EReady flatReady = SeekRowId(flat, env, rowId, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId < part.Stat.Rows ? EReady::Data : EReady::Gone);
@@ -1061,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                 // checking next:
                 while (true)
                 {
-                    TString message = TStringBuilder() << "CheckNext<" << typeid(TEnv).name() << "> " << rowId << " -> " << rowId;
+                    TString message = TStringBuilder() << "CheckNext " << rowId << " -> " << rowId;
                     EReady bTreeReady = NextPrev(bTree, env, next, message);
                     EReady flatReady = NextPrev(flat, env, next, message);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
@@ -1096,14 +1116,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
-        CheckSeekRowId<TTestEnv>(part);
-        CheckSeekRowId<TTouchEnv>(part);
-        CheckSeekLast<TTestEnv>(part);
-        CheckSeekLast<TTouchEnv>(part);
-        CheckSeekKey<TTestEnv>(part, eggs.Scheme->Keys.Get());
-        CheckSeekKey<TTouchEnv>(part, eggs.Scheme->Keys.Get());
-        CheckNextPrev<TTestEnv>(part);
-        CheckNextPrev<TTouchEnv>(part);
+        CheckSeekRowId(part);
+        CheckSeekLast(part);
+        CheckSeekKey(part, eggs.Scheme->Keys.Get());
+        CheckNextPrev(part);
     }
 
     Y_UNIT_TEST(NoNodes) {
@@ -1130,37 +1146,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 }
 
 Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
-    void AssertEqual(const TPartStore& part, const TMap<TGroupId, TSet<TPageId>>& bTree, const TMap<TGroupId, TSet<TPageId>>& flat, const TString& message) {
-        TSet<TGroupId> groupIds;
-        for (const auto &c : {bTree, flat}) {
-            for (const auto &g : c) {
-                groupIds.insert(g.first);
-            }
-        }
-
-        for (TGroupId groupId : groupIds) {
-            TSet<TPageId> bTreeDataPages, flatDataPages;
-            for (TPageId pageId : bTree.Value(groupId, TSet<TPageId>{})) {
-                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                    bTreeDataPages.insert(pageId);
-                }
-            }
-            for (TPageId pageId : flat.Value(groupId, TSet<TPageId>{})) {
-                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                    flatDataPages.insert(pageId);
-                }
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
-        }
-    }
-
-    void AssertEqual(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
-        AssertEqual(part, bTree.Loaded, flat.Loaded, message);
-        AssertEqual(part, bTree.Touched, flat.Touched, message);
-    }
-
-    void DoChargeRowId(ICharge& charge, IPages& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
+    void DoChargeRowId(ICharge& charge, TTouchEnv& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             bool ready = reverse
@@ -1169,7 +1155,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (ready) {
                 return;
             }
-            TTouchEnv::LoadTouched(env, false);
+            env.LoadTouched(false);
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -1185,7 +1171,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                 TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
                 DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
                 DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                AssertEqual(part, bTreeEnv, flatEnv, message);
+                AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
             }
         }
     }

@@ -559,7 +559,7 @@ namespace NPage {
             , MinSize(conf.Groups[groupId.Index].IndexMin)
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , DataPageBuilder(EPage::Index, groupId.IsMain() ? 3 : 2, false, 0 /* no extra data before block */)
+            , DataPageBuilder(EPage::Index, groupId.IsMain() && conf.WriteLastFlatIndexKey ? 3 : 2, false, 0 /* no extra data before block */)
         {
 
         }

@@ -229,7 +229,7 @@ using namespace NKikimrPQ;
 class TPQTabletMock: public TActor<TPQTabletMock> {
 public:
     TPQTabletMock(ETopicPartitionStatus status)
-        : TActor(&TThis::StateWork)
+        : TActor(&TThis::StateMockWork)
         , Status(status) {
     }
 
@@ -247,7 +247,7 @@ private:
         ctx.Send(ev->Sender, response.Release());
     }
 
-    STFUNC(StateWork) {
+    STFUNC(StateMockWork) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvRequest, Handle);
@@ -315,6 +315,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
     NPersQueue::TTestServer server{};
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+    server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
+
+    CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1001, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMDisabled, "A_Source");

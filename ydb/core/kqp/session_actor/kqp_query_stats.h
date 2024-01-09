@@ -7,13 +7,13 @@
 namespace NKikimr::NKqp {
 
 struct TKqpQueryStats {
-    ui64 DurationUs;
+    ui64 DurationUs = 0;
     std::optional<TKqpStatsCompile> Compilation;
 
-    ui64 WorkerCpuTimeUs;
-    ui64 ReadSetsCount;
-    ui64 MaxShardProgramSize;
-    ui64 MaxShardReplySize;
+    ui64 WorkerCpuTimeUs = 0;
+    ui64 ReadSetsCount = 0;
+    ui64 MaxShardProgramSize = 0;
+    ui64 MaxShardReplySize = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 

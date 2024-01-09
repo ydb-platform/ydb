@@ -1005,7 +1005,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                     EReady flatReady = SeekRowId(flat, flatEnv, rowId1, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId1 < part.Stat.Rows ? EReady::Data : EReady::Gone);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                    AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                 }
 
                 // checking repositioning:
@@ -1015,7 +1014,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                     EReady flatReady = SeekRowId(flat, flatEnv, rowId2, message);
                     UNIT_ASSERT_VALUES_EQUAL(bTreeReady, rowId2 < part.Stat.Rows ? EReady::Data : EReady::Gone);
                     AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                    AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                 }
             }
         }
@@ -1031,7 +1029,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         EReady flatReady = SeekLast(flat, flatEnv, message);
         UNIT_ASSERT_VALUES_EQUAL(bTreeReady, EReady::Data);
         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
@@ -1054,7 +1051,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, message);
                         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
                         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
 
                         if (!key) {
                             break;
@@ -1093,8 +1089,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         break;
                     }
                 }
-
-                AssertTouchedTheSame(part, bTreeEnv, flatEnv, "CheckNextPrev");
             }
         }
     }

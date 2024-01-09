@@ -3578,10 +3578,6 @@ The optional flag string may include one or more of the characters i for case-in
 
 The SQL/JSON standard borrows its definition for regular expressions from the LIKE_REGEX operator, which in turn uses the XQuery standard. PostgreSQL does not currently support the LIKE_REGEX operator. Therefore, the like_regex filter is implemented using the POSIX regular expression engine described in Section 9.7.3. This leads to various minor discrepancies from standard SQL/JSON behavior, which are cataloged in Section 9.7.3.8. Note, however, that the flag-letter incompatibilities described there do not apply to SQL/JSON, as it translates the XQuery flag letters to match what the POSIX engine expects.
 
-Keep in mind that the pattern argument of like_regex is a JSON path string literal, written according to the rules given in Section 8.14.7. This means in particular that any backslashes you want to use in the regular expression must be doubled. For example, to match string values of the root document that contain only digits:
-
-$.* ? (@ like_regex "^\\d+$")
-
 ## 9.17. Sequence Manipulation Functions (NOT SUPPORTED) {#sequence-manipulation-functions}
 
 ## 9.18. Conditional Expressions {#conditional-expressions}

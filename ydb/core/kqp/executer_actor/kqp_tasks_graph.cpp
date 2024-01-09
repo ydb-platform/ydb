@@ -112,6 +112,8 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     meta.TableId = MakeTableId(input.GetStreamLookup().GetTable());
                     meta.TablePath = input.GetStreamLookup().GetTable().GetPath();
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                    YQL_ENSURE(meta.TableConstInfo);
+                    meta.TableKind = meta.TableConstInfo->TableKind;
                 }
 
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {

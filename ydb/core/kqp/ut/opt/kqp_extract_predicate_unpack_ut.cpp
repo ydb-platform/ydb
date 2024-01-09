@@ -158,8 +158,14 @@ void Test(const TString& query, const TString& answer, THashSet<TString> allowSc
     }
 }
 
-void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1) {
-    TKikimrRunner kikimr;
+void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1, bool streamLookup = true) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
+
+    auto settings = TKikimrSettings()
+        .SetAppConfig(appConfig);
+
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -204,7 +210,8 @@ Y_UNIT_TEST(OverflowLookup) {
         )",
         R"([])",
         0,
-        2);
+        2,
+        false);
 
     TestRange(
         R"(

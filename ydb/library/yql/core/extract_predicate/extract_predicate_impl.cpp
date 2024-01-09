@@ -1,5 +1,6 @@
 #include "extract_predicate_impl.h"
 
+#include <ydb/library/yql/core/type_ann/type_ann_pg.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_constraint.h>
@@ -781,6 +782,17 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
         }
     }
 
+    if (node->IsCallable("StartsWith")) {
+        if (node->Head().IsCallable("FromPg")) {
+            YQL_CLOG(DEBUG, Core) << "Get rid of FromPg() in " << node->Content() << " first argument";
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+        if (node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            YQL_CLOG(DEBUG, Core) << "Convert second argument of " << node->Content() << " from PG type";
+            return ctx.ChangeChild(*node, 1, ctx.NewCallable(node->Tail().Pos(), "FromPg", {node->TailPtr()}));
+        }
+    }
+
     return node;
 }
 
@@ -911,13 +923,22 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
 
     if (opNode->IsCallable("StartsWith")) {
         YQL_ENSURE(keys.size() == 1);
-        return ctx.Builder(pos)
+        const bool keyIsPg = firstKeyType->GetKind() == ETypeAnnotationKind::Pg;
+        const TTypeAnnotationNode* rangeForType = firstKeyType;
+        if (keyIsPg) {
+            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx);
+            YQL_ENSURE(yqlType);
+            rangeForType = yqlType;
+            YQL_ENSURE(opNode->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg);
+        }
+        auto rangeForNode = ctx.Builder(pos)
             .Callable("RangeFor")
                 .Atom(0, hasNot ? "NotStartsWith" : "StartsWith", TNodeFlags::Default)
                 .Add(1, opNode->TailPtr())
-                .Add(2, ExpandType(pos, *firstKeyType, ctx))
+                .Add(2, ExpandType(pos, *rangeForType, ctx))
             .Seal()
             .Build();
+        return ctx.WrapByCallableIf(keyIsPg, "RangeToPg", std::move(rangeForNode));
     }
 
     if (opNode->IsCallable("SqlIn")) {

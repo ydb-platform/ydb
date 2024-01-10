@@ -50,12 +50,13 @@
                                                 "Predicate": "Exist(item.y.y2)"
                                             },
                                             {
+                                                "Condition": "x1 = y1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

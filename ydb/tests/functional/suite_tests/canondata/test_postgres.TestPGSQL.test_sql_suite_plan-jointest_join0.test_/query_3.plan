@@ -48,12 +48,13 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Condition": "hundred = thousand",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

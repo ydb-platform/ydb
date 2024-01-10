@@ -428,8 +428,8 @@ private:
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
-    TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
+    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvRead::TPtr> WaitingReads;
+    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
@@ -442,7 +442,7 @@ private:
     bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
-    TRowVersion GetMaxReadVersion() const;
+    NOlap::TSnapshot GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
     ui64 GetOutdatedStep() const;
 
@@ -465,12 +465,12 @@ private:
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunInit(const NKikimrTxColumnShard::TInitShard& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunInit(const NKikimrTxColumnShard::TInitShard& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();

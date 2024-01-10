@@ -24,6 +24,7 @@ const std::unordered_map<EApiKey, TString> EApiKeyNames = {
     {EApiKey::CREATE_TOPICS, "CREATE_TOPICS"},
     {EApiKey::INIT_PRODUCER_ID, "INIT_PRODUCER_ID"},
     {EApiKey::SASL_AUTHENTICATE, "SASL_AUTHENTICATE"},
+    {EApiKey::CREATE_PARTITIONS, "CREATE_PARTITIONS"},
 };
 
 
@@ -61,6 +62,8 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TInitProducerIdRequestData>();
         case SASL_AUTHENTICATE:
             return std::make_unique<TSaslAuthenticateRequestData>();
+        case CREATE_PARTITIONS:
+            return std::make_unique<TCreatePartitionsRequestData>();
         default:
             ythrow yexception() << "Unsupported request API key " <<  apiKey;
     }
@@ -100,6 +103,8 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TInitProducerIdResponseData>();
         case SASL_AUTHENTICATE:
             return std::make_unique<TSaslAuthenticateResponseData>();
+        case CREATE_PARTITIONS:
+            return std::make_unique<TCreatePartitionsResponseData>();
         default:
             ythrow yexception() << "Unsupported response API key " <<  apiKey;
     }
@@ -199,6 +204,12 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             } else {
                 return 1;
             }
+        case CREATE_PARTITIONS:
+            if (_version >= 2) {
+                return 2;
+            } else {
+                return 1;
+            }
         default:
             ythrow yexception() << "Unsupported API key " << apiKey;
             break;
@@ -292,6 +303,12 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
                 return 0;
             }
         case SASL_AUTHENTICATE:
+            if (_version >= 2) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case CREATE_PARTITIONS:
             if (_version >= 2) {
                 return 1;
             } else {
@@ -5661,6 +5678,298 @@ i32 TSaslAuthenticateResponseData::Size(TKafkaVersion _version) const {
     NPrivate::Size<ErrorMessageMeta>(_collector, _version, ErrorMessage);
     NPrivate::Size<AuthBytesMeta>(_collector, _version, AuthBytes);
     NPrivate::Size<SessionLifetimeMsMeta>(_collector, _version, SessionLifetimeMs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TCreatePartitionsRequestData
+//
+const TCreatePartitionsRequestData::TimeoutMsMeta::Type TCreatePartitionsRequestData::TimeoutMsMeta::Default = 0;
+const TCreatePartitionsRequestData::ValidateOnlyMeta::Type TCreatePartitionsRequestData::ValidateOnlyMeta::Default = false;
+
+TCreatePartitionsRequestData::TCreatePartitionsRequestData() 
+        : TimeoutMs(TimeoutMsMeta::Default)
+        , ValidateOnly(ValidateOnlyMeta::Default)
+{}
+
+void TCreatePartitionsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TCreatePartitionsRequestData";
+    }
+    NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
+    NPrivate::Read<TimeoutMsMeta>(_readable, _version, TimeoutMs);
+    NPrivate::Read<ValidateOnlyMeta>(_readable, _version, ValidateOnly);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TCreatePartitionsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TCreatePartitionsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<TimeoutMsMeta>(_collector, _writable, _version, TimeoutMs);
+    NPrivate::Write<ValidateOnlyMeta>(_collector, _writable, _version, ValidateOnly);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TCreatePartitionsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<TimeoutMsMeta>(_collector, _version, TimeoutMs);
+    NPrivate::Size<ValidateOnlyMeta>(_collector, _version, ValidateOnly);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TCreatePartitionsRequestData::TCreatePartitionsTopic
+//
+const TCreatePartitionsRequestData::TCreatePartitionsTopic::NameMeta::Type TCreatePartitionsRequestData::TCreatePartitionsTopic::NameMeta::Default = {""};
+const TCreatePartitionsRequestData::TCreatePartitionsTopic::CountMeta::Type TCreatePartitionsRequestData::TCreatePartitionsTopic::CountMeta::Default = 0;
+
+TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsTopic() 
+        : Name(NameMeta::Default)
+        , Count(CountMeta::Default)
+{}
+
+void TCreatePartitionsRequestData::TCreatePartitionsTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TCreatePartitionsRequestData::TCreatePartitionsTopic";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<CountMeta>(_readable, _version, Count);
+    NPrivate::Read<AssignmentsMeta>(_readable, _version, Assignments);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TCreatePartitionsRequestData::TCreatePartitionsTopic::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TCreatePartitionsRequestData::TCreatePartitionsTopic";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<CountMeta>(_collector, _writable, _version, Count);
+    NPrivate::Write<AssignmentsMeta>(_collector, _writable, _version, Assignments);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TCreatePartitionsRequestData::TCreatePartitionsTopic::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<CountMeta>(_collector, _version, Count);
+    NPrivate::Size<AssignmentsMeta>(_collector, _version, Assignments);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment
+//
+
+TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment::TCreatePartitionsAssignment() 
+{}
+
+void TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment";
+    }
+    NPrivate::Read<BrokerIdsMeta>(_readable, _version, BrokerIds);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<BrokerIdsMeta>(_collector, _writable, _version, BrokerIds);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssignment::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<BrokerIdsMeta>(_collector, _version, BrokerIds);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TCreatePartitionsResponseData
+//
+const TCreatePartitionsResponseData::ThrottleTimeMsMeta::Type TCreatePartitionsResponseData::ThrottleTimeMsMeta::Default = 0;
+
+TCreatePartitionsResponseData::TCreatePartitionsResponseData() 
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+{}
+
+void TCreatePartitionsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TCreatePartitionsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<ResultsMeta>(_readable, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TCreatePartitionsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TCreatePartitionsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ResultsMeta>(_collector, _writable, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TCreatePartitionsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ResultsMeta>(_collector, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TCreatePartitionsResponseData::TCreatePartitionsTopicResult
+//
+const TCreatePartitionsResponseData::TCreatePartitionsTopicResult::NameMeta::Type TCreatePartitionsResponseData::TCreatePartitionsTopicResult::NameMeta::Default = {""};
+const TCreatePartitionsResponseData::TCreatePartitionsTopicResult::ErrorCodeMeta::Type TCreatePartitionsResponseData::TCreatePartitionsTopicResult::ErrorCodeMeta::Default = 0;
+const TCreatePartitionsResponseData::TCreatePartitionsTopicResult::ErrorMessageMeta::Type TCreatePartitionsResponseData::TCreatePartitionsTopicResult::ErrorMessageMeta::Default = std::nullopt;
+
+TCreatePartitionsResponseData::TCreatePartitionsTopicResult::TCreatePartitionsTopicResult() 
+        : Name(NameMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+        , ErrorMessage(ErrorMessageMeta::Default)
+{}
+
+void TCreatePartitionsResponseData::TCreatePartitionsTopicResult::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TCreatePartitionsResponseData::TCreatePartitionsTopicResult";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TCreatePartitionsResponseData::TCreatePartitionsTopicResult::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TCreatePartitionsResponseData::TCreatePartitionsTopicResult";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<ErrorMessageMeta>(_collector, _writable, _version, ErrorMessage);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TCreatePartitionsResponseData::TCreatePartitionsTopicResult::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<ErrorMessageMeta>(_collector, _version, ErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);

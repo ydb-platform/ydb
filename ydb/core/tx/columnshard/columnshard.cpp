@@ -258,7 +258,7 @@ ui64 TColumnShard::MemoryUsage() const {
         CommitsInFlight.size() * sizeof(TCommitMeta) +
         LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
         LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
-        (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
+        (WaitingReads.size() + WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();

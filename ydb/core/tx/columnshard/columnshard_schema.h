@@ -392,23 +392,23 @@ struct Schema : NIceDb::Schema {
 
     static void SaveSchemaPresetVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 id, const TRowVersion& version,
+            ui64 id, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(serialized));
     }
 
-    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) {
+    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const NOlap::TSnapshot& dropVersion) {
         db.Table<SchemaPresetInfo>().Key(id).Update(
-            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.Step),
-            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.TxId));
+            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.GetPlanStep()),
+            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.GetTxId()));
     }
 
-    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) {
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete();
+    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const NOlap::TSnapshot& version) {
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
     static void EraseSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
@@ -424,12 +424,12 @@ struct Schema : NIceDb::Schema {
 
     static void SaveTableVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 pathId, const TRowVersion& version,
+            ui64 pathId, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TTableVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Update(
+        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
 
@@ -441,8 +441,8 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
 
-    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const TRowVersion& version) {
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Delete();
+    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const NOlap::TSnapshot& version) {
+        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
     static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {

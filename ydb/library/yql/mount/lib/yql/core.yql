@@ -3,7 +3,7 @@
 (let Unequals (lambda '(value) (lambda '(x) (!= x value))))
 
 (let FindIndex (lambda '(list predicate) (block '(
-   (let enumerated (Enumerate list))
+   (let enumerated (Enumerate (Coalesce list (EmptyList))))
    (let filtered (Filter enumerated (lambda '(x) (Coalesce (Apply predicate (Nth x '1)) (Bool '0)))))
    (return (Nth (ToOptional filtered) '0))
 ))))

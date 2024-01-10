@@ -228,7 +228,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
-struct TEvCreateTopicsResponse : public NActors::TEventLocal<TEvCreateTopicsResponse, EvCreateTopicsResponse> 
+struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse> 
                            , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
 {
     enum EStatus {
@@ -236,9 +236,10 @@ struct TEvCreateTopicsResponse : public NActors::TEventLocal<TEvCreateTopicsResp
         ERROR,
         BAD_REQUEST,
         INVALID_CONFIG,
+        TOPIC_DOES_NOT_EXIST,
     };
 
-    TEvCreateTopicsResponse()
+    TEvTopicModificationResponse()
     {}
 
     TString TopicPath;

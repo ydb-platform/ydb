@@ -41,12 +41,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "joincol = joincol",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

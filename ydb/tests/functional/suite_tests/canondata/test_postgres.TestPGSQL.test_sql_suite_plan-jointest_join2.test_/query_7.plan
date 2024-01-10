@@ -41,12 +41,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "x1 = y1",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

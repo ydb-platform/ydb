@@ -299,10 +299,32 @@ namespace NActors {
         using TEventObserverCollection = std::list<std::function<void(TAutoPtr<IEventHandle>& event)>>;
         class TEventObserverHolder {
         public:
-            TEventObserverHolder(TEventObserverCollection& list, TEventObserverCollection::iterator&& iter)
+            TEventObserverHolder()
+                : List(nullptr)
+            {
+            }
+
+            TEventObserverHolder(TEventObserverCollection* list, TEventObserverCollection::iterator&& iter)
                 : List(list)
                 , Iter(iter)
             {
+            }
+
+            TEventObserverHolder(TEventObserverHolder&& other)
+                : List(nullptr)
+            {
+                *this = std::move(other);
+            }
+
+            TEventObserverHolder& operator=(TEventObserverHolder&& other) noexcept {
+                if (this != &other)
+                {
+                    List = std::move(other.List);
+                    Iter = std::move(other.Iter);
+
+                    other.List = nullptr;
+                }
+                return *this;
             }
 
             ~TEventObserverHolder()
@@ -312,23 +334,25 @@ namespace NActors {
 
             void Remove()
             {
-                if (Iter == List.end()) {
+                if (List == nullptr || Iter == List->end()) {
                     return;
                 }
 
-                List.erase(Iter);
-                Iter = List.end();
+                List->erase(Iter);
+                Iter = List->end();
+
+                List = nullptr;
             }
         private:
-            TEventObserverCollection& List;
+            TEventObserverCollection* List;
             TEventObserverCollection::iterator Iter;
         };
 
         // An example of using AddObserver in unit tests
         /*
             auto observerHolder = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& event) {
-                // Do something with the event inside the calback
-                Cout << "An event is observed " << ev->Get()->Record.ShortDebugString() << Endl;
+                // Do something with the event inside the callback
+                Cout << "An event is observed " << event->Get()->Record.ShortDebugString() << Endl;
 
                 // Optionally reset the event, all subsequent handlers of this event will not be called
                 event.Reset();
@@ -349,13 +373,13 @@ namespace NActors {
             };
 
             auto iter = ObserverFuncs.insert(ObserverFuncs.end(), baseFunc);
-            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+            return TEventObserverHolder(&ObserverFuncs, std::move(iter));
         }
 
         TEventObserverHolder AddObserver(std::function<void(TAutoPtr<IEventHandle>&)> observerFunc)
         {
             auto iter = ObserverFuncs.insert(ObserverFuncs.end(), observerFunc);
-            return TEventObserverHolder(ObserverFuncs, std::move(iter));
+            return TEventObserverHolder(&ObserverFuncs, std::move(iter));
         }
 
         template<typename T>

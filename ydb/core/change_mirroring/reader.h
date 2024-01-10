@@ -31,7 +31,7 @@ public:
      * it's up to specific implementation to distinguish
      * how to notify the user about polling result
      */
-    virtual void Poll() = 0;
+    virtual void Poll(std::function<void(IReader&)> func) = 0;
 };
 
 } // namespace NKikimr::NChangeMirroring

@@ -18,13 +18,23 @@ class TActorReader
     : public TActorBootstrapped<TActorReader>
     , public IReader
 {
+    struct TEvPrivate {
+        enum EEv {
+            EvPoll = EventSpaceBegin(TEvents::ES_PRIVATE),
+        };
+
+        struct TEvPoll : public TEventLocal<TEvPoll, EEv::EvPoll> {
+            TEvPoll(std::function<void(IReader&)> cb)
+                : callback(cb)
+            {}
+            std::function<void(IReader&)> callback;
+        };
+    };
 public:
     TActorReader(
-        TTestActorRuntime& runtime,
-        std::function<void(const TActorContext& ctx)> onPoll,
+        const TActorId& edge,
         const TVector<TRcBuf>& data)
-        : Runtime(runtime)
-        , OnPoll(onPoll)
+        : ParentActorId(edge)
         , Data(data)
     {}
 
@@ -43,29 +53,37 @@ public:
     bool NeedPoll() const override {
         return MaxPolled < Data.size();
     }
-    void Poll() override {
-        Runtime.Send(new IEventHandle(SelfId(), TActorId(), new TEvents::TEvWakeup()));
+
+    void Poll(std::function<void(IReader&)> callback) override {
+        Y_VERIFY(NActors::TlsActivationContext && NActors::TlsActivationContext->ExecutorThread.ActorSystem, "Method must be called in actor system context");
+        TActivationContext::ActorSystem()->Send(SelfId(), new TEvPrivate::TEvPoll(callback));
+    }
+
+    void PollDerived(std::function<void(TActorReader&)> callback) {
+        Poll([cb = callback](IReader& reader) -> void {
+            TActorReader& self = static_cast<TActorReader&>(reader);
+            return cb(self);
+        });
     }
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        Poll();
+        Send(ParentActorId, new TEvents::TEvWakeup);
     }
 
-    void OnPollFinished() {
+    void OnPollFinished(TEvPrivate::TEvPoll::TPtr &ev) {
         MaxPolled = std::max(Data.size(), MaxPolled + PollBatchSize);
-        OnPoll(ActorContext());
+        ev->Get()->callback(*this);
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TEvWakeup::EventType, OnPollFinished);
+            hFunc(TEvPrivate::TEvPoll, OnPollFinished);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 private:
-    TTestActorRuntime& Runtime;
-    std::function<void(const TActorContext& ctx)> OnPoll;
+    const TActorId ParentActorId;
     TVector<TRcBuf> Data;
     ui64 Offset = 0;
     ui64 PollBatchSize = 4;
@@ -95,20 +113,22 @@ Y_UNIT_TEST_SUITE(Reader) {
         }
 
         const auto edge = runtime.AllocateEdgeActor(0);
-        auto* reader = new TActorReader(runtime, [&] (const TActorContext& ctx) {
-            ctx.Send(edge, new TEvents::TEvWakeup);
-        }, slicedData);
+        auto* reader = new TActorReader(edge, slicedData);
         runtime.Register(reader);
 
         TAutoPtr<IEventHandle> handle;
-        // wait initial read
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
+
+        runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
 
         TString result;
 
         while (reader->HasNext() || reader->NeedPoll()) {
             if (reader->NeedPoll()) {
-                reader->Poll();
+                runtime.RunInActorContext(edge, [&](){
+                    reader->PollDerived([&](TActorReader& reader) {
+                        reader.ActorContext().Send(edge, new TEvents::TEvWakeup);
+                    });
+                });
                 // wait poll
                 runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
             }

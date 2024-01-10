@@ -7372,16 +7372,16 @@
     ],
     "test_sql2yql.test[join-inmem_with_set_key]": [
         {
-            "checksum": "1f01980606f9f7593a2eafd8986a411e",
-            "size": 2486,
-            "uri": "https://{canondata_backend}/1937027/b5576dd03b65095c35e7cb4954821e4f66817b94/resource.tar.gz#test_sql2yql.test_join-inmem_with_set_key_/sql.yql"
+            "checksum": "3ccabe5b0575cafb48b98dd6a72cac78",
+            "size": 4725,
+            "uri": "https://{canondata_backend}/1599023/14a33c83ee9ed00bbb41531eba5a0e67835b3ba6/resource.tar.gz#test_sql2yql.test_join-inmem_with_set_key_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-inmem_with_set_key_any]": [
         {
-            "checksum": "75447470e50bc55ae4670d95950b58a6",
-            "size": 2542,
-            "uri": "https://{canondata_backend}/1937027/b5576dd03b65095c35e7cb4954821e4f66817b94/resource.tar.gz#test_sql2yql.test_join-inmem_with_set_key_any_/sql.yql"
+            "checksum": "08586e0491006133758dbdcd93ed71bf",
+            "size": 4781,
+            "uri": "https://{canondata_backend}/1599023/14a33c83ee9ed00bbb41531eba5a0e67835b3ba6/resource.tar.gz#test_sql2yql.test_join-inmem_with_set_key_any_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-inner_all]": [
@@ -24690,16 +24690,16 @@
     ],
     "test_sql_format.test[join-inmem_with_set_key]": [
         {
-            "checksum": "250a8dcd468125a7334d95bf1d96f928",
-            "size": 738,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-inmem_with_set_key_/formatted.sql"
+            "checksum": "9fc8b32523e8ce97343d515e11bd4633",
+            "size": 1035,
+            "uri": "https://{canondata_backend}/1599023/14a33c83ee9ed00bbb41531eba5a0e67835b3ba6/resource.tar.gz#test_sql_format.test_join-inmem_with_set_key_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-inmem_with_set_key_any]": [
         {
-            "checksum": "9442a259dafd5fa6d410b9709ca78bb4",
-            "size": 754,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_join-inmem_with_set_key_any_/formatted.sql"
+            "checksum": "23792c7c0533b85348359838bfc719c1",
+            "size": 1051,
+            "uri": "https://{canondata_backend}/1599023/14a33c83ee9ed00bbb41531eba5a0e67835b3ba6/resource.tar.gz#test_sql_format.test_join-inmem_with_set_key_any_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-inner_all]": [

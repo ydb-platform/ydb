@@ -75,11 +75,13 @@ class TCompletionChunkWrite : public TCompletionAction {
     ui8 PriorityClass;
     std::function<void()> OnDestroy;
     TReqId ReqId;
+    NWilson::TSpan Span;
 
 public:
     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
-            ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId)
+            ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId,
+            NWilson::TSpan&& span)
         : Recipient(recipient)
         , Event(event)
         , Mon(mon)
@@ -89,6 +91,7 @@ public:
         , PriorityClass(priorityClass)
         , OnDestroy(std::move(onDestroy))
         , ReqId(reqId)
+        , Span(std::move(span))
     {
     }
 
@@ -98,6 +101,7 @@ public:
 
     void Exec(TActorSystem *actorSystem) override {
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
+        Span.EndOk();
         LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
                 "PDiskId# " << PDiskId << " ReqId# " << ReqId
             << "TCompletionChunkWrite " << Event->ToString().data()
@@ -115,6 +119,7 @@ public:
     }
 
     void Release(TActorSystem *actorSystem) override {
+        Span.EndError(ErrorReason);
         Event->Status = NKikimrProto::CORRUPTED;
         Event->ErrorReason = ErrorReason;
         actorSystem->Send(Recipient, Event.Release());

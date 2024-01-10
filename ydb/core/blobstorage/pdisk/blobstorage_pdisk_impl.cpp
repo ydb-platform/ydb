@@ -2972,7 +2972,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --inFlight->ChunkWrites;
             };
             ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PDiskId,
-                    ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId);
+                    ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
+                    ev.SpanStack.CreateChild(TWilson::PDisk, "PDisk.ChunkWrite.Completion"));
 
             return true;
         }

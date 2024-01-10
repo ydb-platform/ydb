@@ -1,5 +1,5 @@
 ### FOSSASIA Summit. YDB — an open-source Distributed SQL Database (EN)
-YDB используется там, где нужна стабильность, масштабируемость и гибкость. Её применяют как основную СУБД при работе с большими нагрузками. [{{ team.bondar.name }}]({{ team.bondar.profile }}) ({{ team.bondar.position }}) рассказал об устройстве YDB, ей основных свойствах и преимуществах.
+YDB используется там, где нужна стабильность, масштабируемость и гибкость. Её применяют как основную СУБД при работе с большими нагрузками. [ {{ team.bondar.name }} ]( {{ team.bondar.profile }} ) ( {{ team.bondar.position }} ) рассказал об устройстве YDB, ей основных свойствах и преимуществах.
 
 @[YouTube](https://www.youtube.com/watch?v=A0O7yr9_1Tg)
 

@@ -23,10 +23,6 @@ public:
         PassAway();
     }
 
-    TString GetDescription() const override {
-        return "ReleaseWaitActor";
-    }
-
     TSubActorId GetId() const override {
         return SelfId().LocalId();
     }

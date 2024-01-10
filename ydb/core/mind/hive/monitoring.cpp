@@ -2427,10 +2427,6 @@ public:
         PassAway();
     }
 
-    TString GetDescription() const override {
-        return "DrainWaitActor";
-    }
-
     TSubActorId GetId() const override {
         return SelfId().LocalId();
     }
@@ -2606,10 +2602,6 @@ public:
 
     void Cleanup() override {
         PassAway();
-    }
-
-    TString GetDescription() const override {
-        return "ReassignWaitActor";
     }
 
     TSubActorId GetId() const override {
@@ -2790,10 +2782,6 @@ public:
         PassAway();
     }
 
-    TString GetDescription() const override {
-        return "InitMigrationWaitActor";
-    }
-
     TSubActorId GetId() const override {
         return SelfId().LocalId();
     }
@@ -2875,10 +2863,6 @@ public:
         PassAway();
     }
 
-    TString GetDescription() const override {
-        return "QueryMigrationWaitActor";
-    }
-
     TSubActorId GetId() const override {
         return SelfId().LocalId();
     }
@@ -2950,10 +2934,6 @@ public:
 
     void Cleanup() override {
         PassAway();
-    }
-
-    TString GetDescription() const override {
-        return "MoveWaitActor";
     }
 
     TSubActorId GetId() const override {
@@ -3048,10 +3028,6 @@ public:
         PassAway();
     }
 
-    TString GetDescription() const override {
-        return "StopWaitActor";
-    }
-
     TSubActorId GetId() const override {
         return SelfId().LocalId();
     }
@@ -3132,10 +3108,6 @@ public:
 
     void Cleanup() override {
         PassAway();
-    }
-
-    TString GetDescription() const override {
-        return "ResumeWaitActor";
     }
 
     TSubActorId GetId() const override {

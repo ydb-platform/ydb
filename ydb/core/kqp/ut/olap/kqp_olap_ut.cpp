@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
@@ -5282,6 +5283,39 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cout << output << Endl;
         CompareYson(output, R"([[10u;]])");
     }
+
+    Y_UNIT_TEST(DuplicatesInIncomingBatch) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val1").AddNull();
+            tableInserter.AddRow().Add(3).Add("test_res_3").Add("val3").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
+            testHelper.InsertData(testTable, tableInserter);
+        }
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+    }
+
 }
 
 } // namespace NKqp

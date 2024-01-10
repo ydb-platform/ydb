@@ -809,13 +809,13 @@ public:
         for (NKikimrViewer::TNodeInfo& nodeInfo : *result.MutableNodes()) {
             if (Storage) {
                 {
-                    auto cont(*nodeInfo.MutablePDisks());
+                    auto& cont(*nodeInfo.MutablePDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) -> bool {
                         return a.GetPath() < b.GetPath();
                     });
                 }
                 {
-                    auto cont(*nodeInfo.MutableVDisks());
+                    auto& cont(*nodeInfo.MutableVDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) -> bool {
                         return VDiskIDFromVDiskID(a.GetVDiskId()) < VDiskIDFromVDiskID(b.GetVDiskId());
                     });
@@ -823,7 +823,7 @@ public:
             }
             if (Tablets) {
                 {
-                    auto cont(*nodeInfo.MutableTablets());
+                    auto& cont(*nodeInfo.MutableTablets());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) -> bool {
                         return a.GetType() < b.GetType();
                     });

@@ -8,7 +8,7 @@
 namespace NKikimr::NPQ {
 
 IActor* CreateRequester(TActorId parent, TPartitionSourceManager::TPartitionId partition, ui64 tabletId);
-bool IsResearchRequires(std::optional<const TPartitionGraph::Node*> node);
+bool IsResearchRequires(const TPartitionGraph::Node* node);
 
 //
 // TPartitionSourceManager
@@ -37,7 +37,7 @@ void TPartitionSourceManager::ScheduleBatch() {
 
     PendingSourceIds = std::move(UnknownSourceIds);
 
-    for(const auto* parent : node.value()->HierarhicalParents) {
+    for(const auto* parent : node->HierarhicalParents) {
         PendingCookies.insert(++Cookie);
 
         TActorId actorId = PartitionRequester(parent->Id, parent->TabletId);
@@ -141,7 +141,7 @@ void TPartitionSourceManager::Handle(TEvPQ::TEvSourceIdResponse::TPtr& ev, const
     }
 }
 
-TPartitionSourceManager::TPartitionNode TPartitionSourceManager::GetPartitionNode() const {
+const TPartitionSourceManager::TPartitionNode* TPartitionSourceManager::GetPartitionNode() const {
     return Partition.PartitionGraph.GetPartition(Partition.Partition);
 }
 
@@ -484,8 +484,8 @@ IActor* CreateRequester(TActorId parent, TPartitionSourceManager::TPartitionId p
     return new TSourceIdRequester(parent, partition, tabletId);
 }
 
-bool IsResearchRequires(std::optional<const TPartitionGraph::Node*> node)  {
-    return node && !node.value()->Parents.empty();
+bool IsResearchRequires(const TPartitionGraph::Node* node)  {
+    return node && !node->Parents.empty();
 }
 
 NKikimrPQ::TEvSourceIdResponse::EState Convert(TSourceIdInfo::EState value) {

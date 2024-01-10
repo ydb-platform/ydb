@@ -58,7 +58,11 @@ IActor* CreatePartitionChooserActor(TActorId parentId,
                                     std::optional<ui32> preferedPartition,
                                     bool withoutHash) {
     auto chooser = CreatePartitionChooser(config, withoutHash);
-    return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+    if (SplitMergeEnabled(config.GetPQTabletConfig())) {
+        return new NPartitionChooser::TSMPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+    } else {
+        return new NPartitionChooser::TPartitionChooserActor<NTabletPipe::TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition);
+    }
 }
 
 } // namespace NKikimr::NPQ

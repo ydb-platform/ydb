@@ -40,7 +40,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
     auto* r = resp.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
     r->SetOwnerCookie(cookie);
-    r->SetStatus(PartitionConfig->GetStatus());
+    r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
     r->SetRegistered(registered);
 
     ctx.Send(Tablet, response.Release());

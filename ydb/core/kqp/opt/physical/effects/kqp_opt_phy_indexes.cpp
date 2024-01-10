@@ -138,6 +138,8 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& l
 
     TExprNode::TPtr keys;
 
+    // we need to left only table key columns to perform lookup
+    // unfortunately we can't do it inside lookup stage
     if (fixLookupKeys) {
         auto keyArg = TCoArgument(ctx.NewArgument(pos, "key"));
         auto keysList = TCoArgument(ctx.NewArgument(pos, "keys_list"));

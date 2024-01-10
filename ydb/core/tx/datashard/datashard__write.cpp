@@ -254,4 +254,15 @@ ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode tx
             Y_FAIL_S("Unexpected tx mode " << txMode);
     }
 }
+
+NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
+    NKikimrDataEvents::TEvWrite::ETxMode txMode;
+    if ((flags & TTxFlags::Immediate) && !(flags & TTxFlags::ForceOnline))
+        txMode = NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_IMMEDIATE;
+    else if (flags & TTxFlags::VolatilePrepare)
+        txMode = NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_VOLATILE_PREPARE;
+    else
+        txMode = NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_PREPARE;
+    return txMode;
+}
 }

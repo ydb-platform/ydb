@@ -13,5 +13,6 @@ class Convertor {
 public:
     static ui64 GetTxId(const TAutoPtr<IEventHandle>& ev);
     static ui64 GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode);
+    static NKikimrDataEvents::TEvWrite::ETxMode GetTxMode(ui64 flags);
 };
 }

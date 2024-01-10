@@ -234,59 +234,6 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvRead : public TEventPB<TEvRead, NKikimrTxColumnShard::TEvRead, TEvColumnShard::EvRead> {
-        TEvRead() = default;
-
-        TEvRead(const TActorId& source, ui64 metaShard, ui64 planStep, ui64 txId, ui64 tableId = 0) {
-            ActorIdToProto(source, Record.MutableSource());
-            Record.SetTxInitiator(metaShard);
-            Record.SetPlanStep(planStep);
-            Record.SetTxId(txId);
-            Record.SetTableId(tableId);
-        }
-
-        TActorId GetSource() const {
-            return ActorIdFromProto(Record.GetSource());
-        }
-    };
-
-    struct TEvReadResult : public TEventPB<TEvReadResult, NKikimrTxColumnShard::TEvReadResult,
-                            TEvColumnShard::EvReadResult> {
-        TEvReadResult() = default;
-
-        TEvReadResult(ui64 origin, ui64 metaShard, ui64 planStep, ui64 txId, ui64 tableId, ui32 batch,
-                      bool finished, ui32 status) {
-            Record.SetOrigin(origin);
-            Record.SetTxInitiator(metaShard);
-            Record.SetPlanStep(planStep);
-            Record.SetTxId(txId);
-            Record.SetTableId(tableId);
-            Record.SetBatch(batch);
-            Record.SetFinished(finished);
-            Record.SetStatus(status);
-        }
-
-        TEvReadResult(const TEvReadResult& ev) {
-            Record.CopyFrom(ev.Record);
-        }
-
-        std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const {
-            const auto& scheme = Record.GetMeta().GetSchema();
-            if (scheme.empty() || Record.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
-                return nullptr;
-            }
-            const auto arrowSchema = NArrow::DeserializeSchema(scheme);
-            if (Record.GetData().empty()) {
-                return NArrow::MakeEmptyBatch(arrowSchema);
-            }
-            return NArrow::DeserializeBatch(Record.GetData(), arrowSchema);
-        }
-
-        bool HasMore() const {
-            return !Record.GetFinished();
-        }
-    };
-
     using TEvScan = TEvDataShard::TEvKqpScan;
 };
 
@@ -306,15 +253,7 @@ inline auto& Proto(TEvColumnShard::TEvWrite* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvRead* ev) {
-    return ev->Record;
-}
-
 inline auto& Proto(TEvColumnShard::TEvWriteResult* ev) {
-    return ev->Record;
-}
-
-inline auto& Proto(TEvColumnShard::TEvReadResult* ev) {
     return ev->Record;
 }
 

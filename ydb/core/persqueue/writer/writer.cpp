@@ -20,6 +20,8 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
+#include <ydb/library/dbgtrace/debug_trace.h>
+
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -336,6 +338,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        DBGTRACE("TPartitionWriter::HandleMaxSeqNo");
+
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -460,12 +464,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Handle(TEvPartitionWriter::TEvWriteRequest::TPtr& ev, const TActorContext& ctx) {
+        DBGTRACE("TPartitionWriter::Handle(TEvPartitionWriter::TEvWriteRequest)");
+
         if (HoldPending(ev)) {
             ReserveBytes(ctx);
         }
     }
 
     void ReserveBytes(const TActorContext& ctx) {
+        DBGTRACE("TPartitionWriter::ReserveBytes");
+
         if (IsQuotaInflight()) {
             return;
         }
@@ -495,6 +503,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize());
                 PendingQuota.emplace_back(it->first);
             }
+
+            DBGTRACE_LOG("ev.CmdReserveBytes.Size=" << cmd.GetSize());
 
             NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 

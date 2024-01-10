@@ -25,6 +25,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
+#include <ydb/library/dbgtrace/debug_trace.h>
+
 namespace NKikimr::NPQ {
 
 static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -1134,6 +1136,8 @@ void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const
 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvKeyValue::TEvResponse)");
+
     auto& resp = ev->Get()->Record;
 
     switch (resp.GetCookie()) {
@@ -1177,7 +1181,16 @@ void TPersQueue::Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
-    auto it = Partitions.find(ev->Get()->Partition);
+    const auto partitionId = ev->Get()->Partition;
+
+    //
+    // FIXME(abcdef): костыль. добавил для теста
+    //
+    if (partitionId >= 100'000) {
+        return;
+    }
+
+    auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
     auto diff = ev->Get()->Counters.MakeDiffForAggr(it->second.Baseline);
     ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
@@ -1242,7 +1255,16 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {
-    auto it = Partitions.find(ev->Get()->Partition);
+    const auto partitionId = ev->Get()->Partition;
+
+    //
+    // FIXME(abcdef): костыль. добавил для теста
+    //
+    if (partitionId >= 100'000) {
+        return;
+    }
+
+    auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
     const TString& group = ev->Get()->LabeledCounters.GetGroup();
     it->second.LabeledCounters[group] = ev->Get()->LabeledCounters;
@@ -1253,7 +1275,16 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext& ctx)
 {
-    auto it = Partitions.find(ev->Get()->Partition);
+    const auto partitionId = ev->Get()->Partition;
+
+    //
+    // FIXME(abcdef): костыль. добавил для теста
+    //
+    if (partitionId >= 100'000) {
+        return;
+    }
+
+    auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
     const TString& group = ev->Get()->Group;
     auto jt = it->second.LabeledCounters.find(group);
@@ -1279,6 +1310,14 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
+
+    //
+    // FIXME(abcdef): костыль. добавил для теста
+    //
+    if (partitionId >= 100'000) {
+        return;
+    }
+
     auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
     Y_ABORT_UNLESS(!it->second.InitDone);
@@ -2418,13 +2457,25 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
                                        const TActorId& sender,
                                        const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::HandleShadowPartition");
+
     Y_ABORT_UNLESS(req.HasWriteId());
+
+    if (PendingPersistWriteId) {
+        ReserveBytesRequestQueue.push_back({responseCookie, req, sender});
+        return;
+    }
 
     ui64 writeId = req.GetWriteId();
     ui32 partitionId = req.GetPartition();
 
+    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+    DBGTRACE_LOG("req.CmdWriteSize=" << req.CmdWriteSize());
+    DBGTRACE_LOG("req.HasCmdReserveBytes=" << req.HasCmdReserveBytes());
+
     if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
         const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
         const TActorId& actorId = partition.Actor;
@@ -2445,6 +2496,8 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
 
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvRequest)");
+
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
@@ -3090,14 +3143,27 @@ bool TPersQueue::CanProcessDeleteTxs() const
 
 void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::TryPersistWriteId");
+
     if (PendingPersistWriteId) {
+        DBGTRACE_LOG("PendingPersistWriteId=" << (int)PendingPersistWriteId);
         return;
     }
+
+    DBGTRACE_LOG("ReserveBytesRequestParams.size=" << ReserveBytesRequestParams.size());
+    DBGTRACE_LOG("ReserveBytesRequestQueue.size=" << ReserveBytesRequestQueue.size());
 
     Y_ABORT_UNLESS(ReserveBytesRequestParams.empty());
 
     for (auto& params : ReserveBytesRequestQueue) {
-        TxWrites[params.Request.GetWriteId()].Partitions[params.Request.GetPartition()] = NextShadowPartitionId++;
+        ui64 writeId = params.Request.GetWriteId();
+        ui32 partitionId = params.Request.GetPartition();
+
+        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+        DBGTRACE_LOG("new shadowPartitionId=" << NextShadowPartitionId);
+
+        TxWrites[writeId].Partitions[partitionId] = NextShadowPartitionId++;
+
         ReserveBytesRequestParams.push_back(std::move(params));
     }
 
@@ -3118,6 +3184,8 @@ void TPersQueue::BeginPersistWriteId(const ui64 responseCookie,
                                      const TActorContext& ctx,
                                      const TActorId& sender)
 {
+    DBGTRACE("TPersQueue::BeginPersistWriteId");
+
     ReserveBytesRequestQueue.push_back({responseCookie, req, sender});
 
     TryPersistWriteId(ctx);
@@ -3125,6 +3193,8 @@ void TPersQueue::BeginPersistWriteId(const ui64 responseCookie,
 
 void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::EndPersistWriteId");
+
     Y_ABORT_UNLESS(PendingPersistWriteId);
 
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK);
@@ -3155,20 +3225,29 @@ void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const T
 
 void TPersQueue::ForwardReserveBytesRequestsToShadowPartitions(const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::ForwardReserveBytesRequestsToShadowPartitions");
+
     for (auto& params : ReserveBytesRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
         ui32 partitionId = params.Request.GetPartition();
+
+        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-        Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
-        TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
 
-        if (partition.Actor == TActorId()) {
+        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
+
+        if (!ShadowPartitions.contains(shadowPartitionId)) {
+            DBGTRACE_LOG("CreateShadowPartition");
             CreateShadowPartition(shadowPartitionId, ctx);
         }
+        Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+
+        TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+        Y_ABORT_UNLESS(partition.Actor);
         TActorId pipeClient = ActorIdFromProto(params.Request.GetPipeClient());
 
-        Y_ABORT_UNLESS(partition.Actor);
         HandleReserveBytesRequest(params.Cookie,
                                   partition.Actor,
                                   params.Request,

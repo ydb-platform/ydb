@@ -1040,18 +1040,16 @@ public:
                 auto call = r->val;
                 if (NodeTag(call) == T_FuncCall) {
                     auto fn = CAST_NODE(FuncCall, call);
-                    if (ListLength(fn->funcname) > 1) {
-                        AddError("Expected 1 argument as function name");
-                        return nullptr;
-                    }
-                    auto nameNode = ListNodeNth(fn->funcname, 0);
-                    if (NodeTag(nameNode) != T_String) {
-                        AddError("Function name must be string");
-                        return nullptr;
-                    }
-                    auto name = to_lower(TString(StrVal(ListNodeNth(fn->funcname, 0))));
-                    if (name == "set_config") {
-                        return ParseSetConfig(fn);
+                    if (ListLength(fn->funcname) == 1) {
+                        auto nameNode = ListNodeNth(fn->funcname, 0);
+                        if (NodeTag(nameNode) != T_String) {
+                            AddError("Function name must be string");
+                            return nullptr;
+                        }
+                        auto name = to_lower(TString(StrVal(ListNodeNth(fn->funcname, 0))));
+                        if (name == "set_config") {
+                            return ParseSetConfig(fn);
+                        }
                     }
                 }
             }
@@ -2381,10 +2379,12 @@ public:
         case TRANS_STMT_COMMIT:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
+            Settings.GUCSettings->Commit();
             return true;
         case TRANS_STMT_ROLLBACK:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"), QL(QL(QA("mode"), QA("rollback"))))));
+            Settings.GUCSettings->RollBack();
             return true;
         default:
             AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
@@ -2523,7 +2523,7 @@ public:
         }
         if (schemaname == "") {
             auto search_path = Settings.GUCSettings->Get("search_path");
-            if (!search_path || search_path == "public") {
+            if (!search_path || *search_path == "public") {
                 return Settings.DefaultCluster;
             }
             return TStringBuf(*search_path);

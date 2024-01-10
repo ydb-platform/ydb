@@ -279,6 +279,21 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
     return {baseInput, inputCols};
 }
 
+///TExprBase BuildUpsertTableUsingSink(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+///    const TCoAtomList& autoincrement,
+///    const TKikimrTableDescription& table, TExprContext& ctx)
+///{
+///    const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx);
+///    auto effect = Build<TKqlTableSinkOutput>(ctx, write.Pos())
+///        .Table(BuildTableMeta(table, write.Pos(), ctx))
+///        .Input(input.Ptr())
+///        .Columns(columns.Ptr())
+///        .ReturningColumns(write.ReturningColumns())
+///        .Done();
+///
+///    return effect;
+///}
+
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement,
     const TKikimrTableDescription& table, TExprContext& ctx)
@@ -784,6 +799,23 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
     return BuildReadTable(read, tableData, view && view->PrimaryFlag, withSystemColumns, ctx, kqpCtx).Ptr();
 }
 
+//TExprBase WriteTableUsingSink(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+//    const TCoAtomList& autoincrement,
+//    const TKikimrTableDescription& tableData, TExprContext& ctx)
+//{
+//    auto op = GetTableOp(write);
+//    switch (op) {
+//        case TYdbOperation::Upsert:
+//            return BuildUpsertTableUsingSink(write, inputColumns, autoincrement, tableData, ctx);
+//        case TYdbOperation::Replace:
+//            //TODO: return BuildReplaceTableUsingSink(write, inputColumns, autoincrement, tableData, ctx);
+//        case TYdbOperation::InsertAbort:
+//        case TYdbOperation::InsertRevert:
+//        default:
+//            YQL_ENSURE(false, "Unsupported table operation: " << op << ", table: " << tableData.Metadata->Name);
+//    }
+//}
+
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
@@ -853,6 +885,9 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
         }
     }
 
+    //if (tableData.Metadata->Kind == EKikimrTableKind::Olap) {
+    //    return WriteTableUsingSink(write, inputColumns, defaultConstraintColumns, tableData, ctx).Ptr();
+    //}
     if (HasIndexesToWrite(tableData)) {
         return WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx).Ptr();
     } else {

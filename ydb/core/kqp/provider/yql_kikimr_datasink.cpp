@@ -607,6 +607,22 @@ public:
         return true;
     }
 
+    bool CheckIOOlap(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx) {
+        TKiDataSink dataSink(node->ChildPtr(1));
+        auto& tableDesc = SessionCtx->Tables().GetTable(TString{dataSink.Cluster()}, key.GetTablePath());
+        if (!tableDesc.Metadata || tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
+            return true;
+        }
+
+        // TODO: insert???
+        if (mode != "upsert" && mode != "replace") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables"));
+            return false;
+        }
+
+        return true;
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
@@ -626,6 +642,10 @@ public:
 
                 if (resultNode) {
                     return resultNode;
+                }
+
+                if (!CheckIOOlap(key, node, mode, ctx)) {
+                    return nullptr;
                 }
 
                 if (!settings.ReturningList.IsValid()) {

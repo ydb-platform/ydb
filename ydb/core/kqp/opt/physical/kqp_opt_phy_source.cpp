@@ -29,6 +29,7 @@ bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescri
 }
 
 TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    YQL_CLOG(DEBUG, ProviderKqp) << "TEST!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
     auto stage = node.Cast<TDqStage>();
     struct TMatchedRead {
         TExprBase Expr;

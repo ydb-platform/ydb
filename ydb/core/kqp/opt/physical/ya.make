@@ -6,6 +6,7 @@ SRCS(
     kqp_opt_phy_olap_agg.cpp
     kqp_opt_phy_olap_filter.cpp
     kqp_opt_phy_precompute.cpp
+    #kqp_opt_phy_sink.cpp
     kqp_opt_phy_sort.cpp
     kqp_opt_phy_source.cpp
     kqp_opt_phy_helpers.cpp

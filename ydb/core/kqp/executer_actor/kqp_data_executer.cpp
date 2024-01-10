@@ -1658,7 +1658,6 @@ private:
         if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
             return true;
         }
-<<<<<<< HEAD
 
         for (const auto& input : stage.GetInputs()) {
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
@@ -1668,12 +1667,15 @@ private:
 
         for (const auto& tableOp : stage.GetTableOps()) {
             if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-=======
         Y_UNUSED(stage);
+
+        //if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+        //    return true;
+        //}
+        Y_UNUSED(stage, queryType);
         /*for (const auto &tableOp : stage.GetTableOps()) {
             if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange &&
                 tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
->>>>>>> f6eaaed3a2 (simple test)
                 return true;
             }
         }*/

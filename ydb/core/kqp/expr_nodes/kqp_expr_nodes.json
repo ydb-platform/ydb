@@ -522,6 +522,25 @@
             "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
+            "Name": "TKqpTableSinkSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqpTableSinkOutput",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTableSinkOutput"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Settings", "Type": "TExprList", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqpSinkEffect",
             "Base": "TKqlEffectBase",
             "Match": {"Type": "Callable", "Name": "KqpSinkEffect"},

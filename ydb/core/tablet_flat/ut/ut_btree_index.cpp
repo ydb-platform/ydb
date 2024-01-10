@@ -1025,13 +1025,26 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
+        auto makeKey = [](ui32 firstCell, ui32 secondCell) -> TVector<TCell> {
+            if (secondCell <= 11) {
+                // valid second cell [0 .. 11]
+                return {TCell::Make(firstCell), TCell::Make(secondCell)};
+            }
+            if (secondCell == 12) {
+                return {TCell::Make(firstCell)};
+            }
+            if (secondCell == 13) {
+                return { };
+            }
+            Y_UNREACHABLE();
+        };
+        
         for (bool reverse : {false, true}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
                 for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                    for (ui32 secondCell : xrange<ui32>(0, 12)) {
-                        TVector<TCell> key{TCell::Make(firstCell), TCell::Make(secondCell)};
+                    for (ui32 secondCell : xrange<ui32>(0, 14)) {
+                        TVector<TCell> key = makeKey(firstCell, secondCell);
 
-                    while (true) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                         TPartIndexIt flat(&part, &flatEnv, { });
@@ -1044,10 +1057,6 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, keyDefaults, &(*part.Slices)[0], message);
                         EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, &(*part.Slices)[0], message);
                         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-
-                        if (!key) {
-                            break;
-                        }
                     }
                 }
             }
@@ -1149,13 +1158,13 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (ready) {
                 return;
             }
-            env.LoadTouched(false);
+            env.LoadTouched(true);
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
     }
 
-    bool DoChargeKeys(ICharge& charge, IPages& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+    bool DoChargeKeys(ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             auto result = reverse
@@ -1164,7 +1173,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (result.Ready) {
                 return result.Overshot;
             }
-            TTouchEnv::LoadTouched(env, false);
+            env.LoadTouched(true);
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -1221,7 +1230,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
                         message << ")";
 
-                        Cerr << message << Endl;
+                        // Cerr << message << Endl;
                             
                         bool bTreeOvershot = DoChargeKeys(bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         bool flatOvershot = DoChargeKeys(flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
@@ -1231,7 +1240,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         Y_UNUSED(bTreeOvershot);
                         Y_UNUSED(flatOvershot);
 
-                        AssertEqual(part, bTreeEnv, flatEnv, message);
+                        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                     }
                 }
             }

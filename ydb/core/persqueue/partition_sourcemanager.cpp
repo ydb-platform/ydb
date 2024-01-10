@@ -185,7 +185,7 @@ TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
 
 bool TPartitionSourceManager::HasParents() const {
     auto node = Partition.PartitionGraph.GetPartition(Partition.Partition);
-    return node && !node.value()->Parents.empty();
+    return node && !node->Parents.empty();
 }
 
 TActorId TPartitionSourceManager::PartitionRequester(TPartitionId id, ui64 tabletId) {

@@ -233,8 +233,18 @@ protected:
         OnOwnership(ctx);
     }
 
-    void HandleOwnership(TEvTabletPipe::TEvClientConnected::TPtr& , const NActors::TActorContext& ) {}
-    void HandleOwnership(TEvTabletPipe::TEvClientDestroyed::TPtr& , const NActors::TActorContext& ) {}
+    void HandleOwnership(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
+        auto msg = ev->Get();
+        if (msg->Status != NKikimrProto::OK) {
+            TableHelper.CloseKqpSession(ctx);
+            ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
+        }
+    }
+
+    void HandleOwnership(TEvTabletPipe::TEvClientDestroyed::TPtr& , const NActors::TActorContext& ctx) {
+        TableHelper.CloseKqpSession(ctx);
+        ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
+    }
 
     virtual void OnOwnership(const TActorContext &ctx) = 0;
 
@@ -285,7 +295,7 @@ protected:
 
 protected:
     void ReplyResult(const NActors::TActorContext& ctx) {
-        ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, TThis::OwnerCookie));
+        ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, TThis::OwnerCookie, SeqNo));
     }
 
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
@@ -310,6 +320,7 @@ protected:
     bool PartitionPersisted = false;
 
     TString OwnerCookie;
+    std::optional<ui64> SeqNo = 0;
 };
 
 #undef LOG_PREFIX

@@ -35,9 +35,13 @@ public:
         std::set<Node*> HierarhicalParents;
     };
 
+    TPartitionGraph();
+    TPartitionGraph(const NKikimrPQ::TPQTabletConfig& config);
+
     void Rebuild(const NKikimrPQ::TPQTabletConfig& config);
 
-    std::optional<const Node*> GetPartition(ui32 id) const;
+    const Node* GetPartition(ui32 id) const;
+    std::set<ui32> GetActiveChildren(ui32 id) const;
 private:
     std::unordered_map<ui32, Node> Partitions;
 };

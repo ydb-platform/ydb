@@ -156,15 +156,15 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             // Old configuration format without AllPartitions. Split/Merge is not supported.
             continue;
         }
-        if (node.value()->Children.empty()) {
-            for (const auto* r : node.value()->Parents) {
+        if (node->Children.empty()) {
+            for (const auto* r : node->Parents) {
                 if (extractTabletId != r->TabletId) {
                     Senders.insert(r->TabletId);
                 }
             }
         }
 
-        for (const auto* r : node.value()->Children) {
+        for (const auto* r : node->Children) {
             if (r->Children.empty()) {
                 if (extractTabletId != r->TabletId) {
                     Receivers.insert(r->TabletId);

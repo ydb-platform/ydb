@@ -2,6 +2,8 @@
 
 #include "partition_chooser_impl__abstract_chooser_actor.h"
 
+#include <ydb/core/persqueue/utils.h>
+
 namespace NKikimr::NPQ::NPartitionChooser {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -15,7 +17,7 @@ namespace NKikimr::NPQ::NPartitionChooser {
                     << ") "
 #define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 #define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
+#define INFO(message)  LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 #define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
 template<typename TPipeCreator>
@@ -26,12 +28,14 @@ public:
     using TParentActor = TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>;
 
     TSMPartitionChooserActor(TActorId parentId,
-                           const NKikimrSchemeOp::TPersQueueGroupDescription& /*config*/,
+                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                            std::shared_ptr<IPartitionChooser>& chooser,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition)
-        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition) {
+        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
+        , Graph(config.GetPQTabletConfig()) {
+
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -46,18 +50,37 @@ public:
     }
 
     void OnSelected(const TActorContext &ctx) override {
+        OldPartition = TThis::Partition;
+
         if (BoundaryPartition == TThis::Partition) {
             return OnPartitionChosen(ctx);
         }
 
-        if (!TThis::TableHelper.PartitionId()) {
+        if (!TThis::TableHelper.PartitionId() || !TThis::Partition) {
             TThis::Partition = BoundaryPartition;
             return OnPartitionChosen(ctx);
         }
 
-        if (!TThis::Partition) {
-
+        auto activeChildren = Graph.GetActiveChildren(TThis::TableHelper.PartitionId().value());
+        if (activeChildren.empty()) {
+            return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "has't active partition Marker# PC01", ctx);
         }
+        if (activeChildren.contains(BoundaryPartition->PartitionId)) {
+            TThis::Partition = BoundaryPartition;
+        } else {
+            auto n = RandomNumber<size_t>(activeChildren.size());
+            std::vector<ui32> ac;
+            ac.reserve(activeChildren.size());
+            ac.insert(ac.end(), activeChildren.begin(), activeChildren.end());
+            auto id = ac[n];
+            TThis::Partition = TThis::Chooser->GetPartition(id);
+        }
+
+        if (!TThis::Partition) {
+            return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "can't choose partition Marker# PC02", ctx);
+        }
+
+        GetOldSeqNo(ctx);
     }
 
     void OnOwnership(const TActorContext &ctx) override {
@@ -66,6 +89,59 @@ public:
     }
 
 private:
+    void GetOldSeqNo(const TActorContext &ctx) {
+        DEBUG("GetOldSeqNo");
+        TThis::Become(&TThis::StateGetMaxSeqNo);
+
+        if (!OldPartition) {
+            return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "Inconsistent status Marker# PC03", ctx);
+        }
+
+        TThis::PartitionHelper.Open(OldPartition->TabletId, ctx);
+        TThis::PartitionHelper.SendMaxSeqNoRequest(OldPartition->PartitionId, TThis::SourceId, ctx);
+    }
+
+    void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+
+        TString error;
+        if (!BasicCheck(record, error)) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, std::move(error), ctx);
+        }
+
+        const auto& response = record.GetPartitionResponse();
+        if (!response.HasCmdGetMaxSeqNoResult()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Absent MaxSeqNo result", ctx);
+        }
+
+        const auto& result = response.GetCmdGetMaxSeqNoResult();
+        if (result.SourceIdInfoSize() < 1) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Empty source id info", ctx);
+        }
+
+        const auto& sourceIdInfo = result.GetSourceIdInfo(0);
+        switch (sourceIdInfo.GetState()) {
+        case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
+            TThis::SeqNo = sourceIdInfo.GetSeqNo();
+            break;
+        case NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION:
+        case NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN:
+            TThis::SeqNo = 0; // TODO from table
+            break;
+        }
+
+        TThis::PartitionHelper.Close(ctx);
+        TThis::StartGetOwnership(ctx);
+    }
+
+    STATEFN(StateGetMaxSeqNo) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
+            SFunc(TEvents::TEvPoison, TThis::Die);
+            HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
+        }
+    }
 
 
 private:
@@ -108,6 +184,8 @@ private:
 
 private:
     const TPartitionInfo* BoundaryPartition = nullptr;
+    const TPartitionInfo* OldPartition = nullptr;
+    const TPartitionGraph Graph;
 };
 
 #undef LOG_PREFIX

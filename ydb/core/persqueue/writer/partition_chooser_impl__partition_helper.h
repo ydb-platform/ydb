@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "pipe_utils.h"
+#include "source_id_encoding.h"
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -31,6 +32,15 @@ public:
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
         cmd.SetOwner(sourceId ? sourceId : CreateGuidAsString());
         cmd.SetForce(true);
+
+        NTabletPipe::SendData(ctx, Pipe, ev.Release());
+    }
+
+    void SendMaxSeqNoRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
+        auto ev = MakeRequest(partitionId, Pipe);
+
+        auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
+        cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(sourceId));
 
         NTabletPipe::SendData(ctx, Pipe, ev.Release());
     }

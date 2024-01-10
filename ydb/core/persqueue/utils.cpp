@@ -54,6 +54,13 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
     return nullptr;
 }
 
+TPartitionGraph::TPartitionGraph() {
+}
+
+TPartitionGraph::TPartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {
+    Rebuild(config);
+}
+
 void TPartitionGraph::Rebuild(const NKikimrPQ::TPQTabletConfig& config) {
     Partitions.clear();
 
@@ -106,12 +113,31 @@ void TPartitionGraph::Rebuild(const NKikimrPQ::TPQTabletConfig& config) {
     }
 }
 
-std::optional<const TPartitionGraph::Node*> TPartitionGraph::GetPartition(ui32 id) const {
+const TPartitionGraph::Node* TPartitionGraph::GetPartition(ui32 id) const {
     auto it = Partitions.find(id);
     if (it == Partitions.end()) {
-        return std::nullopt;
+        return nullptr;
     }
-    return std::optional(&it->second);
+    return &it->second;
+}
+
+std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
+    std::deque<const Node*> queue;
+    queue.push_back(GetPartition(id));
+
+    std::set<ui32> result;
+    while(!queue.empty()) {
+        const auto* n = queue.front();
+        queue.pop_front();
+
+        if (n->Children.empty()) {
+            result.emplace(n->Id);
+        } else {
+            queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+        }
+    }
+
+    return result;
 }
 
 TPartitionGraph::Node::Node(const NKikimrPQ::TPQTabletConfig::TPartition& config) {

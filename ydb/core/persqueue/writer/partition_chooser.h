@@ -65,6 +65,7 @@ public:
 
     virtual const TPartitionInfo* GetPartition(const TString& sourceId) const = 0;
     virtual const TPartitionInfo* GetPartition(ui32 partitionId) const = 0;
+    virtual const TPartitionInfo* GetRandomPartition() const = 0;
 };
 
 std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash = false);

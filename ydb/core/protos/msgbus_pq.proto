@@ -469,6 +469,7 @@ message TPersQueuePartitionResponse {
     message TCmdGetOwnershipResult {
         optional string OwnerCookie = 1;
         optional NKikimrPQ.ETopicPartitionStatus Status = 2;
+        optional bool Registered = 3;
     }
 
     message TCmdPrepareDirectReadResult {

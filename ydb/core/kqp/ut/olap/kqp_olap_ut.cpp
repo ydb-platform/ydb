@@ -5364,17 +5364,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto client = kikimr.GetQueryClient();
         auto prepareResult = client.ExecuteQuery(R"(
-            UPSERT INTO `/Root/TestDst` (Col1, Col2, Col3) VALUES
+            UPSERT INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
                 (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
 
-        //const TString sql = R"(
-        //    UPSERT INTO `/Root/TestDst`
-        //    SELECT * FROM `/Root/TestSrc`
-        //)";
-        //auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        //UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+        const TString sql = R"(
+            UPSERT INTO `/Root/TestDst`
+            SELECT * FROM `/Root/TestSrc`
+        )";
+        auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
         //auto it = client.StreamExecuteQuery(R"(
         //    SELECT COUNT(*) FROM `/Root/TestDst`;

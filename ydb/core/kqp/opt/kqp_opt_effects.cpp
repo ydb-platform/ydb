@@ -217,7 +217,7 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprCont
 #undef DBG
 }
 
-TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, TExprContext& ctx) {
+TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const TCoAtomList& columns, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     return Build<TDqStage>(ctx, expr.Pos())
@@ -231,7 +231,7 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, TExprC
                         .Input(expr)
                         .Build()
                     .Build()
-                .Columns().Build()
+                .Columns(columns)
                 .Settings().Build()
                 .Build()
             .Build()
@@ -296,7 +296,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), ctx);
+            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), node.Columns(), ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -320,13 +320,53 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto program = dqUnion.Output().Stage().Program();
+    auto stage = dqUnion.Output().Stage();
+    auto program = stage.Program();
     auto input = program.Body();
 
-    if (InplaceUpdateEnabled(*kqpCtx.Config, table, node.Columns()) && IsMapWrite(table, input, ctx)) {
+    YQL_CLOG(INFO, ProviderKqp) << "#### DQUNION: " << KqpExprToPrettyString(dqUnion, ctx);
+    YQL_CLOG(INFO, ProviderKqp) << "#### dqUnion.Output().Stage(): " << KqpExprToPrettyString(dqUnion.Output().Stage(), ctx);
+    YQL_CLOG(INFO, ProviderKqp) << "#### program: " << KqpExprToPrettyString(program, ctx);
+    YQL_CLOG(INFO, ProviderKqp) << "#### input: " << KqpExprToPrettyString(input, ctx);
+
+    if (sinkEffect) {
+        stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs(stage.Inputs())
+            .Program()
+                .Args(program.Args())
+                .Body<TKqpTableSinkOutput>()
+                    .Input(input)
+                    .Columns(node.Columns())
+                    .Settings().Build()
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add<TDqSink>()
+                    .DataSink<TKqpTableSink>()
+                        .Category(ctx.NewAtom(node.Pos(), "kikimr"))
+                        .Cluster(ctx.NewAtom(node.Pos(), "db"))
+                        .Build()
+                    .Index().Value("0").Build()
+                    .Settings<TKqpTableSinkSettings>()
+                        .Table(node.Table())
+                        .Settings()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        //TODO: check inplace????
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(stageInput.Cast().Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    } else if (InplaceUpdateEnabled(*kqpCtx.Config, table, node.Columns()) && IsMapWrite(table, input, ctx)) {
         stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
             .Output()
-                .Stage(dqUnion.Output().Stage())
+                .Stage(stage)
                 .Index(dqUnion.Output().Index())
                 .Build()
             .Done();
@@ -432,6 +472,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
         YQL_CLOG(INFO, ProviderKqp) << "#### EFFECT: " << KqpExprToPrettyString(effect, ctx);
         if (effect.Maybe<TKqlTableEffect>()) {
             TMaybeNode<TExprBase> input;
+            //TODO: do we need it???
             TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
                 .Name("inputArg")
                 .Done();

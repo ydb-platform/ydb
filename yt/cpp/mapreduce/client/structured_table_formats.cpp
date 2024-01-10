@@ -431,7 +431,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateNodeFormat(
         auto format = CreateSkiffFormat(skiffSchema);
         NYT::NDetail::ApplyFormatHints<TNode>(&format, formatHints);
         return {
-            CreateSkiffFormat(skiffSchema),
+            format,
             TSmallJobFile{
                 TString("skiff") + GetSuffix(direction),
                 CreateSkiffConfig(skiffSchema)

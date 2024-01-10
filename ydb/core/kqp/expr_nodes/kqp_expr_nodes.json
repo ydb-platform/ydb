@@ -527,7 +527,7 @@
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -538,6 +538,15 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Settings", "Type": "TExprList", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TKqpTableSink",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "DataSink"},
+            "Children": [
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
             ]
         },
         {

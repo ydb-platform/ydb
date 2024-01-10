@@ -217,6 +217,42 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprCont
 #undef DBG
 }
 
+TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, TExprContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
+
+    return Build<TDqStage>(ctx, expr.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body<TKqpTableSinkOutput>()
+                .Input<TCoToFlow>()
+                    .Input<TCoJust>()
+                        .Input(expr)
+                        .Build()
+                    .Build()
+                .Columns().Build()
+                .Settings().Build()
+                .Build()
+            .Build()
+        .Outputs<TDqStageOutputsList>()
+            .Add<TDqSink>()
+                .DataSink<TKqpTableSink>()
+                    .Category(ctx.NewAtom(expr.Pos(), "kikimr"))
+                    .Cluster(ctx.NewAtom(expr.Pos(), "db"))
+                    .Build()
+                .Index().Value("0").Build()
+                .Settings<TKqpTableSinkSettings>()
+                    .Table(table)
+                    .Settings()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+}
+
 TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
@@ -247,31 +283,41 @@ TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
 }
 
 bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect)
+    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect)
 {
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
+
+    sinkEffect = kqpCtx.IsGenericQuery() && table.Metadata->Kind == EKikimrTableKind::Olap;
+    YQL_CLOG(INFO, ProviderKqp) << "#### SINK EFFECT: " << static_cast<int>(sinkEffect);
+
     TKqpUpsertRowsSettings settings;
     if (node.Settings()) {
         settings = TKqpUpsertRowsSettings::Parse(node.Settings().Cast());
     }
     if (IsDqPureExpr(node.Input())) {
-        stageInput = BuildPrecomputeStage(node.Input(), ctx);
-
-        effect = Build<TKqpUpsertRows>(ctx, node.Pos())
-            .Table(node.Table())
-            .Input<TCoIterator>()
-                .List(inputArg)
-                .Build()
-            .Columns(node.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
+        if (sinkEffect) {
+            stageInput = RebuildPureStageWithSink(node.Input(), node.Table(), ctx);
+            effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+                .Stage(stageInput.Cast().Ptr())
+                .SinkIndex().Build("0")
+                .Done();
+        } else {
+            stageInput = BuildPrecomputeStage(node.Input(), ctx);
+            effect = Build<TKqpUpsertRows>(ctx, node.Pos())
+                .Table(node.Table())
+                .Input<TCoIterator>()
+                    .List(inputArg)
+                    .Build()
+                .Columns(node.Columns())
+                .Settings(settings.BuildNode(ctx, node.Pos()))
+                .Done();
+        }
         return true;
     }
 
     if (!EnsureDqUnion(node.Input(), ctx)) {
         return false;
     }
-
-    auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
     auto program = dqUnion.Output().Stage().Program();
@@ -371,6 +417,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TVector<TExprBase>& builtEffects)
 {
+    YQL_CLOG(INFO, ProviderKqp) << "TEST: EFFECTS: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputs;
     TVector<TExprBase> newEffects;
@@ -382,6 +429,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
         TMaybeNode<TExprBase> newEffect;
         bool sinkEffect = false;
         YQL_ENSURE(effect.Maybe<TKqlEffectBase>());
+        YQL_CLOG(INFO, ProviderKqp) << "#### EFFECT: " << KqpExprToPrettyString(effect, ctx);
         if (effect.Maybe<TKqlTableEffect>()) {
             TMaybeNode<TExprBase> input;
             TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
@@ -389,7 +437,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 .Done();
 
             if (auto maybeUpsertRows = effect.Maybe<TKqlUpsertRows>()) {
-                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
+                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, sinkEffect)) {
                     return false;
                 }
             }
@@ -570,6 +618,7 @@ TAutoPtr<IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrusivePtr
         }
 
         output = result.Cast().Ptr();
+        YQL_CLOG(INFO, ProviderKqp) << "#### RESULT: " << KqpExprToPrettyString(*output, ctx);
         return TStatus(TStatus::Repeat, true);
     });
 }

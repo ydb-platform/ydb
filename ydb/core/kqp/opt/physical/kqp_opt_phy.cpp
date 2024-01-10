@@ -195,7 +195,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteKqpReadTable(TExprBase node, TExprContext& ctx) {
+        YQL_CLOG(INFO, ProviderKqp) << "TEST!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+        YQL_CLOG(INFO, ProviderKqp) << "BEFORE:" << KqpExprToPrettyString(*node.Ptr(), ctx);
         TExprBase output = KqpRewriteReadTable(node, ctx, KqpCtx);
+        YQL_CLOG(INFO, ProviderKqp) << "AFTER:" << KqpExprToPrettyString(*output.Ptr(), ctx);
         DumpAppliedRule("RewriteKqpReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

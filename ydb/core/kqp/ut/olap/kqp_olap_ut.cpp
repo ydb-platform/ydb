@@ -5362,13 +5362,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto prepareResult = session.ExecuteDataQuery(R"(
+        auto client = kikimr.GetQueryClient();
+        auto prepareResult = client.ExecuteQuery(R"(
             UPSERT INTO `/Root/TestDst` (Col1, Col2, Col3) VALUES
                 (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
 
-        //auto client = kikimr.GetQueryClient();
         //const TString sql = R"(
         //    UPSERT INTO `/Root/TestDst`
         //    SELECT * FROM `/Root/TestSrc`

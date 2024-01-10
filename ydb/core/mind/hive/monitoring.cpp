@@ -4038,7 +4038,7 @@ public:
 
     void RenderHTMLPage(IOutputStream& out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
-        out << "<table class = 'table simple-table2'>";
+        out << "<table>";
         out << "<thead>";
         out << "<tr><th>Id</th><th>Description</th><th>Stop</th></tr>";
         out << "</thead>";

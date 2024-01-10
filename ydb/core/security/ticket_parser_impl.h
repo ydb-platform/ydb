@@ -388,8 +388,7 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
-        for (const auto& [permissionName, permRecord] : record.Permissions) {
-            // const TString& permission(perm);
+        for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
 
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
@@ -791,6 +790,19 @@ private:
         }
     }
 
+    template <typename TTokenRecord>
+    void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const TString& errorMessage, bool isRetryableError) {
+        for (auto& [permissionName, permissionRecord] : record.Permissions) {
+            permissionRecord.Subject.clear();
+            permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                << " permission " << permissionName
+                                << " now has a " << (isRetryableError ? "retryable" : "permanent")  << " error \"" << errorMessage << "\""
+                                << " retryable: " << isRetryableError);
+        }
+        SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
+    }
+
     void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
         auto getResourcePathIdForRequiredPermissions = [] (const ::yandex::cloud::priv::accessservice::v2::Resource& resource_path) -> TString {
             if (resource_path.type() == "resource-manager.folder") {
@@ -819,107 +831,94 @@ private:
             --record.ResponsesLeft;
             auto& examinedPermissions = record.Permissions;
             if (response->Status.Ok()) {
-                const auto& subject = response->Response.subject();
-                const TString subjectName = GetSubjectName(subject);
-                const auto& subjectType = ConvertSubjectType(subject.type_case());
-                for (auto& [permissionName, permissionRecord] : examinedPermissions) {
-                    permissionRecord.Subject = subjectName;
-                    permissionRecord.SubjectType = subjectType;
-                    permissionRecord.Error.clear();
-                }
-                size_t permissionDeniedCount = 0;
-                bool hasRequiredPermissionFailed = false;
-                std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
-                TString permissionDeniedError;
-                const auto& results = response->Response.results();
-                for (const auto& result : results.items()) {
-                    auto permissionDeniedIt = examinedPermissions.find(result.permission());
-                    if (permissionDeniedIt != examinedPermissions.end()) {
-                        permissionDeniedCount++;
-                        auto& permissionDeniedRecord = permissionDeniedIt->second;
-                        permissionDeniedRecord.Subject.clear();
-                        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << subjectName << "\"");
-                        TStringBuilder errorMessage;
-                        if (permissionDeniedRecord.IsRequired()) {
-                            hasRequiredPermissionFailed = true;
-                            errorMessage << permissionDeniedIt->first << " for";
-                            for (const auto& resourcePath : result.resource_path()) {
-                                errorMessage << getResourcePathIdForRequiredPermissions(resourcePath);
-                            }
-                            errorMessage << " - ";
-                            requiredPermissions.push_back(permissionDeniedIt);
-                        }
-                        permissionDeniedError = result.permission_denied_error().message();;
-                        errorMessage << permissionDeniedError;
-                        permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
-                    } else {
-                        BLOG_W("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
-                    }
-                }
-                if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
-                    record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
-                    switch (subjectType) {
-                    case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
-                        if (UserAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for UserAccount(" << subjectName << ")");
-                            THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_user_account_id(subject.user_account().id());
-                            record.ResponsesLeft++;
-                            Send(UserAccountService, request.Release());
-                            return;
-                        }
-                        break;
-                    case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
-                        if (ServiceAccountService) {
-                            BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                        << " asking for ServiceAccount(" << subjectName << ")");
-                            THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
-                            request->Token = record.Ticket;
-                            request->Request.set_service_account_id(subject.service_account().id());
-                            record.ResponsesLeft++;
-                            Send(ServiceAccountService, request.Release());
-                            return;
-                        }
-                        break;
-                    default:
-                        break;
-                    }
-                    SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subjectName, {}));
+                if (response->Response.has_unauthenticated_error()) {
+                    SetAccessServiceBulkAuthorizeError(key, record, response->Response.unauthenticated_error().message(), false);
                 } else {
-                    if (hasRequiredPermissionFailed) {
-                        TStringBuilder errorMessage;
-                        auto it = requiredPermissions.cbegin();
-                        errorMessage << (*it)->second.Error.Message;
-                        ++it;
-                        for (; it != requiredPermissions.cend(); ++it) {
-                            errorMessage << ", " << (*it)->second.Error.Message;
+                    const auto& subject = response->Response.subject();
+                    const TString subjectName = GetSubjectName(subject);
+                    const auto& subjectType = ConvertSubjectType(subject.type_case());
+                    for (auto& [permissionName, permissionRecord] : examinedPermissions) {
+                        permissionRecord.Subject = subjectName;
+                        permissionRecord.SubjectType = subjectType;
+                        permissionRecord.Error.clear();
+                    }
+                    size_t permissionDeniedCount = 0;
+                    bool hasRequiredPermissionFailed = false;
+                    std::vector<typename THashMap<TString, TPermissionRecord>::iterator> requiredPermissions;
+                    TString permissionDeniedError;
+                    const auto& results = response->Response.results();
+                    for (const auto& result : results.items()) {
+                        auto permissionDeniedIt = examinedPermissions.find(result.permission());
+                        if (permissionDeniedIt != examinedPermissions.end()) {
+                            permissionDeniedCount++;
+                            auto& permissionDeniedRecord = permissionDeniedIt->second;
+                            permissionDeniedRecord.Subject.clear();
+                            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " permission " << result.permission() << " access denied for subject \"" << subjectName << "\"");
+                            TStringBuilder errorMessage;
+                            if (permissionDeniedRecord.IsRequired()) {
+                                hasRequiredPermissionFailed = true;
+                                errorMessage << permissionDeniedIt->first << " for";
+                                for (const auto& resourcePath : result.resource_path()) {
+                                    errorMessage << getResourcePathIdForRequiredPermissions(resourcePath);
+                                }
+                                errorMessage << " - ";
+                                requiredPermissions.push_back(permissionDeniedIt);
+                            }
+                            permissionDeniedError = result.permission_denied_error().message();;
+                            errorMessage << permissionDeniedError;
+                            permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
+                        } else {
+                            BLOG_W("Received response for unknown permission " << result.permission() << " for ticket " << record.GetMaskedTicket());
                         }
-                        SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                    }
+                    if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
+                        record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
+                        switch (subjectType) {
+                        case TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE:
+                            if (UserAccountService) {
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                            << " asking for UserAccount(" << subjectName << ")");
+                                THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
+                                request->Token = record.Ticket;
+                                request->Request.set_user_account_id(subject.user_account().id());
+                                record.ResponsesLeft++;
+                                Send(UserAccountService, request.Release());
+                                return;
+                            }
+                            break;
+                        case TPermissionRecord::TTypeCase::SERVICE_ACCOUNT_TYPE:
+                            if (ServiceAccountService) {
+                                BLOG_TRACE("Ticket " << record.GetMaskedTicket()
+                                            << " asking for ServiceAccount(" << subjectName << ")");
+                                THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
+                                request->Token = record.Ticket;
+                                request->Request.set_service_account_id(subject.service_account().id());
+                                record.ResponsesLeft++;
+                                Send(ServiceAccountService, request.Release());
+                                return;
+                            }
+                            break;
+                        default:
+                            break;
+                        }
+                        SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subjectName, {}));
                     } else {
-                        SetError(key, record, {.Message = permissionDeniedError, .Retryable = false});
+                        if (hasRequiredPermissionFailed) {
+                            TStringBuilder errorMessage;
+                            auto it = requiredPermissions.cbegin();
+                            errorMessage << (*it)->second.Error.Message;
+                            ++it;
+                            for (; it != requiredPermissions.cend(); ++it) {
+                                errorMessage << ", " << (*it)->second.Error.Message;
+                            }
+                            SetError(key, record, {.Message = errorMessage, .Retryable = false});
+                        } else {
+                            SetError(key, record, {.Message = permissionDeniedError, .Retryable = false});
+                        }
                     }
                 }
             } else {
-                TString grpsErrorMessage;
-                bool isRetryableGrpsError = false;
-                if (response->Response.has_unauthenticated_error()) {
-                    grpsErrorMessage = response->Response.unauthenticated_error().message();
-                    isRetryableGrpsError = false;
-                } else {
-                    grpsErrorMessage = response->Status.Msg;
-                    isRetryableGrpsError = IsRetryableGrpcError(response->Status);
-                }
-                for (auto& [permissionName, permissionRecord] : examinedPermissions) {
-                    permissionRecord.Subject.clear();
-                    permissionRecord.Error = {.Message = grpsErrorMessage, .Retryable = isRetryableGrpsError};
-                    BLOG_TRACE("Ticket " << record.GetMaskedTicket()
-                                         << " permission " << permissionName
-                                         << " now has a " << (isRetryableGrpsError ? "retryable" : "permanent")  << " error \"" << grpsErrorMessage << "\""
-                                         << " retryable: " << isRetryableGrpsError);
-                }
-                SetError(key, record, {.Message = grpsErrorMessage, .Retryable = isRetryableGrpsError});
+                SetAccessServiceBulkAuthorizeError(key, record, response->Status.Msg, IsRetryableGrpcError(response->Status));
             }
             Respond(record);
         }

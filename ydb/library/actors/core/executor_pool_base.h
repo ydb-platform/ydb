@@ -28,6 +28,7 @@ namespace NActors {
         std::vector<IActor*> Actors;
         mutable std::vector<std::tuple<ui32, double>> DeadActorsUsage;
         friend class TGenericExecutorThread;
+        friend class TSharedExecutorThread;
         void RecalculateStuckActors(TExecutorThreadStats& stats) const;
 #endif
         TAtomic RegisterRevolvingCounter = 0;

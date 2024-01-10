@@ -172,6 +172,7 @@ namespace NActors {
             }
         };
 
+        TBasicExecutorPool *OwnerExecutorPool = nullptr;
         std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
         ui32 NextPool = 0;
 

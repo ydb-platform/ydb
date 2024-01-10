@@ -378,19 +378,7 @@ namespace NActors {
                         actorSystem,
                         this,
                         MailboxTable.Get(),
-                        &Threads[i],
                         PoolName,
-                        TimePerMailbox,
-                        EventsPerMailbox));
-            } else {
-                Threads[i].Thread.Reset(
-                    new TSharedExecutorThread(
-                        i,
-                        actorSystem,
-                        &Threads[i],
-                        0,
-                        PoolName,
-                        SoftProcessingDurationTs,
                         TimePerMailbox,
                         EventsPerMailbox));
             }
@@ -580,6 +568,16 @@ namespace NActors {
     }
 
     bool TExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+        EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
+        Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
+        if (spinThresholdCycles > 0) {
+            // spin configured period
+            Spin(spinThresholdCycles, stopFlag);
+        }
+        return Sleep(stopFlag);
+    }
+
+    bool TSharedExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
         EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
         Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
         if (spinThresholdCycles > 0) {

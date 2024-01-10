@@ -38,13 +38,11 @@ namespace NActors {
             TActorSystem* actorSystem,
             IExecutorPool* executorPool,
             TMailboxTable* mailboxTable,
-            TExecutorThreadCtx *threadCtx,
             const TString& threadName,
             TDuration timePerMailbox,
             ui32 eventsPerMailbox)
         : ActorSystem(actorSystem)
         , ExecutorPool(executorPool)
-        , ThreadCtx(threadCtx)
         , Ctx(workerId, cpuId)
         , ThreadName(threadName)
         , TimePerMailbox(timePerMailbox)
@@ -57,20 +55,18 @@ namespace NActors {
             eventsPerMailbox,
             ui64(-1), // infinite soft deadline
             &Ctx.WorkerStats);
-        Ctx.ThreadCtx = ThreadCtx;
     }
 
     TGenericExecutorThread::TGenericExecutorThread(TWorkerId workerId,
             TActorSystem* actorSystem,
-            TExecutorThreadCtx *threadCtx,
+            IExecutorPool* executorPool,
             i16 poolCount,
             const TString& threadName,
             ui64 softProcessingDurationTs,
             TDuration timePerMailbox,
             ui32 eventsPerMailbox)
         : ActorSystem(actorSystem)
-        , ExecutorPool(threadCtx->OwnerExecutorPool)
-        , ThreadCtx(threadCtx)
+        , ExecutorPool(executorPool)
         , Ctx(workerId, 0)
         , ThreadName(threadName)
         , IsSharedThread(true)
@@ -81,15 +77,24 @@ namespace NActors {
     {
         Ctx.Switch(
             ExecutorPool,
-            static_cast<TExecutorPoolBaseMailboxed*>(threadCtx->OwnerExecutorPool)->MailboxTable.Get(),
+            static_cast<TExecutorPoolBaseMailboxed*>(executorPool)->MailboxTable.Get(),
             NHPTimer::GetClockRate() * timePerMailbox.SecondsFloat(),
             eventsPerMailbox,
             ui64(-1), // infinite soft deadline
             &SharedStats[ExecutorPool->PoolId]);
-        Ctx.ThreadCtx = ThreadCtx;
     }
 
-
+    TSharedExecutorThread::TSharedExecutorThread(TWorkerId workerId,
+                TActorSystem* actorSystem,
+                TSharedExecutorThreadCtx *threadCtx,
+                i16 poolCount,
+                const TString& threadName,
+                ui64 softProcessingDurationTs,
+                TDuration timePerMailbox,
+                ui32 eventsPerMailbox)
+        : TGenericExecutorThread(workerId, actorSystem, threadCtx->OwnerExecutorPool, poolCount, threadName, softProcessingDurationTs, timePerMailbox, eventsPerMailbox)
+        , ThreadCtx(threadCtx)
+    {}
 
     TGenericExecutorThread::~TGenericExecutorThread()
     { }
@@ -477,11 +482,31 @@ namespace NActors {
         return {IsSharedThread, wasWorking};
     }
 
-    void TGenericExecutorThread::UpdatePools() {
+    void* TExecutorThread::ThreadProc() {
+#ifdef _linux_
+        pid_t tid = syscall(SYS_gettid);
+        AtomicSet(ThreadId, (ui64)tid);
+#endif
+
+#ifdef BALLOC
+        ThreadDisableBalloc();
+#endif
+
+        TThreadContext threadCtx;
+        TlsThreadContext = &threadCtx;
+        if (ThreadName) {
+            ::SetCurrentThreadName(ThreadName);
+        }
+
+        ProcessExecutorPool(ExecutorPool);
+        return nullptr;
+    }
+
+    void TSharedExecutorThread::UpdatePools() {
         NeedToReloadPools = EState::NeedToReloadPools;
     }
 
-    TGenericExecutorThread::TProcessingResult TGenericExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
+    TGenericExecutorThread::TProcessingResult TSharedExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
         Ctx.Switch(
             pool,
             pool->MailboxTable.Get(),
@@ -495,7 +520,7 @@ namespace NActors {
         return ProcessExecutorPool(pool);
     }
 
-    void* TGenericExecutorThread::ThreadProc() {
+    void* TSharedExecutorThread::ThreadProc() {
 #ifdef _linux_
         pid_t tid = syscall(SYS_gettid);
         AtomicSet(ThreadId, (ui64)tid);

@@ -212,6 +212,12 @@ namespace NPage {
             TIter it;
             switch (seek) {
                 case ESeek::Exact:
+                    // N.B. we know that key < it->Key
+                    it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);
+                    // If LastKey < key then exact key doesn't exist
+                    if (!it && LastKey && cmp(*LastKey, key)) {
+                        return it;
+                    }
                 case ESeek::Lower:
                     // N.B. we know that key < it->Key
                     it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);

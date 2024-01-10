@@ -144,7 +144,7 @@ public:
      */
     EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
-            // Special treatment for an empty key
+            // special treatment for an empty key
             switch (seek) {
                 case ESeek::Lower:
                     return Seek(0);
@@ -156,16 +156,16 @@ public:
 
         if (slice) {
             if (seek == ESeek::Exact && TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults) < 0) {
-                // the key is before the slice
+                // key < FirstKey
                 return Exhaust();
             }
 
             if (TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults) < 0) {
-                // the key is after the slice
+                // LastKey < key
                 return Exhaust();
             }
 
-            return Exhaust();
+            // TODO: move row id checks from flat_part_iter_multi.h here?
         }
 
         return DoSeek<TSeekKey>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
@@ -178,7 +178,7 @@ public:
      */
     EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
-            // Special treatment for an empty key
+            // special treatment for an empty key
             switch (seek) {
                 case ESeek::Lower:
                     return Seek(GetEndRowId() - 1);
@@ -188,7 +188,19 @@ public:
             }
         }
 
-        Y_UNUSED(slice);
+        if (slice) {
+            if (seek == ESeek::Exact && TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults) < 0) {
+                // LastKey < key
+                return Exhaust();
+            }
+
+            if (TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults) < 0) {
+                // key < FirstKey
+                return Exhaust();
+            }
+
+            // TODO: move row id checks from flat_part_iter_multi.h here?
+        }
 
         return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
     }

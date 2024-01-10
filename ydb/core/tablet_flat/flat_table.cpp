@@ -10,7 +10,7 @@
 #include "flat_range_cache.h"
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
-#include "ydb/core/tablet_flat/util_fmt_desc.h"
+#include "util_fmt_desc.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 

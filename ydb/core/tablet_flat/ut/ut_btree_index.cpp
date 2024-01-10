@@ -1035,7 +1035,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                         TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                         TPartIndexIt flat(&part, &flatEnv, { });
 
-                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << ">(" << seek << ") ";
+                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
                         for (auto c : key) {
                             message << c.AsValue<ui32>() << " ";
                         }

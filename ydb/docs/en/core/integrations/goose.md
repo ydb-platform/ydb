@@ -10,7 +10,7 @@ Goose installation options are described in [its documentation](https://github.c
 
 ## Launch arguments goose
 
-The `goose` utility is called with the command:
+After installation, the `goose` command line utility can be called:
 
 ```
 $ goose <DB> <DSN> <COMMAND> <COMMAND_ARGUMENTS>

@@ -42,12 +42,13 @@
                                                 "TopSortBy": "argument.qr.qq"
                                             },
                                             {
+                                                "Condition": "qq = unique2",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

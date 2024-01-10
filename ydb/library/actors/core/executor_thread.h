@@ -119,7 +119,6 @@ namespace NActors {
             : TGenericExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
-
         TExecutorThread(TWorkerId workerId,
                         TActorSystem* actorSystem,
                         IExecutorPool* executorPool,

@@ -1780,8 +1780,10 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     return result;
 }
 
-void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req, TInstant restartsBarrierTime) {
+void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
     if (info) {
+        TInstant now = TActivationContext::Now();
+        TInstant restartsBarrierTime = now - GetTabletRestartsPeriod();
         auto& tabletInfo = *response.AddTablets();
         tabletInfo.SetTabletID(tabletId);
         tabletInfo.SetTabletType(info->Type);
@@ -1843,8 +1845,6 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
 void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
-    TInstant now = TlsActivationContext->Now();
-    TInstant restartsBarrierTime = now - GetTabletRestartsPeriod();
     if (record.HasTabletID()) {
         TTabletId tabletId = record.GetTabletID();
         NKikimrHive::TForwardRequest forwardRequest;
@@ -1853,7 +1853,7 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
         }
         const TLeaderTabletInfo* tablet = FindTablet(tabletId);
         if (tablet) {
-            FillTabletInfo(response->Record, record.GetTabletID(), tablet, record, restartsBarrierTime);
+            FillTabletInfo(response->Record, record.GetTabletID(), tablet, record);
         } else {
             BLOG_W("Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
         }
@@ -1866,7 +1866,7 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
             if (it->second.IsDeleting()) {
                 continue;
             }
-            FillTabletInfo(response->Record, it->first, &it->second, record, restartsBarrierTime);
+            FillTabletInfo(response->Record, it->first, &it->second, record);
         }
         response->Record.set_starttimetimestamp(StartTime().MilliSeconds());
         response->Record.set_responsetimestamp(TAppData::TimeProvider->Now().MilliSeconds());

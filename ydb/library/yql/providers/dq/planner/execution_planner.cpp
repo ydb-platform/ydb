@@ -571,24 +571,27 @@ namespace NYql::NDqs {
         return !parts.empty();
     }
 
-#define BUILD_CONNECTION(TYPE, BUILDER)                  \
-    if (auto conn = input.Maybe<TYPE>()) {               \
-        BUILDER(TasksGraph, stage, inputIndex, logFunc); \
-        continue;                                        \
-    }
+    const static std::unordered_map<
+        std::string_view,
+        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32,  const TChannelLogFunc&)
+    > ConnectionBuilders = {
+        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels},
+        {TDqCnHashShuffle::CallableName(), &BuildHashShuffleChannels},
+        {TDqCnBroadcast::CallableName(), &BuildBroadcastChannels},
+        {TDqCnMap::CallableName(), BuildMapChannels},
+        {TDqCnMerge::CallableName(), BuildMergeChannels},
+    };
 
-    void TDqsExecutionPlanner::BuildConnections( const NNodes::TDqPhyStage& stage) {
+    void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
-
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
-            const auto& input = stage.Inputs().Item(inputIndex);
+            const auto &input = stage.Inputs().Item(inputIndex);
             if (input.Maybe<TDqConnection>()) {
-                BUILD_CONNECTION(TDqCnUnionAll, BuildUnionAllChannels);
-                BUILD_CONNECTION(TDqCnHashShuffle, BuildHashShuffleChannels);
-                BUILD_CONNECTION(TDqCnBroadcast, BuildBroadcastChannels);
-                BUILD_CONNECTION(TDqCnMap, BuildMapChannels);
-                BUILD_CONNECTION(TDqCnMerge, BuildMergeChannels);
-                YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
+                if (const auto it = ConnectionBuilders.find(input.Cast<NNodes::TCallable>().CallableName()); it != ConnectionBuilders.cend()) {
+                    it->second(TasksGraph, stage, inputIndex, logFunc);
+                } else {
+                    YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
+                }
             } else {
                 YQL_ENSURE(input.Maybe<TDqSource>(), "Unknown stage input: " << input.Cast<NNodes::TCallable>().CallableName());
             }

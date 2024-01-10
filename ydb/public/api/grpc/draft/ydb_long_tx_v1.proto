@@ -10,6 +10,5 @@ service LongTxService {
     rpc CommitTx(CommitTransactionRequest) returns (CommitTransactionResponse);
     rpc RollbackTx(RollbackTransactionRequest) returns (RollbackTransactionResponse);
     rpc Write(WriteRequest) returns (WriteResponse);
-    rpc Read(ReadRequest) returns (ReadResponse);
 //  rpc ResolveNodes(ResolveNodesRequest) returns (stream ResolveNodesResponse);
 }

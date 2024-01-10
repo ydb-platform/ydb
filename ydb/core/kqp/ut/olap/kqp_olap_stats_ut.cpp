@@ -1,5 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+
+
+
+
+
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/testlib/common_helper.h>
 
@@ -14,10 +19,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t tables_in_store = 1000;
     constexpr size_t size_single_table = 13152;
 
-    const TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+    const TVector<TTestHelper::TColumnSchema> schema = {TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
 
     class TOlapStatsController: public NYDBTest::NColumnShard::TController {

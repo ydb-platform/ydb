@@ -6,7 +6,7 @@
 
 ## Installation goose
 
-Goose installation options are described in [documentation](https://github.com/pressly/goose/blob/master/README.md#install).
+Goose installation options are described in [its documentation](https://github.com/pressly/goose/blob/master/README.md#install).
 
 ## Launch arguments goose
 

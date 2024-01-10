@@ -191,6 +191,14 @@ void FillSpec(NYT::TNode& spec,
         spec["annotations"] = *val;
     }
 
+    if (auto val = settings->StartedBy.Get(cluster)) {
+        spec["started_by"] = *val;
+    }
+
+    if (auto val = settings->Description.Get(cluster)) {
+        spec["description"] = *val;
+    }
+
     if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
         if (auto val = settings->MaxJobCount.Get(cluster)) {
             spec["max_job_count"] = static_cast<i64>(*val);

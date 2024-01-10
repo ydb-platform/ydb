@@ -1209,6 +1209,11 @@ bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui6
                     "ForgetTx No " << Self->TabletID()
                     << " txId " << txId);
         }
+
+        if (!op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "End ForgetTx " << Self->TabletID()
                 << " txId " << txId);

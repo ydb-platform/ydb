@@ -102,6 +102,7 @@ TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);

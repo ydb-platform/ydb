@@ -58,7 +58,7 @@ struct IConnection
     virtual IClientPtr CreateClient(const TClientOptions& options = {}) = 0;
     virtual NHiveClient::ITransactionParticipantPtr CreateTransactionParticipant(
         NHiveClient::TCellId cellId,
-        const TTransactionParticipantOptions& options = TTransactionParticipantOptions()) = 0;
+        const TTransactionParticipantOptions& options = {}) = 0;
 
     virtual void ClearMetadataCaches() = 0;
     virtual void Terminate() = 0;

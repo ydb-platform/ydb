@@ -67,6 +67,7 @@ public:
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);
+    // TODO(babenko): rename to MultiLookupRows
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MultiLookup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SelectRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ExplainQuery);

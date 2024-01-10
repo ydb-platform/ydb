@@ -322,7 +322,7 @@ protected:
 
         SendRequestMetrics(ctx);
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
-            Context->ClientId = Request->Header.ClientId.value();
+            Context->KafkaClient = Request->Header.ClientId.value();
         }
         
         switch (Request->Header.RequestApiKey) {
@@ -408,6 +408,11 @@ protected:
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
+    }
+
+    void Handle(TEvKafka::TEvReadSessionInfo::TPtr readInfo, const TActorContext& /*ctx*/) {
+        auto r = readInfo->Get();
+        Context->GroupId = r->GroupId;
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
@@ -727,6 +732,7 @@ protected:
             hFunc(TEvPollerRegisterResult, HandleConnected);
             HFunc(TEvKafka::TEvResponse, Handle);
             HFunc(TEvKafka::TEvAuthResult, Handle);
+            HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);

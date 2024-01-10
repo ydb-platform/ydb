@@ -55,7 +55,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
 
     auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}});
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
-                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem);
+                               federatedQuerySetup, nullptr, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem);
 }
 
 NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYql::IModuleResolver* moduleResolver) {
@@ -4030,9 +4030,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result2.GetStats());
 
-            int readPhase = 1;
+            int readPhase = 0;
             if (serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys");
@@ -4041,6 +4041,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(1).reads().rows(), 1);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+
+                readPhase++;
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/SecondaryComplexKeys/Index/indexImplTable");

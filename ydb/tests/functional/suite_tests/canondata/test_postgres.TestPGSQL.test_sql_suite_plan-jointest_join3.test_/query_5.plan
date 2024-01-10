@@ -42,12 +42,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "k = p_1.k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -135,12 +136,13 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Condition": "k = k",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

@@ -8,12 +8,6 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Overload for TIntrusivePtr<T> MakeStrong(T* p).
-template <class T>
-TIntrusivePtr<T> MakeStrong(const THazardPtr<T>& ptr);
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! Holds an atomic pointer to an instance of ref-counted type |T| enabling concurrent
 //! read and write access.
 template <class T, bool EnableAcquireHazard = false>

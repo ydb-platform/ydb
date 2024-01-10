@@ -63,7 +63,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const NApi::TVersionedLookupRowsOptions& options) override;
 
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) override;
 

@@ -47,7 +47,8 @@ from .._exceptions import (
     WriteTimeout,
 )
 from .._models import Request, Response
-from .._types import AsyncByteStream, CertTypes, SyncByteStream, VerifyTypes
+from .._types import AsyncByteStream, CertTypes, ProxyTypes, SyncByteStream, VerifyTypes
+from .._urls import URL
 from .base import AsyncBaseTransport, BaseTransport
 
 T = typing.TypeVar("T", bound="HTTPTransport")
@@ -124,13 +125,14 @@ class HTTPTransport(BaseTransport):
         http2: bool = False,
         limits: Limits = DEFAULT_LIMITS,
         trust_env: bool = True,
-        proxy: typing.Optional[Proxy] = None,
+        proxy: typing.Optional[ProxyTypes] = None,
         uds: typing.Optional[str] = None,
         local_address: typing.Optional[str] = None,
         retries: int = 0,
         socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
     ) -> None:
         ssl_context = create_ssl_context(verify=verify, cert=cert, trust_env=trust_env)
+        proxy = Proxy(url=proxy) if isinstance(proxy, (str, URL)) else proxy
 
         if proxy is None:
             self._pool = httpcore.ConnectionPool(
@@ -190,7 +192,8 @@ class HTTPTransport(BaseTransport):
             )
         else:  # pragma: no cover
             raise ValueError(
-                f"Proxy protocol must be either 'http', 'https', or 'socks5', but got {proxy.url.scheme!r}."
+                "Proxy protocol must be either 'http', 'https', or 'socks5',"
+                f" but got {proxy.url.scheme!r}."
             )
 
     def __enter__(self: T) -> T:  # Use generics for subclass support.
@@ -263,13 +266,14 @@ class AsyncHTTPTransport(AsyncBaseTransport):
         http2: bool = False,
         limits: Limits = DEFAULT_LIMITS,
         trust_env: bool = True,
-        proxy: typing.Optional[Proxy] = None,
+        proxy: typing.Optional[ProxyTypes] = None,
         uds: typing.Optional[str] = None,
         local_address: typing.Optional[str] = None,
         retries: int = 0,
         socket_options: typing.Optional[typing.Iterable[SOCKET_OPTION]] = None,
     ) -> None:
         ssl_context = create_ssl_context(verify=verify, cert=cert, trust_env=trust_env)
+        proxy = Proxy(url=proxy) if isinstance(proxy, (str, URL)) else proxy
 
         if proxy is None:
             self._pool = httpcore.AsyncConnectionPool(
@@ -328,7 +332,8 @@ class AsyncHTTPTransport(AsyncBaseTransport):
             )
         else:  # pragma: no cover
             raise ValueError(
-                f"Proxy protocol must be either 'http', 'https', or 'socks5', but got {proxy.url.scheme!r}."
+                "Proxy protocol must be either 'http', 'https', or 'socks5',"
+                " but got {proxy.url.scheme!r}."
             )
 
     async def __aenter__(self: A) -> A:  # Use generics for subclass support.

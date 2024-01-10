@@ -644,7 +644,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 auto* clientInfo = result.AddConsumerResult();
                 clientInfo->SetConsumer(userInfo.User);
                 clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
-                clientInfo->SetCommitedOffset(userInfo.GetReadOffset());
+                clientInfo->SetCommitedOffset(userInfo.Offset);
                 requiredConsumers.extract(userInfo.User);
             }
             continue;

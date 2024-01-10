@@ -4,6 +4,8 @@ Introduction
 httplib2 is a comprehensive HTTP client library, httplib2.py supports many
 features left out of other HTTP libraries.
 
+If you want to help this project by bug report or code change, [contribution guidelines](contributing.md) may contain useful information.
+
 ### HTTP and HTTPS
 
 HTTPS support is only available if the socket module was

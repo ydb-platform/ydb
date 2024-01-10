@@ -669,7 +669,6 @@ int RunMain(int argc, const char* argv[])
     TString defYtServer = gatewaysConfig.HasYt() ? NYql::TConfigClusters::GetDefaultYtServer(gatewaysConfig.GetYt()) : TString();
     auto storage = CreateFS(fileStorageCfg, defYtServer);
 
-    TVector<TIntrusivePtr<TThrRefBase>> gateways;
     THashMap<TString, TString> clusters;
     clusters["pg_catalog"] = PgProviderName;
 
@@ -706,7 +705,6 @@ int RunMain(int argc, const char* argv[])
         ytServices.FileStorage = storage;
         ytServices.Config = std::make_shared<TYtGatewayConfig>(gatewaysConfig.GetYt());
         auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-        gateways.emplace_back(ytNativeGateway);
 
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
@@ -779,7 +777,6 @@ int RunMain(int argc, const char* argv[])
             funcRegistry.Get()
         );
         auto pqGateway = CreatePqNativeGateway(pqServices);
-        gateways.emplace_back(pqGateway);
         for (auto& cluster: gatewaysConfig.GetPq().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{PqProviderName});
         }
@@ -791,7 +788,6 @@ int RunMain(int argc, const char* argv[])
         auto solomonConfig = gatewaysConfig.GetSolomon();
         auto solomonGateway = CreateSolomonGateway(solomonConfig);
 
-        gateways.emplace_back(solomonGateway);
         dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, false));
         for (const auto& cluster: gatewaysConfig.GetSolomon().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
@@ -825,7 +821,6 @@ int RunMain(int argc, const char* argv[])
                 metricsPusherFactory);
         }
 
-        gateways.emplace_back(dqGateway);
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
     }
 

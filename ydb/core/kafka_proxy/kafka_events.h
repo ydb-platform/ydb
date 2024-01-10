@@ -29,6 +29,7 @@ struct TEvKafka {
         EvKillReadSession,
         EvCommitedOffsetsResponse,
         EvCreateTopicsResponse,
+        EvReadSessionInfo,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -165,6 +166,14 @@ struct TEvKafka {
         {}
     };
 
+    struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
+        TEvReadSessionInfo(const TString& groupId)
+        : GroupId(groupId)
+        {}
+
+        TString GroupId;
+    };
+
     struct TEvKillReadSession : public TEventLocal<TEvKillReadSession, EvKillReadSession> {};
 
     struct TEvUpdateHistCounter : public TEventLocal<TEvUpdateHistCounter, EvUpdateHistCounter> {
@@ -211,17 +220,11 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse> 
                            , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
 {
-    enum EStatus {
-        OK,
-        ERROR,
-        UNKNOWN_TOPIC,
-    };
-
     TEvCommitedOffsetsResponse()
     {}
 
     TString TopicName;
-    EStatus Status;
+    EKafkaErrors Status;
     std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 

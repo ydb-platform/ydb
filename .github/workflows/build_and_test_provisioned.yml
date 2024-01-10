@@ -55,6 +55,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+      with:
+        ref: cmakebuild
     - name: Build
       uses: ./.github/actions/build
       if: inputs.run_build

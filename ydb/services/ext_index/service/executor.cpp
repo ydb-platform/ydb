@@ -27,13 +27,13 @@ void TExecutor::Handle(TEvAddData::TPtr& ev) {
 
 class TIndexesController: public IActivationExternalController, public IDeletingExternalController {
 public:
-    virtual void OnActivationFailed(const TString& errorMessage, const TString& requestId) override {
+    virtual void OnActivationFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& requestId) override {
         ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot activate index for " << requestId << ": " << errorMessage;
     }
     virtual void OnActivationSuccess(const TString& requestId) override {
         ALS_NOTICE(NKikimrServices::EXT_INDEX) << "index activated " << requestId;
     }
-    virtual void OnDeletingFailed(const TString& errorMessage, const TString& requestId) override {
+    virtual void OnDeletingFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& requestId) override {
         ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot remove index for " << requestId << ": " << errorMessage;
     }
     virtual void OnDeletingSuccess(const TString& requestId) override {

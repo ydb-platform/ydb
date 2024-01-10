@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.20.4.1)
+VERSION(4.24.0.4)
 
 LICENSE(Apache-2.0)
 
@@ -10,7 +10,6 @@ NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
-    google-stubs/__init__.pyi
     google-stubs/protobuf/__init__.pyi
     google-stubs/protobuf/any_pb2.pyi
     google-stubs/protobuf/api_pb2.pyi
@@ -24,6 +23,7 @@ PY_SRCS(
     google-stubs/protobuf/field_mask_pb2.pyi
     google-stubs/protobuf/internal/__init__.pyi
     google-stubs/protobuf/internal/api_implementation.pyi
+    google-stubs/protobuf/internal/builder.pyi
     google-stubs/protobuf/internal/containers.pyi
     google-stubs/protobuf/internal/decoder.pyi
     google-stubs/protobuf/internal/encoder.pyi

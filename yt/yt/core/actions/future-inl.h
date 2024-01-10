@@ -2210,8 +2210,8 @@ private:
             }
 
             if (Options_.CancelInputOnShortcut &&
-               responseIndex < static_cast<int>(this->Futures_.size()) - 1 &&
-               this->TryAcquireFuturesCancelLatch())
+                responseIndex < static_cast<int>(this->Futures_.size()) - 1 &&
+                this->TryAcquireFuturesCancelLatch())
             {
                 this->CancelFutures(NYT::TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
@@ -2247,7 +2247,7 @@ private:
         }
 
         if (Options_.CancelInputOnShortcut &&
-           this->TryAcquireFuturesCancelLatch())
+            this->TryAcquireFuturesCancelLatch())
         {
             this->CancelFutures(NYT::TError(
                 NYT::EErrorCode::FutureCombinerShortcut,

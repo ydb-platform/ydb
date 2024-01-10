@@ -17,7 +17,11 @@ SRCS(
 END()
 
 RECURSE(
-    fuzz
     list_codings
+)
+
+RECURSE_FOR_TESTS(
+    benchmark
+    fuzz
     ut
 )

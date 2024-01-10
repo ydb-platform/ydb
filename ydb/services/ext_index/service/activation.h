@@ -12,7 +12,7 @@ class IActivationExternalController {
 public:
     using TPtr = std::shared_ptr<IActivationExternalController>;
     virtual ~IActivationExternalController() = default;
-    virtual void OnActivationFailed(const TString& errorMessage, const TString& requestId) = 0;
+    virtual void OnActivationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& requestId) = 0;
     virtual void OnActivationSuccess(const TString& requestId) = 0;
 };
 
@@ -31,22 +31,22 @@ private:
 
 protected:
     virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) override {
-        ExternalController->OnActivationFailed(errorMessage, requestId);
+        ExternalController->OnActivationFailed(Ydb::StatusIds::INTERNAL_ERROR, errorMessage, requestId);
         SelfContainer = nullptr;
     }
     virtual void OnDescriptionSuccess(NMetadata::NProvider::TTableInfo&& result, const TString& requestId) override;
 
     virtual void OnModificationFinished(const TString& modificationId) override;
 
-    virtual void OnModificationFailed(const TString& errorMessage, const TString& modificationId) override;
+    virtual void OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& modificationId) override;
 
     virtual void OnRequestResult(NMetadata::NRequest::TDialogYQLRequest::TResponse&& /*result*/) override {
         ExternalController->OnActivationSuccess(RequestId);
         SelfContainer = nullptr;
     }
 
-    virtual void OnRequestFailed(const TString& errorMessage) override {
-        ExternalController->OnActivationFailed(errorMessage, RequestId);
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+        ExternalController->OnActivationFailed(status, errorMessage, RequestId);
         SelfContainer = nullptr;
     }
 public:

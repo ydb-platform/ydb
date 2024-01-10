@@ -47,7 +47,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (
+    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options), (override));
 

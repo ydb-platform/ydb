@@ -222,7 +222,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
         }
     }
 
-    IncCounter(COUNTER_PREPARE_REQUEST);
+    IncCounter(COUNTER_WRITE_REQUEST);
 
     if (CheckDataTxRejectAndReply(ev, ctx)) {
         return;

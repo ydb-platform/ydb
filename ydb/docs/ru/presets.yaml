@@ -1,3 +1,6 @@
 default:
   lang: ru
   # link-console-main: https://console.cloud.yandex.ru
+
+  team:
+    fomichev: [Андрей Фомичев](https://www.linkedin.com/in/andrey-fomichev/) (руководитель YDB)

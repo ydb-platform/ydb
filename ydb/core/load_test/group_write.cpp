@@ -95,9 +95,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , BytesInFlight(0)
         {}
 
-        operator bool() const {
-            return (!MaxRequestsInFlight || RequestsInFlight < MaxRequestsInFlight) &&
-                    (!MaxBytesInFlight || BytesInFlight < MaxBytesInFlight);
+        bool LimitReached() const {
+            return (MaxRequestsInFlight && RequestsInFlight >= MaxRequestsInFlight) ||
+                    (MaxBytesInFlight && BytesInFlight >= MaxBytesInFlight);
         }
 
         void Request(ui64 size) {
@@ -106,7 +106,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void Response(ui64 size) {
-            Y_DEBUG_ABORT_UNLESS(BytesInFlight >= size && RequestsInFlight >= 0);
+            Y_DEBUG_ABORT_UNLESS(BytesInFlight >= size && RequestsInFlight > 0);
             BytesInFlight -= size;
             --RequestsInFlight;
         }
@@ -142,7 +142,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
     public:
-        bool Size() {
+        bool ConfirmedSize() {
             return ConfirmedBlobs.size();
         }
 
@@ -150,12 +150,12 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             return ConfirmedBlobs[idx];
         }
 
-        operator bool() const {
-            return SizeToWrite > 0 || BlobsToWrite > 0;
+        bool IsEmpty() const {
+            return SizeToWrite == 0 && BlobsToWrite == 0;
         }
 
         bool CanSendRequest() {
-            if (!InFlightTracker) {
+            if (InFlightTracker.LimitReached()) {
                 return false;
             }
             return !EnoughBlobsWritten(true);
@@ -205,9 +205,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         TLogoBlobID GetRandomBlobId() {
             Y_ABORT_UNLESS(!ConfirmedBlobs.empty());
-            auto iter = ConfirmedBlobs.begin();
-            std::advance(iter, RandomNumber(ConfirmedBlobs.size()));
-            return *iter;
+            auto idx = RandomNumber(ConfirmedBlobs.size());
+            return ConfirmedBlobs[idx];
         }
 
         TString ToString() {
@@ -609,7 +608,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void MakeInitialAllocation(const TActorContext& ctx) {
-            if (!InitialAllocation) {
+            if (InitialAllocation.IsEmpty()) {
                 Self.InitialAllocationCompleted(ctx);
                 return;
             }
@@ -829,7 +828,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         void IssueWriteIfPossible(const TActorContext& ctx) {
             const TMonotonic now = TActivationContext::Monotonic();
-            while (WriteSettings.LoadEnabled && WriteSettings.InFlightTracker &&
+            while (WriteSettings.LoadEnabled && !WriteSettings.InFlightTracker.LimitReached() &&
                     (TotalBytesWritten + WriteSettings.InFlightTracker.BytesInFlight < WriteSettings.MaxTotalBytes || !WriteSettings.MaxTotalBytes) &&
                     now >= NextWriteTimestamp &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvPut)) {
@@ -896,7 +895,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 ResponseQT->Increment(response.MicroSeconds());
                 IssueWriteIfPossible(ctx);
 
-                if (ConfirmedBlobIds.size() == 1 && !InitialAllocation) {
+                if (ConfirmedBlobIds.size() == 1 && !InitialAllocation.IsEmpty()) {
                     if (NextReadTimestamp == TMonotonic()) {
                         NextReadTimestamp = TActivationContext::Monotonic();
                     }
@@ -985,9 +984,9 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueReadIfPossible(const TActorContext& ctx) {
             const TMonotonic now = TActivationContext::Monotonic();
 
-            while (ReadSettings.LoadEnabled && ReadSettings.InFlightTracker &&
+            while (ReadSettings.LoadEnabled && !ReadSettings.InFlightTracker.LimitReached() &&
                     now >= NextReadTimestamp &&
-                    ConfirmedBlobIds.size() + InitialAllocation.Size() > 0 &&
+                    ConfirmedBlobIds.size() + InitialAllocation.ConfirmedSize() > 0 &&
                     (!ScriptedRequests || ScriptedRequests[ScriptedCounter].EvType == TEvBlobStorage::EvGet)) {
                 IssueReadRequest(ctx);
             }
@@ -1001,8 +1000,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueReadRequest(const TActorContext& ctx) {
             TLogoBlobID id;
             ui32 confirmedBlobs = ConfirmedBlobIds.size();
-            ui32 initialBlobs = InitialAllocation.Size();
-            Y_VERIFY(confirmedBlobs + initialBlobs > 0);
+            ui32 initialBlobs = InitialAllocation.ConfirmedSize();
+            Y_ABORT_UNLESS(confirmedBlobs + initialBlobs > 0);
             ui32 blobIdx = RandomNumber(confirmedBlobs + initialBlobs);
     
             if (blobIdx < confirmedBlobs) {

@@ -142,9 +142,9 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
-            // Special treatment for an empty key
+            // special treatment for an empty key
             switch (seek) {
                 case ESeek::Lower:
                     return Seek(0);
@@ -152,6 +152,20 @@ public:
                 case ESeek::Upper:
                     return Seek(GetEndRowId());
             }
+        }
+
+        if (slice) {
+            if (seek == ESeek::Exact && TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults) < 0) {
+                // key < FirstKey
+                return Exhaust();
+            }
+
+            if (int cmp = TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults); cmp < 0 || cmp == 0 && seek == ESeek::Upper) {
+                // LastKey < key || LastKey == key && Upper
+                return Exhaust();
+            }
+
+            // TODO: move row id checks from flat_part_iter_multi.h here?
         }
 
         return DoSeek<TSeekKey>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
@@ -162,9 +176,9 @@ public:
      *
      * Result is approximate and may be off by one page
      */
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) override {
         if (!key) {
-            // Special treatment for an empty key
+            // special treatment for an empty key
             switch (seek) {
                 case ESeek::Lower:
                     return Seek(GetEndRowId() - 1);
@@ -172,6 +186,20 @@ public:
                 case ESeek::Upper:
                     return Seek(GetEndRowId());
             }
+        }
+
+        if (slice) {
+            if (seek == ESeek::Exact && TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults) < 0) {
+                // LastKey < key
+                return Exhaust();
+            }
+
+            if (int cmp = TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults); cmp < 0 || cmp == 0 && seek == ESeek::Upper) {
+                // key < FirstKey || FirstKey == key && Upper
+                return Exhaust();
+            }
+
+            // TODO: move row id checks from flat_part_iter_multi.h here?
         }
 
         return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});

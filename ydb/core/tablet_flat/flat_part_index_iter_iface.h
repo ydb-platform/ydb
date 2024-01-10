@@ -2,6 +2,7 @@
 
 #include "flat_page_base.h"
 #include "flat_part_iface.h"
+#include "flat_part_slice.h"
 
 namespace NKikimr::NTable {
     
@@ -10,8 +11,8 @@ namespace NKikimr::NTable {
 
         virtual EReady Seek(TRowId rowId) = 0;
         virtual EReady SeekLast() = 0;
-        virtual EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) = 0;
-        virtual EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) = 0;
+        virtual EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) = 0;
+        virtual EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice) = 0;
         virtual EReady Next() = 0;
         virtual EReady Prev() = 0;
 

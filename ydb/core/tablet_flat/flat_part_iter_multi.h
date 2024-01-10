@@ -119,13 +119,14 @@ namespace NTable {
         {
         }
 
-        void SetBounds(TRowId beginRowId, TRowId endRowId) noexcept
+        void SetBounds(const TSlice& slice) noexcept
         {
-            BeginRowId = beginRowId;
-            EndRowId = Min(endRowId, Index.GetEndRowId());
+            BeginRowId = slice.BeginRowId();
+            EndRowId = Min(slice.EndRowId(), Index.GetEndRowId());
             Y_DEBUG_ABORT_UNLESS(BeginRowId < EndRowId,
                 "Trying to iterate over empty bounds=[%lu,%lu)", BeginRowId, EndRowId);
             RowId = Max<TRowId>();
+            Slice = &slice;
         }
 
         EReady Seek(const TCells key, ESeek seek,
@@ -134,7 +135,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (auto ready = Index.Seek(seek, key, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.Seek(seek, key, keyDefaults, Slice); ready != EReady::Data) {
                 return Terminate(ready);
             }
 
@@ -214,7 +215,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (auto ready = Index.SeekReverse(seek, key, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.SeekReverse(seek, key, keyDefaults, Slice); ready != EReady::Data) {
                 return Terminate(ready);
             }
 
@@ -454,6 +455,7 @@ namespace NTable {
     protected:
         TRowId BeginRowId;
         TRowId EndRowId;
+        TSlice const * Slice;
         TRowId RowId;
     };
 
@@ -627,7 +629,7 @@ namespace NTable {
             }
 
             // Full index binary search
-            if (auto ready = Index.Seek(ESeek::Lower, key, keyDefaults); ready != EReady::Data) {
+            if (auto ready = Index.Seek(ESeek::Lower, key, keyDefaults, nullptr); ready != EReady::Data) {
                 return Terminate(ready);
             }
 
@@ -802,12 +804,7 @@ namespace NTable {
 
         void SetBounds(const TSlice& slice) noexcept
         {
-            Main.SetBounds(slice.BeginRowId(), slice.EndRowId());
-        }
-
-        void SetBounds(TRowId beginRowId, TRowId endRowId) noexcept
-        {
-            Main.SetBounds(beginRowId, endRowId);
+            Main.SetBounds(slice);
         }
 
         EReady Seek(const TCells key, ESeek seek) noexcept

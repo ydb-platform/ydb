@@ -49,7 +49,7 @@ public:
         return DataOrGone();
     }
 
-    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const *) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -59,7 +59,7 @@ public:
         return DataOrGone();
     }
 
-    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) override {
+    EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const *) override {
         auto index = TryGetIndex();
         if (!index) {
             return EReady::Page;
@@ -161,7 +161,8 @@ private:
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             Index = TIndex(*page);
-            Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");
+            Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId() || Index->GetEndRowId() == Max<TRowId>(), 
+                "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");
             return &*Index;
         }
         return { };

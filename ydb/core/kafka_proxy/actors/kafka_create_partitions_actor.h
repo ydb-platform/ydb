@@ -5,9 +5,12 @@
 
 namespace NKafka {
 
-class TKafkaCreateTopicsActor: public NActors::TActorBootstrapped<TKafkaCreateTopicsActor> {
+class TKafkaCreatePartitionsActor: public NActors::TActorBootstrapped<TKafkaCreatePartitionsActor> {
 public:
-    TKafkaCreateTopicsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreateTopicsRequestData>& message)
+    TKafkaCreatePartitionsActor(
+            const TContext::TPtr context,
+            const ui64 correlationId,
+            const TMessagePtr<TCreatePartitionsRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message) {
@@ -26,11 +29,10 @@ public:
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
-    const TMessagePtr<TCreateTopicsRequestData> Message;
+    const TMessagePtr<TCreatePartitionsRequestData> Message;
     std::unordered_set<TString> DuplicateTopicNames;
     ui32 InflyTopics = 0;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvTopicModificationResponse>> TopicNamesToResponses;
-    std::unordered_map<TString, std::pair<std::optional<ui64>, std::optional<ui64>>> TopicNamesToRetentions;
 
     TStringBuilder InputLogMessage();
     void ProcessValidateOnly(const NActors::TActorContext& ctx);

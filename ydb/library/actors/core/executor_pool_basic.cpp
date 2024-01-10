@@ -4,6 +4,7 @@
 #include "executor_thread_ctx.h"
 #include "probes.h"
 #include "mailbox.h"
+#include <atomic>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -578,6 +579,10 @@ namespace NActors {
     }
 
     bool TSharedExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+        i64 requestsForWakeUp = RequestsForWakeUp.fetch_sub(1, std::memory_order_acq_rel);
+        if (requestsForWakeUp) {
+            return false;
+        }
         EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
         Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
         if (spinThresholdCycles > 0) {

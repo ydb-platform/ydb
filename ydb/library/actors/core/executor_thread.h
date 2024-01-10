@@ -137,11 +137,6 @@ namespace NActors {
     };
 
     class TSharedExecutorThread: public TGenericExecutorThread {
-        enum class EState : ui64 {
-            Running = 0,
-            NeedToReloadPools,
-        };
-
     public:
         TSharedExecutorThread(TWorkerId workerId,
                     TActorSystem* actorSystem,
@@ -155,14 +150,10 @@ namespace NActors {
         virtual ~TSharedExecutorThread()
         {}
 
-        void UpdatePools();
-
     private:
         TProcessingResult ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool);
 
         void* ThreadProc();
-
-        std::atomic<EState> NeedToReloadPools = EState::NeedToReloadPools;
 
         TSharedExecutorThreadCtx *ThreadCtx;
     };

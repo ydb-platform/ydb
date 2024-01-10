@@ -37,6 +37,15 @@ namespace NActors {
         EASProfile ActorSystemProfile = EASProfile::Default;
     };
 
+    struct TSharedExecutorPoolConfig {
+        ui32 Threads = 1;
+        ui64 SpinThreshold = 100;
+        TCpuMask Affinity; // Executor thread affinity
+        TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
+        ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
+        i16 SoftProcessingDurationTs = 0;
+    };
+
     struct TIOExecutorPoolConfig {
         ui32 PoolId = 0;
         TString PoolName;

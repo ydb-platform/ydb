@@ -257,14 +257,6 @@ void TColumnShard::SendWaitPlanStep(ui64 step) {
 void TColumnShard::RescheduleWaitingReads() {
     ui64 minWaitingStep = Max<ui64>();
     TRowVersion maxReadVersion = GetMaxReadVersion();
-    for (auto it = WaitingReads.begin(); it != WaitingReads.end();) {
-        if (maxReadVersion < it->first) {
-            minWaitingStep = Min(minWaitingStep, it->first.Step);
-            break;
-        }
-        TActivationContext::Send(it->second.Release());
-        it = WaitingReads.erase(it);
-    }
     for (auto it = WaitingScans.begin(); it != WaitingScans.end();) {
         if (maxReadVersion < it->first) {
             minWaitingStep = Min(minWaitingStep, it->first.Step);

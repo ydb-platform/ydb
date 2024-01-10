@@ -55,13 +55,6 @@ class TOperationsManager;
 extern bool gAllowLogBatchingDefaultValue;
 
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
-IActor* CreateReadActor(ui64 tabletId, const NActors::TActorId readBlobsActor,
-                        const TActorId& dstActor, const std::shared_ptr<NOlap::IStoragesManager>& storages,
-                        std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
-                        NOlap::TReadMetadata::TConstPtr readMetadata,
-                        const TInstant& deadline,
-                        const TActorId& columnShardActorId,
-                        ui64 requestCookie, const TConcreteScanCounters& counters);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 
 struct TSettings {
@@ -151,7 +144,6 @@ class TColumnShard
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -264,7 +256,6 @@ protected:
             HFunc(TEvColumnShard::TEvScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
-            HFunc(TEvColumnShard::TEvRead, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
@@ -428,7 +419,6 @@ private:
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
@@ -493,7 +483,7 @@ private:
 
     static TDuration GetControllerPeriodicWakeupActivationPeriod();
     static TDuration GetControllerStatsReportInterval();
-    
+
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;

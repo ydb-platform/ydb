@@ -119,6 +119,17 @@ namespace NActors {
             : TGenericExecutorThread(workerId, cpuId, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
+
+        TExecutorThread(TWorkerId workerId,
+                        TActorSystem* actorSystem,
+                        IExecutorPool* executorPool,
+                        TMailboxTable* mailboxTable,
+                        const TString& threadName,
+                        TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
+                        ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX)
+            : TGenericExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
+        {}
+
         virtual ~TExecutorThread()
         {}
 

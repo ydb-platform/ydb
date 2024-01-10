@@ -964,12 +964,12 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }, env, message, failsAllowed);
     }
 
-    EReady SeekKey(IIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+    EReady SeekKey(IIndexIter& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TKeyCellDefaults *keyDefaults, TSlice const * slice, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             if (reverse) {
-                return iter.SeekReverse(seek, key, keyDefaults, nullptr); // TODO
+                return iter.SeekReverse(seek, key, keyDefaults, slice);
             } else {
-                return iter.Seek(seek, key, keyDefaults, nullptr); // TODO
+                return iter.Seek(seek, key, keyDefaults, slice);
             }
         }, env, message, failsAllowed);
     }
@@ -1040,9 +1040,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
                             message << c.AsValue<ui32>() << " ";
                         }
                         
-                        EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, keyDefaults, message);
-                        EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, message);
-                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, key.empty() ? flatReady : EReady::Data, "Can't be exhausted");
+                        EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, keyDefaults, &(*part.Slices)[0], message);
+                        EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, &(*part.Slices)[0], message);
                         AssertEqual(bTree, bTreeReady, flat, flatReady, message);
 
                         if (!key) {
@@ -1105,7 +1104,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
         const auto part = *eggs.Lone();
 
-        Cerr << DumpPart(part, 1) << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 
@@ -1188,7 +1188,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         const auto part = *eggs.Lone();
 
-        Cerr << DumpPart(part, 1) << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
 

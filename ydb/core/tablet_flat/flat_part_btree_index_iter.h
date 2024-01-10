@@ -154,7 +154,17 @@ public:
             }
         }
 
-        if (slice && !slice->HasSearchKey(key, *keyDefaults)) {
+        if (slice) {
+            if (seek == ESeek::Exact && TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults) < 0) {
+                // the key is before the slice
+                return Exhaust();
+            }
+
+            if (TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults) < 0) {
+                // the key is after the slice
+                return Exhaust();
+            }
+
             return Exhaust();
         }
 
@@ -178,9 +188,7 @@ public:
             }
         }
 
-        if (slice && !slice->HasSearchKey(key, *keyDefaults)) {
-            return Exhaust();
-        }
+        Y_UNUSED(slice);
 
         return DoSeek<TSeekKeyReverse>({seek, key, GroupInfo.ColsKeyIdx, keyDefaults});
     }

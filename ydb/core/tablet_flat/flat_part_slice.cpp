@@ -177,15 +177,6 @@ int TBounds::CompareLastKeySearchKey(
     return bounds.LastInclusive ? 0 : -1;
 }
 
-bool TBounds::HasSearchKey(
-        TArrayRef<const TCell> key,
-        const TKeyCellDefaults& keyDefaults) const noexcept
-{
-    return 
-        TSlice::CompareSearchKeyFirstKey(key, *this, keyDefaults) >= 0 && 
-        TSlice::CompareLastKeySearchKey(*this, key, keyDefaults) >= 0;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void TSlice::Describe(IOutputStream& out) const noexcept

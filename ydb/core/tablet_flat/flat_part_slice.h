@@ -66,13 +66,6 @@ namespace NTable {
                 const TBounds& bounds,
                 TArrayRef<const TCell> key,
                 const TKeyCellDefaults& keyDefaults) noexcept;
-
-        /**
-         * Missing search key cells are treated as +inf
-         */
-        bool HasSearchKey(
-                TArrayRef<const TCell> key,
-                const TKeyCellDefaults& keyDefaults) const noexcept;
     };
 
     /**

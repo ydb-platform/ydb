@@ -24,7 +24,7 @@ namespace NKikimr::NTable {
         /**
          * Precharges data for rows between row1 and row2 inclusive
          *
-         * Important caveat: given rows range should be within Slice
+         * Important caveat: given row range should be within Slice
          */
         bool Do(TRowId row1, TRowId row2,
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
@@ -43,7 +43,7 @@ namespace NKikimr::NTable {
         /**
          * Precharges data for rows between row1 and row2 inclusive in reverse
          *
-         * Important caveat: given rows range should be within Slice
+         * Important caveat: given row range should be within Slice
          */
         bool DoReverse(TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept

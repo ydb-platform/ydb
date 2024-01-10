@@ -17,7 +17,7 @@ $ goose <DB> <DSN> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
 Where:
-- `<DB>` - database engine, in the case of YDB you should write `goose ydb`
+- `<DB>` - database engine, for YDB you should write `goose ydb`
 - `<DSN>` - database connection string.
 - `<COMMAND>` - the command to be executed. A complete list of commands is available in the built-in help (`goose help`).
 - `<COMMAND_ARGUMENTS>` - command arguments.

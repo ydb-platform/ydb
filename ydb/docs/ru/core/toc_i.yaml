@@ -29,7 +29,7 @@ items:
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
-  href: public-talks.md
+  href: public-talks/public-talks.md
 - name: Список изменений
   items:
   - name: "{{ ydb-short-name }} Server"

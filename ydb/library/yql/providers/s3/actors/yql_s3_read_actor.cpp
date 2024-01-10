@@ -404,7 +404,7 @@ public:
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                hFunc(TEvents::TEvPoison, Handle);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -595,6 +595,17 @@ public:
         UpdateEventsQueue(ev->Sender);
         ReadActorToEvents[ev->Sender].Send(new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
     }
+    
+    void Handle(TEvents::TEvPoison::TPtr& ev) {
+        if (UseRuntimeListing) {
+            FinishedConsumers.insert(ev->Sender);
+            if (FinishedConsumers.size() >= ConsumersCount) {
+                PassAway();
+            }
+        } else {
+            PassAway();
+        }
+    }
 
     void PassAway() override {
         LOG_D("TS3FileQueueActor", "PassAway");
@@ -728,6 +739,7 @@ private:
     bool UseRuntimeListing;
     TMaybe<size_t> ConsumersCount;
     THashMap<TActorId, TRetryEventsQueue> ReadActorToEvents;
+    THashSet<TActorId> FinishedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
@@ -1083,9 +1095,8 @@ private:
         ContainerCache.Clear();
         if (UseRuntimeListing) {
             FileQueueEvents.Unsubscribe();
-        } else {
-            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
         }
+        Send(FileQueueActor, new NActors::TEvents::TEvPoison());
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
@@ -2682,9 +2693,8 @@ private:
             }
             if (UseRuntimeListing) {
                 FileQueueEvents.Unsubscribe();
-            } else {
-                Send(FileQueueActor, new NActors::TEvents::TEvPoison());
             }
+            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
 
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();

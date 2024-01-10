@@ -96,7 +96,7 @@ SELECT 'down SQL query';
 
 so that we can instead enter essentially the migration requests themselves.
 
-Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that when applying the migration we create a table of the structure we need, and when rolling back the migration we delete the created table:
+Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that when applying the migration we create a table with necessary schema, and when rolling back the migration we delete the created table:
 
 ```
 -- +goose Up

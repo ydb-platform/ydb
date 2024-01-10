@@ -121,8 +121,26 @@ All subsequent migration files should be created in the same way.
 
 The `goose` utility allows you to manage migrations via the command line:
 - `goose up` - apply all known migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up`.
-- `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`.
+- `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`. 
+  > Warning: the `goose reset` command will revert all your migrations using your statements in blocks `+goose Down`. This also means that all your data in the database will be erased.
 - `goose up-by-one` - apply exactly one “next” migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one`.
 - `goose redo` - re-apply the latest migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
 - `goose down` - rollback the last migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
 - `goose status` - view the status of applying migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status`.
+  Output of command `goose status` may be next:
+  ```
+  $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+  2023/12/15 06:01:31     Applied At                  Migration
+  2023/12/15 06:01:31     =======================================
+  2023/12/15 06:01:31     Fri Dec 15 06:00:38 2023 -- 20231215052248_00001_create_table_users.sql
+  2023/12/15 06:01:31     Fri Dec 15 06:00:51 2023 -- 20231215052432_00002_upsert_test_users.sql
+  2023/12/15 06:01:31     Fri Dec 15 06:01:16 2023 -- 20231215053847_00003_create_table_roles.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215053854_00004_upsert_initial_roles.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215053928_00005_add_column_role_id_into_table_users.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215054003_00006_update_role_id_of_test_users.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215054033_00007_add_column_password_hash_into_table_users.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215054102_00008_add_index_password_hash_on_table_users.sql
+  ```
+  Column `Applied At` informs about status each migration. 
+  If column `Applied At` contains valid timestamp - migration applied. 
+  If column `Applied At` have `Pending` - this means that migration not applied and you can apply it through commands `goose up` or `goose up-by-one`.

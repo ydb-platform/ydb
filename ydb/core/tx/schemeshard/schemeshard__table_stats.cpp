@@ -180,7 +180,9 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx, const
     return newStats;
 }
 
-bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
+                                            const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item,
+                                            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = item.Ev->Get()->Record;
     const auto datashardId = TTabletId(rec.GetDatashardId());
 
@@ -205,19 +207,17 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxStoreTableStats.PersistSingleStats: main stats from"
-        << " datashardId(TabletID)=" << datashardId
-        << " maps to shardIdx: " << shardIdx
-        << ", pathId: " << pathId
-        << ", pathId map=" << Self->PathsById[pathId]->Name
-        << ", is column=" << isColumnTable
-        << ", is olap=" << isOlapStore);
+                "TTxStoreTableStats.PersistSingleStats: main stats from"
+                    << " datashardId(TabletID)=" << datashardId << " maps to shardIdx: " << shardIdx
+                    << ", pathId: " << pathId << ", pathId map=" << Self->PathsById[pathId]->Name
+                    << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
 
     const TPartitionStats newStats = PrepareStats(ctx, rec);
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Add stats from shard with datashardId(TabletID)=" << datashardId << ", pathId " << pathId.LocalPathId
-                << ": RowCount " << newStats.RowCount << ", DataSize " << newStats.DataSize);
+               "Add stats from shard with datashardId(TabletID)=" << datashardId << ", pathId " << pathId.LocalPathId
+                                                                  << ": RowCount " << newStats.RowCount << ", DataSize "
+                                                                  << newStats.DataSize);
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -266,18 +266,20 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 
             if (Self->ColumnTables.contains(tablePathId)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "add stats for exists table with pathId=" << tablePathId);
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "add stats for exists table with pathId=" << tablePathId);
 
                 auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
                 columnTable->UpdateTableStats(tablePathId, newTableStats);
             } else {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "failed add stats for table with pathId=" << tablePathId);
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "failed add stats for table with pathId=" << tablePathId);
             }
         }
 
     } else if (isColumnTable) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" 
-            << rec.GetTables().size());
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.TakeVerified(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;

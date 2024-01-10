@@ -293,12 +293,14 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats* tabletStats) {
+void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
+                                  ::NKikimrTableStats::TTableStats* tabletStats) {
     NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
     auto activeIndexStats = indexStats.Active();   // data stats excluding inactive and evicted
 
     if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes << TabletID());
+        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes
+                                                    << TabletID());
 
         activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
         activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
@@ -345,7 +347,8 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     }
 }
 
-void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
+                                        std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
     if (!TablesManager.HasPrimaryIndex()) {
         return;
     }
@@ -410,4 +413,4 @@ void TColumnShard::SendPeriodicStats() {
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
-}
+}   // namespace NKikimr::NColumnShard

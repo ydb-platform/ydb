@@ -14,7 +14,10 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t tables_in_store = 1000;
     constexpr size_t size_single_table = 13152;
 
-    const TVector<TTestHelper::TColumnSchema> schema = {TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false), TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8), TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)};
+    const TVector<TTestHelper::TColumnSchema> schema = {
+        TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+        TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)};
 
     class TOlapStatsController : public NYDBTest::NColumnShard::TController {
     public:
@@ -74,7 +77,10 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTableStore);
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testTable.SetName("/Root/TableStoreTest/ColumnTableTest")
+            .SetPrimaryKey({"id"})
+            .SetSharding({"id"})
+            .SetSchema(schema);
         testHelper.CreateTable(testTable);
 
         {
@@ -88,7 +94,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         Sleep(TDuration::Seconds(1));
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
-        auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
+        auto describeResult =
+            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
 
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
@@ -115,12 +122,18 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
         for (size_t t = 0; t < tables_in_store; t++) {
             TTestHelper::TColumnTable testTable;
-            testTable.SetName("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t)).SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+            testTable.SetName("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t))
+                .SetPrimaryKey({"id"})
+                .SetSharding({"id"})
+                .SetSchema(schema);
             testHelper.CreateTable(testTable);
 
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             for (size_t i = 0; i < t + inserted_rows; i++) {
-                tableInserter.AddRow().Add(i + t * tables_in_store).Add("test_res_" + std::to_string(i + t * tables_in_store)).AddNull();
+                tableInserter.AddRow()
+                    .Add(i + t * tables_in_store)
+                    .Add("test_res_" + std::to_string(i + t * tables_in_store))
+                    .AddNull();
             }
             testHelper.InsertData(testTable, tableInserter);
         }
@@ -129,7 +142,10 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
         for (size_t t = 0; t < tables_in_store; t++) {
-            auto describeResult = testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t), settings).GetValueSync();
+            auto describeResult =
+                testHelper.GetSession()
+                    .DescribeTable("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t), settings)
+                    .GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             const auto& description = describeResult.GetTableDescription();
 

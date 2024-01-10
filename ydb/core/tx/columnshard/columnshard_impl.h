@@ -484,6 +484,7 @@ private:
     static TDuration GetControllerPeriodicWakeupActivationPeriod();
     static TDuration GetControllerStatsReportInterval();
 
+
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {
         return StoragesManager;

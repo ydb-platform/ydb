@@ -169,8 +169,11 @@ namespace NPage {
             TIter it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);
 
             // If LastKey < key then the needed page doesn't exist
-            if (!it && LastKey && cmp(*LastKey, key)) {
-                return it;
+            if (!it && LastKey) {
+                int cmpLastKey = cmp.Compare(*LastKey, key);
+                if (cmpLastKey < 0 || cmpLastKey == 0 && seek == ESeek::Upper) {
+                    return it;
+                }
             }
 
             if (it.Off() == 0) {

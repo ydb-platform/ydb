@@ -160,8 +160,8 @@ public:
                 return Exhaust();
             }
 
-            if (TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults) < 0) {
-                // LastKey < key
+            if (int cmp = TSlice::CompareLastKeySearchKey(*slice, key, *keyDefaults); cmp < 0 || cmp == 0 && seek == ESeek::Upper) {
+                // LastKey < key || LastKey == key && Upper
                 return Exhaust();
             }
 
@@ -194,8 +194,8 @@ public:
                 return Exhaust();
             }
 
-            if (TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults) < 0) {
-                // key < FirstKey
+            if (int cmp = TSlice::CompareSearchKeyFirstKey(key, *slice, *keyDefaults); cmp < 0 || cmp == 0 && seek == ESeek::Upper) {
+                // key < FirstKey || FirstKey == key && Upper
                 return Exhaust();
             }
 

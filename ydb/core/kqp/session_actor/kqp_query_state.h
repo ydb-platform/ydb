@@ -35,7 +35,7 @@ public:
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        NWilson::TTraceId&& traceId, const TString& sessionId, TMonotonic startedAt)
+        const TString& sessionId, TMonotonic startedAt)
         : QueryId(queryId)
         , Database(database)
         , Cluster(cluster)
@@ -62,7 +62,7 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
-            TWilsonKqp::KqpSession, std::move(traceId),
+            TWilsonKqp::KqpSession, std::move(RequestEv->GetWilsonTraceId()),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();

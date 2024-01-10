@@ -342,23 +342,23 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             auto lookupActorSpan = trace.Root.BFSFindOne("LookupActor");
             UNIT_ASSERT(lookupActorSpan);
 
-            auto dsReads = lookupActorSpan->get().FindAll("DataShard.Read"); // Lookup actor sends EvRead to each shard.
+            auto dsReads = lookupActorSpan->get().FindAll("Datashard.Read"); // Lookup actor sends EvRead to each shard.
             UNIT_ASSERT_EQUAL(dsReads.size(), 2);
 
             canon = "(Session.query.QUERY_ACTION_EXECUTE -> [(CompileService -> [(CompileActor)]) "
                 ", (DataExecuter -> [(WaitForTableResolve) , (WaitForSnapshot) , (ComputeActor) "
-                ", (ComputeActor -> [(LookupActor -> [(WaitForShardsResolve) , (DataShard.Read "
+                ", (ComputeActor -> [(LookupActor -> [(WaitForShardsResolve) , (Datashard.Read "
                 "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) "
                 ", (Datashard.Unit) , (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
                 ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
                 ", (Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit)]) , (Tablet.WriteLog "
-                "-> [(Tablet.WriteLog.LogEntry)])]) , (ReadIterator.ReadOperation)]) , (DataShard.Read "
+                "-> [(Tablet.WriteLog.LogEntry)])])]) , (Datashard.Read "
                 "-> [(Tablet.Transaction -> [(Tablet.Transaction.Execute -> [(Datashard.Unit) , (Datashard.Unit) "
                 ", (Datashard.Unit)]) , (Tablet.Transaction.Wait) , (Tablet.Transaction.Enqueued) "
                 ", (Tablet.Transaction.Execute -> [(Datashard.Unit)]) , (Tablet.Transaction.Wait) "
                 ", (Tablet.Transaction.Enqueued) , (Tablet.Transaction.Execute -> [(Datashard.Unit) "
-                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])]) "
-                ", (ReadIterator.ReadOperation)])])]) , (ComputeActor) , (RunTasks)])])";
+                ", (Datashard.Unit)]) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry)])])"
+                "])])]) , (ComputeActor) , (RunTasks)])])";
         } else {
             auto deSpan = trace.Root.BFSFindOne("DataExecuter");
             UNIT_ASSERT(deSpan);

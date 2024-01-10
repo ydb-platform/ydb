@@ -76,7 +76,7 @@ public:
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in(state.Data(), state.Size());
+            TStringBuf in = TStateCreator::Reader::GetSimpleSnapshot(state);
 
             auto size = ReadUi32(in);
             Buckets.resize(size);

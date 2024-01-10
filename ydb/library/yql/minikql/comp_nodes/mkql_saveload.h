@@ -147,8 +147,17 @@ public:
             Type = static_cast<EType>(type);
         }
 
-        EType GetType() {
+        EType GetType() const {
             return *Type;
+        }
+
+        static TStringBuf GetSimpleSnapshot(const NUdf::TStringRef& state) {
+            TStringBuf buf(state.Data(), state.Size());
+            Reader reader(buf);
+            MKQL_ENSURE(reader.GetType() == EType::SIMPLE_BLOB, "state type is not SIMPLE_BLOB");
+            auto str = ReadString(buf);
+            MKQL_ENSURE(buf.empty(), "broken state");
+            return str;
         }
 
         std::string_view ReadSimpleSnapshot() {

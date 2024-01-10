@@ -81,7 +81,7 @@ private:
 template<class THasher>
 TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config)
     : TopicName(config.GetPQTabletConfig().GetTopicName()) {
-    for(const auto& p : config.GetPartitions()) {
+    for(const auto& p : config.GetPQTabletConfig().GetAllPartitions()) {
         if (NKikimrPQ::ETopicPartitionStatus::Active == p.GetStatus()) {
             auto toBound = p.HasKeyRange() && p.GetKeyRange().HasToBound() ?
                             std::optional<TString>(p.GetKeyRange().GetToBound()) : std::nullopt;
@@ -127,7 +127,7 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
 //
 template<class THasher>
 THashChooser<THasher>::THashChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
-    for(const auto& p : config.GetPartitions()) {
+    for(const auto& p : config.GetPQTabletConfig().GetAllPartitions()) {
         if (NKikimrPQ::ETopicPartitionStatus::Active == p.GetStatus()) {
             Partitions.emplace_back(TPartitionInfo{p.GetPartitionId(),
                                     p.GetTabletId()});

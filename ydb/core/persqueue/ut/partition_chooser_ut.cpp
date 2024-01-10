@@ -26,27 +26,65 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
     config->SetTopicName("/Root/topic-1");
     config->SetTopicPath("/Root");
 
-    auto* p0 = result.AddPartitions();
-    p0->SetPartitionId(0);
-    p0->SetTabletId(1000);
-    p0->MutableKeyRange()->SetToBound("C");
+    {
+        auto* p = result.AddPartitions();
+        p->SetPartitionId(0);
+        p->SetTabletId(1000);
+        p->MutableKeyRange()->SetToBound("C");
+    }
 
-    auto* p1 = result.AddPartitions();
-    p1->SetPartitionId(1);
-    p1->SetTabletId(1001);
-    p1->MutableKeyRange()->SetFromBound("C");
-    p1->MutableKeyRange()->SetToBound("F");
+    {
+        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
+        p->SetPartitionId(0);
+        p->SetTabletId(1000);
+        p->MutableKeyRange()->SetToBound("C");
+    }
 
-    auto* p2 = result.AddPartitions();
-    p2->SetPartitionId(2);
-    p2->SetTabletId(1002);
-    p2->MutableKeyRange()->SetFromBound("F");
+    {
+        auto* p = result.AddPartitions();
+        p->SetPartitionId(1);
+        p->SetTabletId(1001);
+        p->MutableKeyRange()->SetFromBound("C");
+        p->MutableKeyRange()->SetToBound("F");
+    }
 
-    auto* p3 = result.AddPartitions();
-    p3->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
-    p3->SetPartitionId(3);
-    p3->SetTabletId(1003);
-    p3->MutableKeyRange()->SetFromBound("D");
+    {
+        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
+        p->SetPartitionId(1);
+        p->SetTabletId(1001);
+        p->MutableKeyRange()->SetFromBound("C");
+        p->MutableKeyRange()->SetToBound("F");
+    }
+
+    {
+        auto* p = result.AddPartitions();
+        p->SetPartitionId(2);
+        p->SetTabletId(1002);
+        p->MutableKeyRange()->SetFromBound("F");
+    }
+
+    {
+        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
+        p->SetPartitionId(2);
+        p->SetTabletId(1002);
+        p->MutableKeyRange()->SetFromBound("F");
+    }
+
+    {
+        auto* p = result.AddPartitions();
+        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
+        p->SetPartitionId(3);
+        p->SetTabletId(1003);
+        p->MutableKeyRange()->SetFromBound("D");
+    }
+
+    {
+        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
+        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
+        p->SetPartitionId(3);
+        p->SetTabletId(1003);
+        p->MutableKeyRange()->SetFromBound("D");
+    }
 
     return result;
 }
@@ -269,9 +307,12 @@ TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui64 tabletId
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     NPersQueue::TTestServer server{};
+    server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
 
     CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1001, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
 
     {
@@ -307,7 +348,8 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     {
         // Use prefered partition, but sourceId not in partition boundary
         auto r = ChoosePartition(server, SMEnabled, "A_Source_1", 1);
-        UNIT_ASSERT(r->Error);
+        UNIT_ASSERT(r->Result);
+        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
     }
 }
 

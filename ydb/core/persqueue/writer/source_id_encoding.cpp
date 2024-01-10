@@ -21,14 +21,14 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $SourceId AS Utf8; "
-                   "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
+                   "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `" << path << "` "
                    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
         case ESourceIdTableGeneration::PartitionMapping:
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint64; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $SourceId AS Utf8; "
-                   "SELECT Partition, CreateTime, AccessTime FROM `"
+                   "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `"
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
@@ -59,9 +59,10 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
-                   "DECLARE $AccessTime AS Uint64;\n"
-                   "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
+                   "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $SeqNo AS Uint64;\n"
+                   "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
         case ESourceIdTableGeneration::PartitionMapping:
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
@@ -69,10 +70,42 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $Hash AS Uint64; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
-                   "DECLARE $AccessTime AS Uint64;\n"
+                   "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $SeqNo AS Uint64;\n"
                    "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
-                    << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
+                    << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
+        default:
+            Y_ABORT();
+    }
+}
+
+TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            return TStringBuilder() << "--!syntax_v1\n"
+                   "DECLARE $SourceId AS Utf8; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $Hash AS Uint32; "
+                   "DECLARE $Partition AS Uint32; "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $SeqNo AS Uint64;\n"
+                   "UPDATE `" << path << "` "
+                   "SET AccessTime = $AccessTime "
+                   "WHERE Hash = $Hash AND Topic = $Topic AND Partition = $Partition AND SourceId = $SourceId;";
+        case ESourceIdTableGeneration::PartitionMapping:
+            return TStringBuilder() << "--!syntax_v1\n"
+                   "DECLARE $SourceId AS Utf8; "
+                   "DECLARE $Topic AS Utf8; "
+                   "DECLARE $Hash AS Uint64; "
+                   "DECLARE $Partition AS Uint32; "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $SeqNo AS Uint64;\n"
+                   "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath() << "` "
+                   "SET AccessTime = $AccessTime "
+                   "WHERE Hash = $Hash AND Topic = $Topic AND ProducerId = $SourceId AND Partition = $Partition;";
         default:
             Y_ABORT();
     }
@@ -84,6 +117,20 @@ TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
             return GetUpdateSourceIdQueryFromPath(root + "/SourceIdMeta2", generation);
         case ESourceIdTableGeneration::PartitionMapping:
             return GetUpdateSourceIdQueryFromPath(
+                    NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
+                    generation
+            );
+        default:
+            Y_ABORT();
+    }
+}
+
+TString GetUpdateAccessTimeQuery(const TString& root, ESourceIdTableGeneration generation) {
+    switch (generation) {
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            return GetUpdateAccessTimeQueryFromPath(root + "/SourceIdMeta2", generation);
+        case ESourceIdTableGeneration::PartitionMapping:
+            return GetUpdateAccessTimeQueryFromPath(
                     NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath(),
                     generation
             );

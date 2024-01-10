@@ -122,8 +122,19 @@ const TPartitionGraph::Node* TPartitionGraph::GetPartition(ui32 id) const {
 }
 
 std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
+    const auto* p = GetPartition(id);
+    if (!p) {
+        Cerr << ">>>>> Unknown partition p=" << id << Endl;
+        Cerr << ">>>>> Known: ";
+        for(const auto& [k,_] : Partitions) {
+            Cerr << k << ", ";
+        }
+        Cerr << Endl;
+        return {};
+    }
+
     std::deque<const Node*> queue;
-    queue.push_back(GetPartition(id));
+    queue.push_back(p);
 
     std::set<ui32> result;
     while(!queue.empty()) {

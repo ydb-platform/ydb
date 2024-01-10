@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.h"
 #include "pipe_utils.h"
 
 #include <ydb/core/persqueue/events/global.h>
@@ -13,7 +12,6 @@ class TPQRBHelper {
 public:
     TPQRBHelper(ui64 balancerTabletId)
         : BalancerTabletId(balancerTabletId) {
-            Cerr << ">>>>> balancerTabletId = " << balancerTabletId << Endl;
     }
 
     std::optional<ui32> PartitionId() const {

@@ -299,7 +299,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     }
 
     State = ES_DYING;
-
+    TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
 }
 

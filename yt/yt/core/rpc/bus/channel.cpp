@@ -1044,7 +1044,7 @@ private:
                     responseHandler,
                     TStringBuf("Request acknowledgment failed"),
                     TError(NRpc::EErrorCode::TransportError, "Request acknowledgment failed")
-                         << error);
+                        << error);
             }
         }
 

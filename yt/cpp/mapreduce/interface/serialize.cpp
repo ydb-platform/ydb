@@ -254,7 +254,7 @@ void Serialize(const TColumnSchema& columnSchema, NYson::IYsonConsumer* consumer
         })
         .DoIf(columnSchema.StableName().Defined(), [&] (TFluentMap fluent) {
             fluent.Item("stable_name").Value(*columnSchema.StableName());
-         })
+        })
         .DoIf(columnSchema.Deleted().Defined(), [&] (TFluentMap fluent) {
             fluent.Item("deleted").Value(*columnSchema.Deleted());
         })

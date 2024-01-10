@@ -71,7 +71,7 @@ TEST(TLazyYPathServiceTest, SimpleTypes)
                     .Item("key4").Value(true)
                     .Item("key5").Value(0.1)
                     .Item("key6").Entity()
-               .EndMap();
+                .EndMap();
         }));
 
     EXPECT_EQ(FluentString().Value(42), YPathGet(service, "/key1"));
@@ -92,7 +92,7 @@ TEST(TLazyYPathServiceTest, QueryNestedKeySimple)
                         .Item("subkey1").Value("abc")
                         .Item("subkey2").Value(43)
                     .EndMap()
-               .EndMap();
+                .EndMap();
         }));
 
     EXPECT_EQ(FluentString().Value("abc"), YPathGet(service, "/key2/subkey1"));
@@ -242,7 +242,7 @@ TEST(TLazyYPathServiceTest, InexistentPaths)
                         .Item("subkey1").Value("abc")
                         .Item("subkey2").Value(43)
                     .EndMap()
-               .EndMap();
+                .EndMap();
         }));
 
     EXPECT_THROW_WITH_SUBSTRING(YPathGet(service, "/nonExistent"), "Failed to resolve YPath");
@@ -265,7 +265,7 @@ TEST(TLazyYPathServiceTest, ExistsVerb)
                             .Item("subkey1").Value("abc")
                             .Item("subkey2").Value(43)
                         .EndMap()
-               .EndMap();
+                .EndMap();
         }));
 
     EXPECT_TRUE(YPathExists(service, "/key1"));
@@ -293,7 +293,7 @@ TEST(TLazyYPathServiceTest, ListVerb)
                             .Item("subkey1").Value("abc")
                             .Item("subkey2").Value(43)
                         .EndMap()
-               .EndMap();
+                .EndMap();
         }));
 
     EXPECT_EQ((std::vector<TString> {"key1", "key2"}), YPathList(service, ""));
@@ -310,7 +310,7 @@ TEST(TLazyYPathServiceTest, RootAttributes)
                 .EndAttributes()
                 .BeginMap()
                     .Item("key1").Value(42)
-               .EndMap();
+                .EndMap();
         }));
 
     auto expectedAttrs = FluentString().BeginMap()

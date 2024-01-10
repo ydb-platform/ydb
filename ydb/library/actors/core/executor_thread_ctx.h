@@ -8,8 +8,9 @@
 
 
 namespace NActors {
-    class TExecutorThread;
+    class TGenericExecutorThread;
     class TBasicExecutorPool;
+    class TIOExecutorPool;
 
     enum class EThreadState : ui64 {
         None,
@@ -19,7 +20,10 @@ namespace NActors {
     };
 
     struct TGenericExecutorThreadCtx {
-        TAutoPtr<TExecutorThread> Thread;
+        TAutoPtr<TGenericExecutorThread> Thread;
+
+    protected:
+        friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;
 
     private:
@@ -28,6 +32,7 @@ namespace NActors {
     public:
         ui64 StartWakingTs = 0;
 
+    protected:
         template <typename TWaitState>
         TWaitState GetState() {
             return TWaitState(WaitingFlag.load());
@@ -46,7 +51,6 @@ namespace NActors {
             return result;
         }
 
-    protected:
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
             ui64 start = GetCycleCountFast();
@@ -107,6 +111,14 @@ namespace NActors {
 
         TBasicExecutorPool *OwnerExecutorPool = nullptr;
 
+        void SetWork() {
+            ExchangeState(EThreadState::Work);
+        }
+
+        void UnsetWork() {
+            ExchangeState(EThreadState::None);
+        }
+
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
             this->TBase::Spin<TExecutorThreadCtx, EThreadState>(spinThresholdCycles, stopFlag);
         }
@@ -116,6 +128,12 @@ namespace NActors {
         }
 
         bool Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag); // in executor_pool_basic.cpp
+
+        bool WakeUp();
+
+        void Interrupt() {
+            WaitingPad.Interrupt();
+        }
 
         void AfterWakeUp(EThreadState /*state*/) {
         }
@@ -154,6 +172,7 @@ namespace NActors {
             }
         };
 
+        TBasicExecutorPool *OwnerExecutorPool = nullptr;
         std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
         ui32 NextPool = 0;
 

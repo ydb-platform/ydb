@@ -3,4 +3,7 @@ default:
   # link-console-main: https://console.cloud.yandex.ru
 
   team:
-    fomichev: [Андрей Фомичев](https://www.linkedin.com/in/andrey-fomichev/) (руководитель YDB)
+    fomichev: 
+      name: Андрей Фомичев
+      position: руководитель YDB
+      profile: https://www.linkedin.com/in/andrey-fomichev/

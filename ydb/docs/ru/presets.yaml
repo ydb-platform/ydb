@@ -3,7 +3,117 @@ default:
   # link-console-main: https://console.cloud.yandex.ru
 
   team:
+    babich:
+      name: Михаил Бабич
+      position: старший разработчик программного обеспечения
+      profile: https://www.linkedin.com/in/mikhail-babich-807700270/
+    bondar:
+      name: Олег Бондарь
+      position: CPO YDB
+      profile: https://www.linkedin.com/in/olegbondar2000/
+    cherednik:
+      name: Даниил Чередник
+      position: старший разработчик программного обеспечения  
+      profile: https://www.linkedin.com/in/daniil-c-1110165b/
+    dmitriev:
+      name: Алексей Дмитриев 
+      position: технический и продуктовый менеджер в YDB
+      profile: https://www.linkedin.com/in/алексей-дмитриев-7914b535/ 
+    gorshenin:
+      name: Александр Горшенин
+      position: разработчик Java SDK для распределенной базы данных YDB
+      profile: https://www.linkedin.com/in/agorshenin268/   
+    gorbunov:
+      name: Максим Горбунов
+      position: руководитель группы эксплуатации YDB
+      profile: https://www.linkedin.com/in/maksim-gorbunov-20283a55/
+    gridnev:
+      name: Виталий Гриднев
+      position: ведущий разработчик YDB
+      profile: https://www.linkedin.com/in/gridnevvvit/
     fomichev: 
       name: Андрей Фомичев
       position: руководитель YDB
-      profile: https://www.linkedin.com/in/andrey-fomichev/
+      profile: https://www.linkedin.com/in/andrey-fomichev/  
+    stankevichus:
+      name: Алексей Станкевичус 
+      position: руководитель групп разработки распределенного хранилища и распределенной платформы YDB  
+      profile: https://github.com/the-ancient-1
+    sokolov:
+      name: Иван Соколов 
+      position: руководитель службы видеохостинга (Внешний Дзен) 
+      profile:
+    surin:
+      name: Михаил Сурин
+      position:
+      profile:
+    sidorina:
+      name: Юлия Сидорина
+      position: разработчик YDB
+      profile: https://www.linkedin.com/in/yuliya-sidorina-a17ab6220/
+    novozhilova:
+      name: Софья Новожилова 
+      position: занимается развитием аналитического направления платформы YDB
+      profile:
+    nizametdinov:
+      name: Ильназ Низаметдинов
+      position: руководитель группы функциональности ядра YDB
+      profile: https://www.linkedin.com/in/nilnaz
+    myasnikov:
+      name: Алексей Мясников
+      position: руководитель команды разработки клиентских библиотек YDB
+      profile: https://github.com/asmyasnikov
+    kita:
+      name: Максим Кита
+      position: разработчик баз данных
+      profile:     
+    kulin:
+      name: Тимофей Кулин
+      position: разработчик YDB
+      profile: https://github.com/rekby
+    kriukov:
+      name: Александр Крюков
+      position: разработчик YDB
+      profile: https://www.linkedin.com/in/kruall/
+    kuznetcov:
+      name: Владислав Кузнецов
+      position: старший разработчик программного обеспечения
+      profile: https://www.linkedin.com/in/vlad-kuznetcov-a8a012276/
+    kovalenko:
+      name: Антон Коваленко
+      position: технический менеджер YDB
+      profile: https://www.linkedin.com/in/kovalad/
+    ivanov:
+      name: Евгений Иванов
+      position: старший разработчик программного обеспечения
+      profile: https://www.linkedin.com/in/eivanov89/  
+    prudaev:
+      name: Александр Прудаев
+      position: старший разработчик в группе проклейки аналитических продуктов
+      profile: https://www.linkedin.com/in/alexander-prudaev-44ba4383/
+    puchin:
+      name: Сергей Пучин
+      position: руководитель группы распределенных запросов
+      profile: https://www.linkedin.com/in/sergei-puchin-9486b621/
+    rykov:
+      name: Андрей Рыков
+      position: старший разработчик YDB
+      profile: https://www.linkedin.com/in/andrei-rykov-5936b4222/
+    tarasov:
+      name: Егор Тарасов
+      position: DevOps инженер
+      profile: https://www.linkedin.com/in/jorres-tarasov/
+    zivaykin:
+      name: Александр Зевайкин
+      position: технический лидер, кандидат технических наук, доцент.
+      profile:   
+    zverev:
+      name: Евгений Зверев
+      position: разработчик YDB-платформы в Yandex
+      profile:     
+    zinal:
+      name: Максим Зиналь
+      profile: https://www.linkedin.com/in/maxzinal
+      position: архитектор YDB        
+        
+      

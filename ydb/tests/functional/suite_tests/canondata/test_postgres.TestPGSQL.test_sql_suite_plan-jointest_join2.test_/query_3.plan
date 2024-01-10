@@ -42,12 +42,13 @@
                                                 "TopSortBy": "argument.s2.name"
                                             },
                                             {
+                                                "Condition": "name = name",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

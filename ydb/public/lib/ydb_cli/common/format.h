@@ -110,6 +110,7 @@ private:
 
     void SplitPlanInTree(NJson::TJsonValue& plan);
     void SimplifyQueryPlan(NJson::TJsonValue& plan);
+    NJson::TJsonValue ReconstructQueryPlanRec(const NJson::TJsonValue& plan, int operatorIndex, const THashMap<int, NJson::TJsonValue>& planIndex, const THashMap<TString, NJson::TJsonValue>& precomputes, int& nodeCounter);
     TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const THashSet<TString>& redundantNodes);
     THashMap<TString, NJson::TJsonValue> ExtractPrecomputes(NJson::TJsonValue& planJson);
     void ResolvePrecomputeLinks(NJson::TJsonValue& planJson, const THashMap<TString, NJson::TJsonValue>& precomputes);

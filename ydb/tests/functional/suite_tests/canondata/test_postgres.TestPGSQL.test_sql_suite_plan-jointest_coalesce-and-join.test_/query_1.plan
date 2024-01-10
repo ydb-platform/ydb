@@ -42,12 +42,13 @@
                                                 "TopSortBy": "argument.qr.y"
                                             },
                                             {
+                                                "Condition": "_equijoin_column_0 = x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 28
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 26
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -181,12 +182,13 @@
                                         "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Condition": "x = x",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

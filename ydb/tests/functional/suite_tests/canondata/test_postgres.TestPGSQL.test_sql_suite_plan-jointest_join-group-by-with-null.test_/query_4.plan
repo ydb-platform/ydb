@@ -66,12 +66,13 @@
                                                                 "Name": "Aggregate"
                                                             },
                                                             {
+                                                                "Condition": "q2 = q1",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 8
                                                                     },
                                                                     {
-                                                                        "Other": "ConstantExpression"
+                                                                        "ExternalPlanNodeId": 6
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"

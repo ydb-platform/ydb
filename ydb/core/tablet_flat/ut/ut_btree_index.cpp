@@ -1164,7 +1164,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             bool ready = reverse
-                ? charge.DoReverse(row1, row2, keyDefaults, itemsLimit, bytesLimit)
+                ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
             if (ready) {
                 return;
@@ -1176,11 +1176,11 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
+        for (TRowId rowId1 : xrange(part.Stat.Rows)) {
+            for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows)) {
                 TTouchEnv bTreeEnv, flatEnv;
-                TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-                TCharge flat(&flatEnv, part, tags, true);
+                TChargeBTreeIndex bTree(&bTreeEnv, part, *part.Slices->begin(), tags, true);
+                TCharge flat(&flatEnv, part, *part.Slices->begin(), tags, true);
 
                 TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
                 DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);

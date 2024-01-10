@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_part_slice.h"
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
 #include "flat_part_charge_iface.h"
@@ -13,18 +14,20 @@ class TChargeBTreeIndex : public ICharge {
     using TGroupId = NPage::TGroupId;
 
 public:
-    TChargeBTreeIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
-        : Part(&part)
-        , Env(env) {
-        Y_UNUSED(env);
-        Y_UNUSED(part);
+    TChargeBTreeIndex(IPages *env, const TPart &part, const TSlice& slice, TTagsRef tags, bool includeHistory = false)
+        : ICharge(env, part, slice) 
+    {
         Y_UNUSED(tags);
         Y_UNUSED(includeHistory);
     }
 
-public:
+protected:
     TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
+        Y_ABORT_UNLESS(Slice.BeginRowId() <= row1);
+        Y_ABORT_UNLESS(row1 <= row2);
+        Y_ABORT_UNLESS(row2 < Slice.EndRowId());
+
         bool ready = true;
 
         Y_UNUSED(key1);
@@ -34,13 +37,6 @@ public:
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
-
-        if (Y_UNLIKELY(row1 >= meta.RowCount)) {
-            return { true, true }; // already out of bounds, nothing to precharge
-        }
-        if (Y_UNLIKELY(row1 > row2)) {
-            row2 = row1; // will not go further than row1
-        }
 
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
@@ -93,6 +89,10 @@ public:
 
     TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
+        Y_ABORT_UNLESS(Slice.EndRowId() > row1);
+        Y_ABORT_UNLESS(row1 >= row2);
+        Y_ABORT_UNLESS(row2 >= Slice.BeginRowId());
+
         bool ready = true;
         
         Y_UNUSED(key1);
@@ -102,13 +102,6 @@ public:
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
-
-        if (Y_UNLIKELY(row1 >= meta.RowCount)) {
-            row1 = meta.RowCount - 1; // start from the last row
-        }
-        if (Y_UNLIKELY(row1 < row2)) {
-            row2 = row1; // will not go further than row1
-        }
 
         // level contains nodes in reverse order
         TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
@@ -173,10 +166,6 @@ private:
         }
         return false;
     }
-
-private:
-    const TPart* const Part;
-    IPages* const Env;
 };
 
 }

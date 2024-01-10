@@ -229,7 +229,8 @@ namespace {
                 tags.push_back(c.Tag);
             }
 
-            auto charge = CreateCharge(&env, *run.begin()->Part, tags, false);
+            UNIT_ASSERT_VALUES_EQUAL(run.size(), 1);
+            auto charge = CreateCharge(&env, *run.begin()->Part, *part->Slices->begin(), tags, false);
             bool result = reverse
                 ? charge->DoReverse(row1, row2, keyDefaults, items, Max<ui64>())
                 : charge->Do(row1, row2, keyDefaults, items, Max<ui64>());
@@ -1218,18 +1219,6 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{1}, {1, 2}},
             {TGroupId{2}, {3, 4, 5}}
         });
-
-        me.To(200).CheckByRows(8, 7, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {2}},
-            {TGroupId{1}, {}},
-            {TGroupId{2}, {}}
-        });
-
-        me.To(201).CheckByRows(7, 1, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {2}},
-            {TGroupId{1}, {}},
-            {TGroupId{2}, {}}
-        });
     }
 
     Y_UNIT_TEST(ByRowsReverse)
@@ -1291,24 +1280,6 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{0}, {7}},
             {TGroupId{1}, {11, 10}},
             {TGroupId{2}, {23, 22, 21}}
-        });
-
-        me.To(200).CheckByRowsReverse(8, 9, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {2}},
-            {TGroupId{1}, {}},
-            {TGroupId{2}, {}}
-        });
-
-        me.To(201).CheckByRowsReverse(9, 15, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3}},
-            {TGroupId{1}, {}},
-            {TGroupId{2}, {}}
-        });
-
-        me.To(202).CheckByRowsReverse(100, 23, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {8, 7}},
-            {TGroupId{1}, {13, 12, 11}},
-            {TGroupId{2}, {26, 25, 24, 23}}
         });
     }
 
@@ -1401,12 +1372,6 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{0}, {7, 6}},
             {TGroupId{1}, {11, 10, 9}},
             {TGroupId{2}, {23, 22, 21, 20, 19, 18}}
-        });
-
-        me.To(200).CheckByRowsReverse(100, 3, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {8, 7}},
-            {TGroupId{1}, {13, 12, 11, 10}},
-            {TGroupId{2}, {26, 25, 24, 23, 22, 21}}
         });
     }
 }

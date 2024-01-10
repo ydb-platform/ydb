@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_part_slice.h"
 #include "flat_table_part.h"
 #include "flat_part_iface.h"
 #include "flat_part_index_iter.h"
@@ -16,10 +17,8 @@ namespace NTable {
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
 
-        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
-            : Env(env)
-            , Part(&part)
-            , Scheme(*Part->Scheme)
+        TCharge(IPages *env, const TPart &part, const TSlice& slice, TTagsRef tags, bool includeHistory = false)
+            : ICharge(env, part, slice)
             , Index(Part, Env, TGroupId())
         {
             if (includeHistory && Part->HistoricGroupsCount) {
@@ -42,9 +41,14 @@ namespace NTable {
             }
         }
 
+    protected:
         TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
+            Y_DEBUG_ABORT_UNLESS(Slice.BeginRowId() <= row1);
+            Y_DEBUG_ABORT_UNLESS(row1 <= row2);
+            Y_DEBUG_ABORT_UNLESS(row2 < Slice.EndRowId());
+
             auto index = Index.TryLoadRaw();
             if (!index) {
                 return { false, false };
@@ -113,6 +117,10 @@ namespace NTable {
         TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
+            Y_ABORT_UNLESS(Slice.EndRowId() > row1);
+            Y_ABORT_UNLESS(row1 >= row2);
+            Y_ABORT_UNLESS(row2 >= Slice.BeginRowId());
+
             auto index = Index.TryLoadRaw();
             if (!index) {
                 return { false, false };
@@ -608,9 +616,6 @@ namespace NTable {
         }
 
     private:
-        IPages * const Env = nullptr;
-        const TPart * const Part = nullptr;
-        const TPartScheme &Scheme;
         mutable TPartIndexIt Index;
         mutable std::optional<TPartIndexIt> HistoryIndex;
         mutable TSmallVec<TGroupState> Groups;

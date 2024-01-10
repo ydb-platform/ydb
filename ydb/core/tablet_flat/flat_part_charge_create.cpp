@@ -4,11 +4,11 @@
 
 namespace NKikimr::NTable {
 
-THolder<ICharge> CreateCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory) {
+THolder<ICharge> CreateCharge(IPages *env, const TPart &part, const TSlice& slice, TTagsRef tags, bool includeHistory) {
     if (part.IndexPages.BTreeGroups) {
-        return MakeHolder<TChargeBTreeIndex>(env, part, tags, includeHistory);
+        return MakeHolder<TChargeBTreeIndex>(env, part, slice, tags, includeHistory);
     } else {
-        return MakeHolder<TCharge>(env, part, tags, includeHistory);
+        return MakeHolder<TCharge>(env, part, slice, tags, includeHistory);
     }
 }
 

@@ -787,10 +787,8 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
                 if ((flg & EHint::NoByKey) ||
                     part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
                 {
-                    TRowId row1 = pos->Slice.BeginRowId();
-                    TRowId row2 = pos->Slice.EndRowId() - 1;
-                    ready &= CreateCharge(env, *pos->Part, tags, includeHistory)
-                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes)
+                    ready &= CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)
+                        ->Do(key, key, *Scheme->Keys, items, bytes)
                         .Ready;
                     ++stats.Sieved;
                 } else {

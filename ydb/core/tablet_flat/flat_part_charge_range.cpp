@@ -9,9 +9,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
 {
     if (run.size() == 1) {
         auto pos = run.begin();
-        TRowId row1 = pos->Slice.BeginRowId();
-        TRowId row2 = pos->Slice.EndRowId() - 1;
-        return CreateCharge(env, *pos->Part, tags, includeHistory)->Do(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
+        return CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->Do(key1, key2, keyDefaults, items, bytes).Ready;
     }
 
     bool ready = true;
@@ -23,9 +21,6 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
     bool fromStart = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
 
     while (pos != run.end()) {
-        TRowId row1 = pos->Slice.BeginRowId();
-        TRowId row2 = pos->Slice.EndRowId() - 1;
-
         const int cmp = TSlice::CompareLastKeySearchKey(pos->Slice, key2, keyDefaults);
 
         TArrayRef<const TCell> key1r;
@@ -37,7 +32,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
             key2r = key2;
         }
 
-        auto r = CreateCharge(env, *pos->Part, tags, includeHistory)->Do(key1r, key2r, row1, row2, keyDefaults, items, bytes);
+        auto r = CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->Do(key1r, key2r, keyDefaults, items, bytes);
         ready &= r.Ready;
 
         if (cmp >= 0 /* slice->LastKey >= key2 */) {
@@ -45,7 +40,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately key > key2 might be at the start of the next slice
                 TRowId firstRow = pos->Slice.BeginRowId();
                 // Precharge the first row on the next slice
-                CreateCharge(env, *pos->Part, tags, includeHistory)->Do(firstRow, firstRow, keyDefaults, items, bytes);
+                CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->Do(firstRow, firstRow, keyDefaults, items, bytes);
             }
 
             break;
@@ -65,9 +60,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
 {
     if (run.size() == 1) {
         auto pos = run.begin();
-        TRowId row1 = pos->Slice.EndRowId() - 1;
-        TRowId row2 = pos->Slice.BeginRowId();
-        return CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(key1, key2, row1, row2, keyDefaults, items, bytes).Ready;
+        return CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->DoReverse(key1, key2, keyDefaults, items, bytes).Ready;
     }
 
     bool ready = true;
@@ -79,9 +72,6 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
     bool fromEnd = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
 
     for (;;) {
-        TRowId row1 = pos->Slice.EndRowId() - 1;
-        TRowId row2 = pos->Slice.BeginRowId();
-
         // N.B. empty key2 is like -inf during reverse iteration
         const int cmp = key2 ? TSlice::CompareSearchKeyFirstKey(key2, pos->Slice, keyDefaults) : -1;
 
@@ -94,7 +84,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             key2r = key2;
         }
 
-        auto r = CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(key1r, key2r, row1, row2, keyDefaults, items, bytes);
+        auto r = CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->DoReverse(key1r, key2r, keyDefaults, items, bytes);
         ready &= r.Ready;
 
         if (pos == run.begin()) {
@@ -107,7 +97,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately key <= key2 might be at the end of the previous slice
                 TRowId lastRow = pos->Slice.EndRowId() - 1;
                 // Precharge the last row on the previous slice
-                CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
+                CreateCharge(env, *pos->Part, pos->Slice, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
             }
 
             break;

@@ -5311,7 +5311,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         while (csController->GetIndexations().Val() == 0) {
             Cout << "Wait indexation..." << Endl;
-            //testHelper.GetRuntime().SimulateSleep(TDuration::Seconds(2));
             Sleep(TDuration::Seconds(2));
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");

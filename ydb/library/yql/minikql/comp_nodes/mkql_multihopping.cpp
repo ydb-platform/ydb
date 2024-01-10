@@ -126,12 +126,8 @@ public:
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf stateBuf(state.Data(), state.Size());
-            TStateCreator::Reader reader(stateBuf);
-            MKQL_ENSURE(reader.GetType() == TStateCreator::EType::SIMPLE_BLOB, "Wrong type");
-            auto stringView = reader.ReadSimpleSnapshot();
+            TStringBuf in = TStateCreator::Reader::GetSimpleSnapshot(state);
 
-            TStringBuf in(stringView.data(), stringView.size());
             const auto stateVersion = ReadUi32(in);
             if (stateVersion == 1) {
                 const auto statesMapSize = ReadUi32(in);

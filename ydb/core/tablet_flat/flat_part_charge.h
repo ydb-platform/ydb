@@ -45,9 +45,9 @@ namespace NTable {
         TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
-            Y_DEBUG_ABORT_UNLESS(Slice.BeginRowId() <= row1);
-            Y_DEBUG_ABORT_UNLESS(row1 <= row2);
-            Y_DEBUG_ABORT_UNLESS(row2 < Slice.EndRowId());
+            Y_ABORT_UNLESS(Slice.BeginRowId() <= row1);
+            Y_ABORT_UNLESS(row1 <= row2);
+            Y_ABORT_UNLESS(row2 < Slice.EndRowId());
 
             auto index = Index.TryLoadRaw();
             if (!index) {

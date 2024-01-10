@@ -88,9 +88,9 @@ public:
 
             writeTx->GetEngineHost()->UpdateRow(fullTableId, keyCells, commands);
         }
-        //TODO: Counters
-        // self->IncCounter(COUNTER_UPLOAD_ROWS, rowCount);
-        // self->IncCounter(COUNTER_UPLOAD_ROWS_BYTES, matrix.GetBuffer().size());
+        
+        self->IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
+        self->IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 
         writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(self->TabletID(), writeOp->GetTxId()));
 
@@ -170,12 +170,8 @@ public:
         const auto& status = writeOp->GetWriteResult()->Record.status();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << DataShard.TabletID() << ", status " << status);
 
-        //TODO: Counters
-        // if (WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED || WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
-        //     self->IncCounter(COUNTER_WRITE_SUCCESS);
-        // } else {
-        //     self->IncCounter(COUNTER_WRITE_ERROR);
-        // }
+        DataShard.IncCounter(writeOp->GetWriteResult()->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED ?
+            COUNTER_WRITE_SUCCESS : COUNTER_WRITE_ERROR);
 
         ctx.Send(writeOp->GetEv()->Sender, writeOp->ReleaseWriteResult().release(), 0, writeOp->GetEv()->Cookie);
     }

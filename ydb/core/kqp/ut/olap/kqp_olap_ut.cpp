@@ -88,6 +88,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 out << value.GetTimestamp();
                 break;
             }
+            case NYdb::EPrimitiveType::Bool:
+            {
+                out << value.GetBool();
+                break;
+            }
             default:
             {
                 UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
@@ -190,6 +195,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             return *value.GetOptionalUint64();
         } else {
             return value.GetUint64();
+        }
+    }
+
+    TString GetUtf8(const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            return *value.GetOptionalUtf8();
+        } else {
+            return value.GetUtf8();
         }
     }
 
@@ -327,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         if (c.first == "RawBytes") {
                             rawBytes += GetUint64(c.second);
                         }
-                        if (c.first == "Bytes") {
+                        if (c.first == "BlobRangeSize") {
                             bytes += GetUint64(c.second);
                         }
                         if (verbose) {
@@ -517,10 +531,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
 
         TLocalHelper lHelper(kikimr);
+        if (withSomeNulls)
+            lHelper.WithSomeNulls();
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
@@ -1547,7 +1563,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1555,7 +1571,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
+            R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
+            R"(`resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1596,6 +1614,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` > `resource_id`)",
             R"(`level` IS NULL)",
             R"(`level` IS NOT NULL)",
+            R"(`message` IS NULL)",
+            R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
@@ -1819,15 +1839,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             for (auto& op : operators) {
                 if (op.GetMapSafe().at("Name") == "TableFullScan") {
                     UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
-                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
-                    int filterCmdCount = 0;
-                    std::string::size_type pos = 0;
-                    std::string filterCmd = R"("Filter":{)";
-                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
-                        ++filterCmdCount;
-                        pos += filterCmd.size();
-                    }
-                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                    const auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    UNIT_ASSERT(ssa.Contains(R"("Filter":{)"));
                 }
             }
         }
@@ -3420,7 +3433,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        static ui32 numKinds = 5;
+        static ui32 numKinds = 2;
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         for (ui64 i = 0; i < 100; ++i) {
@@ -3431,29 +3444,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
-            SELECT *
+            SELECT PathId, Kind, TabletId, Sum(Rows) as Rows
             FROM `/Root/olapStore/.sys/store_primary_index_stats`
-            ORDER BY PathId, Kind, TabletId
+            GROUP BY PathId, Kind, TabletId
+            ORDER BY TabletId, Kind, PathId
         )");
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), numKinds*3);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
         UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
+        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), 72075186224037889ull);
+        UNIT_ASSERT_GE(GetUint64(rows[4].at("TabletId")), 72075186224037890ull);
         UNIT_ASSERT_GE(GetUint64(rows[1].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
         UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), GetUint64(rows[1].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[6].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[7].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[7].at("TabletId")), GetUint64(rows[1].at("TabletId")));
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "SPLIT_COMPACTED");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("TabletId")), GetUint64(rows[2].at("TabletId")));
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[4].at("Kind")), "INSERTED");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[4].at("TabletId")), GetUint64(rows[5].at("TabletId")));
         UNIT_ASSERT_GE(
             GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")) +
-            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")) +
-            GetUint64(rows[6].at("Rows")) + GetUint64(rows[7].at("Rows")) + GetUint64(rows[8].at("Rows")),
+            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")),
             0.3*0.9*100*1000); // >= 90% of 100K inserted rows
     }
 
@@ -3476,31 +3491,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
+                GROUP BY PathId, TabletId, Kind
+                ORDER BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             UNIT_ASSERT_GT(rows.size(), 1*numKinds);
             UNIT_ASSERT_LE(rows.size(), 3*numKinds);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull);
         }
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
+                GROUP BY PathId, TabletId, Kind
+                ORDER BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             UNIT_ASSERT_GT(rows.size(), 1*numKinds);
             UNIT_ASSERT_LE(rows.size(), 3*numKinds);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull);
         }
@@ -3921,7 +3936,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrRunner kikimr(settings);
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
@@ -3944,36 +3958,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[3].at("Kind")), 2ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "INSERTED");
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Bytes, Rows
+                SELECT SUM(BlobRangeSize) as Bytes, SUM(Rows) as Rows, PathId, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, TabletId
                 ORDER BY Bytes
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_LE(GetUint64(rows[0].at("Bytes")), GetUint64(rows[1].at("Bytes")));
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Rows, Kind, RawBytes, Rows as Rows2, Rows as Rows3, PathId
+                SELECT Sum(Rows) as Rows, Kind, Sum(RawBytes) as RawBytes, Sum(Rows) as Rows2, Sum(Rows) as Rows3, PathId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY Kind, PathId
                 ORDER BY PathId, Kind, Rows3
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("Rows")), GetUint64(rows[2].at("Rows2")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[5].at("Rows")), GetUint64(rows[5].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[11].at("Rows")), GetUint64(rows[11].at("Rows2")));
         }
     }
 
@@ -3981,9 +3994,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_2");
@@ -4001,48 +4013,59 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
-                ORDER BY PathId, Kind, TabletId;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[8].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[8].at("Kind")), 3ull);
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY
-                    PathId DESC, Kind DESC, TabletId DESC
+                WHERE
+                    PathId == UInt64("3") AND Activity = true
+                GROUP BY TabletId, PathId, Kind
+                ORDER BY TabletId, Kind
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT PathId, Kind, TabletId
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, Kind, TabletId
+                ORDER BY PathId DESC, Kind DESC, TabletId DESC
                 ;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 3*3*numKinds;
+            ui32 numExpected = 3*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
                     PathId > UInt64("0") AND PathId < UInt32("4")
                     OR PathId > UInt64("4") AND PathId <= UInt64("5")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY
                     PathId DESC, Kind DESC, TabletId DESC
                 ;
@@ -4050,12 +4073,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 2*3*numKinds;
+            ui32 numExpected = 2*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }
     }
 
@@ -4075,9 +4098,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4088,9 +4111,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, Kind, TabletId
+                SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4103,7 +4126,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind == UInt32("6")
+                WHERE Kind == 'EVICTED'
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -4114,15 +4137,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind >= UInt32("3")
+                WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED')
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GE(rows.size(), 3*3);
+            UNIT_ASSERT_GE(rows.size(), 3);
         }
     }
 
@@ -4130,7 +4154,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
@@ -4152,7 +4175,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -4166,7 +4189,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
                 GROUP BY
                     PathId
                 ORDER BY
@@ -4185,13 +4208,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind < UInt32("4")
+                    Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4209,13 +4230,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
+                    PathId == UInt64("3") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4231,13 +4250,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId >= UInt64("4") AND Kind < UInt32("4")
+                    PathId >= UInt64("4") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4251,13 +4268,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT count(*)
+                SELECT PathId, TabletId, Kind
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            // 3 Tables with 3 Shards each and 4 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
+            // 3 Tables with 3 Shards each and 2 KindId-s of stats
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3 * 3 * 2);
         }
 
         {
@@ -4271,13 +4289,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 2);
             UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
+                SELECT PathId, count(*), sum(Rows), sum(BlobRangeSize), sum(RawBytes)
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 GROUP BY PathId
                 ORDER BY PathId
@@ -4287,7 +4305,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
             for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 3*numKinds);
             }
         }
     }
@@ -4905,9 +4922,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4924,9 +4938,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4943,9 +4954,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToInt) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
@@ -5010,9 +5018,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_Exists) {
-        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`

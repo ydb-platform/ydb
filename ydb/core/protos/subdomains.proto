@@ -25,6 +25,7 @@ message TSubDomainSettings {
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
     optional TAuditSettings AuditSettings = 13;
     optional bool ExternalStatisticsAggregator = 14 [default = false];
+    optional bool GraphShard = 16 [default = false];
 }
 
 message TProcessingParams {
@@ -38,8 +39,7 @@ message TProcessingParams {
     optional fixed64 Hive = 7;
     optional fixed64 SysViewProcessor = 8;
     optional fixed64 StatisticsAggregator = 10;
-
-    //put there SubSchemeShard and SubHive at the future
+    optional fixed64 GraphShard = 11;
 
     // Plan resolution for idle coordinators
     optional uint64 IdlePlanResolution = 9;

@@ -192,6 +192,8 @@ struct TRequestRestartResult
 
 struct IAdminClient
 {
+    virtual ~IAdminClient() = default;
+
     virtual TFuture<int> BuildSnapshot(
         const TBuildSnapshotOptions& options = {}) = 0;
 
@@ -289,6 +291,7 @@ struct IAdminClient
 
     virtual TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options = {}) = 0;
 

@@ -1,11 +1,12 @@
 import ssl
 import sys
+import time
 from types import TracebackType
 from typing import Iterable, Iterator, Iterable, List, Optional, Type
 
 from .._backends.sync import SyncBackend
 from .._backends.base import SOCKET_OPTION, NetworkBackend
-from .._exceptions import ConnectionNotAvailable, UnsupportedProtocol
+from .._exceptions import ConnectionNotAvailable, PoolTimeout, UnsupportedProtocol
 from .._models import Origin, Request, Response
 from .._synchronization import Event, Lock, ShieldCancellation
 from .connection import HTTPConnection
@@ -220,6 +221,13 @@ class ConnectionPool(RequestInterface):
             )
 
         status = RequestStatus(request)
+        timeouts = request.extensions.get("timeout", {})
+        timeout = timeouts.get("pool", None)
+
+        if timeout is not None:
+            deadline = time.monotonic() + timeout
+        else:
+            deadline = float("inf")
 
         with self._pool_lock:
             self._requests.append(status)
@@ -227,8 +235,6 @@ class ConnectionPool(RequestInterface):
             self._attempt_to_acquire_connection(status)
 
         while True:
-            timeouts = request.extensions.get("timeout", {})
-            timeout = timeouts.get("pool", None)
             try:
                 connection = status.wait_for_connection(timeout=timeout)
             except BaseException as exc:
@@ -262,6 +268,10 @@ class ConnectionPool(RequestInterface):
                 raise exc
             else:
                 break
+
+            timeout = deadline - time.monotonic()
+            if timeout < 0:
+                raise PoolTimeout  # pragma: nocover
 
         # When we return the response, we wrap the stream in a special class
         # that handles notifying the connection pool once the response
@@ -316,6 +326,10 @@ class ConnectionPool(RequestInterface):
             self._requests = []
 
     def __enter__(self) -> "ConnectionPool":
+        # Acquiring the pool lock here ensures that we have the
+        # correct dependencies installed as early as possible.
+        with self._pool_lock:
+            pass
         return self
 
     def __exit__(

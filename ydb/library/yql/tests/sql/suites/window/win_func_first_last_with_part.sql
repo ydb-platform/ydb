@@ -11,4 +11,4 @@ SELECT
   subkey
 FROM $input
 WINDOW w1 as (PARTITION BY key_hundred ORDER BY key)
-ORDER BY key_hundred;
+ORDER BY key_hundred, key, subkey;

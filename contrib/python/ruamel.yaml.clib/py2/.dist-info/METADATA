@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: ruamel.yaml.clib
-Version: 0.2.7
+Version: 0.2.2
 Summary: C version of reader, parser and emitter for ruamel.yaml derived from libyaml
 Home-page: https://sourceforge.net/p/ruamel-yaml-clib/code/ci/default/tree
 Author: Anthon van der Neut
@@ -13,17 +13,14 @@ Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.6
 Description-Content-Type: text/x-rst
-License-File: LICENSE
 
 
 ruamel.yaml.clib
@@ -31,8 +28,8 @@ ruamel.yaml.clib
 
 ``ruamel.yaml.clib`` is the C based reader/scanner and emitter for ruamel.yaml
 
-:version:       0.2.7
-:updated:       2022-10-19
+:version:       0.2.2
+:updated:       2020-09-04
 :documentation: http://yaml.readthedocs.io
 :repository:    https://sourceforge.net/projects/ruamel-yaml-clib/
 :pypi:          https://pypi.org/project/ruamel.yaml.clib/
@@ -49,7 +46,6 @@ directory) and the Python code for ruamel.yaml under /usr/lib/pythonX.Y.
 
 .. image:: https://sourceforge.net/p/ruamel-yaml-clib/code/ci/default/tree/_doc/_static/license.svg?format=raw
    :target: https://opensource.org/licenses/MIT
- 
-This release in loving memory of Johanna Clasina van der Neut-Bandel [1922-10-19 - 2015-11-21]
+
 
 

@@ -10,31 +10,47 @@ using namespace fmt::literals;
 namespace NTestUtils {
 
     TString GetPgHost() {
-        return GetEnv("POSTGRES_RECIPE_HOST", "localhost");
+        return "localhost";
     }
 
     ui32 GetPgPort() {
-        const TString port = GetEnv("POSTGRES_RECIPE_PORT");
-        UNIT_ASSERT_C(port, "No postgresql port specified");
-        return FromString<ui32>(port);
+        return 15432;
     }
 
     TString GetPgUser() {
-        return GetEnv("POSTGRES_RECIPE_USER");
+        return "user";
     }
 
     TString GetPgDatabase() {
-        return GetEnv("POSTGRES_RECIPE_DBNAME");
+        return "db";
+    }
+
+    TString GetPgPassword() {
+        return "password";
     }
 
     pqxx::connection CreatePostgresqlConnection() {
         const TString connectionString = fmt::format(
-            "host={host} port={port} dbname={database} user={user}",
+            "host={host} port={port} dbname={database} user={user} password={password}",
             "host"_a = GetPgHost(),
             "port"_a = GetPgPort(),
             "database"_a = GetPgDatabase(),
-            "user"_a = GetPgUser());
-        return pqxx::connection{connectionString};
+            "user"_a = GetPgUser(),
+            "password"_a = GetPgPassword());
+
+        TInstant start = TInstant::Now();
+        ui32 attempt = 0;
+        while ((TInstant::Now() - start).Seconds() < 60) {
+            attempt += 1;
+            try {
+                return pqxx::connection{connectionString};
+            } catch (const pqxx::broken_connection& e) {
+                Cerr << "Attempt " << attempt << ": " << e.what() << Endl;
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+
+        throw yexception() << "Failed to connect PostgreSQL in " << attempt << " attempt(s)";
     }
 
 } // namespace NTestUtils

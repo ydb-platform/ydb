@@ -217,6 +217,7 @@ public:
         IMemoryQuotaManager::TPtr MemoryQuotaManager;
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
+        NWilson::TTraceId TraceId;
     };
 
     struct TSinkArguments {
@@ -247,6 +248,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        NWilson::TTraceId TraceId;
     };
 
     struct TOutputTransformArguments {

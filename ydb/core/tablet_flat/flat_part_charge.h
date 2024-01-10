@@ -42,68 +42,8 @@ namespace NTable {
             }
         }
 
-        bool Do(const TRowId row1, const TRowId row2,
+        TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
-        {
-            auto index = Index.TryLoadRaw();
-            if (!index) {
-                return false;
-            }
-
-            auto startRow = row1;
-            auto endRow = row2;
-
-            // Page that contains row1
-            auto first = index->LookupRow(row1);
-            if (Y_UNLIKELY(!first)) {
-                return true; // already out of bounds, nothing to precharge
-            }
-
-            // Page that contains row2
-            auto last = index->LookupRow(row2, first);
-            if (Y_UNLIKELY(last < first)) {
-                last = first;
-                endRow = Min(endRow, index->GetLastRowId(last));
-            }
-
-            return DoPrecharge(TCells{}, TCells{}, TIter{}, TIter{}, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
-        }
-
-        bool DoReverse(const TRowId row1, const TRowId row2, 
-                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
-        {
-            auto index = Index.TryLoadRaw();
-            if (!index) {
-                return false;
-            }
-
-            auto startRow = row1;
-            auto endRow = row2;
-
-            // Page that contains row1
-            auto first = index->LookupRow(row1);
-            if (Y_UNLIKELY(!first)) {
-                // Looks like row1 is out of bounds, start from the last row
-                startRow = Min(row1, index->GetEndRowId() - 1);
-                first = --(*index)->End();
-                if (Y_UNLIKELY(!first)) {
-                    return true; // empty index?
-                }
-            }
-
-            // Page that contains row2
-            auto last = index->LookupRow(row2, first);
-            if (Y_UNLIKELY(last > first)) {
-                last = first; // will not go past the first page
-                endRow = Max(endRow, last->GetRowId());
-            }
-
-            return DoPrechargeReverse(TCells{}, TCells{}, TIter{}, TIter{}, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
-        }
-
-        TResult Do(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-                ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -164,14 +104,14 @@ namespace NTable {
                 }
             }
 
-            bool ready = DoPrecharge(key1, key2, key1Page, key2Page, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
+            bool ready = DoPrecharge(key1, key2, key1Page, key2Page, first, last, 
+                startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
 
             return { ready, overshot };
         }
 
-        TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1,
-                const TRowId row2, const TKeyCellDefaults &keyDefaults, ui64 itemsLimit,
-                ui64 bytesLimit) const noexcept override
+        TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
+                const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
             if (!index) {
@@ -237,7 +177,8 @@ namespace NTable {
                 }
             }
 
-            bool ready = DoPrechargeReverse(key1, key2, key1Page, key2Page, first, last, startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
+            bool ready = DoPrechargeReverse(key1, key2, key1Page, key2Page, first, last, 
+                startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
 
             return { ready, overshot };
         }
@@ -254,10 +195,8 @@ namespace NTable {
          *
          * If @param key1Page specified, @param first should be the same.
          */
-        bool DoPrecharge(const TCells key1, const TCells key2, 
-                const TIter key1Page, const TIter key2Page,
-                const TIter first, const TIter last,
-                TRowId startRowId, TRowId endRowId,
+        bool DoPrecharge(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
+                const TIter first, const TIter last, TRowId startRowId, TRowId endRowId,
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
         {
             bool ready = true;
@@ -313,7 +252,7 @@ namespace NTable {
                         }
                     }
                     if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
                         }
@@ -352,10 +291,8 @@ namespace NTable {
          *
          * If @param key1Page specified, @param first should be the same.
          */
-        bool DoPrechargeReverse(const TCells key1, const TCells key2, 
-                const TIter key1Page, const TIter key2Page,
-                TIter first, TIter last,
-                TRowId startRowId, TRowId endRowId,
+        bool DoPrechargeReverse(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
+                TIter first, TIter last, TRowId startRowId, TRowId endRowId,
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
         {
             bool ready = true;
@@ -410,7 +347,7 @@ namespace NTable {
                     }
 
                     if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
                         }
@@ -562,8 +499,8 @@ namespace NTable {
         /**
          * Precharges pages that contain row1 to row2 inclusive
          */
-        bool DoPrechargeGroup(TGroupState& g, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
-            auto groupIndex = g.GroupIndex.TryLoadRaw();
+        bool DoPrechargeGroup(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
+            auto groupIndex = group.GroupIndex.TryLoadRaw();
             if (!groupIndex) {
                 if (bytes) {
                     // Note: we can't continue if we have bytes limit
@@ -574,29 +511,29 @@ namespace NTable {
 
             bool ready = true;
 
-            if (!g.Index || row1 < g.Index->GetRowId() || row1 > g.LastRowId) {
-                g.Index = groupIndex->LookupRow(row1, g.Index);
-                if (Y_UNLIKELY(!g.Index)) {
+            if (!group.Index || row1 < group.Index->GetRowId() || row1 > group.LastRowId) {
+                group.Index = groupIndex->LookupRow(row1, group.Index);
+                if (Y_UNLIKELY(!group.Index)) {
                     // Looks like row1 doesn't even exist
-                    g.LastRowId = Max<TRowId>();
+                    group.LastRowId = Max<TRowId>();
                     return ready;
                 }
-                g.LastRowId = groupIndex->GetLastRowId(g.Index);
-                auto pageId = g.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, g.GroupId));
-                bytes += Part->GetPageSize(pageId, g.GroupId);
+                group.LastRowId = groupIndex->GetLastRowId(group.Index);
+                auto pageId = group.Index->GetPageId();
+                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                bytes += Part->GetPageSize(pageId, group.GroupId);
             }
 
-            while (g.LastRowId < row2) {
-                if (!++g.Index) {
+            while (group.LastRowId < row2) {
+                if (!++group.Index) {
                     // Looks like row2 doesn't even exist
-                    g.LastRowId = Max<TRowId>();
+                    group.LastRowId = Max<TRowId>();
                     return ready;
                 }
-                g.LastRowId = groupIndex->GetLastRowId(g.Index);
-                auto pageId = g.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, g.GroupId));
-                bytes += Part->GetPageSize(pageId, g.GroupId);
+                group.LastRowId = groupIndex->GetLastRowId(group.Index);
+                auto pageId = group.Index->GetPageId();
+                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                bytes += Part->GetPageSize(pageId, group.GroupId);
             }
 
             return ready;
@@ -605,8 +542,8 @@ namespace NTable {
         /**
          * Precharges pages that contain row1 to row2 inclusive in reverse
          */
-        bool DoPrechargeGroupReverse(TGroupState& g, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
-            auto groupIndex = g.GroupIndex.TryLoadRaw();
+        bool DoPrechargeGroupReverse(TGroupState& group, TRowId row1, TRowId row2, ui64& bytes) const noexcept {
+            auto groupIndex = group.GroupIndex.TryLoadRaw();
             if (!groupIndex) {
                 if (bytes) {
                     // Note: we can't continue if we have bytes limit
@@ -617,29 +554,29 @@ namespace NTable {
 
             bool ready = true;
 
-            if (!g.Index || row1 < g.Index->GetRowId() || row1 > g.LastRowId) {
-                g.Index = groupIndex->LookupRow(row1, g.Index);
-                if (Y_UNLIKELY(!g.Index)) {
+            if (!group.Index || row1 < group.Index->GetRowId() || row1 > group.LastRowId) {
+                group.Index = groupIndex->LookupRow(row1, group.Index);
+                if (Y_UNLIKELY(!group.Index)) {
                     // Looks like row1 doesn't even exist
-                    g.LastRowId = Max<TRowId>();
+                    group.LastRowId = Max<TRowId>();
                     return ready;
                 }
-                g.LastRowId = groupIndex->GetLastRowId(g.Index);
-                auto pageId = g.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, g.GroupId));
-                bytes += Part->GetPageSize(pageId, g.GroupId);
+                group.LastRowId = groupIndex->GetLastRowId(group.Index);
+                auto pageId = group.Index->GetPageId();
+                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                bytes += Part->GetPageSize(pageId, group.GroupId);
             }
 
-            while (g.Index->GetRowId() > row2) {
-                if (g.Index.Off() == 0) {
+            while (group.Index->GetRowId() > row2) {
+                if (group.Index.Off() == 0) {
                     // This was the last page we could precharge
                     return ready;
                 }
-                g.LastRowId = g.Index->GetRowId() - 1;
-                --g.Index;
-                auto pageId = g.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, g.GroupId));
-                bytes += Part->GetPageSize(pageId, g.GroupId);
+                group.LastRowId = group.Index->GetRowId() - 1;
+                --group.Index;
+                auto pageId = group.Index->GetPageId();
+                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                bytes += Part->GetPageSize(pageId, group.GroupId);
             }
 
             return ready;

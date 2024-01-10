@@ -70,7 +70,7 @@ DEFINE_ENUM(ETraceContextState,
  *
  *  \note Thread affininty: any unless noted otherwise.
  */
- class TTraceContext
+class TTraceContext
     : public TRefCounted
 {
 public:

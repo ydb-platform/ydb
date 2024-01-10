@@ -1,2 +1,0 @@
-pragma UseBlocks;
-SELECT * FROM postgresql_streaming.example_1;

@@ -121,58 +121,12 @@ class TestHttpApi(TestBase):
 
     def test_empty_query(self):
         client = self.create_client()
-        result = client.create_query()
-        query_id = result.get("id")
-
-        wait_for_query_status(client, query_id, ["FAILED"])
-        query_json = client.get_query(query_id)
-        assert normalize_json(query_json) == {
-            "id": "xxxxxxxxxxxxxxxxxxxx",
-            "name": "",
-            "description": "",
-            "text": "",
-            "type": "ANALYTICS",
-            "status": "FAILED",
-            "issues": {
-                "message": "{ <main>: Error: Query failed with code ABORTED at ISOTIME subissue: "
-                           "{ <main>: Error: Failed to parse query subissue: "
-                           "{ <main>: Error: Parse Sql subissue: "
-                           "{ <main>:1:0: Error: Unexpected token absence : cannot match to any predicted input... "
-                           "} } } }",
-                "details": [
-                    {
-                        "message": "Query failed with code ABORTED at ISOTIME",
-                        "severity": "ERROR",
-                        "issues": [
-                            {
-                                "message": "Failed to parse query",
-                                "severity": "ERROR",
-                                "issues": [
-                                    {
-                                        "message": "Parse Sql",
-                                        "severity": "ERROR",
-                                        "issues": [
-                                            {
-                                                "position": {"row": 1},
-                                                "message": "Unexpected token absence : cannot match to any predicted input...\u000a",
-                                                "end_position": {"row": 1},
-                                                "severity": "ERROR",
-                                                "issues": []
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            "meta": {
-                "finished_at": "ISOTIME",
-                "started_at": "ISOTIME"
-            },
-            "result_sets": []
-        }
+        try:
+            client.create_query()
+        except Exception as e:
+            assert "\"message\":\"text\'s length is not in [1; 102400]" in e.args[0]
+            return
+        assert False
 
     def test_warning(self):
         client = self.create_client()

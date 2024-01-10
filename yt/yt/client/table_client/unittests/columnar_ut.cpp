@@ -201,15 +201,15 @@ INSTANTIATE_TEST_SUITE_P(
     TCopyBitmapRangeToBitmapTest,
     TCopyBitmapRangeToBitmapTest,
     ::testing::Values(
-        std::make_tuple(  0,   0),
-        std::make_tuple(  0,  64),
-        std::make_tuple(  0, 192),
-        std::make_tuple( 64, 128),
-        std::make_tuple(  8,  16),
-        std::make_tuple( 10,  13),
-        std::make_tuple(  5, 120),
-        std::make_tuple( 23,  67),
-        std::make_tuple(  1, 191)));
+        std::tuple(  0,   0),
+        std::tuple(  0,  64),
+        std::tuple(  0, 192),
+        std::tuple( 64, 128),
+        std::tuple(  8,  16),
+        std::tuple( 10,  13),
+        std::tuple(  5, 120),
+        std::tuple( 23,  67),
+        std::tuple(  1, 191)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -256,13 +256,13 @@ INSTANTIATE_TEST_SUITE_P(
     TDecodeRleVectorTest,
     TDecodeRleVectorTest,
     ::testing::Values(
-        std::make_tuple(  0,   0, std::vector<int>{}),
-        std::make_tuple(  0,   1, std::vector<int>{1}),
-        std::make_tuple(  0,   5, std::vector<int>{1, 2, 2, 2, 2}),
-        std::make_tuple(  9,  13, std::vector<int>{2, 3, 4, 4}),
-        std::make_tuple( 20,  25, std::vector<int>{5, 5, 5, 5, 5}),
-        std::make_tuple( 25,  27, std::vector<int>{6, 6}),
-        std::make_tuple( 50,  53, std::vector<int>{6, 6, 6})));
+        std::tuple(  0,   0, std::vector<int>{}),
+        std::tuple(  0,   1, std::vector<int>{1}),
+        std::tuple(  0,   5, std::vector<int>{1, 2, 2, 2, 2}),
+        std::tuple(  9,  13, std::vector<int>{2, 3, 4, 4}),
+        std::tuple( 20,  25, std::vector<int>{5, 5, 5, 5, 5}),
+        std::tuple( 25,  27, std::vector<int>{6, 6}),
+        std::tuple( 50,  53, std::vector<int>{6, 6, 6})));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -386,13 +386,13 @@ INSTANTIATE_TEST_SUITE_P(
     TDecodeNullsFromRleDictionaryIndexesWithZeroNullTest,
     TDecodeNullsFromRleDictionaryIndexesWithZeroNullTest,
     ::testing::Values(
-        std::make_tuple(  0,   0),
-        std::make_tuple(  0, 800),
-        std::make_tuple(256, 512),
-        std::make_tuple( 10,  20),
-        std::make_tuple( 10,  20),
-        std::make_tuple( 20, 100),
-        std::make_tuple( 90, 110)));
+        std::tuple(  0,   0),
+        std::tuple(  0, 800),
+        std::tuple(256, 512),
+        std::tuple( 10,  20),
+        std::tuple( 10,  20),
+        std::tuple( 20, 100),
+        std::tuple( 90, 110)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -428,11 +428,11 @@ INSTANTIATE_TEST_SUITE_P(
     TBuildDictionaryIndexesFromRleDictionaryIndexesWithZeroNullTest,
     TBuildDictionaryIndexesFromRleDictionaryIndexesWithZeroNullTest,
     ::testing::Values(
-        std::make_tuple(  0,   0),
-        std::make_tuple(  0,  15),
-        std::make_tuple(  3,   5),
-        std::make_tuple(  1,  10),
-        std::make_tuple( 13,  15)));
+        std::tuple(  0,   0),
+        std::tuple(  0,  15),
+        std::tuple(  3,   5),
+        std::tuple(  1,  10),
+        std::tuple( 13,  15)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -460,11 +460,11 @@ INSTANTIATE_TEST_SUITE_P(
     TBuildIotaDictionaryIndexesFromRleIndexesTest,
     TBuildIotaDictionaryIndexesFromRleIndexesTest,
     ::testing::Values(
-        std::make_tuple(  0,   0, std::vector<ui32>{}),
-        std::make_tuple(  0,  15, std::vector<ui32>{0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4}),
-        std::make_tuple(  3,   5, std::vector<ui32>{0, 0}),
-        std::make_tuple(  1,  10, std::vector<ui32>{0, 0, 1, 1, 2, 2, 2, 2, 2}),
-        std::make_tuple( 13,  15, std::vector<ui32>{0, 0})));
+        std::tuple(  0,   0, std::vector<ui32>{}),
+        std::tuple(  0,  15, std::vector<ui32>{0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4}),
+        std::tuple(  3,   5, std::vector<ui32>{0, 0}),
+        std::tuple(  1,  10, std::vector<ui32>{0, 0, 1, 1, 2, 2, 2, 2, 2}),
+        std::tuple( 13,  15, std::vector<ui32>{0, 0})));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -483,10 +483,10 @@ INSTANTIATE_TEST_SUITE_P(
     TCountNullsInDictionaryIndexesWithZeroNullTest,
     TCountNullsInDictionaryIndexesWithZeroNullTest,
     ::testing::Values(
-        std::make_tuple(std::vector<ui32>{}, 0),
-        std::make_tuple(std::vector<ui32>{0, 0, 0}, 3),
-        std::make_tuple(std::vector<ui32>{1, 2, 3}, 0),
-        std::make_tuple(std::vector<ui32>{1, 0, 3}, 1)));
+        std::tuple(std::vector<ui32>{}, 0),
+        std::tuple(std::vector<ui32>{0, 0, 0}, 3),
+        std::tuple(std::vector<ui32>{1, 2, 3}, 0),
+        std::tuple(std::vector<ui32>{1, 0, 3}, 1)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -509,12 +509,12 @@ INSTANTIATE_TEST_SUITE_P(
     TCountOnesInRleBitmapTest,
     TCountOnesInRleBitmapTest,
     ::testing::Values(
-        std::make_tuple(  0,   0,   0),
-        std::make_tuple( 50,  60,  10),
-        std::make_tuple( 40,  60,  10),
-        std::make_tuple( 60, 100,  40),
-        std::make_tuple(  3,   5,   0),
-        std::make_tuple(  2,   6,   2)));
+        std::tuple(  0,   0,   0),
+        std::tuple( 50,  60,  10),
+        std::tuple( 40,  60,  10),
+        std::tuple( 60, 100,  40),
+        std::tuple(  3,   5,   0),
+        std::tuple(  2,   6,   2)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -574,13 +574,13 @@ INSTANTIATE_TEST_SUITE_P(
     TDecodeNullsFromRleNullBitmapTest,
     TDecodeNullsFromRleNullBitmapTest,
     ::testing::Values(
-        std::make_tuple(  0,   0),
-        std::make_tuple(  0, 800),
-        std::make_tuple(256, 512),
-        std::make_tuple( 10,  20),
-        std::make_tuple( 10,  20),
-        std::make_tuple( 20, 100),
-        std::make_tuple( 90, 110)));
+        std::tuple(  0,   0),
+        std::tuple(  0, 800),
+        std::tuple(256, 512),
+        std::tuple( 10,  20),
+        std::tuple( 10,  20),
+        std::tuple( 20, 100),
+        std::tuple( 90, 110)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -626,15 +626,15 @@ INSTANTIATE_TEST_SUITE_P(
     TDecodeBytemapFromBitmapTest,
     TDecodeBytemapFromBitmapTest,
     ::testing::Values(
-        std::make_tuple(  0,    0),
-        std::make_tuple(  18,  19),
-        std::make_tuple(  0,  512),
-        std::make_tuple(  0,  800),
-        std::make_tuple(256,  512),
-        std::make_tuple( 10,   20),
-        std::make_tuple( 10,   20),
-        std::make_tuple( 20,  100),
-        std::make_tuple( 90,  110)));
+        std::tuple(  0,    0),
+        std::tuple(  18,  19),
+        std::tuple(  0,  512),
+        std::tuple(  0,  800),
+        std::tuple(256,  512),
+        std::tuple( 10,   20),
+        std::tuple( 10,   20),
+        std::tuple( 20,  100),
+        std::tuple( 90,  110)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -704,12 +704,12 @@ INSTANTIATE_TEST_SUITE_P(
     TCountTotalStringLengthInRleDictionaryIndexesWithZeroNullTest,
     TCountTotalStringLengthInRleDictionaryIndexesWithZeroNullTest,
     ::testing::Values(
-        std::make_tuple(  0,   0),
-        std::make_tuple(  0,  30),
-        std::make_tuple(  1,   3),
-        std::make_tuple(  5,  10),
-        std::make_tuple(  4,  25),
-        std::make_tuple(  2,   4)));
+        std::tuple(  0,   0),
+        std::tuple(  0,  30),
+        std::tuple(  1,   3),
+        std::tuple(  5,  10),
+        std::tuple(  4,  25),
+        std::tuple(  2,   4)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

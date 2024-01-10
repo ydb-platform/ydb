@@ -83,7 +83,7 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
     }
 }
 
-void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TObjectSettingsImpl& settings,
+void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TCreateObjectSettings& settings,
                                          TExternalDataSourceManager::TInternalModificationContext& context) {
     CheckFeatureFlag(context);
 
@@ -97,12 +97,13 @@ void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyS
 
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
+    modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
     NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *modifyScheme.MutableCreateExternalDataSource();
     FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
 }
 
-void FillDropExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TObjectSettingsImpl& settings,
+void FillDropExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TDropObjectSettings& settings,
                                        TExternalDataSourceManager::TInternalModificationContext& context) {
     CheckFeatureFlag(context);
 
@@ -116,15 +117,16 @@ void FillDropExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifySch
 
     modifyScheme.SetWorkingDir(pathPair.first);
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
+    modifyScheme.SetSuccessOnNotExist(settings.GetMissingOk());
 
     NKikimrSchemeOp::TDrop& drop = *modifyScheme.MutableDrop();
     drop.SetName(pathPair.second);
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, TActorSystem* actorSystem, bool failedOnAlreadyExists = false)
+NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, TActorSystem* actorSystem, bool failedOnAlreadyExists, bool successOnNotExist)
 {
     auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
-    IActor* requestHandler = new TSchemeOpRequestHandler(request, promiseScheme, failedOnAlreadyExists);
+    IActor* requestHandler = new TSchemeOpRequestHandler(request, promiseScheme, failedOnAlreadyExists, successOnNotExist);
     actorSystem->Register(requestHandler);
     return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
         if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
@@ -159,7 +161,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     }
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::CreateExternalDataSource(const NYql::TObjectSettingsImpl& settings,
+NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::CreateExternalDataSource(const NYql::TCreateObjectSettings& settings,
                                                                                                                            TInternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -172,10 +174,10 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
     FillCreateExternalDataSourceCommand(schemeTx, settings, context);
 
-    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), true);
+    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
 }
 
-NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DropExternalDataSource(const NYql::TObjectSettingsImpl& settings,
+NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalDataSourceManager::DropExternalDataSource(const NYql::TDropObjectSettings& settings,
                                                                                                                          TInternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -188,7 +190,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
     FillDropExternalDataSourceCommand(schemeTx, settings, context);
 
-    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem());
+    return SendSchemeRequest(ev.Release(), context.GetExternalData().GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
 }
 
 TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
@@ -216,18 +218,18 @@ TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoP
     }
 }
 
-void TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+void TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
                                                                                                              TInternalModificationContext& context) const {
     FillCreateExternalDataSourceCommand(*schemeOperation.MutableCreateExternalDataSource(), settings, context);
 }
 
-void TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+void TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
                                                                                                            TInternalModificationContext& context) const {
     FillDropExternalDataSourceCommand(*schemeOperation.MutableDropExternalDataSource(), settings, context);
 }
 
 NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
+        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
     auto ev = MakeHolder<TRequest>();
@@ -252,7 +254,7 @@ NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusio
                 TStringBuilder() << "Execution of prepare operation for EXTERNAL_DATA_SOURCE object: unsupported operation: " << int(schemeOperation.GetOperationCase())));
     }
 
-    return SendSchemeRequest(ev.Release(), context.GetActorSystem(), true);
+    return SendSchemeRequest(ev.Release(), context.GetActorSystem(), schemeTx.GetFailedOnAlreadyExists(), schemeTx.GetSuccessOnNotExist());
 }
 
 }

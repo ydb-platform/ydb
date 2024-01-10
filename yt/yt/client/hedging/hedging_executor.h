@@ -82,10 +82,11 @@ private:
 
     struct TEntry
     {
-        TEntry(NApi::IClientPtr client,
-               NProfiling::TCpuDuration initialPenalty,
-               TCounterPtr counter,
-               TString clusterName);
+        TEntry(
+            NApi::IClientPtr client,
+            NProfiling::TCpuDuration initialPenalty,
+            TCounterPtr counter,
+            TString clusterName);
 
         NApi::IClientPtr Client;
         TString ClusterName;

@@ -133,7 +133,7 @@ fastfloat_really_inline bool rounds_to_nearest() noexcept {
 
 } // namespace detail
 
-template<typename T, typename UC>
+template<typename T, typename UC, typename>
 FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars(UC const * first, UC const * last,
                              T &value, chars_format fmt /*= chars_format::general*/)  noexcept  {
@@ -145,11 +145,8 @@ FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
                                       T &value, parse_options_t<UC> options)  noexcept  {
 
-  static_assert (std::is_same<T, double>::value || std::is_same<T, float>::value, "only float and double are supported");
-  static_assert (std::is_same<UC, char>::value ||
-                 std::is_same<UC, wchar_t>::value ||
-                 std::is_same<UC, char16_t>::value ||
-                 std::is_same<UC, char32_t>::value , "only char, wchar_t, char16_t and char32_t are supported");
+  static_assert (is_supported_float_type<T>(), "only float and double are supported");
+  static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
 
   from_chars_result_t<UC> answer;
 #ifdef FASTFLOAT_SKIP_WHITE_SPACE  // disabled by default
@@ -202,10 +199,10 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
       // We do not have that fegetround() == FE_TONEAREST.
       // Next is a modified Clinger's fast path, inspired by Jakub Jelínek's proposal
       if (pns.exponent >= 0 && pns.mantissa <=binary_format<T>::max_mantissa_fast_path(pns.exponent)) {
-#if defined(__clang__)
+#if defined(__clang__) || defined(FASTFLOAT_32BIT)
         // Clang may map 0 to -0.0 when fegetround() == FE_DOWNWARD
         if(pns.mantissa == 0) {
-          value = pns.negative ? -0. : 0.;
+          value = pns.negative ? T(-0.) : T(0.);
           return answer;
         }
 #endif
@@ -230,6 +227,27 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
     answer.ec = std::errc::result_out_of_range;
   }
   return answer;
+}
+
+
+template <typename T, typename UC, typename>
+FASTFLOAT_CONSTEXPR20
+from_chars_result_t<UC> from_chars(UC const* first, UC const* last, T& value, int base) noexcept
+{
+  static_assert (is_supported_char_type<UC>(), "only char, wchar_t, char16_t and char32_t are supported");
+
+  from_chars_result_t<UC> answer;
+#ifdef FASTFLOAT_SKIP_WHITE_SPACE  // disabled by default
+  while ((first != last) && fast_float::is_space(uint8_t(*first))) {
+    first++;
+  }
+#endif
+  if (first == last || base < 2 || base > 36) {
+    answer.ec = std::errc::invalid_argument;
+    answer.ptr = first;
+    return answer;
+  }
+  return parse_int_string(first, last, value, base);
 }
 
 } // namespace fast_float

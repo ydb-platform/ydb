@@ -16,6 +16,13 @@ void PrepareTablesToUnpack(TSession session) {
             Value String,
             PRIMARY KEY (Key, Fk)
         );
+        CREATE TABLE `/Root/ComplexKeyNotNull` (
+            Key Int32 NOT NULL,
+            Fk Int32 NOT NULL,
+            Value String,
+            PRIMARY KEY (Key, Fk)
+        );
+
         CREATE TABLE `/Root/UintComplexKey` (
             Key UInt64,
             Fk Int64,
@@ -58,6 +65,14 @@ void PrepareTablesToUnpack(TSession session) {
     auto result2 = session.ExecuteDataQuery(R"(
         REPLACE INTO `/Root/ComplexKey` (Key, Fk, Value) VALUES
             (null, null, "NullValue"),
+            (1, 101, "Value1"),
+            (2, 102, "Value1"),
+            (2, 103, "Value3"),
+            (3, 103, "Value2"),
+            (4, 104, "Value2"),
+            (5, 105, "Value3");
+
+        REPLACE INTO `/Root/ComplexKeyNotNull` (Key, Fk, Value) VALUES
             (1, 101, "Value1"),
             (2, 102, "Value1"),
             (2, 103, "Value3"),
@@ -143,8 +158,14 @@ void Test(const TString& query, const TString& answer, THashSet<TString> allowSc
     }
 }
 
-void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1) {
-    TKikimrRunner kikimr;
+void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1, bool streamLookup = true) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
+
+    auto settings = TKikimrSettings()
+        .SetAppConfig(appConfig);
+
+    TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -189,7 +210,8 @@ Y_UNIT_TEST(OverflowLookup) {
         )",
         R"([])",
         0,
-        2);
+        2,
+        false);
 
     TestRange(
         R"(
@@ -293,13 +315,24 @@ Y_UNIT_TEST(ComplexRange) {
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE (Key, Fk) >= (4, 104);
+        )",
+        R"([
+            [[4];[104];["Value2"]];
+            [[5];[105];["Value3"]]
+        ])",
+        2);
+
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKeyNotNull`
             WHERE (Key, Fk) >= (1, 101) AND (Key, Fk) < (4, 104);
         )",
         R"([
-            [[1];[101];["Value1"]];
-            [[2];[102];["Value1"]];
-            [[2];[103];["Value3"]];
-            [[3];[103];["Value2"]]
+            [1;101;["Value1"]];
+            [2;102;["Value1"]];
+            [2;103;["Value3"]];
+            [3;103;["Value2"]]
         ])",
         4);
 
@@ -314,6 +347,16 @@ Y_UNIT_TEST(ComplexRange) {
         1,
         2);
 
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE (Key < 2) OR (Key = 2 AND Fk > 102)
+        )",
+        R"([
+            [[1];[101];["Value1"]];[[2];[103];["Value3"]]
+        ])",
+        2,
+        2);
 }
 
 Y_UNIT_TEST(SqlIn) {

@@ -27,6 +27,7 @@ private:
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     YDB_FLAG_ACCESSOR(WithJsonDocument, false);
     TString ShardingMethod = "HASH_FUNCTION_CONSISTENCY_64";
+    bool WithSomeNulls_ = false;
 protected:
     void CreateOlapTableWithStore(TString tableName = "olapTable", TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
@@ -41,18 +42,17 @@ public:
 
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
-        #Columns { Name: "resource_type" Type: "Utf8" }
         Columns { Name: "resource_id" Type: "Utf8" }
         Columns { Name: "uid" Type: "Utf8" }
         Columns { Name: "level" Type: "Int32" }
         Columns { Name: "message" Type: "Utf8" }
-        #Columns { Name: "json_payload" Type: "Json" }
-        #Columns { Name: "ingested_at" Type: "Timestamp" }
-        #Columns { Name: "saved_at" Type: "Timestamp" }
-        #Columns { Name: "request_id" Type: "Utf8" }
         KeyColumnNames: "timestamp"
         Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
+
+    void WithSomeNulls() {
+        WithSomeNulls_ = true;
+    };
 
     virtual std::vector<TString> GetShardingColumns() const {
         return {"timestamp", "uid"};

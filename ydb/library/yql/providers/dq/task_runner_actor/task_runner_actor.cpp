@@ -106,6 +106,7 @@ private:
             }
 
             hasData = lastPop.GetResult();
+            result.HasData = result.HasData || hasData;
             dataSize = data.Size();
             isFinished = !hasData && Channel->IsFinished();
             changed = changed || hasData || (isFinished != WasFinished);
@@ -116,7 +117,6 @@ private:
         }
         result.IsFinished = isFinished;
         result.IsChanged = changed;
-        result.HasData = hasData;
         return result;
     }
 

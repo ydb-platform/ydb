@@ -85,7 +85,7 @@ namespace NKikimr::NTable::NPage {
 
         struct TShortChild {
             TPageId PageId;
-            TRowId Count;
+            TRowId RowCount;
             ui64 DataSize;
 
             auto operator<=>(const TShortChild&) const = default;
@@ -95,22 +95,22 @@ namespace NKikimr::NTable::NPage {
 
         struct TChild {
             TPageId PageId;
-            TRowId Count;
+            TRowId RowCount;
             ui64 DataSize;
-            TRowId ErasedCount;
+            TRowId ErasedRowCount;
 
             auto operator<=>(const TChild&) const = default;
 
             TString ToString() const noexcept
             {
-                return TStringBuilder() << "PageId: " << PageId << " Count: " << Count << " DataSize: " << DataSize << " Erased: " << ErasedCount;
+                return TStringBuilder() << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize << " ErasedRowCount: " << ErasedRowCount;
             }
         } Y_PACKED;
 
         static_assert(sizeof(TChild) == 28, "Invalid TBtreeIndexNode TChild size");
 
         static_assert(offsetof(TChild, PageId) == offsetof(TShortChild, PageId));
-        static_assert(offsetof(TChild, Count) == offsetof(TShortChild, Count));
+        static_assert(offsetof(TChild, RowCount) == offsetof(TShortChild, RowCount));
         static_assert(offsetof(TChild, DataSize) == offsetof(TShortChild, DataSize));
 
 #pragma pack(pop)
@@ -306,7 +306,7 @@ namespace NKikimr::NTable::NPage {
         {
             if (Header->IsShortChildFormat) {
                 const TShortChild* const shortChild = TDeref<const TShortChild>::At(Children, pos * sizeof(TShortChild));
-                return { shortChild->PageId, shortChild->Count, shortChild->DataSize, 0 };
+                return { shortChild->PageId, shortChild->RowCount, shortChild->DataSize, 0 };
             } else {
                 return *TDeref<const TChild>::At(Children, pos * sizeof(TChild));
             }
@@ -316,7 +316,7 @@ namespace NKikimr::NTable::NPage {
             return beginRowId <= rowId && rowId < endRowId;
         }
 
-        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on) const noexcept
+        TRecIdx Seek(TRowId rowId, std::optional<TRecIdx> on = { }) const noexcept
         {
             const TRecIdx childrenCount = GetChildrenCount();
             if (on && on >= childrenCount) {
@@ -326,19 +326,19 @@ namespace NKikimr::NTable::NPage {
 
             auto range = xrange(0u, childrenCount);
             const auto cmp = [this](TRowId rowId, TPos pos) {
-                return rowId < GetShortChild(pos).Count;
+                return rowId < GetShortChild(pos).RowCount;
             };
 
             TRecIdx result;
             if (!on) {
                 // Will do a full binary search on full range
-            } else if (GetShortChild(*on).Count <= rowId) {
+            } else if (GetShortChild(*on).RowCount <= rowId) {
                 // Try a short linear search first
                 result = *on;
                 for (int linear = 0; linear < 4; ++linear) {
                     result++;
                     Y_ABORT_UNLESS(result < childrenCount, "Should always seek some child");
-                    if (GetShortChild(result).Count > rowId) {
+                    if (GetShortChild(result).RowCount > rowId) {
                         return result;
                     }
                 }
@@ -352,7 +352,7 @@ namespace NKikimr::NTable::NPage {
                     if (result == 0) {
                         return 0;
                     }
-                    if (GetShortChild(result - 1).Count <= rowId) {
+                    if (GetShortChild(result - 1).RowCount <= rowId) {
                         return result;
                     }
                     result--;
@@ -464,14 +464,14 @@ namespace NKikimr::NTable::NPage {
     };
 
     struct TBtreeIndexMeta : public TBtreeIndexNode::TChild {
-        size_t LevelsCount;
+        ui32 LevelCount;
         ui64 IndexSize;
 
         auto operator<=>(const TBtreeIndexMeta&) const = default;
 
         TString ToString() const noexcept
         {
-            return TStringBuilder() << TBtreeIndexNode::TChild::ToString() << " LevelsCount: " << LevelsCount << " IndexSize: " << IndexSize;
+            return TStringBuilder() << TBtreeIndexNode::TChild::ToString() << " LevelCount: " << LevelCount << " IndexSize: " << IndexSize;
         }
     };
 }

@@ -91,6 +91,12 @@ public:
     virtual TDuration GetGuaranteeIndexationInterval(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual TDuration GetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual TDuration GetStatsReportInterval(const TDuration defaultValue) const {
+        return defaultValue;
+    }
     virtual ui64 GetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const {
         return defaultValue;
     }

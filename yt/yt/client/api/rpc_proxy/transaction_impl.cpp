@@ -305,7 +305,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 })));
     }
 
-    return AllSucceeded(futures)
+    return AllSucceeded(std::move(futures))
         .Apply(
             BIND([=, this, this_ = MakeStrong(this)] {
                 auto req = Proxy_.CommitTransaction();
@@ -556,12 +556,12 @@ TFuture<TVersionedLookupRowsResult> TTransaction::VersionedLookupRows(
         PatchTransactionTimestamp(options));
 }
 
-TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {
     ValidateActive();
-    return Client_->MultiLookup(
+    return Client_->MultiLookupRows(
         subrequests,
         PatchTransactionTimestamp(options));
 }

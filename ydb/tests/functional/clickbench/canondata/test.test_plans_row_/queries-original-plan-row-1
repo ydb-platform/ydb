@@ -19,6 +19,7 @@
                                 "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
@@ -37,9 +38,19 @@
                                 "Node Type": "Aggregate-Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Aggregate"
                                     },
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
                                         "Limit": "1",
                                         "Name": "Limit"
                                     }
@@ -55,13 +66,24 @@
                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Name": "Aggregate"
                                                     },
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 2
+                                                            }
+                                                        ],
                                                         "Name": "Filter",
                                                         "Predicate": "item.AdvEngineID != 0"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "ReadColumns": [
                                                             "AdvEngineID"

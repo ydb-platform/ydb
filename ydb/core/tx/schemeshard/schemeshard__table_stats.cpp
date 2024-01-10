@@ -91,6 +91,9 @@ public:
     // returns true to continue batching
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
+
+    template<typename T>
+    TPartitionStats PrepareStats(const TActorContext& ctx, const T& rec) const;
 };
 
 
@@ -121,30 +124,12 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
-bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
-    const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
-    const auto& rec = item.Ev->Get()->Record;
-    auto datashardId = TTabletId(rec.GetDatashardId());
+template<typename T>
+TPartitionStats TTxStoreTableStats::PrepareStats(
+    const TActorContext& ctx, const T& rec) const {
 
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
-    ui64 dataSize = tableStats.GetDataSize();
-    ui64 rowCount = tableStats.GetRowCount();
-
-    bool isDataShard = Self->Tables.contains(pathId);
-    bool isOlapStore = Self->OlapStores.contains(pathId);
-    bool isColumnTable = Self->ColumnTables.contains(pathId);
-    if (!isDataShard && !isOlapStore && !isColumnTable) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
-        return true;
-    }
-
-    if (!Self->TabletIdToShardIdx.contains(datashardId)) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "No shardIdx for shard " << datashardId);
-        return true;
-    }
-
-    TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     TPartitionStats newStats;
     newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound());
@@ -194,8 +179,47 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
     newStats.ShardState = rec.GetShardState();
 
+    return newStats;
+}
+
+bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
+    const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+    const auto& rec = item.Ev->Get()->Record;
+    const auto datashardId = TTabletId(rec.GetDatashardId());
+
+    const auto& tableStats = rec.GetTableStats();
+    ui64 dataSize = tableStats.GetDataSize();
+    ui64 rowCount = tableStats.GetRowCount();
+
+    const bool isDataShard = Self->Tables.contains(pathId);
+    const bool isOlapStore = Self->OlapStores.contains(pathId);
+    const bool isColumnTable = Self->ColumnTables.contains(pathId);
+
+    if (!isDataShard && !isOlapStore && !isColumnTable) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
+        return true;
+    }
+
+    if (!Self->TabletIdToShardIdx.contains(datashardId)) {
+        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "No shardIdx for shard " << datashardId);
+        return true;
+    }
+
+    TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
+
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Add stats from shard " << datashardId << ", pathId " << pathId.LocalPathId
+        "TTxStoreTableStats.PersistSingleStats: main stats from" 
+        << " datashardId(TabletID)=" << datashardId 
+        << " maps to shardIdx: " << shardIdx 
+        << ", pathId: " << pathId
+        << ", pathId map=" << Self->PathsById[pathId]->Name
+        << ", is column=" << isColumnTable
+        << ", is olap=" << isOlapStore);
+
+    const TPartitionStats newStats = PrepareStats(ctx, rec);
+
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Add stats from shard with datashardId(TabletID)=" << datashardId << ", pathId " << pathId.LocalPathId
                 << ": RowCount " << newStats.RowCount << ", DataSize " << newStats.DataSize);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -235,7 +259,32 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         olapStore->UpdateShardStats(shardIdx, newStats);
         newAggrStats = olapStore->GetStats().Aggregated;
         updateSubdomainInfo = true;
+
+        const auto tables = rec.GetTables();
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "OLAP store contains " << tables.size() << " tables.");
+
+        for(const auto& table : tables) {
+            const TPartitionStats newTableStats = PrepareStats(ctx, table);
+
+            const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
+
+            if (Self->ColumnTables.contains(tablePathId)) {
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "add stats for exists table with pathId=" << tablePathId);
+
+                auto columnTable = Self->ColumnTables.TakeVerified(tablePathId);
+                columnTable->UpdateTableStats(tablePathId, newTableStats);
+            } else {
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "failed add stats for table with pathId=" << tablePathId);
+            }
+        }
+
     } else if (isColumnTable) {
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" 
+            << rec.GetTables().size());
+
         auto columnTable = Self->ColumnTables.TakeVerified(pathId);
         oldAggrStats = columnTable->GetStats().Aggregated;
         columnTable->UpdateShardStats(shardIdx, newStats);

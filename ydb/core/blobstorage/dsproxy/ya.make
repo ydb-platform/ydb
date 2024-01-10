@@ -79,4 +79,5 @@ RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_ftol
+    ut_strategy
 )

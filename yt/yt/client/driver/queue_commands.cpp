@@ -227,14 +227,20 @@ void TAdvanceConsumerCommand::Register(TRegistrar registrar)
     registrar.Parameter("old_offset", &TThis::OldOffset)
         .Optional();
     registrar.Parameter("new_offset", &TThis::NewOffset);
+    registrar.Parameter("client_side", &TThis::ClientSide)
+        .Optional();
 }
 
 void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = GetTransaction(context);
 
-    WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
-        .ThrowOnError();
+    if (!ClientSide || *ClientSide) {
+        transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
+    } else {
+        WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
+            .ThrowOnError();
+    }
 
     if (ShouldCommitTransaction()) {
         WaitFor(transaction->Commit())

@@ -53,6 +53,8 @@ class TGetImpl {
 
     std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
 
+    std::unordered_map<TLogoBlobID, std::tuple<bool, bool>> BlobFlags; // keep, doNotKeep per blob
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, const TString& requestPrefix = {})
@@ -219,6 +221,12 @@ public:
                 }
             }
 
+            if (result.HasKeep() || result.HasDoNotKeep()) {
+                auto& [a, b] = BlobFlags[blobId];
+                a |= result.GetKeep();
+                b |= result.GetDoNotKeep();
+            }
+
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
                 R_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
@@ -228,8 +236,7 @@ public:
                     resultBuffer.ExtractFrontPlain(temp.GetDataMut(), temp.size());
                     resultBuffer.Insert(resultBuffer.End(), std::move(temp));
                 }
-                Blackboard.AddResponseData(blobId, orderNumber, resultShift, std::move(resultBuffer), result.GetKeep(),
-                    result.GetDoNotKeep());
+                Blackboard.AddResponseData(blobId, orderNumber, resultShift, std::move(resultBuffer));
             } else if (replyStatus == NKikimrProto::NODATA) {
                 R_LOG_DEBUG_SX(logCtx, "BPG59", "Got# NODATA orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
@@ -243,7 +250,7 @@ public:
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 R_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddNotYetResponse(blobId, orderNumber, result.GetKeep(), result.GetDoNotKeep());
+                Blackboard.AddNotYetResponse(blobId, orderNumber);
             } else {
                 Y_ABORT_UNLESS(false, "Unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(replyStatus).data());
             }

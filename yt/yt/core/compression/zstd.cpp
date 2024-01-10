@@ -51,7 +51,7 @@ void ZstdCompress(int level, TSource* source, TBlob* output)
 
     auto context = ZSTD_createCCtx();
     auto contextGuard = Finally([&] () {
-       ZSTD_freeCCtx(context);
+        ZSTD_freeCCtx(context);
     });
 
     {

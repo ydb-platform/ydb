@@ -13,4 +13,5 @@ $i = (
 
 select distinct key
 from $i
-where value != "";
+where value != ""
+order by key;

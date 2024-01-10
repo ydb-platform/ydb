@@ -368,7 +368,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EOutputFormat::Tsv,
+        EOutputFormat::Parquet,
     });
 
     AddParametersOption(config, "(for data & scan queries)");
@@ -816,7 +817,8 @@ void TCommandExplain::Config(TConfig& config) {
             EOutputFormat::Pretty,
             EOutputFormat::PrettyTable,
             EOutputFormat::JsonUnicode,
-            EOutputFormat::JsonBase64
+            EOutputFormat::JsonBase64,
+            EOutputFormat::JsonBase64Simplify
     });
 
     config.SetFreeArgsNum(0);
@@ -1023,7 +1025,8 @@ void TCommandReadTable::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EOutputFormat::Tsv,
+        EOutputFormat::Parquet,
     });
 
     config.SetFreeArgsNum(1);

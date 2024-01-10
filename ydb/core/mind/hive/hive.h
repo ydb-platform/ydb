@@ -85,8 +85,9 @@ enum class EBalancerType {
     ScatterNetwork,
     Emergency,
     SpreadNeighbours,
+    Storage,
 
-    Last = SpreadNeighbours,
+    Last = Storage,
 };
 
 constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
@@ -261,6 +262,12 @@ struct TBalancerSettings {
     std::optional<TFullObjectId> FilterObjectId;
 };
 
+struct TStorageBalancerSettings {
+    ui64 NumReassigns;
+    ui64 MaxInFlight;
+    TString StoragePool;
+};
+
 struct TBalancerStats {
     ui64 TotalRuns = 0;
     ui64 TotalMovements = 0;
@@ -275,6 +282,13 @@ struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
+    TSubDomainKey ObjectDomain;
+
+    const THive& Hive;
+
+    explicit TNodeFilter(const THive& hive);
+
+    TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
 };
 
 } // NHive

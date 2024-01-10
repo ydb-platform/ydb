@@ -307,10 +307,10 @@ INSTANTIATE_TEST_SUITE_P(
     ValueParametrized,
     TPipeBigReadWriteTest,
     ::testing::Values(
-        std::make_pair(2000 * 4096, 4096),
-        std::make_pair(100 * 4096, 10000),
-        std::make_pair(100 * 4096, 100),
-        std::make_pair(100, 4096)));
+        std::pair(2000 * 4096, 4096),
+        std::pair(100 * 4096, 10000),
+        std::pair(100 * 4096, 100),
+        std::pair(100, 4096)));
 
 #endif
 

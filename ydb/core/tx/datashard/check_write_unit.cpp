@@ -52,7 +52,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
-    auto writeTx = writeOp->WriteTx();
+    auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
     Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());
 
@@ -64,9 +64,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             << "Cannot perform transaction: out of disk space at tablet "
             << DataShard.TabletID() << " txId " << op->GetTxId();
 
-        DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+        DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -77,42 +77,6 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
     {
         for (const auto& key : writeTx->TxInfo().Keys) {
             if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) {
-                ui64 keySize = 0;
-                for (const auto& cell : key.Key->Range.From) {
-                    keySize += cell.Size();
-                }
-                if (keySize > NLimits::MaxWriteKeySize) {
-                    TString err = TStringBuilder()
-                        << "Operation " << *op << " writes key of " << keySize
-                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
-                        << " bytes at " << DataShard.TabletID();
-
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
-                    op->Abort(EExecutionUnitKind::FinishProposeWrite);
-
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                    return EExecutionStatus::Executed;
-                }
-                for (const auto& col : key.Key->Columns) {
-                    if (col.Operation == TKeyDesc::EColumnOperation::Set ||
-                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
-                    {
-                        if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
-                            TString err = TStringBuilder()
-                                << "Transaction write column value of " << col.ImmediateUpdateSize
-                                << " bytes is larger than the allowed threshold";
-
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
-                            op->Abort(EExecutionUnitKind::FinishProposeWrite);
-
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-                            return EExecutionStatus::Executed;
-                        }
-                    }
-                }
-
                 if (DataShard.IsSubDomainOutOfSpace()) {
                     switch (key.Key->RowOperation) {
                         case TKeyDesc::ERowOperation::Read:
@@ -124,9 +88,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+                            DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+                            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
                             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -143,7 +107,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder() << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
@@ -151,7 +115,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(writeOp->WriteTx()->TabletId(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
+        writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {op->GetMinStep(), op->GetMaxStep(), {}}));
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared " << *op << " at " << DataShard.TabletID());
     }
 

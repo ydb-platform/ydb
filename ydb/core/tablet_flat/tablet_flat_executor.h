@@ -202,15 +202,15 @@ class TTransactionContext : public TTxMemoryProviderBase {
     friend class TExecutor;
 
 public:
-    TTransactionContext(TSeat &seat, ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
-                        ui64 memoryLimit, ui64 taskId)
+    TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
+                        ui64 memoryLimit, ui64 taskId, NWilson::TSpan &transactionSpan)
         : TTxMemoryProviderBase(memoryLimit, taskId)
-        , Seat(seat)
         , Tablet(tablet)
         , Generation(gen)
         , Step(step)
         , Env(env)
         , DB(db)
+        , TransactionSpan(transactionSpan)
     {}
 
     ~TTransactionContext() {}
@@ -228,13 +228,22 @@ public:
         return Rescheduled_;
     }
 
+    void StartExecutionSpan() noexcept {
+        TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::Tablet, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
+    }
+
+    void FinishExecutionSpan() noexcept {
+        TransactionExecutionSpan.EndOk();
+    }
+
 public:
-    TSeat& Seat;
     const ui64 Tablet = Max<ui32>();
     const ui32 Generation = Max<ui32>();
     const ui32 Step = Max<ui32>();
     IExecuting &Env;
     NTable::TDatabase &DB;
+    NWilson::TSpan &TransactionSpan;
+    NWilson::TSpan TransactionExecutionSpan;
 
 private:
     bool Rescheduled_ = false;
@@ -281,9 +290,7 @@ public:
 
     ITransaction(NWilson::TTraceId &&traceId)
         : TxSpan(NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.Transaction"))
-    {
-        TxSpan.Attribute("Type", TypeName(*this));
-    }
+    { }
 
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
@@ -298,6 +305,10 @@ public:
     virtual void Describe(IOutputStream &out) const noexcept
     {
         out << TypeName(*this);
+    }
+
+    virtual void SetupTxSpanName() noexcept {
+        TxSpan.Attribute("Type", TypeName(*this));
     }
 
     void SetupTxSpan(NWilson::TTraceId traceId) noexcept {

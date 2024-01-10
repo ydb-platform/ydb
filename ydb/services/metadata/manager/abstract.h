@@ -117,7 +117,7 @@ public:
         const TExternalModificationContext& context) const;
 
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
+        const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
 
     const TTableSchema& GetSchema() const {
         Y_ABORT_UNLESS(!!ActualSchema);

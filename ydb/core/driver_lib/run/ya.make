@@ -67,6 +67,8 @@ PEERDIR(
     ydb/core/formats
     ydb/core/fq/libs/init
     ydb/core/fq/libs/logs
+    ydb/core/graph/service
+    ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/grpc_services/auth_processor

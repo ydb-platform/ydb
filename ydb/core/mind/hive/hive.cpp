@@ -1,4 +1,7 @@
+#include "domain_info.h"
 #include "hive.h"
+#include "hive_impl.h"
+#include "leader_tablet_info.h"
 
 #include <ydb/core/util/tuples.h>
 
@@ -38,6 +41,7 @@ TString EBalancerTypeName(EBalancerType value) {
         case EBalancerType::Emergency: return "Emergency";
         case EBalancerType::SpreadNeighbours: return "Spread";
         case EBalancerType::Manual: return "Manual";
+        case EBalancerType::Storage: return "Storage";
     }
 }
 
@@ -76,5 +80,25 @@ NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& nor
     }
     return dominant;
 }
+
+TNodeFilter::TNodeFilter(const THive& hive) 
+    : Hive(hive) 
+{}
+
+TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
+    const auto* objectDomainInfo = Hive.FindDomain(ObjectDomain);
+
+    if (!objectDomainInfo) {
+        return {AllowedDomains.begin(), AllowedDomains.end()};
+    }
+
+    switch (objectDomainInfo->GetNodeSelectionPolicy()) {
+        case ENodeSelectionPolicy::Default:
+            return {AllowedDomains.begin(), AllowedDomains.end()};
+        case ENodeSelectionPolicy::PreferObjectDomain:
+            return {&ObjectDomain, 1};
+    }
 }
-}
+
+} // NHive
+} // NKikimr

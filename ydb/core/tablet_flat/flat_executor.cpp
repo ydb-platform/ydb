@@ -1580,6 +1580,7 @@ void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, cons
     Y_ABORT_UNLESS(ActivationQueue, "attempt to execute transaction before activation");
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
+    seat->Self->SetupTxSpanName();
 
     LWTRACK(TransactionBegin, seat->Self->Orbit, seat->UniqID, Owner->TabletID(), TypeName(*seat->Self));
 
@@ -1653,16 +1654,16 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     PrivatePageCache->ResetTouchesAndToLoad(true);
     TPageCollectionTxEnv env(*Database, *PrivatePageCache);
 
-    TTransactionContext txc(*seat, Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId);
+    TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId, seat->Self->TxSpan);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
 
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
     
-    NWilson::TSpan txExecuteSpan = seat->CreateExecutionSpan();
+    txc.StartExecutionSpan();
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
-    txExecuteSpan.EndOk();
+    txc.FinishExecutionSpan();
 
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
 

@@ -1306,7 +1306,7 @@ void TPipeline::ForgetTx(ui64 txId) {
 TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
-                                           const TActorContext &ctx, NWilson::TTraceId traceId)
+                                           const TActorContext &ctx, NWilson::TSpan &&operationSpan)
 {
     auto &rec = ev->Get()->Record;
     Y_ABORT_UNLESS(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1323,7 +1323,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);
-    tx->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "ActiveTransaction", NWilson::EFlags::AUTO_END);
+    tx->OperationSpan = std::move(operationSpan);
 
     auto malformed = [&](const TStringBuf txType, const TString& txBody) {
         const TString error = TStringBuilder() << "Malformed " << txType << " tx"
@@ -1560,51 +1560,53 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
 TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext& txc,
-                                           const TActorContext& ctx, NWilson::TTraceId traceId)
+                                           const TActorContext& ctx, NWilson::TSpan &&operationSpan)
 {
     const auto& rec = ev->Get()->Record;
     TBasicOpInfo info(rec.GetTxId(), EOperationKind::DataTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
-    auto op = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
-    op->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(traceId), "WriteOperation", NWilson::EFlags::AUTO_END);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+    writeOp->OperationSpan = std::move(operationSpan);
+    auto writeTx = writeOp->GetWriteTx();
+    Y_ABORT_UNLESS(writeTx);
 
     auto badRequest = [&](const TString& error) {
-        op->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, error);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << error << "at tablet# " << Self->TabletID(), Self->TabletID());
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (!op->WriteTx()->Ready()) {
-        badRequest(TStringBuilder() << "Shard " << Self->TabletID() << " cannot parse tx " << op->GetTxId() << ": " << op->WriteTx()->GetError());
-        return op;
+    if (!writeTx->Ready()) {
+        badRequest(TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        return writeOp;
     }
 
-    op->ExtractKeys();
+    writeTx->ExtractKeys(true);
 
     switch (rec.txmode()) {
         case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
             break;
         case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
-            op->SetVolatilePrepareFlag();
+            writeOp->SetVolatilePrepareFlag();
             break;
         case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
-            op->SetImmediateFlag();
+            writeOp->SetImmediateFlag();
             break;
         default:
             badRequest(TStringBuilder() << "Unknown txmode: " << rec.txmode());
-            return op;
+            return writeOp;
     }
 
     // Make config checks for immediate op.
-    if (op->IsImmediate()) {
+    if (writeOp->IsImmediate()) {
         if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Shard " << Self->TabletID() << " force immediate op " << op->GetTxId() << " to online according to config");
-            op->SetForceOnlineFlag();
+            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Force immediate writeOp " << writeOp->GetTxId() << " to online according to config, at tablet #" << Self->TabletID());
+            writeOp->SetForceOnlineFlag();
         } else {
             if (Config.DirtyImmediate())
-                op->SetForceDirtyFlag();
+                writeOp->SetForceDirtyFlag();
         }
     }
 
-    return op;
+    return writeOp;
 }
 
 void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
@@ -1707,9 +1709,15 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
+        NWilson::TSpan unitSpan(TWilsonTablet::Tablet, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
+        
+        unitSpan.Attribute("Type", TypeName(unit))
+                .Attribute("Status", static_cast<int>(status))
+                .EndOk();
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Execution status for " << *op << " at " << Self->TabletID()

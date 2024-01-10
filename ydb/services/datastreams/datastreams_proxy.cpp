@@ -1560,6 +1560,7 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TGetRecordsActor::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, PipeClient);
+        TRlHelpers::PassAway(SelfId());
         TBase::Die(ctx);
     }
 

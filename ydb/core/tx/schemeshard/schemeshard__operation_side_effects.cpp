@@ -525,6 +525,11 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             }
         }
 
+        if (!tenantLink.TenantGraphShard && subDomain->GetTenantGraphShardID()) {
+            message->SetTenantGraphShard(ui64(subDomain->GetTenantGraphShardID()));
+            hasChanges = true;
+        }
+
         if (!hasChanges) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"

@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(0.2.6)
+VERSION(0.2.12)
 
 LICENSE(MIT)
 
@@ -15,6 +15,7 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     wcwidth/__init__.py
+    wcwidth/table_vs16.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py
     wcwidth/unicode_versions.py

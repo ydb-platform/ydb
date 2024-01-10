@@ -6,11 +6,11 @@ $l = AsList(
 );
 
 $d = ToSortedDict($l);
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),DictKeys($d),DictPayloads($d);
 select DictLookup($d,AsList(1,2)), DictLookup($d,AsList(1,3));
 select DictContains($d,AsList(1,2)), DictContains($d,AsList(1,3));
 
 $d = ToSortedMultiDict($l);
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),DictKeys($d),DictPayloads($d);
 select DictLookup($d,AsList(1,2)), DictLookup($d,AsList(1,3));
 select DictContains($d,AsList(1,2)), DictContains($d,AsList(1,3));

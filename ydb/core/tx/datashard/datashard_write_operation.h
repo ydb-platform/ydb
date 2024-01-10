@@ -26,51 +26,28 @@ public:
         return 100;
     }
 
-    NKikimrTxDataShard::TError::EKind Code() const {
-        return ErrCode;
-    }
-    const TString GetError() const {
-        return ErrStr;
+    const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
+        return Ev;
     }
 
-    TStepOrder StepTxId() const {
-        return StepTxId_;
-    }
-    ui64 TxId() const {
-        return StepTxId_.TxId;
-    }
-    ui64 TabletId() const {
-        return TabletId_;
-    }
-    const NEvents::TDataEvents::TEvWrite::TPtr& Ev() const {
-        return Ev_;
-    }
-
-    const NKikimrDataEvents::TEvWrite& Record() const {
-        return Ev_->Get()->Record;
+    const NKikimrDataEvents::TEvWrite& GetRecord() const {
+        return Ev->Get()->Record;
     }
 
     const NKikimrDataEvents::TEvWrite::TOperation& RecordOperation() const {
-        //TODO Only one operation is supported now
-        return Record().operations(0);
-    }
-
-    const TTableId& TableId() const {
-        return TableId_;
-    }
-
-    const TSerializedCellMatrix Matrix() const {
-        return Matrix_;
+        Y_ABORT_UNLESS(GetRecord().operations().size() == 1, "Only one operation is supported now");
+        Y_ABORT_UNLESS(GetRecord().operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
+        return GetRecord().operations(0);
     }
 
     ui64 LockTxId() const {
-        return Record().locktxid();
+        return GetRecord().locktxid();
     }
     ui32 LockNodeId() const {
-        return Record().locknodeid();
+        return GetRecord().locknodeid();
     }
     bool Immediate() const {
-        return Record().txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
+        return GetRecord().txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE;
     }
     bool NeedDiagnostics() const {
         return true;
@@ -78,13 +55,6 @@ public:
     bool CollectStats() const {
         return true;
     }
-    TInstant ReceivedAt() const {
-        return ReceivedAt_;
-    }
-    TInstant Deadline() const {
-        return Deadline_;
-    }
-
     bool Ready() const {
         return ErrCode == NKikimrTxDataShard::TError::OK;
     }
@@ -115,6 +85,9 @@ public:
 
     NMiniKQL::IEngineFlat* GetEngine() {
         return EngineBay.GetEngine();
+    }
+    NMiniKQL::TEngineHost* GetEngineHost() {
+        return EngineBay.GetEngineHost();
     }
     void DestroyEngine() {
         EngineBay.DestroyEngine();
@@ -163,47 +136,25 @@ public:
         return EngineBay.GetVolatileCommitOrdered();
     }
 
-    TActorId Source() const {
-        return Source_;
-    }
-    void SetSource(const TActorId& actorId) {
-        Source_ = actorId;
-    }
-    void SetStep(ui64 step) {
-        StepTxId_.Step = step;
-    }
     bool IsProposed() const {
-        return Source_ != TActorId();
+        return Source != TActorId();
     }
 
     inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
-        return Record().locks();
+        return GetRecord().locks();
     }
 
-    bool ParseRecord(TDataShard* self);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx);
+    bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
+    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, ui64 tabletId, const TActorContext& ctx);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
 
-    ui64 GetTxSize() const {
-        return TxSize;
-    }
     ui32 KeysCount() const {
         return TxInfo().WritesCount;
     }
 
-    void SetTxCacheUsage(ui64 val) {
-        TxCacheUsage = val;
-    }
-    ui64 GetTxCacheUsage() const {
-        return TxCacheUsage;
-    }
-
     void ReleaseTxData();
-    bool IsTxDataReleased() const {
-        return IsReleased;
-    }
 
     bool IsTxInfoLoaded() const {
         return TxInfo().Loaded;
@@ -221,29 +172,32 @@ public:
     }
 
 private:
-    //TODO: YDB_READONLY
-    TStepOrder StepTxId_;
-    ui64 TabletId_;
-    TTableId TableId_;
-    const TUserTable* TableInfo_;
-    const NEvents::TDataEvents::TEvWrite::TPtr& Ev_;
-    TSerializedCellMatrix Matrix_;
-    TActorId Source_;
+    const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
     TEngineBay EngineBay;
-    NKikimrTxDataShard::TError::EKind ErrCode;
-    TString ErrStr;
-    ui64 TxSize;
-    ui64 TxCacheUsage;
-    bool IsReleased;
-    const TInstant ReceivedAt_;  // For local timeout tracking
-    TInstant Deadline_;
 
+    YDB_ACCESSOR_DEF(TActorId, Source);
+
+    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
+    YDB_READONLY_DEF(TTableId, TableId);
+    YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
+    YDB_READONLY_DEF(TInstant, ReceivedAt);
+
+    YDB_READONLY_DEF(ui64, TxSize);
+
+    YDB_READONLY_DEF(NKikimrTxDataShard::TError::EKind, ErrCode);
+    YDB_READONLY_DEF(TString, ErrStr);
+    YDB_READONLY_DEF(bool, IsReleased);
+
+    const TUserTable* TableInfo;
+private:
     void ComputeTxSize();
 };
 
 class TWriteOperation : public TOperation {
     friend class TWriteUnit;
 public:
+    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+    
     explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
 
     ~TWriteOperation();
@@ -253,38 +207,17 @@ public:
     void FillVolatileTxData(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
 
     const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
-        return Ev_;
+        return Ev;
     }
     void SetEv(const NEvents::TDataEvents::TEvWrite::TPtr& ev) {
         UntrackMemory();
-        Ev_ = ev;
+        Ev = ev;
         TrackMemory();
     }
     void ClearEv() {
         UntrackMemory();
-        Ev_.Reset();
+        Ev.Reset();
         TrackMemory();
-    }
-
-    ui64 GetSchemeShardId() const {
-        return SchemeShardId;
-    }
-    void SetSchemeShardId(ui64 id) {
-        SchemeShardId = id;
-    }
-    ui64 GetSubDomainPathId() const {
-        return SubDomainPathId;
-    }
-    void SetSubDomainPathId(ui64 pathId) {
-        SubDomainPathId = pathId;
-    }
-
-    const NKikimrSubDomains::TProcessingParams& GetProcessingParams() const {
-        return ProcessingParams;
-    }
-    void SetProcessingParams(const NKikimrSubDomains::TProcessingParams& params)
-    {
-        ProcessingParams.CopyFrom(params);
     }
 
     void Deactivate() override {
@@ -294,27 +227,17 @@ public:
     }
 
     ui32 ExtractKeys() {
-        return WriteTx_ ? WriteTx_->ExtractKeys(false) : 0;
+        return WriteTx ? WriteTx->ExtractKeys(false) : 0;
     }
 
     bool ReValidateKeys() {
-        return WriteTx_ ? WriteTx_->ReValidateKeys() : true;
+        return WriteTx ? WriteTx->ReValidateKeys() : true;
     }
 
     void MarkAsUsingSnapshot() {
         SetUsingSnapshotFlag();
     }
 
-    void SetTxCacheUsage(ui64 val) {
-        TxCacheUsage = val;
-    }
-    ui64 GetTxCacheUsage() const {
-        return TxCacheUsage;
-    }
-
-    ui64 GetReleasedTxDataSize() const {
-        return ReleasedTxDataSize;
-    }
     bool IsTxDataReleased() const {
         return ReleasedTxDataSize > 0;
     }
@@ -339,8 +262,8 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
-    void DbStoreArtifactFlags(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreLocksAccessLog(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreArtifactFlags(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
 
     ui64 GetMemoryConsumption() const;
 
@@ -360,13 +283,13 @@ public:
     void BuildExecutionPlan(bool loaded) override;
 
     bool HasKeysInfo() const override {
-        return WriteTx_ ? WriteTx_->TxInfo().Loaded : false;
+        return WriteTx ? WriteTx->TxInfo().Loaded : false;
     }
 
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
-        if (WriteTx_) {
-            Y_ABORT_UNLESS(WriteTx_->TxInfo().Loaded);
-            return WriteTx_->TxInfo();
+        if (WriteTx) {
+            Y_ABORT_UNLESS(WriteTx->TxInfo().Loaded);
+            return WriteTx->TxInfo();
         }
         // For scheme tx global reader and writer flags should
         // result in all required dependencies.
@@ -374,42 +297,45 @@ public:
     }
 
     ui64 LockTxId() const override {
-        return WriteTx_ ? WriteTx_->LockTxId() : 0;
+        return WriteTx ? WriteTx->LockTxId() : 0;
     }
 
     ui32 LockNodeId() const override {
-        return WriteTx_ ? WriteTx_->LockNodeId() : 0;
+        return WriteTx ? WriteTx->LockNodeId() : 0;
     }
 
     bool HasLockedWrites() const override {
-        return WriteTx_ ? WriteTx_->HasLockedWrites() : false;
+        return WriteTx ? WriteTx->HasLockedWrites() : false;
     }
 
     ui64 IncrementPageFaultCount() {
         return ++PageFaultCount;
     }
 
-    const TValidatedWriteTx::TPtr& WriteTx() const { 
-        return WriteTx_; 
+    const TValidatedWriteTx::TPtr& GetWriteTx() const { 
+        return WriteTx; 
+    }
+    TValidatedWriteTx::TPtr& GetWriteTx() {
+        return WriteTx;
     }
     TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
 
     void ClearWriteTx() { 
-        WriteTx_ = nullptr; 
+        WriteTx = nullptr; 
     }
 
-    const NKikimrDataEvents::TEvWrite& Record() const {
-        return Ev_->Get()->Record;
+    const NKikimrDataEvents::TEvWrite& GetRecord() const {
+        return Ev->Get()->Record;
     }
 
-    const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& WriteResult() const {
-        return WriteResult_;
+    const std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& GetWriteResult() const {
+        return WriteResult;
     }
-    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& WriteResult() {
-        return std::move(WriteResult_);
+    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& ReleaseWriteResult() {
+        return std::move(WriteResult);
     }
 
-    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
+    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg, ui64 tabletId);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
 private:
@@ -417,17 +343,17 @@ private:
     void UntrackMemory() const;
 
 private:
-    NEvents::TDataEvents::TEvWrite::TPtr Ev_;
-    TValidatedWriteTx::TPtr WriteTx_;
-    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult_;
+    NEvents::TDataEvents::TEvWrite::TPtr Ev;
+    TValidatedWriteTx::TPtr WriteTx;
+    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
-    // TODO: move to persistent part of operation's flags
-    ui64 ArtifactFlags;
-    ui64 TxCacheUsage;
-    ui64 ReleasedTxDataSize;
-    ui64 SchemeShardId;
-    ui64 SubDomainPathId;
-    NKikimrSubDomains::TProcessingParams ProcessingParams;
+    YDB_READONLY_DEF(ui64, ArtifactFlags);
+    YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
+    YDB_ACCESSOR_DEF(ui64, ReleasedTxDataSize);
+    YDB_ACCESSOR_DEF(ui64, SchemeShardId);
+    YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
+    YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
+    
     ui64 PageFaultCount = 0;
 };
 

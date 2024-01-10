@@ -83,11 +83,16 @@ namespace NClickHouse {
         TQuery();
         TQuery(const char* query);
         TQuery(const TString& query);
+        TQuery(const TString& query, const TString& query_id);
         ~TQuery();
 
         ///
         inline TString GetText() const {
             return Query_;
+        }
+
+        inline TString GetId() const {
+            return QueryId_;
         }
 
         /// Set handler for receiving result data.
@@ -144,6 +149,7 @@ namespace NClickHouse {
 
     private:
         TString Query_;
+        TString QueryId_;
         TExceptionCallback ExceptionCb_;
         TProfileCallback ProfileCb_;
         TProgressCallback ProgressCb_;

@@ -472,7 +472,7 @@ public:
      *  If the value is set before the call to #handlered, then
      *  #handler is discarded.
      */
-    bool OnCanceled(TCallback<void (const TError&)> handler) const;
+    bool OnCanceled(TCallback<void(const TError&)> handler) const;
 
     //! Converts promise into future.
     operator TFuture<T>() const;

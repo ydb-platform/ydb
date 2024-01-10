@@ -246,6 +246,7 @@ message TEvReassignTablet {
     enum EHiveReassignReason {
         HIVE_REASSIGN_REASON_NO = 0;
         HIVE_REASSIGN_REASON_SPACE = 1;
+        HIVE_REASSIGN_REASON_BALANCE = 2; // internal to Hive
     }
 
     optional fixed64 TabletID = 1;
@@ -556,3 +557,13 @@ message TEvUpdateTabletsObjectReply {
     optional uint64 TxPartId = 3;
 }
 
+message TEvUpdateDomain {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+    optional NKikimrSubDomains.EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 2;
+    optional uint64 TxId = 3;
+}
+
+message TEvUpdateDomainReply {
+    optional fixed64 Origin = 1;
+    optional uint64 TxId = 2;
+}

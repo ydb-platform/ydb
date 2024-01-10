@@ -1,3 +1,0 @@
-pragma UseBlocks;
-
-SELECT id, id * id AS id_square FROM rtmr_dev00_clickhouse.example_1;

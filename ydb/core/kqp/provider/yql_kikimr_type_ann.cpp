@@ -514,28 +514,39 @@ private:
             return status;
         }
 
-        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-        if (TString(node.ReturningStar()) == "true") {
-            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
-                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
-        }
-
-        auto selectType = GetReadTableRowType(
-            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
-            node.ReturningColumns(), sysColumnsEnabled
-        );
-        if (!selectType) {
-            return TStatus::Error;
-        }
-
-        if (!node.ReturningColumns().Empty()) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "It is not allowed to use returning"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
+    }
+
+    template<typename KiCallable>
+    TMaybe<TStatus> DoHandleReturningList(TKiReturningList node, TExprContext& ctx) {
+        if (auto maybeWrite = node.Update().Maybe<KiCallable>()) {
+            auto write = maybeWrite.Cast();
+
+            bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+            auto selectType = GetReadTableRowType(
+                ctx, SessionCtx->Tables(), TString(write.DataSink().Cluster()), TString(write.Table().Value()),
+                write.ReturningColumns(), sysColumnsEnabled
+            );
+            if (!selectType) {
+                return TStatus::Error;
+            }
+
+            node.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(selectType));
+
+            return TStatus::Ok;
+        }
+        return {};
+    }
+
+    virtual TStatus HandleReturningList(TKiReturningList node, TExprContext& ctx) override {
+        if (auto status = DoHandleReturningList<TKiWriteTable>(node, ctx)) {
+            return *status;
+        }
+        if (auto status = DoHandleReturningList<TKiUpdateTable>(node, ctx)) {
+            return *status;
+        }
+        return TStatus::Error;
     }
 
     virtual TStatus HandleUpdateTable(TKiUpdateTable node, TExprContext& ctx) override {
@@ -602,20 +613,6 @@ private:
                     << "Can't set NULL or optional value to not null column: " << column->Name));
                 return TStatus::Error;
             }
-        }
-
-        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
-        if (TString(node.ReturningStar()) == "true") {
-            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
-                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
-        }
-
-        auto selectType = GetReadTableRowType(
-            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
-            node.ReturningColumns(), sysColumnsEnabled
-        );
-        if (!selectType) {
-            return TStatus::Error;
         }
 
         if (!node.ReturningColumns().Empty()) {
@@ -761,7 +758,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         if (defaultType->GetKind() != actualType->GetKind()) {
                             ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                                 << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-                            
+
                             return TStatus::Error;
                         }
 
@@ -812,7 +809,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                             columnMeta.DefaultFromLiteral.mutable_value()->set_bytes_value(parseResult.Str);
                             auto* pg = columnMeta.DefaultFromLiteral.mutable_type()->mutable_pg_type();
-                            
+
                             pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
                             pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
                         } else if (auto literal = constraint.Value().Maybe<TCoDataCtor>()) {
@@ -822,7 +819,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 TStringBuilder() << "Unsupported type of default value " << constraint.Value().Cast().Ptr()->Content()));
                             return TStatus::Error;
                         }
-                        
+
                     } else if (constraint.Name().Value() == "serial") {
 
                         if (columnMeta.IsDefaultKindDefined()) {
@@ -1263,7 +1260,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             }
                         }
                     }
-    
+
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);
                         if (families.Cast<TCoAtomList>().Size() > 1) {
@@ -1564,16 +1561,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "force") {
-                if (setting.Value()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
-                        TStringBuilder() << "force node shouldn't have value" << name));
-                }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown drop user setting: " << name));
-                return TStatus::Error;
-            }
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                TStringBuilder() << "Unknown drop user setting: " << name));
+            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
@@ -1621,16 +1611,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     virtual TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "force") {
-                if (setting.Value()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
-                        TStringBuilder() << "force node shouldn't have value" << name));
-                }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown drop group setting: " << name));
-                return TStatus::Error;
-            }
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                TStringBuilder() << "Unknown drop group setting: " << name));
+            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());

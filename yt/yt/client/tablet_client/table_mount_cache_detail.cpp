@@ -235,12 +235,12 @@ std::pair<std::optional<TErrorCode>, TTabletInfoPtr> TTableMountCacheBase::Inval
                     retryableErrorCode = std::nullopt;
                 }
 
-                return std::make_pair(retryableErrorCode, tabletInfo);
+                return std::pair(retryableErrorCode, tabletInfo);
             }
         }
     }
 
-    return std::make_pair(std::nullopt, nullptr);
+    return std::pair(std::nullopt, nullptr);
 }
 
 void TTableMountCacheBase::Clear()

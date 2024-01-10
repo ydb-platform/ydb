@@ -43,7 +43,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TLeaveGroupRequestData>(response->ApiKeys, LEAVE_GROUP);
     AddApiKey<THeartbeatRequestData>(response->ApiKeys, HEARTBEAT);
     AddApiKey<TFindCoordinatorRequestData>(response->ApiKeys, FIND_COORDINATOR);
-    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT);
+    AddApiKey<TOffsetCommitRequestData>(response->ApiKeys, OFFSET_COMMIT, {.MaxVersion=1});
     AddApiKey<TOffsetFetchRequestData>(response->ApiKeys, OFFSET_FETCH);
 
     return response;

@@ -214,7 +214,7 @@ private:
                     buffer,
                     stringElement.data(),
                     stringElement.size());
-                 bufferForStringLikeValues_->Advance(stringElement.size());
+                bufferForStringLikeValues_->Advance(stringElement.size());
                 auto value = TStringBuf(buffer, stringElement.size());
 
                 RowValues_[rowIndex] = MakeUnversionedStringValue(value, ColumnId_);
@@ -800,7 +800,7 @@ void PrepareArrayForComplexType(
                     buffer,
                     valueBuffer.Data(),
                     valueBuffer.Size());
-                 bufferForStringLikeValues->Advance(valueBuffer.Size());
+                bufferForStringLikeValues->Advance(valueBuffer.Size());
 
                 auto value = TStringBuf(buffer, valueBuffer.Size());
 
@@ -822,7 +822,7 @@ void PrepareArray(
         case ELogicalMetatype::Simple:
             return PrepareArrayForSimpleLogicalType(
                 denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
-                 bufferForStringLikeValues,
+                bufferForStringLikeValues,
                 column,
                 rowsValues,
                 columnIndex,
@@ -841,7 +841,7 @@ void PrepareArray(
         case ELogicalMetatype::VariantStruct:
             return PrepareArrayForComplexType(
                 denullifiedLogicalType,
-                 bufferForStringLikeValues,
+                bufferForStringLikeValues,
                 column,
                 rowsValues,
                 columnIndex,
@@ -895,7 +895,7 @@ public:
             const auto denullifiedLogicalType = DenullifyLogicalType(columnType);
             PrepareArray(
                 denullifiedLogicalType,
-                 bufferForStringLikeValues,
+                bufferForStringLikeValues,
                 batch->column(columnIndex),
                 rowsValues,
                 columnIndex,

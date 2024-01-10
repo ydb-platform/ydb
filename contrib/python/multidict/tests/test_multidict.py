@@ -199,6 +199,7 @@ class BaseMultiDictTest:
             d.getone("key2")
 
         assert d.getone("key2", "default") == "default"
+        assert d.getone(key="key2", default="default") == "default"
 
     def test__iter__(
         self,
@@ -532,6 +533,8 @@ class TestMultiDict(BaseMultiDictTest):
     def test_get(self, cls: Type[MultiDict[int]]) -> None:
         d = cls([("a", 1), ("a", 2)])
         assert d["a"] == 1
+        assert d.get("a") == 1
+        assert d.get("z", 3) == 3
 
     def test_items__repr__(self, cls: Type[MultiDict[str]]) -> None:
         d = cls([("key", "value1")], key="value2")

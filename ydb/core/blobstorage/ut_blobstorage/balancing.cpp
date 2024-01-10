@@ -7,6 +7,23 @@
 
 using TPartsLocations = TVector<TVector<ui8>>;
 
+TString ToString(const TPartsLocations& partsLocations) {
+    TStringBuilder b;
+    b << "[";
+    for (const auto& parts: partsLocations) {
+        if (parts.size() == 0) {
+            b << ". ";
+        } else {
+            for (auto x: parts) {
+                b << ToString(x);
+            }
+            b << " ";
+        }
+    }
+    b << "]";
+    return b;
+}
+
 
 struct TTestEnv {
     TTestEnv(ui32 nodeCount, TBlobStorageGroupType erasure)
@@ -14,6 +31,7 @@ struct TTestEnv {
         .NodeCount = nodeCount,
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
+        .FeatureFlags = MakeFeatureFlags(),
     })
     {
         Env.CreateBoxAndPool(1, 1);
@@ -26,6 +44,12 @@ struct TTestEnv {
         for (ui32 i = 0; i < Env.Settings.NodeCount; ++i) {
             RunningNodes.insert(i);
         }
+    }
+
+    static TFeatureFlags MakeFeatureFlags() {
+        TFeatureFlags res;
+        res.SetUseVDisksBalancing(true);
+        return res;
     }
 
     static TString PrepareData(const ui32 dataLen, const ui32 start) {
@@ -125,12 +149,13 @@ struct TTestEnv {
     bool CheckPartsLocations(const TLogoBlobID& blobId) {
         auto expectedParts = GetExpectedPartsLocations(blobId);
         auto actualParts = GetActualPartsLocations(blobId);
-        UNIT_ASSERT_VALUES_EQUAL(expectedParts.size(), actualParts.size());
+        TString errMsg = ToString(expectedParts) + " != " + ToString(actualParts);
+        UNIT_ASSERT_VALUES_EQUAL_C(expectedParts.size(), actualParts.size(), errMsg);
 
         for (ui32 i = 0; i < expectedParts.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(expectedParts[i].size(), actualParts[i].size());
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedParts[i].size(), actualParts[i].size(), errMsg);
             for (ui32 j = 0; j < expectedParts[i].size(); ++j) {
-                UNIT_ASSERT_VALUES_EQUAL(expectedParts[i][j], actualParts[i][j]);
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedParts[i][j], actualParts[i][j], errMsg);
             }
         }
 
@@ -204,6 +229,28 @@ struct TStopOneNodeTest {
             Env->Sim(TDuration::Seconds(10));
             Env.StartNode(nodeIdWithBlob);
             Env->Sim(TDuration::Seconds(10));
+
+            Cerr << "Start compaction 1" << Endl;
+            for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
+                Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+            }
+            Env->Sim(TDuration::Seconds(10));
+            Cerr << "Finish compaction 1" << Endl;
+
+            Cerr << "Start compaction 2" << Endl;
+            for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
+                Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+            }
+            Env->Sim(TDuration::Seconds(10));
+            Cerr << "Finish compaction 2" << Endl;
+
+            Cerr << "Start compaction 3" << Endl;
+            for (ui32 pos = 0; pos < Env->Settings.NodeCount; ++pos) {
+                Env->CompactVDisk(Env.GroupInfo->GetActorId(pos));
+            }
+            Env->Sim(TDuration::Seconds(10));
+            Cerr << "Finish compaction 3" << Endl;
+
             Env.CheckPartsLocations(MakeLogoBlobId(step, data.size()));
             UNIT_ASSERT_VALUES_EQUAL(Env.SendGet(step, data.size())->Get()->Responses[0].Buffer.ConvertToString(), data);
         }

@@ -24,14 +24,12 @@ public:
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const;
     std::shared_ptr<arrow::Scalar> GetLastScalar() const;
 
-    TSaverSplittedChunk(std::shared_ptr<arrow::RecordBatch> batch, TString&& serializedChunk)
+    TSaverSplittedChunk(const std::shared_ptr<arrow::RecordBatch>& batch, TString&& serializedChunk)
         : SlicedBatch(batch)
-        , SerializedChunk(std::move(serializedChunk))
-    {
+        , SerializedChunk(std::move(serializedChunk)) {
         Y_ABORT_UNLESS(SlicedBatch);
         Y_ABORT_UNLESS(SlicedBatch->num_columns() == 1);
         Y_ABORT_UNLESS(SlicedBatch->num_rows());
-
     }
 
     bool IsCompatibleColumn(const std::shared_ptr<arrow::Field>& f) const {
@@ -39,9 +37,11 @@ public:
             return false;
         }
         if (SlicedBatch->num_columns() != 1) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected columns count")("expectation", 1)("actual", SlicedBatch->num_columns());
             return false;
         }
         if (!SlicedBatch->schema()->fields().front()->Equals(f)) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected column type")("expectation", f->ToString())("actual", SlicedBatch->schema()->fields().front()->ToString());
             return false;
         }
         return true;

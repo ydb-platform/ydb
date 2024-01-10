@@ -4,7 +4,7 @@
 
 [Goose](https://github.com/pressly/goose) is an open-source tool that helps to version the data schema in the database and manage migrations between these versions. Goose supports many different database management systems, including YDB. Goose uses migration files and stores the state of migrations directly in the database in a special table.
 
-## Installation goose
+## Install goose
 
 Goose installation options are described in [its documentation](https://github.com/pressly/goose/blob/master/README.md#install).
 

@@ -157,7 +157,7 @@ struct TContext : public TThrRefBase {
         std::list<NYql::NDqProto::TComputeActorState> States;
     };
 
-    const NActors::TActorContext& Ctx;
+    const NActors::TActorContext Ctx;
     const TString TablePathPrefix;
     const TString GraphId;
     const TCheckpointId CheckpointId;
@@ -432,7 +432,7 @@ std::list<TString> TStateStorage::SerializeState(const NYql::NDqProto::TComputeA
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
     size_t offset = 0;
     while (size) {
-        size_t chunkSize = size <= rowLimit ? size : rowLimit;
+        size_t chunkSize = (rowLimit && (size > rowLimit)) ? rowLimit : size;
         result.push_back(serializedState.substr(offset, chunkSize));
         offset += chunkSize;
         size -= chunkSize;
@@ -465,7 +465,6 @@ TFuture<TIssues> TStateStorage::SaveState(
 
     auto promise = NewPromise<TIssues>();
     auto future = UpsertRow(context);
-
 
     context->Callback = [promise, context, thisPtr = TIntrusivePtr(this)] (TFuture<TStatus> upsertRowStatus) mutable {
         
@@ -517,8 +516,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
 
     return ListStates(context)
         .Apply([context, thisPtr = TIntrusivePtr(this)] (const TFuture<TStatus>& result) mutable {
-            TStatus status = result.GetValue();
-            if (!status.IsSuccess()) {
+            if (!result.GetValue().IsSuccess()) {
                 return result;
             }
             return thisPtr->SkipStatesInFuture(context);
@@ -651,7 +649,6 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context)
             return future.Apply(
                 [context] (const TFuture<TDataQueryResult>& future) {
                     TStatus status = future.GetValue();
-
                     if (!status.IsSuccess()) {
                         return status;
                     }

@@ -12,11 +12,14 @@
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <util/system/env.h>
 
@@ -30,8 +33,13 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 NYql::NDqProto::TComputeActorState MakeStateFromBlob(const TString& blob) {
+    auto value = NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(blob);
+    const TStringBuf savedBuf = value.AsStringRef();
+    TString result;
+    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
     NYql::NDqProto::TComputeActorState state;
-    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+    state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;
 }
 
@@ -47,6 +55,7 @@ struct TTestRuntime {
     TString YdbDatabase;
     std::unique_ptr<NYdb::TDriver> YdbDriver;
     std::unique_ptr<NYdb::NTable::TTableClient> YdbTableClient;
+    NKikimr::TActorSystemStub ActorSystemStub;
 
     TTestRuntime(const char* tablePrefix)
         : TablePrefix(tablePrefix)
@@ -63,6 +72,8 @@ struct TTestRuntime {
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
         storageConfig.SetTablePrefix(TablePrefix);
+        auto& stateStorageLimits = *config.MutableStateStorageLimits();
+        stateStorageLimits.SetMaxRowSizeBytes(8000000);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -79,6 +90,8 @@ struct TTestRuntime {
         NConfig::TCheckpointGcConfig gcConfig;
         auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
         ActorGC = Runtime->Register(gc.release());
+
+
 
         Runtime->DispatchEvents({}, TDuration::Zero());
 

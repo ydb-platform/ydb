@@ -61,7 +61,6 @@ NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& valu
     TString result;
     NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
     result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
-
     NYql::NDqProto::TComputeActorState state;
     state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;

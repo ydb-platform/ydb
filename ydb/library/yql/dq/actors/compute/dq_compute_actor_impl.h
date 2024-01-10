@@ -861,8 +861,8 @@ protected:
                 sink->AsyncOutput->LoadState(sinkState);
             }
         } catch (const std::exception& e) {
-            CA_LOG_D("Exception: " << e.what());
             error = e.what();
+            CA_LOG_D("Exception: " << error);
         }
         TString& blob = *state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->MutableBlob();
         if (blob && !error.Defined()) {

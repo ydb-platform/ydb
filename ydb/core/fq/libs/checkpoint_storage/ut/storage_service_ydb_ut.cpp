@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -16,7 +17,6 @@
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
 #include <util/system/env.h>
 
 namespace NFq {
@@ -256,6 +256,14 @@ void CreateCompletedCheckpoint(
     CompleteCheckpoint(runtime, graphId, generation, checkpointId, false);
 }
 
+TString MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
+    const TStringBuf savedBuf = value.AsStringRef();
+    TString result;
+    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
+    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+    return result;
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -490,25 +498,27 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
 
     Y_UNIT_TEST(ShouldSaveState)
     {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldSaveState");
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
 
-        SaveState(runtime, 1317, CheckpointId1, "some random state");
+        SaveState(runtime, 1317, CheckpointId1, MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState("some random state")));
     }
 
     Y_UNIT_TEST(ShouldGetState)
     {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldGetState");
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+        auto state = MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState("some random state"));
+        SaveState(runtime, 1317, CheckpointId1, state);
 
-        SaveState(runtime, 1317, CheckpointId1, "some random state");
-
-        auto state = GetState(runtime, 1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, "some random state");
+        auto actual = GetState(runtime, 1317, GraphId, CheckpointId1);
+        UNIT_ASSERT_VALUES_EQUAL(state, actual);
     }
 
     Y_UNIT_TEST(ShouldUseGc)

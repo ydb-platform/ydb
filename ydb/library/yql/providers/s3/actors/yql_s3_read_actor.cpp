@@ -41,6 +41,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -147,7 +148,7 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
 
-        EvReadResult = EvBegin,
+        EvReadResult = EvBegin + 1,
         EvDataPart,
         EvReadStarted,
         EvReadFinished,
@@ -164,6 +165,9 @@ struct TEvPrivate {
         EvEnd
     };
 
+    static_assert(
+        TEvRetryQueuePrivate::EvEnd <= static_cast<ui32>(EvReadResult), 
+        "RetryQueue private events do not fit before our local events");
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     // Events
@@ -309,10 +313,14 @@ public:
 
     struct TEvPrivatePrivate {
         enum {
-            EvGetNextFile = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvGetNextFile = EvBegin + 1,
             EvNextListingChunkReceived,
             EvEnd
         };
+        static_assert(
+            TEvRetryQueuePrivate::EvEnd <= EvGetNextFile, 
+            "RetryQueue private events do not fit before our local events");
         static_assert(
             EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE),
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
@@ -393,6 +401,9 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvPrivatePrivate::TEvGetNextFile, HandleGetNextFile);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
+                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
@@ -406,6 +417,7 @@ public:
     }
 
     void HandleGetNextFile(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
+        UpdateEventsQueue(ev->Sender);
         auto requestAmount = ev->Get()->Record.GetRequestedAmount();
         LOG_D("TS3FileQueueActor", "HandleGetNextFile requestAmount:" << requestAmount);
         if (Objects.size() > requestAmount) {
@@ -434,6 +446,27 @@ public:
             }
         } else {
             TransitToErrorState();
+        }
+    }
+
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        Y_UNUSED(ev);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.Retry();
+        }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor", "Handle disconnected FileQueue " << ev->Get()->NodeId);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.HandleNodeDisconnected(ev->Get()->NodeId);
+        }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor","Handle connected FileQueue " << ev->Get()->NodeId);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.HandleNodeConnected(ev->Get()->NodeId);
         }
     }
 
@@ -511,9 +544,7 @@ public:
         Y_ENSURE(MaybeIssues.Defined());
         LOG_I("TS3FileQueueActor", "TransitToErrorState an error occurred sending ");
         for (auto& [requestorId, _]: RequestQueue) {
-            Send(
-                requestorId,
-                std::make_unique<TEvPrivate::TEvObjectPathReadError>(*MaybeIssues));
+            ReadActorToEvents[requestorId].Send(new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
         }
         RequestQueue.clear();
         Objects.clear();
@@ -539,6 +570,7 @@ public:
 
     void HandleGetNextFileForEmptyState(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
         LOG_D("TS3FileQueueActor", "HandleGetNextFileForEmptyState Giving away rest of Objects");
+        UpdateEventsQueue(ev->Sender);
         SendObjects(ev->Sender, ev->Get()->Record.GetRequestedAmount());
     }
 
@@ -560,7 +592,8 @@ public:
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextFileForErrorState Giving away rest of Objects");
-        Send(ev->Sender, std::make_unique<TEvPrivate::TEvObjectPathReadError>(*MaybeIssues));
+        UpdateEventsQueue(ev->Sender);
+        ReadActorToEvents[ev->Sender].Send(new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
     }
 
     void PassAway() override {
@@ -572,10 +605,13 @@ public:
             }
         } else {
             for (auto& [requestorId, _]: RequestQueue) {
-                Send(
-                    requestorId,
-                    std::make_unique<TEvPrivate::TEvObjectPathReadError>(*MaybeIssues));
+                ReadActorToEvents[requestorId].Send(
+                    new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
             }
+        }
+
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.Unsubscribe();
         }
 
         RequestQueue.clear();
@@ -599,9 +635,8 @@ private:
 
         LOG_T("TS3FileQueueActor", "SendObjects amount: " << amount << " result size: " << result.size());
 
-        Send(
-            recipient,
-            std::make_unique<TEvPrivate::TEvObjectPathBatch>(
+        ReadActorToEvents[recipient].Send(
+            new TEvPrivate::TEvObjectPathBatch(
                 std::move(result), HasNoMoreItems()));
     }
     bool HasNoMoreItems() const {
@@ -669,6 +704,13 @@ private:
                             future.GetValue()));
                 });
     }
+    
+    void UpdateEventsQueue(TActorId actor) {
+        if (!ReadActorToEvents.contains(actor)) {
+            ReadActorToEvents[actor].Init(TxId, SelfId(), SelfId());
+            ReadActorToEvents[actor].OnNewRecipientId(actor);
+        }
+    }
 
 private:
     const TTxId TxId;
@@ -685,6 +727,7 @@ private:
     TMaybe<TIssues> MaybeIssues;
     bool UseRuntimeListing;
     TMaybe<size_t> ConsumersCount;
+    THashMap<TActorId, TRetryEventsQueue> ReadActorToEvents;
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
@@ -777,6 +820,8 @@ public:
                 PatternVariant,
                 ES3PatternType::Wildcard});
         }
+        FileQueueEvents.Init(TxId, SelfId(), SelfId());
+        FileQueueEvents.OnNewRecipientId(FileQueueActor);
         SendPathRequest();
         Become(&TS3ReadActor::StateFunc);
     }
@@ -832,9 +877,8 @@ public:
     void SendPathRequest() {
         Y_ENSURE(!IsWaitingObjectQueueResponse);
         const ui64 requestedAmount = std::min(ReadActorFactoryCfg.MaxInflight, FilesRemained.value_or(std::numeric_limits<ui64>::max()));
-        Send(
-            FileQueueActor,
-            std::make_unique<TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile>(
+        FileQueueEvents.Send(
+            new TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile(
                 requestedAmount));
         IsWaitingObjectQueueResponse = true;
     }
@@ -867,6 +911,9 @@ private:
         hFunc(TEvPrivate::TEvReadError, Handle);
         hFunc(TEvPrivate::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvPrivate::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
     )
 
     void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
@@ -1002,6 +1049,21 @@ private:
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
+    
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        Y_UNUSED(ev);
+        FileQueueEvents.Retry();
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor", "Handle disconnected FileQueue " << ev->Get()->NodeId);
+        FileQueueEvents.HandleNodeDisconnected(ev->Get()->NodeId);
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor","Handle connected FileQueue " << ev->Get()->NodeId);
+        FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
+    }
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
@@ -1019,7 +1081,9 @@ private:
         QueueTotalDataSize = 0;
 
         ContainerCache.Clear();
-        if (!UseRuntimeListing) {
+        if (UseRuntimeListing) {
+            FileQueueEvents.Unsubscribe();
+        } else {
             Send(FileQueueActor, new NActors::TEvents::TEvPoison());
         }
         TActorBootstrapped<TS3ReadActor>::PassAway();
@@ -1071,6 +1135,7 @@ private:
     const ui64 FileSizeLimit;
     std::optional<ui64> FilesRemained;
     bool UseRuntimeListing;
+    TRetryEventsQueue FileQueueEvents;
 };
 
 struct TReadSpec {
@@ -2391,6 +2456,8 @@ public:
                 PatternVariant,
                 ES3PatternType::Wildcard});
         }
+        FileQueueEvents.Init(TxId, SelfId(), SelfId());
+        FileQueueEvents.OnNewRecipientId(FileQueueActor);
         SendPathRequest();
         Become(&TS3StreamReadActor::StateFunc);
         Bootstrapped = true;
@@ -2484,9 +2551,8 @@ public:
     void SendPathRequest() {
         Y_ENSURE(!IsWaitingObjectQueueResponse);
         LOG_D("TS3StreamReadActor", "SendPathRequest " << ReadActorFactoryCfg.MaxInflight);
-        Send(
-            FileQueueActor,
-            std::make_unique<TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile>(
+        FileQueueEvents.Send(
+            new TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile(
                 ReadActorFactoryCfg.MaxInflight));
         IsWaitingObjectQueueResponse = true;
     }
@@ -2614,7 +2680,9 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new NActors::TEvents::TEvPoison());
             }
-            if (!UseRuntimeListing) {
+            if (UseRuntimeListing) {
+                FileQueueEvents.Unsubscribe();
+            } else {
                 Send(FileQueueActor, new NActors::TEvents::TEvPoison());
             }
 
@@ -2638,6 +2706,9 @@ private:
         hFunc(TEvPrivate::TEvFileFinished, HandleFileFinished);
         hFunc(TEvPrivate::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvPrivate::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
     )
 
     void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
@@ -2752,6 +2823,21 @@ private:
             }
         }
     }
+    
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        Y_UNUSED(ev);
+        FileQueueEvents.Retry();
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor", "Handle disconnected FileQueue " << ev->Get()->NodeId);
+        FileQueueEvents.HandleNodeDisconnected(ev->Get()->NodeId);
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        LOG_T("TS3StreamReadActor","Handle connected FileQueue " << ev->Get()->NodeId);
+        FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
+    }
 
     bool LastFileWasProcessed() const {
         return Blocks.empty() && (ListedFiles == CompletedFiles) && IsObjectQueueEmpty;
@@ -2831,6 +2917,7 @@ private:
     bool Bootstrapped = false;
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
     bool UseRuntimeListing;
+    TRetryEventsQueue FileQueueEvents;
 };
 
 using namespace NKikimr::NMiniKQL;

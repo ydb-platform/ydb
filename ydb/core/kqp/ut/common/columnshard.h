@@ -70,6 +70,7 @@ namespace NKqp {
     public:
         TTestHelper(const TKikimrSettings& settings);
         TKikimrRunner& GetKikimr();
+        TTestActorRuntime& GetRuntime();
         NYdb::NTable::TSession& GetSession();
         void CreateTable(const TColumnTableBase& table);
         void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit = {}, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);

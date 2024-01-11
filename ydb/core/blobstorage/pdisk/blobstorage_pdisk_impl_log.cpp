@@ -1268,7 +1268,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
         }
     }
-    TryTrimChunk(false, 0, req.SpanStack.PeekTop() ? *req.SpanStack.PeekTop() : static_cast<const NWilson::TSpan&>(NWilson::TSpan{}));
+    TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
 }
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
@@ -1308,7 +1308,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         }
         IsLogChunksReleaseInflight = false;
 
-        TryTrimChunk(false, 0, req.SpanStack.PeekTop() ? *req.SpanStack.PeekTop() : static_cast<const NWilson::TSpan&>(NWilson::TSpan{}));
+        TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
     }
 }
 

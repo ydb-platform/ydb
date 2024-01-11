@@ -261,6 +261,8 @@ namespace NWilson {
             return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
 
+        static const TSpan Empty;
+
     private:
         void Send();
 

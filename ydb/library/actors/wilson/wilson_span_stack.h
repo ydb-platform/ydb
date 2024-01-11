@@ -2,7 +2,8 @@
 
 #include "wilson_span.h"
 
-#include <memory>
+#include <util/generic/vector.h>
+#include <stack>
 
 namespace NWilson {
 
@@ -10,7 +11,7 @@ namespace NWilson {
     public:
         TSpanStack(TSpan&& root) {
             if (root) {
-                Top = std::make_unique<TStackNode>(std::move(root));
+                Stack.push(std::move(root));
             }
         }
 
@@ -18,33 +19,28 @@ namespace NWilson {
         TSpan* Push(ui8 verbosity, T&& name, TFlags flags = EFlags::NONE) {
             auto span = CreateChild(verbosity, std::forward<T>(name), flags);
             if (span) {
-                Top = std::make_unique<TStackNode>(std::move(span), std::move(Top));
-                return &Top->Span;
+                Stack.push(std::move(span));
+                return &Stack.top();
             }
             return nullptr;
         }
 
         template<class T>
         TSpan CreateChild(ui8 verbosity, T&& name, TFlags flags = EFlags::NONE) const {
-            if (auto span = PeekTop()) {
-                return span->CreateChild(verbosity, std::forward<T>(name), flags);
-            }
-            return {};
+            return PeekTopConst().CreateChild(verbosity, std::forward<T>(name), flags);
         }
 
         TTraceId GetTraceId() const {
-            if (auto span = PeekTop()) {
-                return span->GetTraceId();
-            }
-            return {};
+            return PeekTopConst().GetTraceId();
         }
 
         TSpan Pop() {
-            if (!Top) {
+            if (Stack.empty()) {
                 return {};
             }
-            auto prevTop = std::exchange(Top, std::move(Top->Next));
-            return std::move(prevTop->Span);
+            auto top = std::move(Stack.top());
+            Stack.pop();
+            return top;
         }
 
         void PopOk() {
@@ -56,29 +52,22 @@ namespace NWilson {
             Pop().EndError(std::forward<T>(error));
         }
 
-        TSpan* PeekTop() const {
-            if (!Top) {
+        TSpan* PeekTop() {
+            if (Stack.empty()) {
                 return nullptr;
             }
-            return &Top->Span;
+            return &Stack.top();
+        }
+
+        const TSpan& PeekTopConst() const {
+            if (Stack.empty()) {
+                return TSpan::Empty;
+            }
+            return Stack.top();
         }
 
     private:
-        struct TStackNode {
-            TStackNode(TSpan&& span, std::unique_ptr<TStackNode> next)
-                : Span(std::move(span))
-                , Next(std::move(next))
-            {}
-
-            TStackNode(TSpan&& span)
-                : TStackNode(std::move(span), {})
-            {}
-
-            TSpan Span;
-            std::unique_ptr<TStackNode> Next;
-        };
-
-        std::unique_ptr<TStackNode> Top;
+        std::stack<TSpan, TVector<TSpan>> Stack;
     };
 
 } // NWilson

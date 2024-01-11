@@ -241,7 +241,7 @@ private:
         const auto& status = ev->Get()->Response->Status;
 
         if (status == "403") {
-            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
+            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " << DetailedPermissionsError(requestIter->second);
         }
 
         auto errorMessage = ev->Get()->Error;

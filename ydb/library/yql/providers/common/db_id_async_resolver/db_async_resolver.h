@@ -66,7 +66,7 @@ struct TDatabaseAuth {
     NConnector::NApi::EProtocol Protocol = NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
 
     bool operator==(const TDatabaseAuth& other) const {
-        return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, Protocol);
+        return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, other.Protocol);
     }
 
     bool operator!=(const TDatabaseAuth& other) const {

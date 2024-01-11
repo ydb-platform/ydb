@@ -20,14 +20,16 @@ enum EFinalizationStatus : i32 {
 };
 
 struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, TInstant deadline)
         : Database(database)
         , OperationId(id)
+        , Deadline(deadline)
     {
     }
 
     TString Database;
     NOperationId::TOperationId OperationId;
+    TInstant Deadline;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {

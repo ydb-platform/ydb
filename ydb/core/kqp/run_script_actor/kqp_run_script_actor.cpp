@@ -155,6 +155,13 @@ private:
     }
 
     void Handle(TEvCheckAliveRequest::TPtr& ev) {
+        LOG_W("Lease was expired in database"
+            << ", execution id: " << ExecutionId
+            << ", saved final status: " << FinalStatusIsSaved
+            << ", wait finalization request: " << WaitFinalizationRequest
+            << ", is executing: " << IsExecuting()
+            << ", current status: " << Status);
+
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 

@@ -107,6 +107,8 @@ enum class EResourceToBalance {
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
 struct ISubActor {
+    const TInstant StartTime;
+
     virtual void Cleanup() = 0;
 
     virtual TString GetDescription() const {
@@ -114,6 +116,8 @@ struct ISubActor {
     }
 
     virtual TSubActorId GetId() const = 0;
+
+    ISubActor() : StartTime(TActivationContext::Now()) {}
 };
 
 

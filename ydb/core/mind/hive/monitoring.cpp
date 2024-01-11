@@ -4037,21 +4037,35 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream& out) {
-        out << "<script>$('.container').css('width', 'auto');</script>";
-        out << "<table>";
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: right; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(2) { text-align: left; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(3) { text-align: left; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(4) { text-align: left; }";
+        out << "table.simple-table2 td { text-align: right; }";
+        out << "table.simple-table2 td:nth-child(2) { text-align: left; }";
+        out << "table.simple-table2 td:nth-child(3) { text-align: left; }";
+        out << "table.simple-table2 td:nth-child(4) { text-align: left; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        out << "<table class='table simple-table2'>";
         out << "<thead>";
-        out << "<tr><th>Id</th><th>Description</th><th>Stop</th></tr>";
+        out << "<tr><th>Id</th><th>Description</th><th>Started at</th><th>Stop</th></tr>";
         out << "</thead>";
         out << "<tbody>";
         for (const auto* subActor: Self->SubActors) {
             out << "<tr>";
             out << "<td>" << subActor->GetId() << "</td>";
             out << "<td>" << subActor->GetDescription() << "</td>";
-            out << "<td><a href = '?TabletID=" << Self->HiveId << "&page=Subactors&stop=" << subActor->GetId() << "'>Stop</a></td>";
+            out << "<td>" << subActor->StartTime << "</td>";
+            out << "<td><a href = '?TabletID=" << Self->HiveId << "&page=Subactors&stop=" << subActor->GetId() << "'><span class='glyphicon glyphicon-remove-sign' title='Stop SubActor'></span></a></td>";
             out << "</tr>";
         }
         out << "</tbody>";
         out << "</table>";
+        out << "</body>";
     }
 };
 

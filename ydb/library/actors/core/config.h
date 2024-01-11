@@ -35,6 +35,7 @@ namespace NActors {
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
+        bool HasSharedThread = false;
     };
 
     struct TSharedExecutorPoolConfig {
@@ -63,6 +64,7 @@ namespace NActors {
         TVector<TBasicExecutorPoolConfig> Basic;
         TVector<TIOExecutorPoolConfig> IO;
         TVector<TSelfPingInfo> PingInfoByPool;
+        TSharedExecutorPoolConfig Shared;
 
         ui32 GetExecutorsCount() const {
             return Basic.size() + IO.size();

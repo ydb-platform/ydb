@@ -1171,6 +1171,10 @@ bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui6
         return false;
     }
 
+    if (!op->IsExecutionPlanFinished()) {
+        GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+    }
+
     ForgetTx(txId);
     Self->CheckDelayedProposeQueue(ctx);
     MaybeActivateWaitingSchemeOps(ctx);

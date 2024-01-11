@@ -95,7 +95,8 @@ TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGene
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Partition AS Uint32; "
-                   "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64;\n"
                    "UPDATE `" << path << "` "
                    "SET AccessTime = $AccessTime "
                    "WHERE Hash = $Hash AND Topic = $Topic AND Partition = $Partition AND SourceId = $SourceId;";
@@ -105,8 +106,9 @@ TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGene
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $Hash AS Uint64; "
                    "DECLARE $Partition AS Uint32; "
-                   "DECLARE $AccessTime AS Uint64; "
-                   "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath() << "` "
+                   "DECLARE $CreateTime AS Uint64; "
+                   "DECLARE $AccessTime AS Uint64;\n"
+                   "UPDATE `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath() << "` "
                    "SET AccessTime = $AccessTime "
                    "WHERE Hash = $Hash AND Topic = $Topic AND ProducerId = $SourceId AND Partition = $Partition;";
         default:

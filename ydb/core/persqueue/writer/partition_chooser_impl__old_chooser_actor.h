@@ -37,8 +37,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TThis::Initialize(ctx);
-        TThis::InitTable(ctx);
+            TThis::Initialize(ctx);
+            TThis::InitTable(ctx);
     }
 
     TActorIdentity SelfId() const {
@@ -82,21 +82,21 @@ private:
         DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TThis::SourceId);
         TThis::Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
 
+        PQRBHelper.Close(ctx);
+
         OnPartitionChosen(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ev);
-
-        if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+        if (PQRBHelper.IsPipe(ev->Sender) && ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe connection fail", ctx);
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ev);
-
-        TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
+        if(PQRBHelper.IsPipe(ev->Sender)) {
+            TThis::ReplyError(ErrorCode::INITIALIZING, "Pipe destroyed", ctx);
+        }
     }
 
     STATEFN(StatePQRB) {

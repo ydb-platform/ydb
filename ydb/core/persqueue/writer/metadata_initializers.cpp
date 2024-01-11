@@ -44,11 +44,11 @@ void TSrcIdMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr cont
             column.set_name("Partition");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
         }
-        {
+        /*{
             auto& column = *request.add_columns();
             column.set_name("SeqNo");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
-        }
+        }*/
         {
             auto* partSettings = request.mutable_partitioning_settings();
             partSettings->add_partition_by("Hash");

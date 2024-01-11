@@ -41,8 +41,13 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         BoundaryPartition = ChoosePartitionSync(ctx);
 
-        TThis::Initialize(ctx);
-        TThis::InitTable(ctx);
+        if (TThis::SourceId) {
+            TThis::Initialize(ctx);
+            GetOwnershipFast(ctx);
+        } else {
+            TThis::Partition = BoundaryPartition;
+            TThis::StartGetOwnership(ctx);
+        }
     }
 
     TActorIdentity SelfId() const {
@@ -50,24 +55,40 @@ public:
     }
 
     void OnSelected(const TActorContext &ctx) override {
-        OldPartition = TThis::Partition;
-
-        if (BoundaryPartition == TThis::Partition) {
+        if (TThis::Partition) {
+            // If we have found a partition, it means that the partition is active, which means
+            // that we need to continue writing to it, and it does not matter whether it falls
+            // within the boundaries of the distribution.
             return OnPartitionChosen(ctx);
         }
 
-        if (!TThis::TableHelper.PartitionId() || !TThis::Partition) {
+        if (!TThis::TableHelper.PartitionId()) {
+            // They didn't write with this SourceId earlier, or the SourceID has already been deleted.
             TThis::Partition = BoundaryPartition;
             return OnPartitionChosen(ctx);
         }
 
+        const auto* node = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+        if (!node) {
+            // The partition where the writting was performed earlier has already been deleted. 
+            // We can write without taking into account the hierarchy of the partition.
+            TThis::Partition = BoundaryPartition;
+            return OnPartitionChosen(ctx);
+        }
+
+        // Choosing a partition based on the split and merge hierarchy.
         auto activeChildren = Graph.GetActiveChildren(TThis::TableHelper.PartitionId().value());
         if (activeChildren.empty()) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "has't active partition Marker# PC01", ctx);
         }
+
         if (activeChildren.contains(BoundaryPartition->PartitionId)) {
+            // First of all, we are trying to write to the partition taking into account the
+            // distribution boundaries.
             TThis::Partition = BoundaryPartition;
         } else {
+            // It is important to save the write into account the hierarchy of partitions, because
+            // this will preserve the guarantees of the order of reading.
             auto n = RandomNumber<size_t>(activeChildren.size());
             std::vector<ui32> ac;
             ac.reserve(activeChildren.size());
@@ -89,16 +110,67 @@ public:
     }
 
 private:
+    void GetOwnershipFast(const TActorContext &ctx) {
+        TThis::Become(&TThis::StateOwnershipFast);
+        if (!BoundaryPartition) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "A partition not choosed", ctx);
+        }
+
+        DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
+
+        TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
+        TThis::PartitionHelper.SendGetOwnershipRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
+    }
+
+    void HandleOwnershipFast(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        DEBUG("HandleOwnershipFast");
+        auto& record = ev->Get()->Record;
+
+        TString error;
+        if (!BasicCheck(record, error)) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, std::move(error), ctx);
+        }
+
+        const auto& response = record.GetPartitionResponse();
+        if (!response.HasCmdGetOwnershipResult()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
+        }
+
+        TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
+
+        if (NKikimrPQ::ETopicPartitionStatus::Active == response.GetCmdGetOwnershipResult().GetStatus()
+            && response.GetCmdGetOwnershipResult().GetRegistered()) {
+            // Fast path: the partition ative and already written
+            return TThis::ReplyResult(ctx);
+        }
+
+        TThis::InitTable(ctx);
+    }
+
+    STATEFN(StateOwnershipFast) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvPersQueue::TEvResponse, HandleOwnershipFast);
+            HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
+            SFunc(TEvents::TEvPoison, TThis::Die);
+        }
+    }
+
+
+private:
     void GetOldSeqNo(const TActorContext &ctx) {
         DEBUG("GetOldSeqNo");
         TThis::Become(&TThis::StateGetMaxSeqNo);
 
-        if (!OldPartition) {
+        const auto* oldNode = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+
+        if (!oldNode) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "Inconsistent status Marker# PC03", ctx);
         }
 
-        TThis::PartitionHelper.Open(OldPartition->TabletId, ctx);
-        TThis::PartitionHelper.SendMaxSeqNoRequest(OldPartition->PartitionId, TThis::SourceId, ctx);
+        TThis::PartitionHelper.Open(oldNode->TabletId, ctx);
+        TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx);
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -184,7 +256,6 @@ private:
 
 private:
     const TPartitionInfo* BoundaryPartition = nullptr;
-    const TPartitionInfo* OldPartition = nullptr;
     const TPartitionGraph Graph;
 };
 

@@ -76,6 +76,7 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
         p->SetPartitionId(3);
         p->SetTabletId(1003);
         p->MutableKeyRange()->SetFromBound("D");
+        p->AddChildPartitionIds(4);
     }
 
     {
@@ -83,6 +84,23 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
         p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
         p->SetPartitionId(3);
         p->SetTabletId(1003);
+        p->MutableKeyRange()->SetFromBound("D");
+        p->AddChildPartitionIds(4);
+    }
+
+    {
+        auto* p = result.AddPartitions();
+        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
+        p->SetPartitionId(4);
+        p->SetTabletId(1004);
+        p->MutableKeyRange()->SetFromBound("D");
+    }
+
+    {
+        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
+        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
+        p->SetPartitionId(4);
+        p->SetTabletId(1004);
         p->MutableKeyRange()->SetFromBound("D");
     }
 
@@ -281,6 +299,10 @@ private:
         auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
         cmd->SetOwnerCookie("ower_cookie");
         cmd->SetStatus(Status);
+        cmd->SetRegistered(!!SeqNo);
+
+        auto* sn = response->Record.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult()->AddSourceIdInfo();
+        sn->SetSeqNo(SeqNo.value_or(0));
 
         ctx.Send(ev->Sender, response.Release());
     }
@@ -294,6 +316,7 @@ private:
 
 private:
     ETopicPartitionStatus Status;
+    std::optional<ui64> SeqNo;
 };
 
 
@@ -314,6 +337,8 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 1001, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1003, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 1004, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMEnabled, "A_Source");
@@ -327,9 +352,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
     }
     {
         // Define partition for sourceId that is not in partition boundary
+        // We use this partition because it active
         WriteToTable(server, "X_Source_w_0", 0);
         auto r = ChoosePartition(server, SMEnabled, "X_Source_w_0");
-        UNIT_ASSERT(r->Error);
+        UNIT_ASSERT(r->Result);
+        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
     }
     {
         // Redefine partition  for sourceId. Check that partition changed;
@@ -343,7 +370,7 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
         WriteToTable(server, "A_Source_w_0", 3);
         auto r = ChoosePartition(server, SMEnabled, "A_Source_w_0");
         UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 4);
     }
     {
         // Use prefered partition, but sourceId not in partition boundary

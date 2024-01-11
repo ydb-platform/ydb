@@ -56,6 +56,7 @@ public:
 
         DEBUG("SelectQuery: " << SelectQuery);
         DEBUG("UpdateQuery: " << UpdateQuery);
+        DEBUG("UpdateAccessTimeQuery: " << UpdateAccessTimeQuery);
 
         return true;
     }

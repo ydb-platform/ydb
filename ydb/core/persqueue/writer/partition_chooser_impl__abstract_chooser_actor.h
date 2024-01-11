@@ -64,12 +64,17 @@ public:
         PartitionHelper.Close(ctx);
     }
 
+    bool NeedTable(const NActors::TActorContext& ctx) {
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+        return SourceId && (!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass());
+    }
+
 protected:
     void InitTable(const NActors::TActorContext& ctx) {
+        TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
             DEBUG("InitTable");
-            TThis::Become(&TThis::StateInitTable);
             TableHelper.SendInitTableRequest(ctx);
         } else {
             StartKqpSession(ctx);
@@ -90,8 +95,7 @@ protected:
 
 protected:
     void StartKqpSession(const NActors::TActorContext& ctx) {
-        const auto& pqConfig = AppData(ctx)->PQConfig;
-        if (SourceId && (!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass())) {
+        if (NeedTable(ctx)) {
             DEBUG("StartKqpSession")
             TThis::Become(&TThis::StateCreateKqpSession);
             TableHelper.SendCreateSessionRequest(ctx);
@@ -152,7 +156,7 @@ protected:
 
 protected:
     void SendUpdateRequests(const TActorContext& ctx) {
-        if (SourceId) {
+        if (NeedTable(ctx)) {
             TThis::Become(&TThis::StateUpdate);
             DEBUG("Update the table");
             TableHelper.SendUpdateRequest(Partition->PartitionId, ctx);
@@ -199,11 +203,11 @@ protected:
 
 protected:
     void StartGetOwnership(const TActorContext &ctx) {
+        TThis::Become(&TThis::StateOwnership);
         if (!Partition) {
             return ReplyError(ErrorCode::INITIALIZING, "Partition not choosed", ctx);
         }
 
-        TThis::Become(&TThis::StateOwnership);
         DEBUG("GetOwnership Partition TabletId=" << Partition->TabletId);
 
         PartitionHelper.Open(Partition->TabletId, ctx);
@@ -230,20 +234,24 @@ protected:
 
         OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
 
+        PartitionHelper.Close(ctx);
+
         OnOwnership(ctx);
     }
 
     void HandleOwnership(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx) {
         auto msg = ev->Get();
-        if (msg->Status != NKikimrProto::OK) {
+        if (PartitionHelper.IsPipe(ev->Sender) && msg->Status != NKikimrProto::OK) {
             TableHelper.CloseKqpSession(ctx);
             ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
         }
     }
 
-    void HandleOwnership(TEvTabletPipe::TEvClientDestroyed::TPtr& , const NActors::TActorContext& ctx) {
-        TableHelper.CloseKqpSession(ctx);
-        ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
+    void HandleOwnership(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx) {
+        if (PartitionHelper.IsPipe(ev->Sender)) {
+            TableHelper.CloseKqpSession(ctx);
+            ReplyError(ErrorCode::INITIALIZING, "Pipe closed", ctx);
+        }
     }
 
     virtual void OnOwnership(const TActorContext &ctx) = 0;

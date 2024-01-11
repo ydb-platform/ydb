@@ -140,14 +140,14 @@ private:
 
         try {
             HandleResponse(ev, requestIter, errorMessage, result);
-        }
-        catch (const std::exception& e) {
+        } catch (...) {
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
-                << ", details: " << e.what();
+                << ", details: " << CurrentExceptionMessage();
             LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
         }
-        LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
+
+        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
               << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
 
         if (HandledIds == Requests.size()) {
@@ -241,15 +241,7 @@ private:
         const auto& status = ev->Get()->Response->Status;
 
         if (status == "403") {
-            const auto second = requestIter->second;
-
-            auto result = TStringBuilder() << "You have no permission to resolve database id into database endpoint. ";
-            if (second.DatabaseType == EDatabaseType::ClickHouse || second.DatabaseType == EDatabaseType::PostgreSQL) {
-                auto mdbTypeStr = NYql::DatabaseTypeLowercase(second.DatabaseType);
-                result << "Please check that your service account has role "  << 
-                                       "`managed-" << mdbTypeStr << ".viewer`.";
-            }
-            return result;
+            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
         }
 
         auto errorMessage = ev->Get()->Error;
@@ -263,6 +255,17 @@ private:
         errorMessage += error;
 
         return errorMessage;
+    }
+
+
+    TString DetailedPermissionsError(const TResolveParams& params) const {
+ 
+        if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
+                auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
+                return TStringBuilder() << "Please check that your service account has role "  << 
+                                       "`managed-" << mdbTypeStr << ".viewer`.";
+        }
+        return "";
     }
 
     const TActorId Sender;

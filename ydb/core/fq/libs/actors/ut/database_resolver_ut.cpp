@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouse_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                NoPermissionStr + "Please check that your service account has role `managed-clickhouse.viewer`."
+                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-clickhouse.viewer`."
             )
         };
 
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                NoPermissionStr + "Please check that your service account has role `managed-postgresql.viewer`."
+                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-postgresql.viewer`."
             )
         };
 

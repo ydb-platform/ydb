@@ -6,7 +6,6 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
@@ -158,7 +157,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
     void TestWithSaveLoadImpl(
         const std::vector<std::tuple<ui32, i64, ui32>> input,
         const std::vector<std::tuple<ui32, ui32>> expected,
-        bool withTraverse,
         bool dataWatermarks)
     {
         TWatermark watermark;
@@ -179,23 +177,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
             }
             UNIT_ASSERT_EQUAL(status, NUdf::EFetchStatus::Yield);
 
-            TString graphState;
-            if (withTraverse) {
-                SaveGraphState(&root1, 1, 0ULL, graphState);
-            } else {
-                graphState = graph1->SaveGraphState();
-            }
+            TString graphState = graph1->SaveGraphState();
 
             TSetup<false> setup2(GetAuxCallableFactory(watermark));
             auto graph2 = BuildGraph(setup2, input, -1, yieldPos, dataWatermarks);
-            NUdf::TUnboxedValue root2;
-            if (withTraverse) {
-                root2 = graph2->GetValue();
-                LoadGraphState(&root2, 1, 0ULL, graphState);
-            } else {
-                graph2->LoadGraphState(graphState);
-                root2 = graph2->GetValue();
-            }
+            graph2->LoadGraphState(graphState);
+            NUdf::TUnboxedValue root2 = graph2->GetValue();
 
             status = NUdf::EFetchStatus::Ok;
             while (status == NUdf::EFetchStatus::Ok) {

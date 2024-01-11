@@ -6,6 +6,7 @@ SRCS(
     enum_ut.cpp
     guid_ut.cpp
     preprocessor_ut.cpp
+    strong_typedef_ut.cpp
 )
 
 PEERDIR(

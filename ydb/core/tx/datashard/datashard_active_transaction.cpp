@@ -313,11 +313,6 @@ void TValidatedDataTx::ComputeDeadline() {
     }
 }
 
-TActiveTransaction::~TActiveTransaction()
-{
-    UntrackMemory();
-}
-
 void TActiveTransaction::FillTxData(TValidatedDataTx::TPtr dataTx)
 {
     Y_ABORT_UNLESS(!DataTx);

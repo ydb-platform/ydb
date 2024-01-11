@@ -28,6 +28,41 @@ using namespace Tests;
 
 using TActiveTxPtr = std::shared_ptr<TActiveTransaction>;
 
+namespace {
+    void VerifyNoActiveTransactions() {
+        using namespace NActors::NMemory;
+        using namespace NActors::NMemory::NPrivate;
+
+        {
+            std::map<void*, TString> set;
+            {
+                std::unique_lock<std::mutex> lock(NActors::NMemory::TActiveTransactionTracker::ActiveSetMutex);
+                set = NActors::NMemory::TActiveTransactionTracker::ActiveSet;
+            }
+
+            for (const auto &p : set) {
+                Cerr << "[" << p.first << "] = " << p.second << Endl;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(set.size(), 0);
+        }
+
+        // const auto& instance = TMemoryTracker::Instance();
+        // instance->Initialize();
+        // std::vector<TMetric> metrics;
+        // TMemoryTracker::Instance()->GatherMetrics(metrics);
+
+        // for (size_t i : xrange(metrics.size())) {
+        //     if (instance->GetName(i) == TString(MemoryLabelActiveTransactionBody)) {
+        //         UNIT_ASSERT_VALUES_EQUAL(metrics[i].GetCount(), 0);
+        //         return;
+        //     }
+        // }
+
+        // UNIT_ASSERT_C(false, "Datashard/TActiveTransaction/TxBody metric not found");
+    }
+}
+
 ///
 class TDatashardTester {
 public:
@@ -865,6 +900,8 @@ Y_UNIT_TEST(RandomPoints_DelayRS_Reboot) {
             RandomTxDeps(opts, v.first, v.second, false);
         }
     }
+
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(RandomPoints_DelayRS_Reboot_Dirty) {
@@ -890,6 +927,7 @@ Y_UNIT_TEST(RandomPoints_DelayRS_Reboot_Dirty) {
             RandomTxDeps(opts, v.first, v.second, false);
         }
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(RandomPoints_DelayData) {
@@ -912,6 +950,7 @@ Y_UNIT_TEST(RandomPoints_DelayData) {
         RandomTxDeps(opts, v.first, v.second, true);
         RandomTxDeps(opts, v.first, v.second, false);
     }
+    VerifyNoActiveTransactions();
 }
 
 ///
@@ -1135,6 +1174,7 @@ Y_UNIT_TEST(RandomPointsAndRanges) {
     for (auto& v : variants) {
         RandomPointsAndRanges(opts, v[0], v[1], v[2], v[3]);
     }
+    VerifyNoActiveTransactions();
 }
 }
 
@@ -1214,6 +1254,7 @@ Y_UNIT_TEST(ScanFollowedByUpdate) {
             return checkScanResult(tx, ref2);
         }, NDataShard::TTxFlags::Default);
     proxy.ExecQueue();
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
@@ -1308,6 +1349,7 @@ Y_UNIT_TEST(TestDelayedTxWaitsForWriteActiveTxOnly) {
         options.FinalEvents.emplace_back(IsTxResultComplete(), 3);
         runtime.DispatchEvents(options);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
@@ -1391,6 +1433,7 @@ Y_UNIT_TEST(TestOnlyDataTxLagCausesRejects) {
     }
 
     ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"), true, Ydb::StatusIds::OVERLOADED);
+    VerifyNoActiveTransactions();
 }
 
 }
@@ -1521,6 +1564,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderLockLost, StreamLookup) {
         }
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
@@ -1655,6 +1699,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
                            "{ items { uint32_value: 6 } items { uint32_value: 10 } }";
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
@@ -1755,6 +1800,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, StreamLookup) {
             SELECT key, value FROM $rows ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }, { items { uint32_value: 4 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
@@ -1861,6 +1907,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
             SELECT key, value FROM $rows ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }, { items { uint32_value: 4 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
@@ -1981,6 +2028,7 @@ Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
         auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup) {
@@ -2111,6 +2159,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderRestartLocksReorderedWithoutBarrier, StreamLookup
         auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 3;"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) {
@@ -2291,6 +2340,7 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNoBarrierRestartImmediateLongTail, StreamLookup) 
         auto result = KqpSimpleExec(runtime, Q_("SELECT key, value FROM `/Root/table-1` WHERE key = 7;"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 7 } items { uint32_value: 4 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestCopyTableNoDeadlock) {
@@ -2476,23 +2526,7 @@ Y_UNIT_TEST(TestCopyTableNoDeadlock) {
         auto response = AwaitResponse(runtime, fRead);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
-}
-
-void VerifyNoActiveTransactions() {
-    using namespace NActors::NMemory::NPrivate;
-    const auto& instance = TMemoryTracker::Instance();
-    instance->Initialize();
-    std::vector<TMetric> metrics;
-    TMemoryTracker::Instance()->GatherMetrics(metrics);
-
-    for (size_t i : xrange(metrics.size())) {
-        if (instance->GetName(i) == TString(MemoryLabelActiveTransactionBody)) {
-            UNIT_ASSERT_VALUES_EQUAL(metrics[i].GetCount(), 0);
-            return;
-        }
-    }
-
-    UNIT_ASSERT_C(false, "Datashard/TActiveTransaction/TxBody metric not found");
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestPlannedCancelSplit) {
@@ -2802,6 +2836,7 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
         auto response = AwaitResponse(runtime, fWrite1);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::UNAVAILABLE);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
@@ -2942,6 +2977,7 @@ Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
             response.operation().status() == Ydb::StatusIds::UNAVAILABLE,
             "Status: " << response.operation().status());
     }
+    VerifyNoActiveTransactions();
 }
 
 namespace {
@@ -3111,6 +3147,7 @@ Y_UNIT_TEST(TestReadTableWriteConflict) {
         auto response = AwaitResponse(runtime, fWriteDist);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
+    VerifyNoActiveTransactions();
 }
 
 /**
@@ -3184,6 +3221,7 @@ Y_UNIT_TEST(TestReadTableImmediateWriteBlock) {
         auto response = AwaitResponse(runtime, fWriteImm);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
@@ -3231,6 +3269,7 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
 
     // Since ReadTable was for a single-shard table we shouldn't see any plan steps
     UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestImmediateQueueThenSplit) {
@@ -3399,6 +3438,7 @@ Y_UNIT_TEST(TestImmediateQueueThenSplit) {
         "Unexpected "
         << successes << " successes and "
         << failures << " failures");
+    VerifyNoActiveTransactions();
 }
 
 void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
@@ -3734,6 +3774,7 @@ Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
     // We expect this upsert to complete successfully
     // When there's a bug it will get stuck due to readtable before barrier
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);"));
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
@@ -3841,6 +3882,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartNoUndeterminedImmediate, StreamLookup) {
         auto result = KqpSimpleExec(runtime, Q_(R"(SELECT key, value FROM `/Root/table-1` WHERE key = 1 ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(result, "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
@@ -3932,6 +3974,7 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, StreamLookup) {
         auto result = KqpSimpleExec(runtime, Q_(R"(SELECT key, value FROM `/Root/table-1` WHERE key = 3 ORDER BY key)"));
         UNIT_ASSERT_VALUES_EQUAL(result,  "{ items { uint32_value: 3 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
@@ -4076,6 +4119,7 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
         auto response = AwaitResponse(runtime, f);
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
@@ -4142,6 +4186,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
         )"));
         UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
@@ -4264,6 +4309,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLockOutOfOrder) {
         )"));
         UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ABORTED");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
@@ -4358,6 +4404,7 @@ Y_UNIT_TEST(TestSnapshotReadAfterStuckRW) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
@@ -4630,6 +4677,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadPriority, UnprotectedReads) {
         "{ items { uint32_value: 7 } items { uint32_value: 7 } }, "
         "{ items { uint32_value: 9 } items { uint32_value: 9 } }, "
         "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
@@ -4818,6 +4866,7 @@ Y_UNIT_TEST(TestUnprotectedReadsThenWriteVisibility) {
             )")),
         "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
         "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(UncommittedReadSetAck) {
@@ -5042,6 +5091,7 @@ Y_UNIT_TEST(UncommittedReadSetAck) {
         UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 42);
         UPSERT INTO `/Root/table-3` (key, value) VALUES (4, 42), (5, 42);
     )"));
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(UncommittedReads) {
@@ -5185,6 +5235,7 @@ Y_UNIT_TEST(UncommittedReads) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
             "{ items { uint32_value: 4 } items { uint32_value: 4 } }");
     }
+    VerifyNoActiveTransactions();
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardOutOfOrder)

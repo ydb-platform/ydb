@@ -251,6 +251,19 @@ private:
                     }
                 }
             }
+            DIV() {
+                std::map<void*, TString> set;
+                {
+                    std::unique_lock<std::mutex> lock(NActors::NMemory::TActiveTransactionTracker::ActiveSetMutex);
+                    set = NActors::NMemory::TActiveTransactionTracker::ActiveSet;
+                }
+
+                for (const auto &p : set) {
+                    DIV() {
+                        str << "[" << p.first << "] = " << p.second;
+                    }
+                }
+            }
 #endif
         }
 

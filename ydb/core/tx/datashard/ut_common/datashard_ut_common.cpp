@@ -1796,14 +1796,11 @@ void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
              bool dml,
-             Ydb::StatusIds::StatusCode code,
-             NWilson::TTraceId traceId)
+             Ydb::StatusIds::StatusCode code)
 {
     auto &runtime = *server->GetRuntime();
-    TAutoPtr<IEventHandle> handle;
-
     auto request = MakeSQLRequest(sql, dml);
-    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr, std::move(traceId)));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }

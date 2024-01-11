@@ -1305,6 +1305,11 @@
             "Match": {"Type": "Callable", "Name": "Abs"}
         },
         {
+            "Name": "TCoSize",
+            "Base": "TCoUnaryArithmetic",
+            "Match": {"Type": "Callable", "Name": "Size"}
+        },
+        {
             "Name": "TCoBinaryArithmetic",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

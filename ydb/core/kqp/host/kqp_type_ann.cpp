@@ -864,6 +864,21 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
             }
         }
         return res;
+    } else if (TKqpOlapFilterUnaryOp::Match(node)) {
+        if (!EnsureArgsCount(*node, 2, ctx)) {
+            return false;
+        }
+        const auto op = node->Child(TKqpOlapFilterUnaryOp::idx_Operator);
+        if (!EnsureAtom(*op, ctx)) {
+            return false;
+        }
+        if (!op->IsAtom({"minus","abs","not","size","exists","empty"})) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Unexpected OLAP unary operation: " << op->Content()
+            ));
+            return false;
+        }
+        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterUnaryOp::idx_Arg), itemType, ctx);
     } else if (TKqpOlapFilterBinaryOp::Match(node)) {
         if (!EnsureArgsCount(*node, 3, ctx)) {
             return false;

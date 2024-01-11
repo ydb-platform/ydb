@@ -206,7 +206,7 @@ class TColumnShard
         TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
     }
 
-    void ActivateTiering(const ui64 pathId, const TString& useTiering);
+    void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
     void OnTieringModified();
 public:
     enum class EOverloadStatus {

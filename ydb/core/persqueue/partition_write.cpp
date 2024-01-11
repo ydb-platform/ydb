@@ -23,6 +23,8 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+#include <ydb/library/dbgtrace/debug_trace.h>
+
 namespace NKikimr::NPQ {
 
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
@@ -199,6 +201,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
 }
 
 void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
+    DBGTRACE("TPartition::ProcessReserveRequests");
     PQ_LOG_T("TPartition::ProcessReserveRequests.");
 
     const ui64 maxWriteInflightSize = Config.GetPartitionConfig().GetMaxWriteInflightSize();
@@ -209,6 +212,8 @@ void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
         const ui64& size = ReserveRequests.front()->Size;
         const ui64& cookie = ReserveRequests.front()->Cookie;
         const bool& lastRequest = ReserveRequests.front()->LastRequest;
+
+        DBGTRACE_LOG("ownerCookie=" << ownerCookie);
 
         auto it = Owners.find(owner);
         if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
@@ -247,14 +252,19 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 
 
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvReserveBytes)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
 
     const TString& ownerCookie = ev->Get()->OwnerCookie;
     TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
     const ui64& messageNo = ev->Get()->MessageNo;
 
+    DBGTRACE_LOG("ownerCookie=" << ownerCookie);
+    DBGTRACE_LOG("messageNo=" << messageNo);
+
     auto it = Owners.find(owner);
     if (it == Owners.end() || it->second.OwnerCookie != ownerCookie) {
+        DBGTRACE_LOG("dead ownership session");
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST, "ReserveRequest from dead ownership session");
         return;
     }

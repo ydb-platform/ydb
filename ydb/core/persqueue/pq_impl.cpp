@@ -50,6 +50,9 @@ struct TPartitionInfo {
         : Actor(info.Actor)
         , KeyRange(info.KeyRange)
         , InitDone(info.InitDone)
+        , ReserveBytesRequests(info.ReserveBytesRequests)
+        , WriteBytesRequests(info.WriteBytesRequests)
+        , PersistedWriteId(info.PersistedWriteId)
     {
         Baseline.Populate(info.Baseline);
     }
@@ -59,6 +62,16 @@ struct TPartitionInfo {
     bool InitDone;
     TTabletCountersBase Baseline;
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
+
+    struct TCommandParams {
+        ui64 Cookie;
+        NKikimrClient::TPersQueuePartitionRequest Request;
+        TActorId Sender;
+    };
+
+    TDeque<TCommandParams> ReserveBytesRequests;
+    TDeque<TCommandParams> WriteBytesRequests;
+    bool PersistedWriteId = false;
 };
 
 struct TChangeNotification {
@@ -1178,21 +1191,21 @@ void TPersQueue::Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&)
     MeteringSink.IncreaseQuantity(ev->Get()->Type, ev->Get()->Quantity);
 }
 
+TPartitionInfo& TPersQueue::GetPartitionInfo(ui32 partitionId)
+{
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        it = ShadowPartitions.find(partitionId);
+        Y_ABORT_UNLESS(it != ShadowPartitions.end());
+    }
+    return it->second;
+}
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
-
-    //
-    // FIXME(abcdef): костыль. добавил для теста
-    //
-    if (partitionId >= 100'000) {
-        return;
-    }
-
-    auto it = Partitions.find(partitionId);
-    Y_ABORT_UNLESS(it != Partitions.end());
-    auto diff = ev->Get()->Counters.MakeDiffForAggr(it->second.Baseline);
+    auto& partition = GetPartitionInfo(partitionId);
+    auto diff = ev->Get()->Counters.MakeDiffForAggr(partition.Baseline);
     ui64 cpuUsage = diff->Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE].Get();
     ui64 networkBytesUsage = diff->Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Get();
     if (ResourceMetrics) {
@@ -1208,7 +1221,7 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     }
 
     Counters->Populate(*diff.Get());
-    ev->Get()->Counters.RememberCurrentStateAsBaseline(it->second.Baseline);
+    ev->Get()->Counters.RememberCurrentStateAsBaseline(partition.Baseline);
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
@@ -1256,18 +1269,9 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
-
-    //
-    // FIXME(abcdef): костыль. добавил для теста
-    //
-    if (partitionId >= 100'000) {
-        return;
-    }
-
-    auto it = Partitions.find(partitionId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    auto& partition = GetPartitionInfo(partitionId);
     const TString& group = ev->Get()->LabeledCounters.GetGroup();
-    it->second.LabeledCounters[group] = ev->Get()->LabeledCounters;
+    partition.LabeledCounters[group] = ev->Get()->LabeledCounters;
     Y_UNUSED(ctx);
 //  if uncommented, all changes will be reported immediatly
 //    AggregateAndSendLabeledCountersFor(group, ctx);
@@ -1276,19 +1280,10 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCountersDrop::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
-
-    //
-    // FIXME(abcdef): костыль. добавил для теста
-    //
-    if (partitionId >= 100'000) {
-        return;
-    }
-
-    auto it = Partitions.find(partitionId);
-    Y_ABORT_UNLESS(it != Partitions.end());
+    auto& partition = GetPartitionInfo(partitionId);
     const TString& group = ev->Get()->Group;
-    auto jt = it->second.LabeledCounters.find(group);
-    if (jt != it->second.LabeledCounters.end())
+    auto jt = partition.LabeledCounters.find(group);
+    if (jt != partition.LabeledCounters.end())
         jt->second.SetDrop();
     Y_UNUSED(ctx);
 //  if uncommented, all changes will be reported immediatly
@@ -1310,22 +1305,13 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
     const auto partitionId = ev->Get()->Partition;
-
-    //
-    // FIXME(abcdef): костыль. добавил для теста
-    //
-    if (partitionId >= 100'000) {
-        return;
-    }
-
-    auto it = Partitions.find(partitionId);
-    Y_ABORT_UNLESS(it != Partitions.end());
-    Y_ABORT_UNLESS(!it->second.InitDone);
-    it->second.InitDone = true;
+    auto& partition = GetPartitionInfo(partitionId);
+    Y_ABORT_UNLESS(!partition.InitDone);
+    partition.InitDone = true;
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
-    auto allInitialized = PartitionsInited == Partitions.size();
+    auto allInitialized = PartitionsInited == (Partitions.size() + ShadowPartitions.size());
     if (!InitCompleted && allInitialized) {
         OnInitComplete(ctx);
     }
@@ -2461,11 +2447,6 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
 
     Y_ABORT_UNLESS(req.HasWriteId());
 
-    if (PendingPersistWriteId) {
-        ReserveBytesRequestQueue.push_back({responseCookie, req, sender});
-        return;
-    }
-
     ui64 writeId = req.GetWriteId();
     ui32 partitionId = req.GetPartition();
 
@@ -2478,6 +2459,7 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
         DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
         const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+        Y_ABORT_UNLESS(partition.InitDone);
         const TActorId& actorId = partition.Actor;
 
         if (req.CmdWriteSize()) {
@@ -2485,12 +2467,25 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
         } else if (req.HasCmdReserveBytes()) {
             TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
             HandleReserveBytesRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
+        } else if (req.HasCmdGetOwnership()) {
+            TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+            HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
         } else {
-            Y_ABORT("CmdReserveBytes or CmdWrite expected");
+            Y_ABORT("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
         }
     } else {
-        Y_ABORT_UNLESS(req.HasCmdReserveBytes());
-        BeginPersistWriteId(responseCookie, req, ctx, sender);
+        Y_ABORT_UNLESS(req.HasCmdGetOwnership());
+        GetOwnershipRequests.push_back({responseCookie, req, sender});
+
+        if (!PendingPersistWriteId) {
+            ui32 shadowPartitionId = NextShadowPartitionId++;
+            DBGTRACE_LOG("new shadowPartitionId=" << shadowPartitionId);
+
+            CreateShadowPartition(shadowPartitionId, writeId, partitionId, ctx);
+            ShadowPartitions.at(shadowPartitionId).PersistedWriteId = false;
+
+            BeginPersistWriteId(ctx);
+        }
     }
 }
 
@@ -3150,24 +3145,35 @@ void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
         return;
     }
 
-    DBGTRACE_LOG("ReserveBytesRequestParams.size=" << ReserveBytesRequestParams.size());
-    DBGTRACE_LOG("ReserveBytesRequestQueue.size=" << ReserveBytesRequestQueue.size());
-
-    Y_ABORT_UNLESS(ReserveBytesRequestParams.empty());
-
-    for (auto& params : ReserveBytesRequestQueue) {
-        ui64 writeId = params.Request.GetWriteId();
-        ui32 partitionId = params.Request.GetPartition();
-
-        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
-        DBGTRACE_LOG("new shadowPartitionId=" << NextShadowPartitionId);
-
-        TxWrites[writeId].Partitions[partitionId] = NextShadowPartitionId++;
-
-        ReserveBytesRequestParams.push_back(std::move(params));
+    if (GetOwnershipRequests.empty()) {
+        DBGTRACE_LOG("empty GetOwnershipRequests");
+        return;
     }
 
-    ReserveBytesRequestQueue.clear();
+    BeginPersistWriteId(ctx);
+}
+
+void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
+{
+    DBGTRACE("TPersQueue::BeginPersistWriteId");
+
+    Y_ABORT_UNLESS(!PendingPersistWriteId);
+    Y_ABORT_UNLESS(!GetOwnershipRequests.empty());
+
+    DBGTRACE_LOG("GetOwnershipRequests.size=" << GetOwnershipRequests.size());
+    DBGTRACE_LOG("HandleGetOwnershipRequestParams.size=" << HandleGetOwnershipRequestParams.size());
+
+    Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
+
+    for (auto& request : GetOwnershipRequests) {
+        ui64 writeId = request.Request.GetWriteId();
+        ui32 partitionId = request.Request.GetPartition();
+
+        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+    }
+
+    HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
+    GetOwnershipRequests.clear();
 
     auto request = MakeHolder<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(PERSIST_WRITEID_COOKIE);
@@ -3177,18 +3183,6 @@ void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
     PendingPersistWriteId = true;
 
     ctx.Send(ctx.SelfID, request.Release());
-}
-
-void TPersQueue::BeginPersistWriteId(const ui64 responseCookie,
-                                     const NKikimrClient::TPersQueuePartitionRequest& req,
-                                     const TActorContext& ctx,
-                                     const TActorId& sender)
-{
-    DBGTRACE("TPersQueue::BeginPersistWriteId");
-
-    ReserveBytesRequestQueue.push_back({responseCookie, req, sender});
-
-    TryPersistWriteId(ctx);
 }
 
 void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
@@ -3215,19 +3209,20 @@ void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const T
         return;
     }
 
-    ForwardReserveBytesRequestsToShadowPartitions(ctx);
-
-    ReserveBytesRequestParams.clear();
+    ForwardGetOwnershipToShadowPartitions(ctx);
+    HandleGetOwnershipRequestParams.clear();
 
     PendingPersistWriteId = false;
     TryPersistWriteId(ctx);
 }
 
-void TPersQueue::ForwardReserveBytesRequestsToShadowPartitions(const TActorContext& ctx)
+void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ForwardReserveBytesRequestsToShadowPartitions");
+    DBGTRACE("TPersQueue::ForwardGetOwnershipToShadowPartitions");
 
-    for (auto& params : ReserveBytesRequestParams) {
+    Y_ABORT_UNLESS(!HandleGetOwnershipRequestParams.empty());
+
+    for (auto& params : HandleGetOwnershipRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
         ui32 partitionId = params.Request.GetPartition();
 
@@ -3235,20 +3230,14 @@ void TPersQueue::ForwardReserveBytesRequestsToShadowPartitions(const TActorConte
 
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-
         DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
-
-        if (!ShadowPartitions.contains(shadowPartitionId)) {
-            DBGTRACE_LOG("CreateShadowPartition");
-            CreateShadowPartition(shadowPartitionId, ctx);
-        }
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
         TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
         Y_ABORT_UNLESS(partition.Actor);
         TActorId pipeClient = ActorIdFromProto(params.Request.GetPipeClient());
 
-        HandleReserveBytesRequest(params.Cookie,
+        HandleGetOwnershipRequest(params.Cookie,
                                   partition.Actor,
                                   params.Request,
                                   ctx,
@@ -3258,8 +3247,12 @@ void TPersQueue::ForwardReserveBytesRequestsToShadowPartitions(const TActorConte
 }
 
 void TPersQueue::CreateShadowPartition(ui32 shadowPartitionId,
+                                       ui64 writeId,
+                                       ui32 originalPartitionId,
                                        const TActorContext& ctx)
 {
+    TxWrites[writeId].Partitions[originalPartitionId] = shadowPartitionId;
+
     TActorId actorId = ctx.Register(CreatePartitionActor(shadowPartitionId,
                                                          TopicConverter,
                                                          Config,
@@ -3267,7 +3260,7 @@ void TPersQueue::CreateShadowPartition(ui32 shadowPartitionId,
                                                          ctx));
     ShadowPartitions.emplace(shadowPartitionId,
                              TPartitionInfo(actorId,
-                                            {},
+                                            {}, // GetPartitionKeyRange(Config, GetPartition(originalPartitionId))
                                             *Counters));
 }
 

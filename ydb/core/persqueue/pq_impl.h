@@ -437,15 +437,14 @@ private:
                                const TActorContext& ctx);
 
     void TryPersistWriteId(const TActorContext& ctx);
-    void BeginPersistWriteId(const ui64 responseCookie,
-                             const NKikimrClient::TPersQueuePartitionRequest& req,
-                             const TActorContext& ctx,
-                             const TActorId& sender);
+    void BeginPersistWriteId(const TActorContext& ctx);
     void EndPersistWriteId(const NKikimrClient::TResponse& resp,
                            const TActorContext& ctx);
 
-    void ForwardReserveBytesRequestsToShadowPartitions(const TActorContext& ctx);
+    void ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx);
     void CreateShadowPartition(ui32 shadowPartitionId,
+                               ui64 writeId,
+                               ui32 originalPartitionId,
                                const TActorContext& ctx);
 
     struct TReserveBytesRequestParams {
@@ -454,9 +453,11 @@ private:
         TActorId Sender;
     };
 
-    TDeque<TReserveBytesRequestParams> ReserveBytesRequestQueue;
-    TVector<TReserveBytesRequestParams> ReserveBytesRequestParams;
+    TDeque<TReserveBytesRequestParams> GetOwnershipRequests;
+    TDeque<TReserveBytesRequestParams> HandleGetOwnershipRequestParams;
     bool PendingPersistWriteId = false;
+
+    TPartitionInfo& GetPartitionInfo(ui32 partitionId);
 };
 
 

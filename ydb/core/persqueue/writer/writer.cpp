@@ -190,6 +190,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void WriteAccepted(ui64 cookie) {
+        DBGTRACE("TPartitionWriter::WriteAccepted");
         Send(Client, new TEvPartitionWriter::TEvWriteAccepted(Opts.SessionId, Opts.TxId, cookie));
     }
 
@@ -274,13 +275,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     void GetOwnership() {
         auto ev = MakeRequest(PartitionId, PipeClient);
 
-        auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
+        auto& request = *ev->Record.MutablePartitionRequest();
+        auto& cmd = *request.MutableCmdGetOwnership();
         if (Opts.UseDeduplication) {
             cmd.SetOwner(SourceId);
         } else {
             cmd.SetOwner(CreateGuidAsString());
         }
         cmd.SetForce(true);
+
+        SetWriteId(request);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
@@ -598,6 +602,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie) {
+        DBGTRACE("TPartitionWriter::Write");
+
         if (PendingReserve.empty()) {
             ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #02");
             Disconnected(EErrorCode::InternalError);
@@ -619,6 +625,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
+        DBGTRACE("TPartitionWriter::Write");
+
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
         ev->Record = std::move(req);
 
@@ -640,6 +648,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+        DBGTRACE("TPartitionWriter::Handle(TEvPersQueue::TEvResponse)");
+
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -648,7 +658,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         const auto& response = record.GetPartitionResponse();
+        DBGTRACE_LOG("response.Cookie=" << response.GetCookie());
         if (!response.CmdWriteResultSize()) {
+            DBGTRACE_LOG("bytes reserved");
+
             if (PendingReserve.empty()) {
                 return WriteResult(EErrorCode::InternalError, "Unexpected ReserveBytes response", std::move(record));
             }
@@ -680,6 +693,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 Write(cookie);
             }
         } else {
+            DBGTRACE_LOG("bytes writed");
+
             if (PendingWrite.empty()) {
                 return WriteResult(EErrorCode::InternalError, "Unexpected Write response", std::move(record));
             }

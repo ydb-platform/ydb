@@ -2,7 +2,7 @@
 
 This section presents the implementation of integration between the Kubernetes cluster log shipping tool - FluentBit, with subsequent saving for viewing or analysis in {{ ydb-short-name }}.
 
-## Введение
+## Introduction
 
 FluentBit is a tool that can collect text data, manipulate it (change, transform, merge) and send it to various storage facilities for further processing.
 

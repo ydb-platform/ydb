@@ -478,12 +478,11 @@ private:
     void SendPeriodicStats();
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats * tabletStats);
+    void ConfigureStats(const NOlap::TColumnEngineStats& indexStats, ::NKikimrTableStats::TTableStats* tabletStats);
     void FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const;
 
     static TDuration GetControllerPeriodicWakeupActivationPeriod();
     static TDuration GetControllerStatsReportInterval();
-
 
 public:
     const std::shared_ptr<NOlap::IStoragesManager>& GetStoragesManager() const {

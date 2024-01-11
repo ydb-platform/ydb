@@ -393,7 +393,7 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 }
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
-    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);    
+    const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
     Y_UNUSED(pathEl);
 
     auto* pathDescription = Result->Record.MutablePathDescription();

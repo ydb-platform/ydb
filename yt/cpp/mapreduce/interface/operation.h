@@ -2219,7 +2219,7 @@ private:
 ///
 /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
 class IVanillaJobBase
-   : public virtual IStructuredJob
+    : public virtual IStructuredJob
 {
 public:
     /// Type of job implemented by this class.

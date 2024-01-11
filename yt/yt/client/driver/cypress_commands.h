@@ -93,7 +93,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCreateCommand
-     : public NYTree::TYsonStructLite
+    : public NYTree::TYsonStructLite
 {
 public:
     void Execute(ICommandContextPtr context);

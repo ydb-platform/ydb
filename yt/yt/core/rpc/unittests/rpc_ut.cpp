@@ -817,7 +817,7 @@ TYPED_TEST(TRpcTest, ConnectionLost)
     Sleep(TDuration::Seconds(0.5));
 
     EXPECT_FALSE(asyncRspOrError.IsSet());
-    this->Server_->Stop(false);
+    YT_UNUSED_FUTURE(this->Server_->Stop(false));
 
     Sleep(TDuration::Seconds(2));
 

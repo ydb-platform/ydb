@@ -13,11 +13,12 @@ package netip
 
 import (
 	"errors"
+	"math"
+	"strconv"
+
 	"internal/bytealg"
 	"internal/intern"
 	"internal/itoa"
-	"math"
-	"strconv"
 )
 
 // Sizes: (64-bit)

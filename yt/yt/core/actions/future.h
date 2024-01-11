@@ -332,7 +332,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-class TFuture
+class [[nodiscard]] TFuture
     : public TFutureBase<T>
 {
 public:
@@ -376,7 +376,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <>
-class TFuture<void>
+class [[nodiscard]] TFuture<void>
     : public TFutureBase<void>
 {
 public:

@@ -95,7 +95,7 @@ TEST(TAsyncExpiringCacheTest, TestBackgroundUpdate)
     auto cache = New<TSimpleExpiringCache>(config);
 
     auto start = Now();
-    cache->Get(0);
+    YT_UNUSED_FUTURE(cache->Get(0));
     Sleep(TDuration::MilliSeconds(500));
     int actual = cache->GetCount();
     auto end = Now();
@@ -118,7 +118,7 @@ TEST(TAsyncExpiringCacheTest, TestConcurrentAccess)
     for (int i = 0; i < 10; ++i) {
         auto callback = BIND([=] () {
             for (int j = 0; j < 1000; ++j) {
-                cache->Get(0);
+                YT_UNUSED_FUTURE(cache->Get(0));
 
                 if (rand() % 20 == 0) {
                     cache->InvalidateActive(0);
@@ -198,7 +198,7 @@ TEST(TAsyncExpiringCacheTest, TestAccessTime2)
     auto cache = New<TSimpleExpiringCache>(config);
 
     for (int i = 0; i < 10; ++i) {
-        cache->Get(0);
+        YT_UNUSED_FUTURE(cache->Get(0));
         Sleep(TDuration::MilliSeconds(50));
     }
 
@@ -213,7 +213,7 @@ TEST(TAsyncExpiringCacheTest, TestAccessTime3)
     auto cache = New<TSimpleExpiringCache>(config);
 
     for (int i = 0; i < 10; ++i) {
-        cache->Get(0);
+        YT_UNUSED_FUTURE(cache->Get(0));
         Sleep(TDuration::MilliSeconds(100));
     }
 
@@ -240,7 +240,7 @@ TEST(TAsyncExpiringCacheTest, TestUpdateTime1)
     auto cache = New<TSimpleExpiringCache>(config, 1.0);
 
     for (int i = 0; i < 10; ++i) {
-        cache->Get(0);
+        YT_UNUSED_FUTURE(cache->Get(0));
         Sleep(TDuration::MilliSeconds(100));
     }
 
@@ -254,7 +254,7 @@ TEST(TAsyncExpiringCacheTest, TestUpdateTime2)
     auto cache = New<TSimpleExpiringCache>(config, 0.0);
 
     for (int i = 0; i < 10; ++i) {
-        cache->Get(0);
+        YT_UNUSED_FUTURE(cache->Get(0));
         Sleep(TDuration::MilliSeconds(100));
     }
 

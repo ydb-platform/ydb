@@ -1,4 +1,5 @@
 #include "reader.h"
+#include "reader_mock.h"
 
 #include <functional>
 
@@ -16,7 +17,6 @@ using namespace NActors;
 
 class TActorReader
     : public TActorBootstrapped<TActorReader>
-    , public IReader
 {
     struct TEvPrivate {
         enum EEv {
@@ -24,10 +24,10 @@ class TActorReader
         };
 
         struct TEvPoll : public TEventLocal<TEvPoll, EEv::EvPoll> {
-            TEvPoll(std::function<void(IReader&)> cb)
+            TEvPoll(std::function<void(TActorReader&)> cb)
                 : callback(cb)
             {}
-            std::function<void(IReader&)> callback;
+            std::function<void(TActorReader&)> callback;
         };
     };
 public:
@@ -38,29 +38,29 @@ public:
         , Data(data)
     {}
 
-    bool HasNext() const override {
+    bool HasNext() const {
         return Offset < MaxPolled;
     }
 
-    ui64 Remaining() const override {
+    ui64 Remaining() const {
         return MaxPolled - Offset;
     }
 
-    TRcBuf ReadNext() override {
+    TRcBuf ReadNext() {
         return Data[Offset++];
     }
 
-    bool NeedPoll() const override {
+    bool NeedPoll() const {
         return MaxPolled < Data.size();
     }
 
-    void Poll(std::function<void(IReader&)> callback) override {
+    void Poll(std::function<void(TActorReader&)> callback) {
         Y_VERIFY(NActors::TlsActivationContext && NActors::TlsActivationContext->ExecutorThread.ActorSystem, "Method must be called in actor system context");
         TActivationContext::ActorSystem()->Send(SelfId(), new TEvPrivate::TEvPoll(callback));
     }
 
     void PollDerived(std::function<void(TActorReader&)> callback) {
-        Poll([cb = callback](IReader& reader) -> void {
+        Poll([cb = callback](TActorReader& reader) -> void {
             TActorReader& self = static_cast<TActorReader&>(reader);
             return cb(self);
         });
@@ -115,6 +115,13 @@ Y_UNIT_TEST_SUITE(Reader) {
         const auto edge = runtime.AllocateEdgeActor(0);
         auto* reader = new TActorReader(edge, slicedData);
         runtime.Register(reader);
+
+        auto* readerClient = new TReaderClientMock(AIReader::TReaderActorHandle{edge});
+        readerClient->OnBootstrap = [](auto& mock) {
+            mock.BecomeStateWork();
+            mock.Poll(AIReader::Tag{});
+        };
+        runtime.Register(readerClient);
 
         TAutoPtr<IEventHandle> handle;
 

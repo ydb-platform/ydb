@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto opts = TShardedTableOptions();
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        EvWriteRows rows = EvWrite ? EvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : EvWriteRows{};
+        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
         auto upsertObserver = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
         auto upsertResultObserver = ReplaceEvProposeTransactionResultWithEvWrite(runtime, rows);
 

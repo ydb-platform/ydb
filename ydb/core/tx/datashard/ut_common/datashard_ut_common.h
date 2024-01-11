@@ -714,8 +714,8 @@ void ExecSQL(Tests::TServer::TPtr server,
 NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvWrite>&& request, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
 NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus = NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, NWilson::TTraceId traceId = {});
 
-struct EvWriteRow {
-    EvWriteRow(std::initializer_list<ui32> init) {
+struct TEvWriteRow {
+    TEvWriteRow(std::initializer_list<ui32> init) {
         for (ui32 value : init) {
             Cells.emplace_back(TCell((const char*)&value, sizeof(ui32)));
         }
@@ -729,29 +729,29 @@ struct EvWriteRow {
         Completed
     } Status = Init;
 };
-class EvWriteRows : public std::vector<EvWriteRow> {
+class TEvWriteRows : public std::vector<TEvWriteRow> {
     public:
-    EvWriteRows() = default;
-    EvWriteRows(std::initializer_list<EvWriteRow> init) :
-        std::vector<EvWriteRow>(init) { }
+    TEvWriteRows() = default;
+    TEvWriteRows(std::initializer_list<TEvWriteRow> init) :
+        std::vector<TEvWriteRow>(init) { }
 
-    const EvWriteRow& ProcessNextRow() {
-        auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == EvWriteRow::EStatus::Init; });
+    const TEvWriteRow& ProcessNextRow() {
+        auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == TEvWriteRow::EStatus::Init; });
         Y_VERIFY_S(processedRow != end(), "There should be at least one EvWrite row to process.");
-        processedRow->Status = EvWriteRow::EStatus::Processing;
+        processedRow->Status = TEvWriteRow::EStatus::Processing;
         Cerr << "Processing next EvWrite row\n";
         return *processedRow;
     }
     void CompleteNextRow() {
-        auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == EvWriteRow::EStatus::Processing; });
+        auto processedRow = std::find_if(begin(), end(), [](const auto& row) { return row.Status == TEvWriteRow::EStatus::Processing; });
         Y_VERIFY_S(processedRow != end(), "There should be at lest one EvWrite row processing.");
-        processedRow->Status = EvWriteRow::EStatus::Completed;
+        processedRow->Status = TEvWriteRow::EStatus::Completed;
         Cerr << "Completed next EvWrite row\n";
     }
 };
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows);
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows);
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows);
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows);
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 

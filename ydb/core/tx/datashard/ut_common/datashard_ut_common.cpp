@@ -1880,11 +1880,11 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
 
 
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows) {
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
     if (rows.empty())
         return {};
 
-    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
+    return runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != TEvDataShard::EvProposeTransaction)
             return;
 
@@ -1945,14 +1945,14 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
         auto handle = new IEventHandle(event->Recipient, event->Sender, evWrite.release(), 0, event->Cookie);
         handle->Rewrite(handle->GetTypeRewrite(), event->GetRecipientRewrite());
         event.Reset(handle);
-    }));
+    });
 }
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows) {
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
     if (rows.empty())
         return {};
 
-    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
+    return runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
 
@@ -1964,18 +1964,15 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWit
         // Construct new EvProposeTransactionResult
         ui64 txId = record.GetTxId();
         ui64 origin = record.GetOrigin();
-        auto status = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
-        if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED)
-            status = NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
-        else if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED)
-            status = NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
+        auto status = NKikimr::NDataShard::EvWrite::Convertor::GetStatus(record.GetStatus());
+
         auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
 
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evResult.release(), 0, event->Cookie);
         handle->Rewrite(handle->GetTypeRewrite(), event->GetRecipientRewrite());
         event.Reset(handle);
-    }));
+    });
 }
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
@@ -2006,9 +2003,10 @@ void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
     struct IsShardStateChange
     {
         IsShardStateChange(ui64 tabletId)
-            : TabletId(tabletId)
-            {
-            }
+            :
+                TabletId(tabletId)
+                {
+                }
 
         bool operator()(IEventHandle& ev)
         {
@@ -2062,7 +2060,8 @@ namespace {
             , Snapshot(snapshot)
             , Ordered(ordered)
             , State(pause ? EState::PauseWait : EState::Normal)
-        { }
+        {
+        }
 
         void Bootstrap(const TActorContext& ctx) {
             auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();

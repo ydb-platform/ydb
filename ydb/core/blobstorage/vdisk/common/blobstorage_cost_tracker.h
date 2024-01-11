@@ -100,7 +100,7 @@ protected:
                 return HDDEstimator.Write(chunkSize);
             }
             default: {
-                ui64 seekTime = 1. * chunkSize * DeviceSeekTimeNs;
+                ui64 seekTime = DeviceSeekTimeNs / 100u;  // assume we do one seek per 100 log records
                 ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
                 return seekTime + writeTime;
             }
@@ -253,6 +253,7 @@ public:
     }
 };
 
+using TBsCostModelErasureNone = TBsCostModelBase;
 class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
 class TBsCostModelMirror3of4;

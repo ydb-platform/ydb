@@ -1200,6 +1200,11 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     }
 
     for (ui64 txId : outdatedTxs) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                 "Outdated Tx %" PRIu64 " is cleaned at tablet %" PRIu64 " and outdatedStep# %" PRIu64,
@@ -1215,6 +1220,11 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
     if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+        
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);

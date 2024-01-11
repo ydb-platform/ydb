@@ -15,7 +15,6 @@
   "cmake/archive.cmake":"build/export_generators/hardcoded-cmake/cmake/archive.cmake",
   "cmake/bison.cmake":"build/export_generators/hardcoded-cmake/cmake/bison.cmake",
   "cmake/common.cmake":"build/export_generators/hardcoded-cmake/cmake/common.cmake",
-  "cmake/conan-profiles":"devtools/yexport/cmake",
   "cmake/conan.cmake":"build/export_generators/hardcoded-cmake/cmake/conan.cmake",
   "cmake/cuda.cmake":"build/export_generators/hardcoded-cmake/cmake/cuda.cmake",
   "cmake/cython.cmake":"build/export_generators/hardcoded-cmake/cmake/cython.cmake",

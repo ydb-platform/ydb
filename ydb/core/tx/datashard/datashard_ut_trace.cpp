@@ -21,6 +21,93 @@ using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
+    void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             Ydb::StatusIds::StatusCode code,
+             NWilson::TTraceId traceId = {})
+    {
+        google::protobuf::Arena arena;
+        auto &runtime = *server->GetRuntime();
+        TAutoPtr<IEventHandle> handle;
+
+        THolder<NKqp::TEvKqp::TEvQueryRequest> request;
+        if (traceId) {
+            struct RequestCtx : NGRpcService::IRequestCtxMtSafe {
+                RequestCtx(NWilson::TTraceId &&traceId) : TraceId(std::move(traceId)) {}
+
+                NWilson::TTraceId GetWilsonTraceId() const override {
+                    return TraceId.Clone();
+                }
+
+                TMaybe<TString> GetTraceId() const override {
+                    return Nothing();
+                }
+
+                const TMaybe<TString> GetDatabaseName() const override {
+                    return "";
+                }
+
+                const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
+                    return Ptr;
+                }
+
+                const TString& GetSerializedToken() const override {
+                    return Token;
+                }
+
+                bool IsClientLost() const override {
+                    return false;
+                };
+
+                virtual const google::protobuf::Message* GetRequest() const override {
+                    return nullptr;
+                };
+
+                const TMaybe<TString> GetRequestType() const override {
+                    return "_document_api_request";
+                };
+
+                void SetFinishAction(std::function<void()>&& cb) override {
+                    Y_UNUSED(cb);
+                };
+
+                google::protobuf::Arena* GetArena() override {
+                    return nullptr;
+                };
+
+                TIntrusiveConstPtr<NACLib::TUserToken> Ptr;
+                TString Token;
+                NWilson::TTraceId TraceId;
+            };
+            
+            auto *txControl = google::protobuf::Arena::CreateMessage<Ydb::Table::TransactionControl>(&arena);
+            txControl->mutable_begin_tx()->mutable_serializable_read_write();
+            txControl->set_commit_tx(true);
+
+            auto ptr = std::make_shared<RequestCtx>(std::move(traceId));
+            request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+                NKikimrKqp::QUERY_ACTION_EXECUTE,
+                NKikimrKqp::QUERY_TYPE_SQL_DML,
+                TActorId(),
+                ptr,
+                TString(), //sessionId
+                TString(sql),
+                TString(), //queryId
+                txControl, //tx_control
+                nullptr, //ydbParameters
+                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED, //collectStats
+                nullptr, // query_cache_policy
+                nullptr //operationParams
+            );
+        } else {
+            request = MakeSQLRequest(sql, true);
+        }
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
+    }
+
     class FakeWilsonUploader : public TActorBootstrapped<FakeWilsonUploader> {
         public:
         class Span {
@@ -232,7 +319,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500), (7, 700), (9, 900);",
-            true,
             Ydb::StatusIds::SUCCESS,
             std::move(traceId)
         );
@@ -292,7 +378,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500), (7, 700), (9, 900);",
-            true,
             Ydb::StatusIds::SUCCESS
         );
 
@@ -300,7 +385,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 100), (4, 300), (6, 500), (8, 700), (10, 900);",
-            true,
             Ydb::StatusIds::SUCCESS
         );
 
@@ -326,7 +410,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "SELECT * FROM `/Root/table-1` WHERE key = 1 OR key = 3 OR key = 5 OR key = 7 OR key = 9;",
-            true,
             Ydb::StatusIds::SUCCESS,
             std::move(traceId)
         );
@@ -419,7 +502,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500), (7, 700), (9, 900);",
-            true,
             Ydb::StatusIds::SUCCESS
         );
 
@@ -427,7 +509,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 100), (4, 300), (6, 500), (8, 700), (10, 900);",
-            true,
             Ydb::StatusIds::SUCCESS
         );
 
@@ -437,7 +518,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             server,
             sender,
             "SELECT * FROM `/Root/table-1`;",
-            true,
             Ydb::StatusIds::SUCCESS,
             std::move(traceId)
         );

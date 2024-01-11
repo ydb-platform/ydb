@@ -265,7 +265,7 @@ private:
                 return TStringBuilder() << "Please check that your service account has role "  << 
                                        "`managed-" << mdbTypeStr << ".viewer`.";
         }
-        return "";
+        return {};
     }
 
     const TActorId Sender;

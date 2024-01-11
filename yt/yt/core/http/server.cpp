@@ -190,7 +190,14 @@ private:
 
             NProfiling::TWallTimer timer;
 
-            YT_LOG_DEBUG("Received HTTP request (ConnectionId: %v, RequestId: %v, Method: %v, Path: %v, L7RequestId: %v, L7RealIP: %v, UserAgent: %v)",
+            YT_LOG_DEBUG("Received HTTP request ("
+                "ConnectionId: %v, "
+                "RequestId: %v, "
+                "Method: %v, "
+                "Path: %v, "
+                "L7RequestId: %v, "
+                "L7RealIP: %v, "
+                "UserAgent: %v)",
                 request->GetConnectionId(),
                 request->GetRequestId(),
                 request->GetMethod(),

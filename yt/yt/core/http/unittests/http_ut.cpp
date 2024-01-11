@@ -1,35 +1,35 @@
 #include <yt/yt/core/test_framework/framework.h>
 #include <yt/yt/core/test_framework/test_key.h>
 
-#include <yt/yt/core/http/server.h>
 #include <yt/yt/core/http/client.h>
-#include <yt/yt/core/http/private.h>
-#include <yt/yt/core/http/http.h>
-#include <yt/yt/core/http/stream.h>
+#include <yt/yt/core/http/compression.h>
 #include <yt/yt/core/http/config.h>
-#include <yt/yt/core/http/helpers.h>
 #include <yt/yt/core/http/connection_pool.h>
+#include <yt/yt/core/http/helpers.h>
+#include <yt/yt/core/http/http.h>
+#include <yt/yt/core/http/private.h>
+#include <yt/yt/core/http/server.h>
+#include <yt/yt/core/http/stream.h>
 
-#include <yt/yt/core/https/server.h>
 #include <yt/yt/core/https/client.h>
 #include <yt/yt/core/https/config.h>
+#include <yt/yt/core/https/server.h>
 
-#include <yt/yt/core/net/connection.h>
-#include <yt/yt/core/net/listener.h>
-#include <yt/yt/core/net/dialer.h>
 #include <yt/yt/core/net/config.h>
+#include <yt/yt/core/net/connection.h>
+#include <yt/yt/core/net/dialer.h>
+#include <yt/yt/core/net/listener.h>
 #include <yt/yt/core/net/mock/dialer.h>
 
-#include <yt/yt/core/concurrency/poller.h>
-#include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/crypto/tls.h>
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/https/config.h>
 
 #include <library/cpp/testing/common/network.h>
 
@@ -1390,6 +1390,84 @@ TEST(TRangeHeadersTest, Test)
 
     headers->Set("Range", "bytes=-2");
     EXPECT_ANY_THROW(FindBytesRange(headers));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestOutputStream
+    : public NConcurrency::IAsyncOutputStream
+{
+    std::exception_ptr Exception;
+    TError Error;
+
+    TFuture<void> Return()
+    {
+        if (Exception) {
+            std::rethrow_exception(Exception);
+        }
+
+        return MakeFuture(Error);
+    }
+
+    TFuture<void> Write(const TSharedRef& /*buffer*/) override
+    {
+        return Return();
+    }
+
+    TFuture<void> Close() override
+    {
+        return Return();
+    }
+};
+
+DEFINE_REFCOUNTED_TYPE(TTestOutputStream)
+
+TEST(TCompression, Segfault)
+{
+    auto out = New<TTestOutputStream>();
+    auto compression = CreateCompressingAdapter(out, "br");
+
+    out->Error = TError("Write failed");
+    try {
+        Y_UNUSED(compression->Write(TSharedRef::FromString("hello")));
+        Y_UNUSED(compression->Close());
+    } catch (const std::exception& ) {
+    }
+
+    for (;;) {
+        try {
+            Y_UNUSED(compression->Write(TSharedRef::FromString("hello")));
+        } catch (const std::exception& ) {
+            break;
+        }
+    }
+}
+
+TEST(TCompression, StreamFlush)
+{
+    constexpr int IterationCount = 10;
+    for (const auto& compression : GetSupportedCompressions()) {
+        if (compression == IdentityContentEncoding) {
+            continue;
+        }
+        TStringStream stringStream;
+        auto asyncStream = CreateAsyncAdapter(static_cast<IOutputStream*>(&stringStream));
+        auto compressionStream = CreateCompressingAdapter(asyncStream, compression);
+        auto previousLength = stringStream.Size();
+        for (int i = 0; i < IterationCount; ++i) {
+            WaitFor(compressionStream->Write(TSharedRef("x", 1, nullptr)))
+                .ThrowOnError();
+            WaitFor(compressionStream->Flush())
+                .ThrowOnError();
+            EXPECT_GT(stringStream.Size(), previousLength)
+                << "Output for stream " << compression << " has not grown on iteration " << i;
+            previousLength = stringStream.Size();
+        }
+        WaitFor(compressionStream->Close())
+            .ThrowOnError();
+        WaitFor(asyncStream->Close())
+            .ThrowOnError();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

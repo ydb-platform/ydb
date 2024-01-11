@@ -12,6 +12,7 @@ SRCS(
     depth_limiting_yson_consumer_ut.cpp
     filter_ut.cpp
     lexer_ut.cpp
+    list_verb_lazy_yson_consumer_ut.cpp
     protobuf_scalar_type_ut.cpp
     protobuf_yson_schema_ut.cpp
     protobuf_yson_ut.cpp

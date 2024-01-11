@@ -41,14 +41,7 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
 inline TString DatabaseTypeLowercase(EDatabaseType databaseType) {
     auto dump = ToString(databaseType);
     dump.to_lower();
-
-    switch (databaseType) {
-        case EDatabaseType::ClickHouse:
-        case EDatabaseType::PostgreSQL:
-            return dump;
-        default:
-            ythrow yexception() << "Unsupported database type: " << ToString(databaseType);
-    }
+    return dump;
 }
 
 // TODO: remove this function after /kikimr/yq/tests/control_plane_storage is moved to /ydb.
@@ -73,7 +66,7 @@ struct TDatabaseAuth {
     NConnector::NApi::EProtocol Protocol = NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED;
 
     bool operator==(const TDatabaseAuth& other) const {
-        return std::tie(StructuredToken, AddBearerToToken, UseTls) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls);
+        return std::tie(StructuredToken, AddBearerToToken, UseTls, Protocol) == std::tie(other.StructuredToken, other.AddBearerToToken, other.UseTls, Protocol);
     }
 
     bool operator!=(const TDatabaseAuth& other) const {

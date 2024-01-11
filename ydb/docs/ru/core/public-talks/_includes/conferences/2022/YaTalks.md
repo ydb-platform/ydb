@@ -1,4 +1,4 @@
-### YaTalks. Open Source трибуна. YDB в Open Source — что это такое?
+### Open Source трибуна. YDB в Open Source — что это такое? {#2022-conf-yatalks-open-source}
 Яндекс понимает важность опенсорса, выпускает собственные открытые продукты и поддерживает сообщество. [ {{ team.bondar.name }} ]( {{ team.bondar.position }} ) ( {{ team.bondar.profile }} ) рассказал о выходе YDB в Open Source, о сообществе платформы, а также о балансе между потребностями внутренних и внешних пользователей.
 
 @[YouTube](https://www.youtube.com/watch?v=s238or35z48).

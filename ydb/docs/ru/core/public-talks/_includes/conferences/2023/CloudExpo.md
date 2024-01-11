@@ -1,2 +1,2 @@
-### CloudExpo. From Baremetal to Kubernetes: YDB’s Journey (EN)
+### From Baremetal to Kubernetes: YDB’s Journey (EN) {#2023-conf-cloudexpo}
 [ {{ team.tarasov.name }} ]( {{ team.tarasov.profile }} ) ( {{ team.tarasov.position }} ) показал как можно развернуть YDB в Kubernetes, подключить блочные устройства к YDB для достижения оптимальной производительности при сохранении безопасности и как поддерживать блокировки POSIX на дисках, чтобы каждый диск мог использоваться только одним контейнером за раз.

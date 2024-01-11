@@ -101,7 +101,7 @@ public:
 
     private:
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in = TStateCreator::Reader::GetSimpleSnapshot(state);
+            TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
 
             const auto stateVersion = ReadUi32(in);
             if (stateVersion == 1) {
@@ -133,7 +133,7 @@ public:
             }
             WriteUi64(out, Latest);
             WriteBool(out, Terminating);
-            return TStateCreator::MakeSimpleBlobState(out);
+            return TNodeStateHelper::MakeSimpleBlobState(out);
         }
 
         void ClearState() {

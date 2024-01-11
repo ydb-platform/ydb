@@ -37,25 +37,6 @@ message TSinkState {
     uint64 OutputIndex = 2;
 }
 
-message TMiniKqlStateItem {
-    bytes Key = 1;
-    bytes Blob = 2;
-}
-
-message TNodeState {
-    message TSnaphot {
-        repeated TMiniKqlStateItem Items = 1;
-    }
-    message TIncrement {
-        repeated TMiniKqlStateItem NewOrChanged = 1;
-        repeated bytes DeletedKeys = 2;
-    }
-    oneof State {
-        TSnaphot Snapshot = 1;
-        TIncrement Increment = 2;
-    }
-}
-
 message TMiniKqlProgramState {
     TStateData Data = 1;
     uint64 RuntimeVersion = 2;

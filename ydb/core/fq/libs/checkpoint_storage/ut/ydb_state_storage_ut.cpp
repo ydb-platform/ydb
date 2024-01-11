@@ -59,8 +59,7 @@ TStateStoragePtr GetStateStorage(const char* tablePrefix) {
 NYql::NDqProto::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
     const TStringBuf savedBuf = value.AsStringRef();
     TString result;
-    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
-    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
     NYql::NDqProto::TComputeActorState state;
     state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;
@@ -71,7 +70,7 @@ NYql::NDqProto::TComputeActorState MakeStateFromBlob(size_t blobSize) {
     for (size_t i = 0; i < blobSize; ++i) {
         blob += static_cast<TString::value_type>(std::rand() % 100);
     }
-    return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(blob));
+    return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob));
 }
 
 NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) {
@@ -80,7 +79,7 @@ NYql::NDqProto::TComputeActorState MakeIncrementState(size_t miniKqlPStateSize) 
     for (size_t i = 0; i < itemCount; ++i) {
         map[ToString((777 + i))] = TString(miniKqlPStateSize / itemCount, 'a');
     }
-    return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(map));
+    return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(map));
 }
 
 NYql::NDqProto::TComputeActorState MakeIncrementState(
@@ -89,10 +88,10 @@ NYql::NDqProto::TComputeActorState MakeIncrementState(
     const std::set<TString>& deleted)
 {
     if (!snapshot.empty()) {
-        return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(snapshot));
+        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(snapshot));
     }
     else {
-        return MakeState(NKikimr::NMiniKQL::TStateCreator::MakeIncrementState(increment, deleted));
+        return MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeIncrementState(increment, deleted));
     }
 }
 

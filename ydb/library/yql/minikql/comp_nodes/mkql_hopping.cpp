@@ -72,11 +72,11 @@ public:
             WriteBool(out, Started);
             WriteBool(out, Finished);
 
-            return TStateCreator::MakeSimpleBlobState(out);
+            return TNodeStateHelper::MakeSimpleBlobState(out);
         }
 
         void Load(const NUdf::TStringRef& state) override {
-            TStringBuf in = TStateCreator::Reader::GetSimpleSnapshot(state);
+            TStringBuf in = TNodeStateHelper::Reader::GetSimpleSnapshot(state);
 
             auto size = ReadUi32(in);
             Buckets.resize(size);

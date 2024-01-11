@@ -731,8 +731,7 @@ public:
             } else if (mutableValue.IsBoxed()) {
                 NUdf::TUnboxedValue saved = mutableValue.Save();
                 const TStringBuf savedBuf = saved.AsStringRef();
-                WriteUi32(result, savedBuf.Size());
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
             } else { // No load was done during previous runs (if any).
                 MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
                 const NUdf::TStringRef savedRef = mutableValue.AsStringRef();

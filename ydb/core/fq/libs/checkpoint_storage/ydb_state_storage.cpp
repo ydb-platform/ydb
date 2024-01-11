@@ -54,20 +54,20 @@ public:
                 auto nodeStateSize = NKikimr::NMiniKQL::ReadUi32(buf);
                 Y_ABORT_UNLESS(buf.Size() >= nodeStateSize);
 
-                NKikimr::NMiniKQL::TStateCreator::Reader reader(buf);
+                NKikimr::NMiniKQL::TNodeStateHelper::Reader reader(buf);
                 auto type = reader.GetType();
                 auto& nodeState = NodeStates[nodeNum];
                 nodeState.Type = type;
 
                 switch (type) {
-                    case NKikimr::NMiniKQL::TStateCreator::EType::SIMPLE_BLOB:
+                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::SIMPLE_BLOB:
                     {
                         auto simpleBlob = reader.ReadSimpleSnapshot();
                         nodeState.SimpleBlob = simpleBlob;
                     }
                     break;
-                    case NKikimr::NMiniKQL::TStateCreator::EType::SNAPSHOT:
-                    case NKikimr::NMiniKQL::TStateCreator::EType::INCREMENT:
+                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::SNAPSHOT:
+                    case NKikimr::NMiniKQL::TNodeStateHelper::EType::INCREMENT:
                         reader.ReadItems(
                             [&](std::string_view key, std::string_view value) {
                                 nodeState.Items[TString(key)] = TString(value);
@@ -91,9 +91,9 @@ public:
         for (const auto& [nodeNum, nodeState] : NodeStates) {
             
              NYql::NUdf::TUnboxedValue saved = 
-                nodeState.Type == NKikimr::NMiniKQL::TStateCreator::EType::SIMPLE_BLOB
-                ? NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(nodeState.SimpleBlob)
-                : NKikimr::NMiniKQL::TStateCreator::MakeSnapshotState(nodeState.Items);
+                nodeState.Type == NKikimr::NMiniKQL::TNodeStateHelper::EType::SIMPLE_BLOB
+                ? NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(nodeState.SimpleBlob)
+                : NKikimr::NMiniKQL::TNodeStateHelper::MakeSnapshotState(nodeState.Items);
             const TStringBuf savedBuf = saved.AsStringRef();
             NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
             result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
@@ -117,7 +117,7 @@ public:
             
             TStringBuf nodeStateBuf(buf.Data(), nodeStateSize);
 
-            if (NKikimr::NMiniKQL::TStateCreator::Reader(nodeStateBuf).GetType() == NKikimr::NMiniKQL::TStateCreator::EType::INCREMENT) {
+            if (NKikimr::NMiniKQL::TNodeStateHelper::Reader(nodeStateBuf).GetType() == NKikimr::NMiniKQL::TNodeStateHelper::EType::INCREMENT) {
                 return EStateType::Increment;
             }
             buf.Skip(nodeStateSize);
@@ -128,7 +128,7 @@ public:
 
 private:
     struct NodeState {
-        NKikimr::NMiniKQL::TStateCreator::EType Type;
+        NKikimr::NMiniKQL::TNodeStateHelper::EType Type;
         std::map<TString, TString> Items;
         TString SimpleBlob;
     };

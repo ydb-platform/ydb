@@ -18,23 +18,21 @@ class TestBigState(TestYdsBase):
         client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         sql = Rf'''
-            $s =
-            SELECT time, ListConcat(ListReplicate(key, {KeyLen})) as key
+            $raw_stream = SELECT Yson::Parse(Data) AS yson_data
+                FROM myyds.`{self.input_topic}` WITH SCHEMA (Data String NOT NULL);
+
+            $format_stream = SELECT time, ListConcat(ListReplicate(key, {KeyLen})) as key
                 FROM (
                     SELECT
                         Yson::LookupInt64(yson_data, "time") AS time,
                         Yson::LookupString(yson_data, "key") AS key
-                     FROM (
-                        SELECT
-                            Yson::Parse(Data) AS yson_data
-                            FROM myyds.`{self.input_topic}` WITH SCHEMA (Data String NOT NULL)));
+                     FROM $raw_stream);
 
             INSERT INTO myyds.`{self.output_topic}`
             SELECT STREAM
                 Yson::SerializeText(Yson::From(TableRow()))
             FROM (
-               --     SELECT * from $s
-                SELECT key, COUNT(*) as cnt from $s
+                SELECT key, COUNT(*) as cnt from $format_stream
                 GROUP BY HOP(CAST(time AS Timestamp), "PT1S", "PT1S", "PT1S"), key
                 )
             '''

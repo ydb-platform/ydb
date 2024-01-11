@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
 
-        SaveState(runtime, 1317, CheckpointId1, MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState("some random state")));
+        SaveState(runtime, 1317, CheckpointId1, MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState("some random state")));
     }
 
     Y_UNIT_TEST(ShouldGetState)
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState(NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState("some random state"));
+        auto state = MakeState(NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState("some random state"));
         SaveState(runtime, 1317, CheckpointId1, state);
 
         auto actual = GetState(runtime, 1317, GraphId, CheckpointId1);

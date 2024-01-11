@@ -33,11 +33,10 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 NYql::NDqProto::TComputeActorState MakeStateFromBlob(const TString& blob) {
-    auto value = NKikimr::NMiniKQL::TStateCreator::MakeSimpleBlobState(blob);
+    auto value = NKikimr::NMiniKQL::TNodeStateHelper::MakeSimpleBlobState(blob);
     const TStringBuf savedBuf = value.AsStringRef();
     TString result;
-    NKikimr::NMiniKQL::WriteUi32(result, savedBuf.Size());
-    result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, savedBuf);
     NYql::NDqProto::TComputeActorState state;
     state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(result);
     return state;

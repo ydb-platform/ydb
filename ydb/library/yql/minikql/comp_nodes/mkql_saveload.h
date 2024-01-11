@@ -13,7 +13,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-
 Y_FORCE_INLINE void WriteByte(TString& out, ui8 value) {
     out.append((char)value);
 }
@@ -89,8 +88,7 @@ Y_FORCE_INLINE NUdf::TUnboxedValue ReadUnboxedValue(TStringBuf& in, const TValue
     return value;
 }
 
-
-class TStateCreator {
+class TNodeStateHelper {
 
 public:
     enum class EType {
@@ -98,6 +96,11 @@ public:
         SNAPSHOT,
         INCREMENT
     };
+
+    static void AddNodeState(TString& result, const TStringBuf& state) {
+        WriteUi32(result, state.Size());
+        result.AppendNoAlias(state.Data(), state.Size());
+    }
 
     static NUdf::TUnboxedValue MakeSimpleBlobState(const TString& blob) {
         TString out;
@@ -148,7 +151,7 @@ public:
         }
 
         EType GetType() const {
-            return *Type;
+            return Type;
         }
 
         static TStringBuf GetSimpleSnapshot(const NUdf::TStringRef& state) {
@@ -164,10 +167,10 @@ public:
             return ReadString(Buf);
         }
 
-        using TCallback = std::function<void(std::string_view, std::string_view)>;
-        using TCallbackDelete = std::function<void(std::string_view)>;
+        using TCallbackUpdateItem = std::function<void(std::string_view, std::string_view)>;
+        using TCallbackDeleteKey = std::function<void(std::string_view)>;
 
-        void ReadItems(TCallback callback, TCallbackDelete callback2) {
+        void ReadItems(TCallbackUpdateItem updateItem, TCallbackDeleteKey deleteKey) {
             MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
             ui32 itemsCount = ReadUi32(Buf);
             ui32 deletedCount = 0;
@@ -177,16 +180,16 @@ public:
             for (ui32 i = 0; i < itemsCount; ++i) {
                 auto key = ReadString(Buf);
                 auto value = ReadString(Buf);
-                callback(key, value);
+                updateItem(key, value);
             }
             if (deletedCount) {
                 auto key = ReadString(Buf);
-                callback2(key);
+                deleteKey(key);
             }
         }
     private:
         TStringBuf& Buf;
-        TMaybe<EType> Type;
+        EType Type{EType::SIMPLE_BLOB};
     };
 };
 

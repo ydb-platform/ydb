@@ -11,7 +11,6 @@ SET(ORIG_SRC_DIR ydb/library/yql/minikql/computation)
 SET(ORIG_SOURCES
     mkql_computation_node_codegen.cpp
     mkql_computation_node_graph.cpp
-    mkql_computation_node_graph_saveload.cpp
     mkql_computation_node_holders_codegen.cpp
     mkql_llvm_base.cpp
 )

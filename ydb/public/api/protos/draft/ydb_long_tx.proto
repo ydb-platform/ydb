@@ -87,24 +87,3 @@ message WriteResult {
 message WriteResponse {
     Ydb.Operations.Operation operation = 1;
 }
-
-message ReadRequest {
-    Ydb.Operations.OperationParams operation_params = 1;
-    string tx_id = 2;
-    string path = 3;
-    oneof query {
-        string sql = 11;
-    }
-}
-
-message ReadResult {
-    string tx_id = 1;
-    string path = 2;
-    uint64 chunk = 3;
-    bool finished = 4;
-    Data data = 5;
-}
-
-message ReadResponse {
-    Ydb.Operations.Operation operation = 1;
-}

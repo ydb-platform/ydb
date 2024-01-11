@@ -77,19 +77,6 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncReadResult Read(const TString& txId, const TString& table,
-                          const TOpSettings& settings = TOpSettings()) {
-        auto request = MakeOperationRequest<Ydb::LongTx::ReadRequest>(settings);
-        request.set_tx_id(txId);
-        request.set_path(table);
-        // TODO: query
-
-        return RunOperation<Ydb::LongTx::V1::LongTxService,
-                            Ydb::LongTx::ReadRequest, Ydb::LongTx::ReadResponse, TLongTxReadResult>(
-            std::move(request),
-            &Ydb::LongTx::V1::LongTxService::Stub::AsyncRead,
-            TRpcRequestSettings::Make(settings));
-    }
 };
 
 TClient::TClient(const TDriver& driver, const TClientSettings& settings)
@@ -98,10 +85,6 @@ TClient::TClient(const TDriver& driver, const TClientSettings& settings)
 
 TClient::TAsyncBeginTxResult TClient::BeginWriteTx() {
     return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::WRITE);
-}
-
-TClient::TAsyncBeginTxResult TClient::BeginReadTx() {
-    return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::READ);
 }
 
 TClient::TAsyncCommitTxResult TClient::CommitTx(const TString& txId) {
@@ -117,9 +100,6 @@ TClient::TAsyncWriteResult TClient::Write(const TString& txId, const TString& ta
     return Impl_->Write(txId, table, dedupId, data, format);
 }
 
-TClient::TAsyncReadResult TClient::Read(const TString& txId, const TString& table) {
-    return Impl_->Read(txId, table);
-}
 
 } // namespace NLongTx
 } // namespace NYdb

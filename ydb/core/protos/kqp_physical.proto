@@ -344,11 +344,17 @@ message TKqpExternalSink {
     string AuthInfo = 4;
 }
 
+message TKqpInternalSink {
+    TKqpPhyTableId Table = 1;
+    repeated TKqpPhyColumnId Columns = 2;
+}
+
 message TKqpSink {
     uint32 OutputIndex = 1;
 
     oneof Type {
         TKqpExternalSink ExternalSink = 2;
+        TKqpInternalSink InternalSink = 3;
     }
 }
 

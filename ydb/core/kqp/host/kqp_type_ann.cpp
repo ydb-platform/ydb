@@ -1748,6 +1748,42 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+        return TStatus::Error;
+    }
+    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateTableSinkOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto source = input->Child(TKqpTableSinkOutput::idx_Input);
+    if (!EnsureNewSeqType<false, false, false>(*source, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*input->Child(TKqpTableSinkOutput::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto itemType = source->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
+    if (!EnsureStructType(source->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+    const auto structType = itemType->Cast<TStructExprType>();
+    const auto columns = input->Child(TKqpTableSinkOutput::idx_Columns)->ChildrenList();
+
+    // TODO: check it (s3 datasink AnnotateTargetBase)
+    Y_UNUSED(structType, columns);
+
+    input->SetTypeAnn(ctx.MakeType<TFlowExprType>(structType));
+    return TStatus::Ok;
+}
+
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
@@ -1900,6 +1936,14 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqlReturningList::Match(input.Get())) {
                 return AnnotateReturningList(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpTableSinkSettings::Match(input.Get())) {
+                return AnnotateTableSinkSettings(input, ctx);
+            }
+
+            if (TKqpTableSinkOutput::Match(input.Get())) {
+                return AnnotateTableSinkOutput(input, ctx);
             }
 
             return dqTransformer->Transform(input, output, ctx);

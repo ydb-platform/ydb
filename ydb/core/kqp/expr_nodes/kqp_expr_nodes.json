@@ -527,7 +527,8 @@
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

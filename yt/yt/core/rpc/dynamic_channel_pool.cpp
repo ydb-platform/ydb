@@ -62,11 +62,11 @@ public:
             TGuid::Create(),
             EndpointDescription_,
             ServiceName_))
-       , ViablePeerRegistry_(CreateViablePeerRegistry(
+        , ViablePeerRegistry_(CreateViablePeerRegistry(
             Config_,
             BIND(&TImpl::CreateChannel, Unretained(this)),
             Logger))
-       , RandomPeerRotationExecutor_(New<TPeriodicExecutor>(
+        , RandomPeerRotationExecutor_(New<TPeriodicExecutor>(
             TDispatcher::Get()->GetLightInvoker(),
             BIND(&TDynamicChannelPool::TImpl::MaybeEvictRandomPeer, MakeWeak(this)),
             Config_->RandomPeerEvictionPeriod))

@@ -24,7 +24,6 @@ import (
 	"errors"
 	"syscall"
 	_ "unsafe" // for go:linkname
-
 )
 
 // registerLoadFromEmbeddedTZData is defined in package time.

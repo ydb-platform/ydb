@@ -239,7 +239,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // Wait for the next check of cluster liveness, `vla` cluster will become current again.
     Sleep(TDuration::Seconds(5));
 
-     // From `vla` because it became ok again.
+    // From `vla` because it became ok again.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
         auto rows = result.Get().Value().Rowset->GetRows();

@@ -29,11 +29,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha1"
-	// Explicitly import these for their crypto.RegisterHash init side-effects.
-	// Keep these as blank imports, even if they're imported above.
-	_ "crypto/sha1"
-	_ "crypto/sha256"
-	_ "crypto/sha512"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
@@ -47,6 +42,12 @@ import (
 	"strconv"
 	"time"
 	"unicode"
+
+	// Explicitly import these for their crypto.RegisterHash init side-effects.
+	// Keep these as blank imports, even if they're imported above.
+	_ "crypto/sha1"
+	_ "crypto/sha256"
+	_ "crypto/sha512"
 
 	"golang.org/x/crypto/cryptobyte"
 	cryptobyte_asn1 "golang.org/x/crypto/cryptobyte/asn1"

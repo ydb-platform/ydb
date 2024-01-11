@@ -57,7 +57,7 @@ public:
     {
         EXPECT_EQ(1, std::ssize(message));
         auto replyMessage = Serialize(Message_);
-        replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None));
+        YT_UNUSED_FUTURE(replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
     }
 
 private:

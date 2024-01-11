@@ -9,8 +9,8 @@ import logging
 import argparse
 import yatest.common
 
-from test import const
 from six.moves import input
+import build.plugins.lib.test_const as const
 import library.python.fs as fs
 import library.python.testing.recipe
 

@@ -858,8 +858,8 @@ void UnversionedValueToListImpl(
             std::function<google::protobuf::Message*()> appender,
             const TProtobufMessageType* type)
             : Appender_(std::move(appender))
-              , Type_(type)
-              , OutputStream_(&WireBytes_)
+            , Type_(type)
+            , OutputStream_(&WireBytes_)
         { }
 
         void OnStringScalar(TStringBuf value) override

@@ -160,7 +160,7 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
     MKQL_ENSURE(false, "Incorrect data slot: " << (ui32)type);
 }
 
-bool IsLeapYear(ui32 year) {
+bool IsLeapYear(i32 year) {
     bool isLeap = (year % 4 == 0);
     if (year % 100 == 0) {
         isLeap = year % 400 == 0;
@@ -600,6 +600,8 @@ bool SplitDateUncached(ui16 value, ui32& year, ui32& month, ui32& day) {
 
 namespace {
 
+constexpr ui32 DAYS_IN_400_YEARS = 146097;
+
 class TDateTable {
 public:
     TDateTable() {
@@ -610,6 +612,24 @@ public:
         ui32 dayOfWeek = 2;
         ui32 weekOfYear = 52;
         ui32 weekOfYearIso8601 = 1;
+
+        auto yearDays = 0u;
+        for (auto i = 0u; i < Years_.size(); ++i) {
+            Years_[i] = yearDays;
+            yearDays += IsLeapYear(i + NUdf::MIN_YEAR) ? 366 : 365;
+        }
+        Y_ASSERT(yearDays == DAYS_IN_400_YEARS);
+
+        Months_[0] = 0;
+        LeapMonths_[0] = 0;
+        ui16 monthDays = 0;
+        ui16 leapMonthDays = 0;
+        for (auto month = 1u; month < Months_.size(); ++month) {
+            Months_[month] = monthDays;
+            LeapMonths_[month] = leapMonthDays;
+            monthDays += GetMonthLength(month, false);
+            leapMonthDays += GetMonthLength(month, true);
+        }
 
         for (ui16 date = 0; date < Days_.size(); ++date) {
             ui32 year, month, day;
@@ -692,6 +712,28 @@ public:
         return true;
     }
 
+    bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
+        if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
+            return false;
+        }
+        auto isLeap = IsLeapYear(year);
+        auto monthLength = GetMonthLength(month, isLeap);
+
+        if (Y_UNLIKELY(day < 1 || day > monthLength)) {
+            return false;
+        }
+
+        i32 y = (year < 0) ? (year - NUdf::MIN_YEAR + 1) : (year - NUdf::MIN_YEAR);
+        if (Y_UNLIKELY(y < 0)) {
+            value = (y / 400 - 1) * DAYS_IN_400_YEARS + Years_[400 + y % 400];
+        } else {
+            value = (y / 400) * DAYS_IN_400_YEARS + Years_[y % 400];
+        }
+        value += isLeap ? LeapMonths_[month] : Months_[month];
+        value += day - 1;
+        return true;
+    }
+
     bool EnrichByOffset(ui16 value, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const {
         if (Y_UNLIKELY(value >= Days_.size())) {
             return false;
@@ -729,6 +771,9 @@ private:
 
     std::array<ui16, NUdf::MAX_YEAR - NUdf::MIN_YEAR + 1> YearsOffsets_; // start of linear date for each year
     std::array<TDayInfo, NUdf::MAX_DATE + 2> Days_; // packed info for each date
+    std::array<ui32, 400> Years_; // start of linear date for each year in [1970, 2370] - period of 400 years
+    std::array<ui16, 13> Months_;
+    std::array<ui16, 13> LeapMonths_;
 };
 
 }
@@ -983,6 +1028,45 @@ NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
 
     if (value >= NUdf::MAX_DATE) {
         return NUdf::TUnboxedValuePod();
+    }
+
+    return NUdf::TUnboxedValuePod(value);
+}
+
+NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
+    ui32 year, month, day;
+    ui32 pos = 0;
+    bool beforeChrist = false;
+    if (pos < buf.Size()) {
+        char c = buf.Data()[pos];
+        if (c == '-') {
+            beforeChrist = true;
+            ++pos;
+        } else if (c == '+') {
+            ++pos;
+        }
+    }
+
+    if (!ParseNumber(pos, buf, year, 6) || pos == buf.Size() || buf.Data()[pos] != '-') {
+        return NUdf::TUnboxedValuePod();
+    }
+    i32 iyear = beforeChrist ? -year : year;
+
+    // skip '-'
+    ++pos;
+    if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    // skip '-'
+    ++pos;
+    if (!ParseNumber(pos, buf, day, 2) || pos != buf.Size()) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    i32 value;
+    if (Y_LIKELY(TDateTable::Instance().MakeDate32(iyear, month, day, value))) {
+        return NUdf::TUnboxedValuePod(value);
     }
 
     return NUdf::TUnboxedValuePod(value);
@@ -1705,8 +1789,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
     }
 
     case NUdf::EDataSlot::Date32:
-        //TODO
-        return {};
+        return ParseDate32(buf);
 
     case NUdf::EDataSlot::Datetime64:
         //TODO

@@ -4,6 +4,7 @@
 #include "executor_thread_ctx.h"
 #include "probes.h"
 #include "mailbox.h"
+#include <atomic>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
@@ -578,6 +579,14 @@ namespace NActors {
     }
 
     bool TSharedExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
+        i64 requestsForWakeUp = RequestsForWakeUp.fetch_sub(1, std::memory_order_acq_rel);
+        if (requestsForWakeUp) {
+            if (requestsForWakeUp > 1) {
+                requestsForWakeUp--;
+                RequestsForWakeUp.compare_exchange_weak(requestsForWakeUp, 0, std::memory_order_acq_rel);
+            }
+            return false;
+        }
         EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
         Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
         if (spinThresholdCycles > 0) {
@@ -594,6 +603,40 @@ namespace NActors {
                 case EThreadState::None:
                 case EThreadState::Work:
                     return false;
+                case EThreadState::Spin:
+                case EThreadState::Sleep:
+                    if (ReplaceState<EThreadState>(state, EThreadState::None)) {
+                        if (state == EThreadState::Sleep) {
+                            ui64 beforeUnpark = GetCycleCountFast();
+                            StartWakingTs = beforeUnpark;
+                            WaitingPad.Unpark();
+                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
+                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
+                            }
+                        }
+                        return true;
+                    }
+                    break;
+                default:
+                    Y_ABORT();
+            }
+        }
+        return false;
+    }
+
+    bool TSharedExecutorThreadCtx::WakeUp() {
+        i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
+        if (requestsForWakeUp >= 0) {
+            return false;
+        }
+
+        for (;;) {
+            EThreadState state = GetState<EThreadState>();
+            switch (state) {
+                case EThreadState::None:
+                case EThreadState::Work:
+                    // TODO(kruall): check race
+                    continue;
                 case EThreadState::Spin:
                 case EThreadState::Sleep:
                     if (ReplaceState<EThreadState>(state, EThreadState::None)) {

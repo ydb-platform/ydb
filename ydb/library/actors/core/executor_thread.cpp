@@ -10,6 +10,7 @@
 #include "executor_thread_ctx.h"
 #include "probes.h"
 
+#include <atomic>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -92,7 +93,7 @@ namespace NActors {
                 ui64 softProcessingDurationTs,
                 TDuration timePerMailbox,
                 ui32 eventsPerMailbox)
-        : TGenericExecutorThread(workerId, actorSystem, threadCtx->OwnerExecutorPool, poolCount, threadName, softProcessingDurationTs, timePerMailbox, eventsPerMailbox)
+        : TGenericExecutorThread(workerId, actorSystem, threadCtx->ExecutorPools[0].load(), poolCount, threadName, softProcessingDurationTs, timePerMailbox, eventsPerMailbox)
         , ThreadCtx(threadCtx)
     {}
 
@@ -502,10 +503,6 @@ namespace NActors {
         return nullptr;
     }
 
-    void TSharedExecutorThread::UpdatePools() {
-        NeedToReloadPools = EState::NeedToReloadPools;
-    }
-
     TGenericExecutorThread::TProcessingResult TSharedExecutorThread::ProcessSharedExecutorPool(TExecutorPoolBaseMailboxed *pool) {
         Ctx.Switch(
             pool,
@@ -515,7 +512,7 @@ namespace NActors {
             GetCycleCountFast() + SoftProcessingDurationTs,
             &SharedStats[pool->PoolId]);
         Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
-        Ctx.WorkerId = (pool == ThreadCtx->OwnerExecutorPool ? -1 : -2);
+        Ctx.WorkerId = (pool == ThreadCtx->ExecutorPools[0].load(std::memory_order_relaxed) ? -1 : -2);
         Y_ABORT_UNLESS(Ctx.Stats->ElapsedTicksByActivity.size());
         return ProcessExecutorPool(pool);
     }
@@ -536,33 +533,22 @@ namespace NActors {
             ::SetCurrentThreadName(ThreadName);
         }
 
-        if (!IsSharedThread) {
-            ProcessExecutorPool(ExecutorPool);
-            return nullptr;
-        }
-
-        TExecutorPoolBaseMailboxed *ownerPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OwnerExecutorPool);
-        TExecutorPoolBaseMailboxed *otherPool = nullptr;
-
-
-        std::vector<TExecutorPoolBaseMailboxed*> pools;
         do {
-            if (NeedToReloadPools.load() == EState::NeedToReloadPools) {
-                // otherPool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->OtherExecutorPool.load());
-                NeedToReloadPools = EState::Running;
-            }
             bool wasWorking = true;
-            while (wasWorking && NeedToReloadPools.load() == EState::Running && !StopFlag.load(std::memory_order_relaxed)) {
+            while (wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
                 wasWorking = false;
-                TProcessingResult result = ProcessSharedExecutorPool(ownerPool);
-                wasWorking |= result.WasWorking;
-                if (otherPool) {
-                    result = ProcessSharedExecutorPool(otherPool);
-                    wasWorking = result.WasWorking;
+
+                for (ui32 poolIdx = 0; poolIdx < MaxPoolsForSharedThreads; ++poolIdx) {
+                    TExecutorPoolBaseMailboxed *pool = dynamic_cast<TExecutorPoolBaseMailboxed*>(ThreadCtx->ExecutorPools[poolIdx].load(std::memory_order_acquire));
+                    if (!pool) {
+                        break;
+                    }
+                    TProcessingResult result = ProcessSharedExecutorPool(pool);
+                    wasWorking |= result.WasWorking;
                 }
             }
 
-            if (!wasWorking && NeedToReloadPools.load() == EState::Running && !StopFlag.load(std::memory_order_relaxed)) {
+            if (!wasWorking && !StopFlag.load(std::memory_order_relaxed)) {
                 TlsThreadContext->Timers.Reset();
                 ThreadCtx->Wait(0, &StopFlag);
             }

@@ -142,7 +142,7 @@ namespace NActors {
     };
 
 
-    constexpr ui32 MaxPoolsForSharedThreads = 4;
+    constexpr ui32 MaxPoolsForSharedThreads = 2;
 
     struct TSharedExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
@@ -172,8 +172,8 @@ namespace NActors {
             }
         };
 
-        TBasicExecutorPool *OwnerExecutorPool = nullptr;
         std::atomic<TBasicExecutorPool*> ExecutorPools[MaxPoolsForSharedThreads];
+        std::atomic<i64> RequestsForWakeUp = 0;
         ui32 NextPool = 0;
 
         void AfterWakeUp(TWaitState state) {
@@ -189,6 +189,12 @@ namespace NActors {
         }
 
         bool Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag); // in executor_pool_basic.cpp
+
+        bool WakeUp();
+
+        void Interrupt() {
+            WaitingPad.Interrupt();
+        }
 
         TSharedExecutorThreadCtx() = default;
     };

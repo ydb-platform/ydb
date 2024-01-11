@@ -1069,7 +1069,7 @@ NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
         return NUdf::TUnboxedValuePod(value);
     }
 
-    return NUdf::TUnboxedValuePod(value);
+    return NUdf::TUnboxedValuePod();
 }
 
 NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {

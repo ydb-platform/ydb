@@ -8,8 +8,10 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+//#include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -109,8 +111,22 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
-        DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output;
+        auto aggregate = node.Cast<TCoAggregateBase>();
+        auto input = aggregate.Input().Maybe<TDqConnection>();
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
+        //std::cout << "RewriteAggregate " << std::endl;
+        //std::cout << "input" << bool(input) << aggregate.Input().Ref().Content()<< std::endl;
+        //std::cout << "input" << bool(hopSetting) << std::endl;
+        if (input && hopSetting) {
+            output = RewriteAsHoppingWindow(node, ctx, input.Cast());
+        }        
+        else {
+            output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());
+        }
+        if (output) {
+            DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

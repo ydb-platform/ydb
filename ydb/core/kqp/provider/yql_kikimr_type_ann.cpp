@@ -415,6 +415,8 @@ private:
             defaultConstraintColumnsSet.emplace(keyColumnName);
         }
 
+        THashSet<TString> generateColumnsIfInsertColumnsSet;
+
         for(const auto& [name, info] : table->Metadata->Columns) {
             if (rowType->FindItem(name)) {
                 continue;
@@ -424,7 +426,15 @@ private:
                 continue;
             }
 
+            if (defaultConstraintColumnsSet.find(name) != defaultConstraintColumnsSet.end()) {
+                continue;
+            }
+
             if (info.IsDefaultKindDefined()) {
+                if (op == TYdbOperation::Upsert) {
+                    generateColumnsIfInsertColumnsSet.emplace(name);
+                }
+
                 defaultConstraintColumnsSet.emplace(name);
             }
         }
@@ -485,6 +495,11 @@ private:
                 defaultConstraintColumns.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
             }
 
+            TExprNode::TListType generateColumnsIfInsert;
+            for(auto& generatedColumn: generateColumnsIfInsertColumnsSet) {
+                generateColumnsIfInsert.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
+            }
+
             node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
                 .Add(node.Settings())
                 .Add()
@@ -497,6 +512,12 @@ private:
                     .Name().Build("default_constraint_columns")
                     .Value<TCoAtomList>()
                         .Add(defaultConstraintColumns)
+                        .Build()
+                    .Build()
+                .Add()
+                    .Name().Build("generate_columns_if_insert")
+                    .Value<TCoAtomList>()
+                        .Add(generateColumnsIfInsert)
                         .Build()
                     .Build()
                 .Done()

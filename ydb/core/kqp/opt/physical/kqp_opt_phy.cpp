@@ -68,6 +68,7 @@ public:
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TKqlInsertRows::Match, HNDL(BuildInsertStages));
         AddHandler(0, &TKqlUpdateRows::Match, HNDL(BuildUpdateStages));
+        AddHandler(0, &TKqlInsertOnConflictUpdateRows::Match, HNDL(RewriteGenerateIfInsert));
         AddHandler(0, &TKqlUpdateRowsIndex::Match, HNDL(BuildUpdateIndexStages));
         AddHandler(0, &TKqlUpsertRowsIndex::Match, HNDL(BuildUpsertIndexStages));
         AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages));
@@ -141,6 +142,12 @@ protected:
     TMaybeNode<TExprBase> RewriteReturningUpsert(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteReturningUpsert(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteReturningUpsert", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteGenerateIfInsert(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteGenerateIfInsert(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteGenerateIfInsert", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

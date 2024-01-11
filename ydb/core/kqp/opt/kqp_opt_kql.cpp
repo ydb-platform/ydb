@@ -283,7 +283,21 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     const TCoAtomList& autoincrement,
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
+    auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
+    YQL_ENSURE(generateColumnsIfInsertNode);
+    TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
+
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx);
+    if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
+        return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
+            .Table(BuildTableMeta(table, write.Pos(), ctx))
+            .Input(input.Ptr())
+            .Columns(columns.Ptr())
+            .ReturningColumns(write.ReturningColumns())
+            .GenerateColumnsIfInsert(generateColumnsIfInsert)
+            .Done();
+    }
+
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())

@@ -553,7 +553,12 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
         isStream = true;
     } else {
-        YQL_ENSURE(TKqlUpsertRows::Match(node.Get()) || TKqlUpsertRowsIndex::Match(node.Get()));
+
+        YQL_ENSURE(
+            TKqlUpsertRows::Match(node.Get()) ||
+            TKqlUpsertRowsIndex::Match(node.Get()) ||
+            TKqlInsertOnConflictUpdateRows::Match(node.Get())
+        );
 
         if (!EnsureListType(*input, ctx)) {
             return TStatus::Error;

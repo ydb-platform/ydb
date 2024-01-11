@@ -147,6 +147,40 @@ class TYsonStructLite
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <std::default_initializable TStruct>
+class TExternalizedYsonStruct
+    : public TYsonStructLite
+{
+public:
+    //! NB(arkady-e1ppa): Alias is used by registrar postprocessors
+    //! in order to properly infer template argument.
+    using TExternal = TStruct;
+
+    TStruct* That = nullptr;
+
+    //! NB(arkady-e1ppa): Due to still present bug in clang which makes it
+    //! incapable of processing constraints, which refer to class template
+    //! parameters, we cannot properly constraint TSerializer here and
+    //! fallback on static_assert inside of function body.
+
+    //! TODO(arkady-e1ppa): If this bug ever gets fixed,
+    //! replace class with std::derived_from<TExternalizedYsonStruct<TStruct>>
+    //! and remove exposition-only "requires" statements
+
+    template <class TSerializer>
+        // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
+    static TSerializer CreateWritable(TStruct& writable);
+
+    template <class TSerializer>
+        // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
+    static TSerializer CreateReadOnly(const TStruct& readOnly);
+
+protected:
+    static TStruct* GetDefault() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TYsonStructRegistry
 {
 public:
@@ -218,6 +252,30 @@ public:
     void Preprocessor(std::function<void(TStruct*)> preprocessor);
 
     void Postprocessor(std::function<void(TStruct*)> postprocessor);
+
+    //! NB(arkady-e1ppa): clang-14 doesn't treat constraint below as a SFINAE error
+    //! in case when TStruct doesn't have an alias for TExternal.
+    //! Thus this constraint is commented out for now and compensated for
+    //! with a static assert inside of the function body.
+    //! This issue is fixed since clang-16.
+
+    //! TODO(arkady-e1ppa): restore these constraints once clang-14 usage is completely abolished.
+    //! For Pre-/Post- processors write
+    //! template <CInvocable<void(typename TStruct::TExternal*)> TExternalPreprocessor>
+    //! (and TExternalPostprocessor in case of ExternalPostprocessor) and remove
+    //! these exposition-only "requires" statements
+
+    template <class TExternal, class TValue>
+        // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
+    TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
+
+    template <class TExternalPreprocessor>
+        // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+    void ExternalPreprocessor(TExternalPreprocessor preprocessor);
+
+    template <class TExternalPostprocessor>
+        // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+    void ExternalPostprocessor(TExternalPostprocessor postprocessor);
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
@@ -291,6 +349,9 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 
 //! Define Yson Struct auxiliary methods out of class.
 #define DEFINE_YSON_STRUCT(TStruct)
+
+//! Define non-ref-counted Yson external serializer methods and fields.
+#define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)
 
 ////////////////////////////////////////////////////////////////////////////////
 

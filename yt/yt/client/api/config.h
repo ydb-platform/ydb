@@ -16,7 +16,7 @@
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
-#include <yt/yt/core/misc/backoff_strategy_api.h>
+#include <yt/yt/core/misc/backoff_strategy.h>
 
 namespace NYT::NApi {
 
@@ -69,7 +69,7 @@ class TConnectionDynamicConfig
 public:
     NTabletClient::TTableMountCacheDynamicConfigPtr TableMountCache;
 
-    TSerializableExponentialBackoffOptionsPtr TabletWriteBackoff;
+    TExponentialBackoffOptions TabletWriteBackoff;
 
     REGISTER_YSON_STRUCT(TConnectionDynamicConfig);
 

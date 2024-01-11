@@ -37,13 +37,9 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
         .DefaultNew();
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
-        .DefaultNew();
-
-    registrar.Preprocessor([] (TThis* config) {
-        // TODO(gritukan): Enable tablet retries by default one day.
-        config->TabletWriteBackoff = New<TSerializableExponentialBackoffOptions>();
-        config->TabletWriteBackoff->InvocationCount = 1;
-    });
+        .Default({
+            .InvocationCount = 1
+        });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

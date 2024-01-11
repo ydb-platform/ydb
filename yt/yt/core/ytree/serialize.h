@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "serialization_traits.h"
 
 #include <yt/yt/core/yson/producer.h>
 
@@ -151,6 +152,10 @@ void Serialize(
 template <class T, class TTag>
 void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer);
 
+template <class T>
+    requires CSerializableByTraits<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -255,6 +260,14 @@ void Deserialize(
 
 template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node);
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, INodePtr node);
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

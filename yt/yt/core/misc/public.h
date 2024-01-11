@@ -180,4 +180,21 @@ concept CScalable = requires (TObject object, TScalar scalar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T, class Sig>
+struct TIsInvocable;
+
+template <class T, class TRet, bool NoExcept, class... TArgs>
+struct TIsInvocable<T, TRet(TArgs...) noexcept(NoExcept)>
+{
+    static constexpr bool Value =
+        NoExcept ?
+        std::is_nothrow_invocable_r_v<TRet, T, TArgs...> :
+        std::is_invocable_r_v<TRet, T, TArgs...>;
+};
+
+template <class T, class Sig>
+concept CInvocable = TIsInvocable<T, Sig>::Value;
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

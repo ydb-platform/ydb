@@ -462,6 +462,15 @@ void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consu
     Serialize(value.Underlying(), consumer);
 }
 
+template <class T>
+    requires CSerializableByTraits<T>
+void Serialize(const T& value, NYson::IYsonConsumer* consumer)
+{
+    using TSerializer = typename TSerializationTraits<T>::TSerializer;
+    auto serializer = TSerializer::template CreateReadOnly<TSerializer>(value);
+    Serialize(serializer, consumer);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -650,6 +659,22 @@ template <class T, class TTag>
 void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
+}
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, INodePtr node)
+{
+    using TSerializer = typename TSerializationTraits<T>::TSerializer;
+    auto serializer = TSerializer::template CreateWritable<TSerializer>(value);
+    Deserialize(serializer, node);
+}
+
+template <class T>
+    requires CSerializableByTraits<T>
+void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor)
+{
+    Deserialize(value, NYson::ExtractTo<NYTree::INodePtr>(cursor));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -346,8 +346,9 @@ public:
     TTraceContextFinishGuard(TTraceContextFinishGuard&&) = default;
 
     TTraceContextFinishGuard& operator=(const TTraceContextFinishGuard&) = delete;
-    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&) = default;
+    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&);
 
+    void Release();
 private:
     TTraceContextPtr TraceContext_;
 };

@@ -1,4 +1,6 @@
 items:
+- name: Обзор
+  href: index.md
 - name: Доклады с конференций
   href: conferences.md
 - name: Вебинары и открытые лекции 

@@ -102,11 +102,11 @@ TQueryInfo TStockWorkloadGenerator::FillStockData() const {
         INSERT INTO `stock`(product, quantity) SELECT product, quantity from AS_TABLE( $stocks );
     )";
 
-    char productName[8] = "";
     NYdb::TValueBuilder rows;
     rows.BeginList();
     for (size_t i = 0; i < Params.ProductCount; ++i) {
-        std::sprintf(productName, "p%.6zu", i);
+        char productName[8] = "";
+        std::snprintf(productName, sizeof(productName), "p%.6zu", i);
         rows.AddListItem()
                 .BeginStruct()
                 .AddMember("product").Utf8(productName)
@@ -238,10 +238,10 @@ unsigned int TStockWorkloadGenerator::GetProductCountInOrder() {
 }
 
 TStockWorkloadGenerator::TProductsQuantity TStockWorkloadGenerator::GenerateOrder(unsigned int productCountInOrder, int quantity) {
-    char productName[8] = "";
     TProductsQuantity products;
     for (unsigned i = 0; i < productCountInOrder; ++i) {
-        std::sprintf(productName, "p%.6i", ProductIdGenerator(Gen));
+        char productName[8] = "";
+        std::snprintf(productName, sizeof(productName), "p%.6i", ProductIdGenerator(Gen));
         products.emplace(productName, quantity);
     }
     return products;
@@ -277,7 +277,7 @@ TQueryInfoList TStockWorkloadGenerator::SubmitSameOrder() {
     char productName[8] = "";
     TProductsQuantity products;
     for (unsigned i = 0; i < Params.ProductCount; ++i) {
-        std::sprintf(productName, "p%.6i", i);
+        std::snprintf(productName, sizeof(productName), "p%.6i", i);
         products.emplace(productName, 1);
     }
     res.push_back(InsertOrder(orderID, customer, products));

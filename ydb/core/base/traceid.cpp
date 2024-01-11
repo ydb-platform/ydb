@@ -28,7 +28,7 @@ TString TTraceID::ToString() const {
 
 void TTraceID::Out(IOutputStream &o) const {
     char buf[240];
-    sprintf(buf, "[ID:%" PRIu64 ", Created: %s]", RandomID, TInstant::MicroSeconds(CreationTime).ToRfc822StringLocal().data());
+    snprintf(buf, sizeof(buf), "[ID:%" PRIu64 ", Created: %s]", RandomID, TInstant::MicroSeconds(CreationTime).ToRfc822StringLocal().data());
     o << buf;
 }
 

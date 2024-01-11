@@ -2724,7 +2724,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
                         YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
                     } else {
                         char buffer[1 + 10 + 1];
-                        sprintf(buffer, "$%" PRIu32, ++uniqueNum);
+                        snprintf(buffer, sizeof(buffer), "$%" PRIu32, ++uniqueNum);
                         YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
                     }
                     frame.TopoSortedNodes.emplace_back(node.second);

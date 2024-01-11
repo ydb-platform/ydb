@@ -41,14 +41,7 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
 inline TString DatabaseTypeLowercase(EDatabaseType databaseType) {
     auto dump = ToString(databaseType);
     dump.to_lower();
-
-    switch (databaseType) {
-        case EDatabaseType::ClickHouse:
-        case EDatabaseType::PostgreSQL:
-            return dump;
-        default:
-            ythrow yexception() << "Unsupported database type: " << ToString(databaseType);
-    }
+    return dump;
 }
 
 // TODO: remove this function after /kikimr/yq/tests/control_plane_storage is moved to /ydb.

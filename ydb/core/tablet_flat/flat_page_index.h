@@ -221,6 +221,7 @@ namespace NPage {
                     if (!it && LastKey && cmp(*LastKey, key)) {
                         return it;
                     }
+                    break;
                 case ESeek::Lower:
                     // N.B. we know that key < it->Key
                     it = std::upper_bound(Page.Begin(), Page.End(), key, cmp);

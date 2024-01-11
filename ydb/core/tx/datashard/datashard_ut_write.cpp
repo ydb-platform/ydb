@@ -35,10 +35,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto opts = TShardedTableOptions();
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        auto upsertObserver = EvWrite ? ReplaceEvProposeTransactionWithEvWrite(runtime) : TTestActorRuntimeBase::TEventObserverHolder();
-        auto upsertResultObserver = EvWrite ? ReplaceEvProposeTransactionResultWithEvWrite(runtime) : TTestActorRuntimeBase::TEventObserverHolder();
-
-        // Write(runtime, sender, shards[0], tableId, opts.Columns_, 3, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        EvWriteRows rows = EvWrite ? EvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : EvWriteRows{};
+        auto upsertObserver = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+        auto upsertResultObserver = ReplaceEvProposeTransactionResultWithEvWrite(runtime, rows);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));

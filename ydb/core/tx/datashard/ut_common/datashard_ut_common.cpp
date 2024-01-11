@@ -1878,8 +1878,13 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
     return Write(runtime, sender, shardId, std::move(request), expectedStatus, std::move(traceId));
 }
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime) {
-    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([](TAutoPtr<IEventHandle>& event) {
+
+
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows) {
+    if (rows.empty())
+        return {};
+
+    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != TEvDataShard::EvProposeTransaction)
             return;
 
@@ -1888,42 +1893,49 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
         if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_DATA)
             return;
 
-        Cerr << "TEvProposeTransaction TX_KIND_DATA event is observed and will be replaced with EvWrite: " << record.ShortDebugString() << Endl;
-
         // Parse original TEvProposeTransaction
         const TString& txBody = record.GetTxBody();
         NKikimrTxDataShard::TDataTransaction tx;
         Y_VERIFY(tx.ParseFromArray(txBody.data(), txBody.size()));
-        const auto& tasks = tx.GetKqpTransaction().GetTasks();
-        Y_VERIFY_S(tasks.size() == 1, "Only 1 task is supported");
-        const auto& task = tasks[0];
-        NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
-        Y_VERIFY(task.GetMeta().UnpackTo(&meta));
-        const auto& tableMeta = meta.GetTable();
-        ui64 tableId = tableMeta.GetTableId().GetTableId();
-        const auto& writes = meta.GetWrites();
-        ui16 colCount = writes.GetColumns().size();
 
         // Construct new EvWrite
-        ui64 txId = record.GetTxId();
-        auto txMode = NKikimr::NDataShard::EvWrite::Convertor::GetTxMode(record.GetFlags());
-        ui32 rowCount = 1;
-        std::vector<ui32> columnIds(colCount);
-        std::iota(columnIds.begin(), columnIds.end(), 1);
-
-        TVector<TString> stringValues;
         TVector<TCell> cells;
-        for (ui32 row = 0; row < rowCount; ++row) {
-            for (ui32 col = 0; col < colCount; ++col) {
-                ui32 value32 = 1;
-                cells.emplace_back(TCell((const char*)&value32, sizeof(ui32)));
-            }
+        ui64 tableId = 0;
+        ui16 colCount = 0;
+        for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
+            NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
+            Y_VERIFY(task.GetMeta().UnpackTo(&meta));
+            if (!meta.HasWrites())
+                continue;
+
+            const auto& tableMeta = meta.GetTable();
+            Y_VERIFY_S(tableId == 0 || tableId == tableMeta.GetTableId().GetTableId(), "Only writes to one table is supported now");
+            tableId = tableMeta.GetTableId().GetTableId();
+            const auto& writes = meta.GetWrites();
+            Y_VERIFY_S(colCount == 0 || colCount == writes.GetColumns().size(), "Only equal column count is supported now.");
+            colCount = writes.GetColumns().size();
+
+            const auto& row = rows.ProcessNextRow();
+            Y_VERIFY(row.Cells.size() == colCount);
+            std::copy(row.Cells.begin(), row.Cells.end(), std::back_inserter(cells));
+        }
+        
+        if (cells.empty()) {
+            Cerr << "TEvProposeTransaction TX_KIND_DATA has no writes.\n";
+            return;
         }
 
-        TSerializedCellMatrix matrix(cells, rowCount, colCount);
+        Cerr << "TEvProposeTransaction TX_KIND_DATA event is observed and will be replaced with EvWrite: " << record.ShortDebugString() << Endl;
+
+        TSerializedCellMatrix matrix(cells, cells.size() / colCount, colCount);
         TString blobData = matrix.ReleaseBuffer();
 
         UNIT_ASSERT(blobData.size() < 8_MB);
+
+        ui64 txId = record.GetTxId();
+        auto txMode = NKikimr::NDataShard::EvWrite::Convertor::GetTxMode(record.GetFlags());
+        std::vector<ui32> columnIds(colCount);
+        std::iota(columnIds.begin(), columnIds.end(), 1);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
@@ -1936,10 +1948,15 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
     }));
 }
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime) {
-    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([](TAutoPtr<IEventHandle>& event) {
+TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, EvWriteRows& rows) {
+    if (rows.empty())
+        return {};
+
+    return TTestActorRuntimeBase::TEventObserverHolder(runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
+
+        rows.CompleteNextRow();
 
         const auto& record = event->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
         Cerr << "EvWriteResult event is observed and will be replaced with EvProposeTransactionResult: " << record.ShortDebugString() << Endl;

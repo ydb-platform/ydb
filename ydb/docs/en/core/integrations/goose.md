@@ -61,12 +61,12 @@ The migration file can be generated using the `goose create` command:
 
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00001_create_first_table sql
-2023/12/15 05:22:48 Created new file: 20231215052248_00001_create_table_users.sql
+2024/01/12 11:52:29 Created new file: 20240112115229_00001_create_first_table.sql
 ```
 
 This means that the tool has created a new migration file `<timestamp>_00001_create_table_users.sql`:
 ```
-$ ls .
+$ ls
 20231215052248_00001_create_table_users.sql
 ```
 
@@ -108,7 +108,7 @@ Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that
 CREATE TABLE users (
      id Uint64,
      username Text,
-     created_at TzDatetime,
+     created_at Timestamp,
      PRIMARY KEY (id)
 );
 -- +goose StatementEnd
@@ -123,10 +123,9 @@ We can check status of migrations:
 
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
-2023/12/15 06:01:31     Applied At                  Migration
-2023/12/15 06:01:31     =======================================
-2023/12/15 06:01:31     Pending                  -- 20231215052248_00001_create_table_users.sql
-2023/12/15 06:01:31     Pending                  -- 20231215052248_00002_add_column_password_hash_into_table_users.sql
+2024/01/12 11:53:50     Applied At                  Migration
+2024/01/12 11:53:50     =======================================
+2024/01/12 11:53:50     Pending                  -- 20240112115229_00001_create_first_table.sql
 ```
 
 Status `Pending` of migration means that migration not applied and you can apply it through commands `goose up` or `goose up-by-one`.
@@ -134,28 +133,67 @@ Status `Pending` of migration means that migration not applied and you can apply
 Let's apply migration using `goose up`:
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up
-2023/12/15 05:59:55 OK   20231215052248_00001_create_table_users.sql (68.32ms)
+2024/01/12 11:55:18 OK   20240112115229_00001_create_first_table.sql (93.58ms)
+2024/01/12 11:55:18 goose: successfully migrated database to version: 20240112115229
 ```
 
 Let's check the status of migration through `goose status`:
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
-2023/12/15 06:01:31     Applied At                  Migration
-2023/12/15 06:01:31     =======================================
-2023/12/15 06:01:31     Fri Dec 15 06:00:38 2023 -- 20231215052248_00001_create_table_users.sql
+2024/01/12 11:56:00     Applied At                  Migration
+2024/01/12 11:56:00     =======================================
+2024/01/12 11:56:00     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
 ```
 
-Status `Pending` changed to timestamp `Fri Dec 15 06:00:38 2023` - this means that migration applied.
+Status `Pending` changed to timestamp `Fri Jan 12 11:55:18 2024` - this means that migration applied.
 
-Also we can see a changes using YDB UI on http://localhost:8765:
+Also we can see a changes through another options:
 
-PLACE_FOR_SCREENSHOT
+{% list tabs %}
+
+- Using YDB UI on http://localhost:8765
+
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+
+- Using YDB CLI
+
+  ```
+  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  <table> users
+
+  Columns:
+  ┌────────────┬────────────┬────────┬─────┐
+  │ Name       │ Type       │ Family │ Key │
+  ├────────────┼────────────┼────────┼─────┤
+  │ id         │ Uint64?    │        │ K0  │
+  │ username   │ Utf8?      │        │     │
+  │ created_at │ Timestamp? │        │     │
+  └────────────┴────────────┴────────┴─────┘
+
+  Storage settings:
+  Store large values in "external blobs": false
+
+  Column families:
+  ┌─────────┬──────┬─────────────┬────────────────┐
+  │ Name    │ Data │ Compression │ Keep in memory │
+  ├─────────┼──────┼─────────────┼────────────────┤
+  │ default │      │ None        │                │
+  └─────────┴──────┴─────────────┴────────────────┘
+
+  Auto partitioning settings:
+  Partitioning by size: true
+  Partitioning by load: false
+  Preferred partition size (Mb): 2048
+  Min partitions count: 1
+  ```
+
+{% endlist %}
 
 Let's make the second migration with adding column `password_hash` to table `users`:
 
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00002_add_column_password_hash_into_table_users sql
-2023/12/15 06:01:31 Created new file: 20231215052248_00002_add_column_password_hash_into_table_users.sql
+2024/01/12 12:00:57 Created new file: 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
 Let's edit the migration file `<timestamp>_00002_add_column_password_hash_into_table_users.sql`:
@@ -172,26 +210,87 @@ ALTER TABLE users DROP COLUMN password_hash;
 -- +goose StatementEnd
 ```
 
+We can check status of migrations:
+
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2024/01/12 12:02:40     Applied At                  Migration
+2024/01/12 12:02:40     =======================================
+2024/01/12 12:02:40     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
+2024/01/12 12:02:40     Pending                  -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
+```
+
+We see first migration in applied status and second in pending status.
+
+Let's apply migration using `goose up-by-one`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one
+2024/01/12 12:04:56 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (59.93ms)
+```
+
+Let's check the status of migration through `goose status`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2024/01/12 12:05:17     Applied At                  Migration
+2024/01/12 12:05:17     =======================================
+2024/01/12 12:05:17     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
+2024/01/12 12:05:17     Fri Jan 12 12:04:56 2024 -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
+```
+
+Both migration applied.
+
+Also we can see a changes through another options:
+
+{% list tabs %}
+
+- Using YDB UI on http://localhost:8765
+
+  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
+
+- Using YDB CLI
+
+  ```
+  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  <table> users
+
+  Columns:
+  ┌───────────────┬────────────┬────────┬─────┐
+  │ Name          │ Type       │ Family │ Key │
+  ├───────────────┼────────────┼────────┼─────┤
+  │ id            │ Uint64?    │        │ K0  │
+  │ username      │ Utf8?      │        │     │
+  │ created_at    │ Timestamp? │        │     │
+  │ password_hash │ Utf8?      │        │     │
+  └───────────────┴────────────┴────────┴─────┘
+
+  Storage settings:
+  Store large values in "external blobs": false
+
+  Column families:
+  ┌─────────┬──────┬─────────────┬────────────────┐
+  │ Name    │ Data │ Compression │ Keep in memory │
+  ├─────────┼──────┼─────────────┼────────────────┤
+  │ default │      │ None        │                │
+  └─────────┴──────┴─────────────┴────────────────┘
+
+  Auto partitioning settings:
+  Partitioning by size: true
+  Partitioning by load: false
+  Preferred partition size (Mb): 2048
+  Min partitions count: 1
+  ```
+
+{% endlist %}
+
 All subsequent migration files should be created in the same way.
 
-## Managing migrations
+## Short list of "goose" commands
 
 The `goose` utility allows you to manage migrations via the command line:
+- `goose status` - view the status of applying migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status`.
 - `goose up` - apply all known migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up`.
-- `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`. 
-  > Be careful: the `goose reset` command will revert all your migrations using your statements in blocks `+goose Down`. This also means that all your data in the database will be erased.
 - `goose up-by-one` - apply exactly one “next” migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one`.
 - `goose redo` - re-apply the latest migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
 - `goose down` - rollback the last migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
-- `goose status` - view the status of applying migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status`.
-  Output of command `goose status` may be next:
-  ```
-  $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
-  2023/12/15 06:01:31     Applied At                  Migration
-  2023/12/15 06:01:31     =======================================
-  2023/12/15 06:01:31     Fri Dec 15 06:00:38 2023 -- 20231215052248_00001_create_table_users.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215052248_00002_add_column_password_hash_into_table_users.sql
-  ```
-  Column `Applied At` informs about status each migration. 
-  If column `Applied At` contains valid timestamp - migration applied. 
-  If column `Applied At` have `Pending` - this means that migration not applied and you can apply it through commands `goose up` or `goose up-by-one`.
+- `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`. 
+  > Be careful: the `goose reset` command will revert all your migrations using your statements in blocks `+goose Down`. This also means that all your data in the database will be erased.

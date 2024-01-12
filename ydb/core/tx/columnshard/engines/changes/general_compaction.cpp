@@ -18,6 +18,7 @@ namespace NKikimr::NOlap::NCompaction {
 
 void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TConstructionContext& context) noexcept {
     std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
+    Blobs.clear();
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     {
@@ -44,6 +45,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
 
 void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context) noexcept {
     std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
+    Blobs.clear();
     static const TString portionIdFieldName = "$$__portion_id";
     static const TString portionRecordIndexFieldName = "$$__portion_record_idx";
     static const std::shared_ptr<arrow::Field> portionIdField = std::make_shared<arrow::Field>(portionIdFieldName, std::make_shared<arrow::UInt16Type>());
@@ -102,7 +104,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             auto dataSchema = context.SchemaVersions.GetSchema(p.GetPortionInfo().GetMinSnapshot());
             auto loader = dataSchema->GetColumnLoaderOptional(columnId);
             std::vector<const TColumnRecord*> records;
-            std::vector<IPortionColumnChunk::TPtr> chunks;
+            std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
             if (!p.ExtractColumnChunks(columnId, records, chunks)) {
                 AFL_VERIFY(!loader);
                 records = {nullptr};
@@ -177,10 +179,11 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, stats));
 
         for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
-            std::map<ui32, std::vector<IPortionColumnChunk::TPtr>> portionColumns;
+            std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
+            resultSchema->GetIndexInfo().BuildIndexes(portionColumns);
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
         }
         TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());
@@ -189,19 +192,18 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slice(std::move(i));
-            auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-            std::vector<std::vector<IPortionColumnChunk::TPtr>> chunksByBlobs = slice.GroupChunksByBlobs();
+            auto b = batchResult->Slice(recordIdx, slice.GetRecordsCountVerified());
+            std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunksByBlobs = slice.GroupChunksByBlobs();
             AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), SaverContext.GetStorageOperator()));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
-            recordIdx += slice.GetRecordsCount();
+            recordIdx += slice.GetRecordsCountVerified();
         }
     }
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    Blobs.clear();
     i64 portionsSize = 0;
     i64 portionsCount = 0;
     i64 insertedPortionsSize = 0;

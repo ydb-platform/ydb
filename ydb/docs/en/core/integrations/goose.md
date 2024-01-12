@@ -294,7 +294,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)
 ```
 
-Let's check the status of migration through `goose status`:
+Let's check the migration statuses through `goose status`:
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
 2024/01/12 13:07:36     Applied At                  Migration

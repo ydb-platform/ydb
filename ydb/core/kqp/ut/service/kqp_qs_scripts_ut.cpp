@@ -690,14 +690,14 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        
+
         UNIT_ASSERT(results.GetResultSet().Truncated());
     }
 
     Y_UNIT_TEST(TestFetchMoreThanLimit) {
         constexpr size_t NUMER_BATCHES = 5;
         constexpr size_t ROWS_LIMIT = 20;
-        
+
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
 
@@ -717,6 +717,31 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             UNIT_ASSERT(resultSet.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), i);
         }
+    }
+
+    Y_UNIT_TEST(Tcl) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto op = db.ExecuteScript(R"(
+            SELECT 1;
+            COMMIT;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::SUCCESS, op.Status().GetIssues().ToString());
+
+        auto readyOp = WaitScriptExecutionOperation(op.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::GENERIC_ERROR, readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(readyOp.Status().GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+
+        op = db.ExecuteScript(R"(
+            SELECT 1;
+            ROLLBACK;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::SUCCESS, op.Status().GetIssues().ToString());
+
+        readyOp = WaitScriptExecutionOperation(op.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::GENERIC_ERROR, readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(readyOp.Status().GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
     }
 }
 

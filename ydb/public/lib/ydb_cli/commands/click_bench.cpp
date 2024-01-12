@@ -470,7 +470,7 @@ int TClickBenchCommandClean::Run(TConfig& config) {
     static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
     char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
     TString fullPath = FullTablePath(config.Database, Table);
-    int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
+    int res = std::snprintf(dropDdl, sizeof(dropDdl), DropDdlTmpl, fullPath.c_str());
     if (res < 0) {
         Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
         return -1;

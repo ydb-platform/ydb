@@ -291,7 +291,7 @@ int TTpchCommandClean::Run(TConfig& config) {
     char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
     for (auto& table : Tables) {
         TString fullPath = FullTablePath(config.Database, table);
-        int res = std::sprintf(dropDdl, DropDdlTmpl, fullPath.c_str());
+        int res = std::snprintf(dropDdl, sizeof(dropDdl), DropDdlTmpl, fullPath.c_str());
         if (res < 0) {
             Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
             return -1;

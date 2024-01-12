@@ -17,8 +17,7 @@ namespace NWilson {
 
         template<class T>
         TSpan* Push(ui8 verbosity, T&& name, TFlags flags = EFlags::NONE) {
-            auto span = CreateChild(verbosity, std::forward<T>(name), flags);
-            if (span) {
+            if (auto span = CreateChild(verbosity, std::forward<T>(name), flags)) {
                 Stack.push(std::move(span));
                 return &Stack.top();
             }

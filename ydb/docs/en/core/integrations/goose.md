@@ -212,7 +212,7 @@ ALTER TABLE users DROP COLUMN password_hash;
 -- +goose StatementEnd
 ```
 
-We can check status of migrations:
+We can check the migration statuses again:
 
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status

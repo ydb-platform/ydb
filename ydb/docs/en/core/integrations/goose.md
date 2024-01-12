@@ -288,7 +288,7 @@ All subsequent migration files should be created in the same way.
 
 ### Downgrading migrations
 
-Let's downgrade latest migration using `goose down`:
+Let's downgrade (revert) the latest migration using `goose down`:
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down
 2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)

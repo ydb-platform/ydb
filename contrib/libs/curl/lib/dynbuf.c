@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2020 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -76,6 +76,8 @@ static CURLcode dyn_nappend(struct dynbuf *s,
   DEBUGASSERT(s->toobig);
   DEBUGASSERT(indx < s->toobig);
   DEBUGASSERT(!s->leng || s->bufr);
+  DEBUGASSERT(a <= s->toobig);
+  DEBUGASSERT(!len || mem);
 
   if(fit > s->toobig) {
     Curl_dyn_free(s);
@@ -84,7 +86,9 @@ static CURLcode dyn_nappend(struct dynbuf *s,
   else if(!a) {
     DEBUGASSERT(!indx);
     /* first invoke */
-    if(fit < MIN_FIRST_ALLOC)
+    if(MIN_FIRST_ALLOC > s->toobig)
+      a = s->toobig;
+    else if(fit < MIN_FIRST_ALLOC)
       a = MIN_FIRST_ALLOC;
     else
       a = fit;
@@ -92,6 +96,9 @@ static CURLcode dyn_nappend(struct dynbuf *s,
   else {
     while(a < fit)
       a *= 2;
+    if(a > s->toobig)
+      /* no point in allocating a larger buffer than this is allowed to use */
+      a = s->toobig;
   }
 
   if(a != s->allc) {
@@ -99,8 +106,7 @@ static CURLcode dyn_nappend(struct dynbuf *s,
        include that as well when it uses this code */
     void *p = realloc(s->bufr, a);
     if(!p) {
-      Curl_safefree(s->bufr);
-      s->leng = s->allc = 0;
+      Curl_dyn_free(s);
       return CURLE_OUT_OF_MEMORY;
     }
     s->bufr = p;
@@ -169,10 +175,12 @@ CURLcode Curl_dyn_addn(struct dynbuf *s, const void *mem, size_t len)
  */
 CURLcode Curl_dyn_add(struct dynbuf *s, const char *str)
 {
-  size_t n = strlen(str);
+  size_t n;
+  DEBUGASSERT(str);
   DEBUGASSERT(s);
   DEBUGASSERT(s->init == DYNINIT);
   DEBUGASSERT(!s->leng || s->bufr);
+  n = strlen(str);
   return dyn_nappend(s, (unsigned char *)str, n);
 }
 
@@ -186,6 +194,7 @@ CURLcode Curl_dyn_vaddf(struct dynbuf *s, const char *fmt, va_list ap)
   DEBUGASSERT(s);
   DEBUGASSERT(s->init == DYNINIT);
   DEBUGASSERT(!s->leng || s->bufr);
+  DEBUGASSERT(fmt);
   rc = Curl_dyn_vprintf(s, fmt, ap);
 
   if(!rc)

@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -42,7 +42,7 @@
 #endif
 
 #ifndef STDERR_FILENO
-#  define STDERR_FILENO  fileno(stderr)
+#  define STDERR_FILENO  fileno(tool_stderr)
 #endif
 
 #endif /* HEADER_CURL_TOOL_MAIN_H */

@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -93,8 +93,8 @@ struct Curl_chunker {
 
 /* The following functions are defined in http_chunks.c */
 void Curl_httpchunk_init(struct Curl_easy *data);
-CHUNKcode Curl_httpchunk_read(struct Curl_easy *data, char *datap,
-                              ssize_t length, ssize_t *wrote,
+CHUNKcode Curl_httpchunk_read(struct Curl_easy *data, char *buf,
+                              size_t blen, size_t *pconsumed,
                               CURLcode *passthru);
 
 #endif /* HEADER_CURL_HTTP_CHUNKS_H */

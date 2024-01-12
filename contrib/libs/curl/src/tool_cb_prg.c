@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -37,6 +37,8 @@
 #include "tool_operate.h"
 
 #include "memdebug.h" /* keep this as LAST include */
+
+#define MAX_BARLENGTH 256
 
 #ifdef HAVE_TERMIOS_H
 #  include <termios.h>
@@ -78,11 +80,16 @@ static const unsigned int sinus[] = {
 
 static void fly(struct ProgressData *bar, bool moved)
 {
-  char buf[256];
+  char buf[MAX_BARLENGTH + 2];
   int pos;
   int check = bar->width - 2;
 
-  msnprintf(buf, sizeof(buf), "%*s\r", bar->width-1, " ");
+  /* bar->width is range checked when assigned */
+  DEBUGASSERT(bar->width <= MAX_BARLENGTH);
+  memset(buf, ' ', bar->width);
+  buf[bar->width] = '\r';
+  buf[bar->width + 1] = '\0';
+
   memcpy(&buf[bar->bar], "-=O=-", 5);
 
   pos = sinus[bar->tick%200] / (1000000 / check);
@@ -114,10 +121,8 @@ static void fly(struct ProgressData *bar, bool moved)
 ** callback for CURLOPT_XFERINFOFUNCTION
 */
 
-#define MAX_BARLENGTH 256
-
-#if (SIZEOF_CURL_OFF_T == 4)
-#  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFF)
+#if (SIZEOF_CURL_OFF_T < 8)
+#error "too small curl_off_t"
 #else
    /* assume SIZEOF_CURL_OFF_T == 8 */
 #  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFFFFFFFFFF)
@@ -249,7 +254,7 @@ void progressbarinit(struct ProgressData *bar,
     struct winsize ts;
     if(!ioctl(STDIN_FILENO, TIOCGWINSZ, &ts))
       cols = ts.ws_col;
-#elif defined(WIN32)
+#elif defined(_WIN32)
     {
       HANDLE  stderr_hnd = GetStdHandle(STD_ERROR_HANDLE);
       CONSOLE_SCREEN_BUFFER_INFO console_info;
@@ -274,7 +279,7 @@ void progressbarinit(struct ProgressData *bar,
   else if(bar->width > MAX_BARLENGTH)
     bar->width = MAX_BARLENGTH;
 
-  bar->out = config->global->errors;
+  bar->out = tool_stderr;
   bar->tick = 150;
   bar->barmove = 1;
 }

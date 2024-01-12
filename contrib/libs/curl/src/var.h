@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_NSSG_H
-#define HEADER_CURL_NSSG_H
+#ifndef HEADER_CURL_VAR_H
+#define HEADER_CURL_VAR_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -23,19 +23,25 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "curl_setup.h"
 
-#ifdef USE_NSS
-/*
- * This header should only be needed to get included by vtls.c and nss.c
- */
+#include "tool_getparam.h"
+#include "dynbuf.h"
 
-#include "urldata.h"
+struct var {
+  struct var *next;
+  const char *name;
+  const char *content;
+  size_t clen; /* content length */
+};
 
-/* initialize NSS library if not already */
-CURLcode Curl_nss_force_init(struct Curl_easy *data);
+struct GlobalConfig;
 
-extern const struct Curl_ssl Curl_ssl_nss;
+ParameterError setvariable(struct GlobalConfig *global, const char *input);
+ParameterError varexpand(struct GlobalConfig *global,
+                         const char *line, struct curlx_dynbuf *out,
+                         bool *replaced);
 
-#endif /* USE_NSS */
-#endif /* HEADER_CURL_NSSG_H */
+/* free everything */
+void varcleanup(struct GlobalConfig *global);
+
+#endif /* HEADER_CURL_VAR_H */

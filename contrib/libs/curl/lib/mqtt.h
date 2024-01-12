@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2019 - 2022, Björn Stenberg, <bjorn@haxx.se>
+ * Copyright (C) Björn Stenberg, <bjorn@haxx.se>
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -56,6 +56,7 @@ struct MQTT {
   size_t npacket; /* byte counter */
   unsigned char firstbyte;
   size_t remaining_length;
+  struct dynbuf recvbuf;
 };
 
 #endif /* HEADER_CURL_MQTT_H */

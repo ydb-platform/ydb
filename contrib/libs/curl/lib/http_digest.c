@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -24,7 +24,7 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_CRYPTO_AUTH)
+#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_DIGEST_AUTH)
 
 #include "urldata.h"
 #include "strcase.h"
@@ -81,7 +81,7 @@ CURLcode Curl_output_digest(struct Curl_easy *data,
   bool have_chlg;
 
   /* Point to the address of the pointer that holds the string to send to the
-     server, which is for a plain host or for a HTTP proxy */
+     server, which is for a plain host or for an HTTP proxy */
   char **allocuserpwd;
 
   /* Point to the name and password for this */

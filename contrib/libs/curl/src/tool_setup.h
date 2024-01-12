@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -37,6 +37,8 @@
 
 #include "curl_setup.h" /* from the lib directory */
 
+extern FILE *tool_stderr;
+
 /*
  * curl tool certainly uses libcurl's external interface.
  */
@@ -47,7 +49,7 @@
  * Platform specific stuff.
  */
 
-#if defined(macintosh) && defined(__MRC__)
+#ifdef macintosh
 #  define main(x,y) curl_main(x,y)
 #endif
 
@@ -62,6 +64,14 @@
 
 #ifndef HAVE_STRDUP
 #  include "tool_strdup.h"
+#endif
+
+#if defined(_WIN32)
+/* set in win32_init() */
+extern LARGE_INTEGER tool_freq;
+extern bool tool_isVistaOrGreater;
+/* set in init_terminal() */
+extern bool tool_term_has_bold;
 #endif
 
 #endif /* HEADER_CURL_TOOL_SETUP_H */

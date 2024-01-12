@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -39,15 +39,23 @@ CURLcode Curl_rtsp_parseheader(struct Curl_easy *data, char *header);
 
 #endif /* CURL_DISABLE_RTSP */
 
+typedef enum {
+  RTP_PARSE_SKIP,
+  RTP_PARSE_CHANNEL,
+  RTP_PARSE_LEN,
+  RTP_PARSE_DATA
+} rtp_parse_st;
 /*
  * RTSP Connection data
  *
  * Currently, only used for tracking incomplete RTP data reads
  */
 struct rtsp_conn {
-  char *rtp_buf;
-  ssize_t rtp_bufsize;
+  struct dynbuf buf;
   int rtp_channel;
+  size_t rtp_len;
+  rtp_parse_st state;
+  BIT(in_header);
 };
 
 /****************************************************************************
@@ -62,7 +70,7 @@ struct RTSP {
    * HTTP functions can safely treat this as an HTTP struct, but RTSP aware
    * functions can also index into the later elements.
    */
-  struct HTTP http_wrapper; /*wrap HTTP to do the heavy lifting */
+  struct HTTP http_wrapper; /* wrap HTTP to do the heavy lifting */
 
   long CSeq_sent; /* CSeq of this request */
   long CSeq_recv; /* CSeq received */

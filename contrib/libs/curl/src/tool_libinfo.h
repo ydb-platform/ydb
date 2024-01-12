@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -29,8 +29,11 @@
 
 
 extern curl_version_info_data *curlinfo;
+
 extern const char * const *built_in_protos;
 extern size_t proto_count;
+
+extern const char * const *feature_names;
 
 extern const char *proto_file;
 extern const char *proto_ftp;
@@ -41,6 +44,22 @@ extern const char *proto_rtsp;
 extern const char *proto_scp;
 extern const char *proto_sftp;
 extern const char *proto_tftp;
+extern const char *proto_ipfs;
+extern const char *proto_ipns;
+
+extern bool feature_altsvc;
+extern bool feature_brotli;
+extern bool feature_hsts;
+extern bool feature_http2;
+extern bool feature_http3;
+extern bool feature_httpsproxy;
+extern bool feature_libz;
+extern bool feature_ntlm;
+extern bool feature_ntlm_wb;
+extern bool feature_spnego;
+extern bool feature_ssl;
+extern bool feature_tls_srp;
+extern bool feature_zstd;
 
 CURLcode get_libcurl_info(void);
 const char *proto_token(const char *proto);

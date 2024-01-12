@@ -1,3 +1,5 @@
+#ifndef HEADER_CURL_TOOL_IPFS_H
+#define HEADER_CURL_TOOL_IPFS_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -5,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -23,25 +25,9 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#if defined(NETWARE)
+#define MAX_GATEWAY_URL_LEN 10000
 
-#ifdef NETWARE
-#  ifdef __NOVELL_LIBC__
-#    include <screen.h>
-#  else
-#    error #include <nwconio.h>
-#  endif
-#endif
+CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
+                          struct OperationConfig *config);
 
-#include "tool_panykey.h"
-
-#include "memdebug.h" /* keep this as LAST include */
-
-void tool_pressanykey(void)
-{
-#if defined(NETWARE)
-  pressanykey();
-#endif
-}
-
-#endif /* NETWARE */
+#endif /* HEADER_CURL_TOOL_IPFS_H */

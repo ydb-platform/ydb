@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_TOOL_PANYKEY_H
-#define HEADER_CURL_TOOL_PANYKEY_H
+#ifndef HEADER_CURL_IDN_H
+#define HEADER_CURL_IDN_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -23,12 +23,22 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "tool_setup.h"
 
-#if defined(NETWARE)
-void tool_pressanykey(void);
+bool Curl_is_ASCII_name(const char *hostname);
+CURLcode Curl_idnconvert_hostname(struct hostname *host);
+#if defined(USE_LIBIDN2) || defined(USE_WIN32_IDN)
+#define USE_IDN
+void Curl_free_idnconverted_hostname(struct hostname *host);
+CURLcode Curl_idn_decode(const char *input, char **output);
+CURLcode Curl_idn_encode(const char *input, char **output);
+#ifdef USE_LIBIDN2
+#define Curl_idn_free(x) idn2_free(x)
 #else
-#define tool_pressanykey() Curl_nop_stmt
+#define Curl_idn_free(x) free(x)
 #endif
 
-#endif /* HEADER_CURL_TOOL_PANYKEY_H */
+#else
+#define Curl_free_idnconverted_hostname(x)
+#define Curl_idn_decode(x) NULL
+#endif
+#endif /* HEADER_CURL_IDN_H */

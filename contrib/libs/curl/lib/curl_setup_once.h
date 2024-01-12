@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -34,10 +34,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
-
-#ifdef HAVE_ERRNO_H
 #include <errno.h>
-#endif
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -59,7 +56,7 @@
 #include <sys/time.h>
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
 #endif
@@ -70,6 +67,16 @@
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+
+#ifdef USE_WOLFSSL
+#include <stdint.h>
+#endif
+
+#ifdef USE_SCHANNEL
+/* Must set this before <schannel.h> is included directly or indirectly by
+   another Windows header. */
+#  define SCHANNEL_USE_BLACKLISTS 1
 #endif
 
 #ifdef __hpux
@@ -287,7 +294,7 @@ typedef unsigned int bit;
  */
 
 #undef DEBUGASSERT
-#if defined(DEBUGBUILD) && defined(HAVE_ASSERT_H)
+#if defined(DEBUGBUILD)
 #define DEBUGASSERT(x) assert(x)
 #else
 #define DEBUGASSERT(x) do { } while(0)

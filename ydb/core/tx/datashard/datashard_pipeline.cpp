@@ -1563,7 +1563,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
                                            const TActorContext& ctx, NWilson::TSpan &&operationSpan)
 {
     const auto& rec = ev->Get()->Record;
-    TBasicOpInfo info(rec.GetTxId(), EOperationKind::DataTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
     auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();

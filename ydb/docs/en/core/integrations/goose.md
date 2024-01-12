@@ -64,7 +64,11 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2023/12/15 05:22:48 Created new file: 20231215052248_00001_create_table_users.sql
 ```
 
-This means that the tool has created a new migration file `<timestamp>_00001_create_table_users.sql` where we can record the steps to change the schema for the YDB database, which is accessible through the corresponding connection string.
+This means that the tool has created a new migration file `<timestamp>_00001_create_table_users.sql`:
+```
+$ ls .
+20231215052248_00001_create_table_users.sql
+```
 
 So, after executing the goose create command, a migration file `<timestamp>_00001_create_table_users.sql` will be created with the following content:
 
@@ -94,7 +98,7 @@ And
 SELECT 'down SQL query';
 ```
 
-so that we can instead enter essentially the migration requests themselves.
+We can replace this statements to statements for change the schema for the YDB database, which is accessible through the corresponding connection string.
 
 Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that when applying the migration we create a table with necessary schema, and when rolling back the migration we delete the created table:
 
@@ -112,6 +116,59 @@ CREATE TABLE users (
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE users;
+-- +goose StatementEnd
+```
+
+We can check status of migrations:
+
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2023/12/15 06:01:31     Applied At                  Migration
+2023/12/15 06:01:31     =======================================
+2023/12/15 06:01:31     Pending                  -- 20231215052248_00001_create_table_users.sql
+2023/12/15 06:01:31     Pending                  -- 20231215052248_00002_add_column_password_hash_into_table_users.sql
+```
+
+Status `Pending` of migration means that migration not applied and you can apply it through commands `goose up` or `goose up-by-one`.
+
+Let's apply migration using `goose up`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up
+2023/12/15 05:59:55 OK   20231215052248_00001_create_table_users.sql (68.32ms)
+```
+
+Let's check the status of migration through `goose status`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2023/12/15 06:01:31     Applied At                  Migration
+2023/12/15 06:01:31     =======================================
+2023/12/15 06:01:31     Fri Dec 15 06:00:38 2023 -- 20231215052248_00001_create_table_users.sql
+```
+
+Status `Pending` changed to timestamp `Fri Dec 15 06:00:38 2023` - this means that migration applied.
+
+Also we can see a changes using YDB UI on http://localhost:8765:
+
+PLACE_FOR_SCREENSHOT
+
+Let's make the second migration with adding column `password_hash` to table `users`:
+
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00002_add_column_password_hash_into_table_users sql
+2023/12/15 06:01:31 Created new file: 20231215052248_00002_add_column_password_hash_into_table_users.sql
+```
+
+Let's edit the migration file `<timestamp>_00002_add_column_password_hash_into_table_users.sql`:
+
+```
+-- +goose Up
+-- +goose StatementBegin
+ALTER TABLE users ADD COLUMN password_hash Text;
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+ALTER TABLE users DROP COLUMN password_hash;
 -- +goose StatementEnd
 ```
 
@@ -133,13 +190,7 @@ The `goose` utility allows you to manage migrations via the command line:
   2023/12/15 06:01:31     Applied At                  Migration
   2023/12/15 06:01:31     =======================================
   2023/12/15 06:01:31     Fri Dec 15 06:00:38 2023 -- 20231215052248_00001_create_table_users.sql
-  2023/12/15 06:01:31     Fri Dec 15 06:00:51 2023 -- 20231215052432_00002_upsert_test_users.sql
-  2023/12/15 06:01:31     Fri Dec 15 06:01:16 2023 -- 20231215053847_00003_create_table_roles.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215053854_00004_upsert_initial_roles.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215053928_00005_add_column_role_id_into_table_users.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215054003_00006_update_role_id_of_test_users.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215054033_00007_add_column_password_hash_into_table_users.sql
-  2023/12/15 06:01:31     Pending                  -- 20231215054102_00008_add_index_password_hash_on_table_users.sql
+  2023/12/15 06:01:31     Pending                  -- 20231215052248_00002_add_column_password_hash_into_table_users.sql
   ```
   Column `Applied At` informs about status each migration. 
   If column `Applied At` contains valid timestamp - migration applied. 

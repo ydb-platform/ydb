@@ -165,7 +165,7 @@ The in-memory transaction map is limited in size by limiting the number of open 
 
 When copying tables, and when datashards split/merge they use LocalDB borrowing, where source shard SSTs are merged into destination shard tables. When using uncommitted changes those may contain changes from open transactions, or those which have been committed or rolled back, but not compacted yet. To guarantee that destination shards have the same view of the data as the source shards, TxStatus blobs also need borrowing, modifying destination transaction maps.
 
-An anomaly is theoretically possible, where a transaction has different status at different shards, and it must be taken into account during merging. Let's review a hypothetical situation:
+Note that transaction may have different status at different shards. Let's review a hypothetical example:
 
 * Transaction writes changes to key K with TxId at shard S, which are compacted into a large SST
 * Shard S becomes too large and splits into shards L and R, so that SST is borrowed by both with row filters applied, key K ends up in shard L, but transaction TxId is also phantomly present in shard R, since it is mentioned in the borrowed SST

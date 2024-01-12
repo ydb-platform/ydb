@@ -161,6 +161,7 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
 }
 
 bool IsLeapYear(i32 year) {
+    // todo check correctness for negative years
     bool isLeap = (year % 4 == 0);
     if (year % 100 == 0) {
         isLeap = year % 400 == 0;
@@ -201,13 +202,24 @@ ui32 LeapDaysSinceEpoch(ui32 yearsSinceEpoch) {
     return leapDaysCount;
 }
 
-void WriteDate(IOutputStream& out, ui32 year, ui32 month, ui32 day) {
+void WriteDate(IOutputStream& out, i32 year, ui32 month, ui32 day) {
     out << year << '-' << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
 }
 
 bool WriteDate(IOutputStream& out, ui16 value) {
     ui32 year, month, day;
     if (!SplitDate(value, year, month, day)) {
+        return false;
+    }
+
+    WriteDate(out, year, month, day);
+    return true;
+}
+
+bool WriteDate32(IOutputStream& out, i32 value) {
+    i32 year;
+    ui32 month, day;
+    if (!SplitDate32(value, year, month, day)) {
         return false;
     }
 
@@ -388,6 +400,12 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
 
     case NUdf::EDataSlot::Date:
         if (!WriteDate(out, value.Get<ui16>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        break;
+
+    case NUdf::EDataSlot::Date32:
+        if (!WriteDate32(out, value.Get<i32>())) {
             return NUdf::TUnboxedValuePod();
         }
         break;
@@ -600,7 +618,8 @@ bool SplitDateUncached(ui16 value, ui32& year, ui32& month, ui32& day) {
 
 namespace {
 
-constexpr ui32 DAYS_IN_400_YEARS = 146097;
+constexpr i32 SOLAR_CYCLE_DAYS = 146097;
+constexpr i32 SOLAR_CYCLE_YEARS = 400;
 
 class TDateTable {
 public:
@@ -618,7 +637,7 @@ public:
             Years_[i] = yearDays;
             yearDays += IsLeapYear(i + NUdf::MIN_YEAR) ? 366 : 365;
         }
-        Y_ASSERT(yearDays == DAYS_IN_400_YEARS);
+        Y_ASSERT(yearDays == SOLAR_CYCLE_DAYS);
 
         Months_[0] = 0;
         LeapMonths_[0] = 0;
@@ -666,6 +685,28 @@ public:
         auto& info = Days_[value];
         month = info.Month;
         day = info.Day;
+        return true;
+    }
+
+    bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day) const {
+        auto solarCycles = value / SOLAR_CYCLE_DAYS;
+        value = value % SOLAR_CYCLE_DAYS;
+        if (Y_UNLIKELY(value < 0)) {
+            solarCycles -= 1;
+            value += SOLAR_CYCLE_DAYS;
+        }
+        auto y = std::upper_bound(Years_.cbegin(), Years_.cend(), value) - 1;
+        Y_ASSERT(y >= Years_.cbegin());
+        value -= *y;
+        year = NUdf::MIN_YEAR + SOLAR_CYCLE_YEARS * solarCycles + std::distance(Years_.cbegin(), y);
+        if (Y_UNLIKELY(year <= 0)) {
+            --year;
+        }
+        auto& months = IsLeapYear(year) ? LeapMonths_ : Months_;
+        auto m = std::upper_bound(months.cbegin() + 1, months.cend(), value) - 1;
+        Y_ASSERT(m >= months.cbegin());
+        month = std::distance(months.cbegin(), m);
+        day = 1 + value - *m;
         return true;
     }
 
@@ -725,9 +766,9 @@ public:
 
         i32 y = (year < 0) ? (year - NUdf::MIN_YEAR + 1) : (year - NUdf::MIN_YEAR);
         if (Y_UNLIKELY(y < 0)) {
-            value = (y / 400 - 1) * DAYS_IN_400_YEARS + Years_[400 + y % 400];
+            value = (y / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + y % SOLAR_CYCLE_YEARS];
         } else {
-            value = (y / 400) * DAYS_IN_400_YEARS + Years_[y % 400];
+            value = (y / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[y % SOLAR_CYCLE_YEARS];
         }
         value += isLeap ? LeapMonths_[month] : Months_[month];
         value += day - 1;
@@ -771,15 +812,19 @@ private:
 
     std::array<ui16, NUdf::MAX_YEAR - NUdf::MIN_YEAR + 1> YearsOffsets_; // start of linear date for each year
     std::array<TDayInfo, NUdf::MAX_DATE + 2> Days_; // packed info for each date
-    std::array<ui32, 400> Years_; // start of linear date for each year in [1970, 2370] - period of 400 years
-    std::array<ui16, 13> Months_;
-    std::array<ui16, 13> LeapMonths_;
+    std::array<ui32, SOLAR_CYCLE_YEARS> Years_; // start of linear date for each year in [1970, 2370] - solar cycle period
+    std::array<ui16, 13> Months_; // cumulative days count for months
+    std::array<ui16, 13> LeapMonths_; // cumulative days count for months in a leap year
 };
 
 }
 
 bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) {
     return TDateTable::Instance().SplitDate(value, year, month, day);
+}
+
+bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day) {
+    return TDateTable::Instance().SplitDate32(value, year, month, day);
 }
 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) {

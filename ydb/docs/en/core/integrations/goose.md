@@ -130,7 +130,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2024/01/12 11:53:50     Pending                  -- 20240112115229_00001_create_first_table.sql
 ```
 
-Status `Pending` of migration means that migration not applied and you can apply it through commands `goose up` or `goose up-by-one`.
+Status `Pending` of migration means that migration has not been applied yet. You can apply such migrations with commands `goose up` or `goose up-by-one`.
 
 Let's apply migration using `goose up`:
 ```

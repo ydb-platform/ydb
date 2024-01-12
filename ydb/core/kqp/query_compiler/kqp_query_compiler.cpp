@@ -981,6 +981,8 @@ private:
     void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink) {
         if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
+            internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
+            // internalSinkProto->SetSettings(google::protobuf::Any{});
             FillTableId(settings.Table().Cast(), *internalSinkProto.MutableTable());
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
@@ -999,7 +1001,9 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (dataSinkCategory == NYql::KikimrProviderName || dataSinkCategory == NYql::YdbProviderName) {
+        if (dataSinkCategory == NYql::KikimrProviderName
+                || dataSinkCategory == NYql::YdbProviderName
+                || dataSinkCategory == NYql::KqpTableSinkName) {
             FillKqpSink(sink, protoSink);
         } else {
             // Delegate sink filling to dq integration of specific provider

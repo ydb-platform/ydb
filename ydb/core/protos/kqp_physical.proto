@@ -345,8 +345,11 @@ message TKqpExternalSink {
 }
 
 message TKqpInternalSink {
-    TKqpPhyTableId Table = 1;
-    repeated TKqpPhyColumnId Columns = 2;
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+
+    TKqpPhyTableId Table = 3;
+    repeated TKqpPhyColumnId Columns = 4;
 }
 
 message TKqpSink {

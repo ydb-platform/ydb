@@ -157,7 +157,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 - Используя YDB UI по адресу http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -247,7 +247,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 - Используя YDB UI по адресу http://localhost:8765
 
-  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
+  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -309,7 +309,7 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 - Используя YDB UI по адресу http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя YDB CLI
 

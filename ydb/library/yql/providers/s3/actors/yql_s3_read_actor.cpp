@@ -38,6 +38,7 @@
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_factory.h"
 
+#include <ydb/core/base/events.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -143,6 +144,52 @@ struct TS3ReadError : public yexception {
 
 using TObjectPath = NS3::FileQueue::TObjectPath;
 
+struct TEvS3FileQueue {
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
+        EvGetNextFile = EvBegin,
+        EvObjectPathBatch,
+        EvObjectPathReadError,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
+
+
+    struct TEvGetNextFile : TEventPB<TEvGetNextFile, NS3::FileQueue::TEvGetNextFile, EvGetNextFile> {
+        TEvGetNextFile() {
+            Record.SetRequestedAmount(1);
+        };
+        TEvGetNextFile(ui64 requestedAmount) {
+            Record.SetRequestedAmount(requestedAmount);
+        }
+    };
+
+    struct TEvObjectPathBatch :
+        public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
+
+        TEvObjectPathBatch() {
+            Record.SetNoMoreFiles(false);
+        }
+
+        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles) {
+            Record.MutableObjectPaths()->Assign(
+                std::make_move_iterator(objectPaths.begin()),
+                std::make_move_iterator(objectPaths.end()));
+            Record.SetNoMoreFiles(noMoreFiles);
+        }
+    };
+
+    struct TEvObjectPathReadError :
+        public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
+
+        TEvObjectPathReadError() { }
+
+        TEvObjectPathReadError(TIssues issues) {
+            IssuesToMessage(issues, Record.MutableIssues());
+        }
+    };
+};
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -158,8 +205,6 @@ struct TEvPrivate {
         EvNextRecordBatch,
         EvFileFinished,
         EvContinue,
-        EvObjectPathBatch,
-        EvObjectPathReadError,
         EvReadResult2,
 
         EvEnd
@@ -264,31 +309,6 @@ struct TEvPrivate {
     struct TEvContinue : public NActors::TEventLocal<TEvContinue, EvContinue> {
     };
 
-    struct TEvObjectPathBatch :
-        public NActors::TEventPB<TEvObjectPathBatch, NS3::FileQueue::TEvObjectPathBatch, EvObjectPathBatch> {
-
-        TEvObjectPathBatch() {
-            Record.SetNoMoreFiles(false);
-        }
-
-        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles) {
-            Record.MutableObjectPaths()->Assign(
-                std::make_move_iterator(objectPaths.begin()),
-                std::make_move_iterator(objectPaths.end()));
-            Record.SetNoMoreFiles(noMoreFiles);
-        }
-    };
-
-    struct TEvObjectPathReadError :
-        public NActors::TEventPB<TEvObjectPathReadError, NS3::FileQueue::TEvObjectPathReadError, EvObjectPathReadError> {
-
-        TEvObjectPathReadError() { }
-
-        TEvObjectPathReadError(TIssues issues) {
-            IssuesToMessage(issues, Record.MutableIssues());
-        }
-    };
-
     struct TReadRange {
         int64_t Offset;
         int64_t Length;
@@ -314,25 +334,16 @@ public:
     struct TEvPrivatePrivate {
         enum {
             EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvGetNextFile = EvBegin + 1,
-            EvNextListingChunkReceived,
+            EvNextListingChunkReceived = EvBegin + 1,
             EvEnd
         };
         static_assert(
-            TEvRetryQueuePrivate::EvEnd <= EvGetNextFile, 
-            "RetryQueue private events do not fit before our local events");
+            TEvRetryQueuePrivate::EvEnd <= EvNextListingChunkReceived, 
+            "RetryQueue private events do not fit before our private events");
         static_assert(
             EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE),
             "expected EvEnd <= EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvGetNextFile : TEventPB<TEvGetNextFile, NS3::FileQueue::TEvGetNextFile, EvGetNextFile> {
-            TEvGetNextFile() {
-                Record.SetRequestedAmount(1);
-            };
-            TEvGetNextFile(ui64 requestedAmount) {
-                Record.SetRequestedAmount(requestedAmount);
-            }
-        };
         struct TEvNextListingChunkReceived :
             public TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
             NS3Lister::TListResult ListingResult;
@@ -367,7 +378,6 @@ public:
         , Pattern(std::move(pattern))
         , PatternVariant(patternVariant)
         , PatternType(patternType) {
-        Y_UNUSED(ConsumersCount);
         for (size_t i = 0; i < paths.size(); ++i) {
             TObjectPath object;
             object.SetPath(paths[i].Path);
@@ -399,7 +409,7 @@ public:
     STATEFN(ThereAreDirectoriesToListState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvPrivatePrivate::TEvGetNextFile, HandleGetNextFile);
+                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFile);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -416,7 +426,7 @@ public:
         }
     }
 
-    void HandleGetNextFile(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextFile(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
         UpdateEventsQueue(ev->Sender);
         auto requestAmount = ev->Get()->Record.GetRequestedAmount();
         LOG_D("TS3FileQueueActor", "HandleGetNextFile requestAmount:" << requestAmount);
@@ -544,7 +554,7 @@ public:
         Y_ENSURE(MaybeIssues.Defined());
         LOG_I("TS3FileQueueActor", "TransitToErrorState an error occurred sending ");
         for (auto& [requestorId, _]: RequestQueue) {
-            ReadActorToEvents[requestorId].Send(new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
+            ReadActorToEvents[requestorId].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
         }
         RequestQueue.clear();
         Objects.clear();
@@ -555,7 +565,7 @@ public:
     STATEFN(NoMoreDirectoriesState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvPrivatePrivate::TEvGetNextFile, HandleGetNextFileForEmptyState);
+                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForEmptyState);
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
@@ -568,7 +578,7 @@ public:
         }
     }
 
-    void HandleGetNextFileForEmptyState(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextFileForEmptyState(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
         LOG_D("TS3FileQueueActor", "HandleGetNextFileForEmptyState Giving away rest of Objects");
         UpdateEventsQueue(ev->Sender);
         SendObjects(ev->Sender, ev->Get()->Record.GetRequestedAmount());
@@ -577,7 +587,7 @@ public:
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvPrivatePrivate::TEvGetNextFile, HandleGetNextFileForErrorState);
+                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForErrorState);
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
@@ -588,12 +598,12 @@ public:
         }
     }
 
-    void HandleGetNextFileForErrorState(TEvPrivatePrivate::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextFileForErrorState(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextFileForErrorState Giving away rest of Objects");
         UpdateEventsQueue(ev->Sender);
-        ReadActorToEvents[ev->Sender].Send(new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
+        ReadActorToEvents[ev->Sender].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
     }
     
     void Handle(TEvents::TEvPoison::TPtr& ev) {
@@ -617,7 +627,7 @@ public:
         } else {
             for (auto& [requestorId, _]: RequestQueue) {
                 ReadActorToEvents[requestorId].Send(
-                    new TEvPrivate::TEvObjectPathReadError(*MaybeIssues));
+                    new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
             }
         }
 
@@ -647,7 +657,7 @@ private:
         LOG_T("TS3FileQueueActor", "SendObjects amount: " << amount << " result size: " << result.size());
 
         ReadActorToEvents[recipient].Send(
-            new TEvPrivate::TEvObjectPathBatch(
+            new TEvS3FileQueue::TEvObjectPathBatch(
                 std::move(result), HasNoMoreItems()));
     }
     bool HasNoMoreItems() const {
@@ -890,7 +900,7 @@ public:
         Y_ENSURE(!IsWaitingObjectQueueResponse);
         const ui64 requestedAmount = std::min(ReadActorFactoryCfg.MaxInflight, FilesRemained.value_or(std::numeric_limits<ui64>::max()));
         FileQueueEvents.Send(
-            new TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile(
+            new TEvS3FileQueue::TEvGetNextFile(
                 requestedAmount));
         IsWaitingObjectQueueResponse = true;
     }
@@ -921,14 +931,14 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadResult, Handle);
         hFunc(TEvPrivate::TEvReadError, Handle);
-        hFunc(TEvPrivate::TEvObjectPathBatch, HandleObjectPathBatch);
-        hFunc(TEvPrivate::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
+        hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
     )
 
-    void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
+    void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingObjectQueueResponse);
         IsWaitingObjectQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
@@ -944,7 +954,7 @@ private:
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
     }
-    void HandleObjectPathReadError(TEvPrivate::TEvObjectPathReadError::TPtr& result) {
+    void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
         IsObjectQueueEmpty = true;
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
@@ -1062,8 +1072,7 @@ private:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
     
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-        Y_UNUSED(ev);
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
 
@@ -2563,7 +2572,7 @@ public:
         Y_ENSURE(!IsWaitingObjectQueueResponse);
         LOG_D("TS3StreamReadActor", "SendPathRequest " << ReadActorFactoryCfg.MaxInflight);
         FileQueueEvents.Send(
-            new TS3FileQueueActor::TEvPrivatePrivate::TEvGetNextFile(
+            new TEvS3FileQueue::TEvGetNextFile(
                 ReadActorFactoryCfg.MaxInflight));
         IsWaitingObjectQueueResponse = true;
     }
@@ -2714,14 +2723,14 @@ private:
         hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
         hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
         hFunc(TEvPrivate::TEvFileFinished, HandleFileFinished);
-        hFunc(TEvPrivate::TEvObjectPathBatch, HandleObjectPathBatch);
-        hFunc(TEvPrivate::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
+        hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
     )
 
-    void HandleObjectPathBatch(TEvPrivate::TEvObjectPathBatch::TPtr& objectPathBatch) {
+    void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingObjectQueueResponse);
         IsWaitingObjectQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
@@ -2742,7 +2751,7 @@ private:
         }
     }
 
-    void HandleObjectPathReadError(TEvPrivate::TEvObjectPathReadError::TPtr& result) {
+    void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
         IsObjectQueueEmpty = true;
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);

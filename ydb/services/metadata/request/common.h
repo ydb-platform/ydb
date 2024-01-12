@@ -17,6 +17,10 @@ enum EEvents {
     EvCreateTableInternalResponse,
     EvCreateTableResponse,
 
+    EvAlterTableRequest,
+    EvAlterTableInternalResponse,
+    EvAlterTableResponse,
+
     EvDropTableRequest,
     EvDropTableInternalResponse,
     EvDropTableResponse,
@@ -79,6 +83,8 @@ using TDialogCreatePath = TDialogPolicyImpl<Ydb::Scheme::MakeDirectoryRequest, Y
     EEvents::EvCreatePathRequest, EEvents::EvCreatePathInternalResponse, EEvents::EvCreatePathResponse>;
 using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse,
     EEvents::EvCreateTableRequest, EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
+using TDialogAlterTable = TDialogPolicyImpl<Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse,
+    EEvents::EvAlterTableRequest, EEvents::EvAlterTableInternalResponse, EEvents::EvAlterTableResponse>;
 using TDialogDropTable = TDialogPolicyImpl<Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse,
     EEvents::EvDropTableRequest, EEvents::EvDropTableInternalResponse, EEvents::EvDropTableResponse>;
 using TDialogModifyPermissions = TDialogPolicyImpl<Ydb::Scheme::ModifyPermissionsRequest, Ydb::Scheme::ModifyPermissionsResponse,

@@ -68,7 +68,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
             self.UpsertPortion(portionInfo, &oldInfo);
 
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
+                context.DB.WriteColumn(portionInfo, record);
             }
         }
         for (auto& portionInfoWithBlobs : AppendedPortions) {
@@ -77,7 +77,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
             AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
             self.UpsertPortion(portionInfo);
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
+                context.DB.WriteColumn(portionInfo, record);
             }
         }
     }

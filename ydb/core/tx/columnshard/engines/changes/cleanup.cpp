@@ -40,7 +40,7 @@ bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
             continue;
         }
         for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Erase(context.DB, portionInfo, record);
+            context.DB.EraseColumn(portionInfo, record);
         }
     }
 

@@ -19,8 +19,8 @@ class Client:
         conn = pg8000.dbapi.Connection(
             user=self.settings.username,
             password=self.settings.password,
-            host=self.settings.host,
-            port=self.settings.port,
+            host=self.settings.host_external,
+            port=self.settings.port_external,
             database=dbname,
         )
         conn.autocommit = True

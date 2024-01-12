@@ -149,7 +149,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 - Используя YDB UI по адресу http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
 
 - Используя YDB CLI
 
@@ -239,7 +239,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 - Используя YDB UI по адресу http://localhost:8765
 
-  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
+  ![YDB UI after apply second migration](../../../_assets/goose-ydb-ui-after-second-migration.png)
 
 - Используя YDB CLI
 

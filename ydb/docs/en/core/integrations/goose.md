@@ -55,7 +55,7 @@ Let's create a migrations directory and then all `goose` commands should be exec
 $ mkdir migrations && cd migrations
 ```
 
-## Adding a migration file
+## Managing migrations using goose
 
 The migration file can be generated using the `goose create` command:
 
@@ -153,7 +153,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
 
 - Using YDB CLI
 
@@ -245,7 +245,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
+  ![YDB UI after apply second migration](../../../_assets/goose-ydb-ui-after-second-migration.png)
 
 - Using YDB CLI
 

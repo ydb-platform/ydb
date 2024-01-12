@@ -146,7 +146,7 @@ TBuffer *TCompletionChunkReadPart::GetBuffer() {
 }
 
 void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
-    Span.Event("exec", {});
+    auto execSpan = Span.CreateChild(TWilson::PDisk, "PDisk.CompletionChunkReadPart.Exec");
     Y_ABORT_UNLESS(actorSystem);
     Y_ABORT_UNLESS(CumulativeCompletion);
     if (TCompletionAction::Result != EIoResult::Ok) {
@@ -281,6 +281,8 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
 
     AtomicSub(PDisk->InFlightChunkRead, RawReadSize);
     RawReadSize = 0;
+    execSpan.EndOk();
+    Span.EndOk();
     delete this;
 }
 
@@ -291,6 +293,7 @@ void TCompletionChunkReadPart::Release(TActorSystem *actorSystem) {
     }
     AtomicSub(PDisk->InFlightChunkRead, RawReadSize);
     RawReadSize = 0;
+    Span.EndError("release");
     delete this;
 }
 
@@ -303,6 +306,7 @@ TCompletionChunkRead::~TCompletionChunkRead() {
 }
 
 void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
+    auto execSpan = Span.CreateChild(TWilson::PDisk, "PDisk.CompletionChunkRead.Exec");
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
     result->Data = std::move(CommonBuffer);
@@ -323,6 +327,8 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     actorSystem->Send(Read->Sender, result.Release());
     Read->IsReplied = true;
     PDisk->Mon.GetReadCounter(Read->PriorityClass)->CountResponse();
+    execSpan.EndOk();
+    Span.EndOk();
     delete this;
 }
 

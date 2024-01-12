@@ -100,8 +100,8 @@ public:
     }
 
     void Exec(TActorSystem *actorSystem) override {
+        auto execSpan = Span.CreateChild(TWilson::PDisk, "PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
-        Span.EndOk();
         LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK,
                 "PDiskId# " << PDiskId << " ReqId# " << ReqId
             << "TCompletionChunkWrite " << Event->ToString().data()
@@ -115,14 +115,16 @@ public:
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
         }
+        execSpan.EndOk();
+        Span.EndOk();
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
-        Span.EndError(ErrorReason);
         Event->Status = NKikimrProto::CORRUPTED;
         Event->ErrorReason = ErrorReason;
         actorSystem->Send(Recipient, Event.Release());
+        Span.EndError(ErrorReason);
         delete this;
     }
 };
@@ -165,11 +167,12 @@ class TCompletionChunkRead : public TCompletionAction {
     TAtomic Deletes;
     std::function<void()> OnDestroy;
     ui64 ChunkNonce;
+    NWilson::TSpan Span;
 
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce)
+            ui64 chunkNonce, NWilson::TSpan&& span)
         : TCompletionAction()
         , PDisk(pDisk)
         , Read(read)
@@ -179,6 +182,7 @@ public:
         , Deletes(0)
         , OnDestroy(std::move(onDestroy))
         , ChunkNonce(chunkNonce)
+        , Span(std::move(span))
         , DoubleFreeCanary(ReferenceCanary)
     {}
 
@@ -207,6 +211,7 @@ public:
 
     void Release(TActorSystem *actorSystem) override {
         ReplyError(actorSystem, "TCompletionChunkRead is released");
+        Span.EndError("release");
     }
 };
 

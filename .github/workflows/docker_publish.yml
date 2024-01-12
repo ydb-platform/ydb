@@ -9,17 +9,7 @@ on:
         type: string
         required: true
         default: main
-        description: "Git branch/tag revision to build ydbd"
-      cli_git_ref:
-        type: string
-        required: true
-        default: main
-        description: "Git branch/tag revision to build CLI"
-      local_ydb_git_ref:
-        type: string
-        required: true
-        default: main
-        description: "Git branch/tag revision to build local_ydb binary"
+        description: "Git branch/tag revision to build"
       dockerfile_branch:
         type: string
         required: true
@@ -30,6 +20,12 @@ on:
         required: true
         default: trunk
         description: "docker image tag"
+      local_ydb_ref:
+        type: string
+        required: true
+        default: main
+        description: "Git branch/tag revision to build local_ydb"
+
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
@@ -54,18 +50,6 @@ jobs:
         working-directory: ydbd
         run: |
           echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Checkout repository for build CLI
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.cli_git_ref || 'main' }}
-          path: cli
-
-      - name: Checkout repository for build local_ydb binary
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.local_ydb_git_ref || 'main' }}
-          path: local_ydb
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v2

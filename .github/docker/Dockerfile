@@ -8,24 +8,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       python3 curl lsb-release python3-dev libc6-dev libidn11-dev libaio1 libaio-dev libgcc-11-dev binutils tree git
 
-COPY ydbd/ /ydbwork/ydbd/
-WORKDIR /ydbwork/ydbd/
+COPY ydb/ /ydbwork/ydb/
+
+WORKDIR /ydbwork/ydb/
+
 RUN ./ya make -r -T \
       -C ydb/apps/ydbd/ydbd \
+      -C ydb/apps/ydb/ydb \
+      -C ydb/public/tools/local_ydb/local_ydb \
       -o /ydbwork/out/ \
     && /ydbwork/out/ydb/apps/ydbd/ydbd -V \
     && tree /ydbwork/out/ \
-    && strip /ydbwork/out/ydb/apps/ydbd/ydbd \
-    && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
-
-COPY cli/ /ydbwork/cli/
-WORKDIR /ydbwork/cli/
-RUN ./ya make -r -T \
-      -C ydb/apps/ydb/ydb \
-      -o /ydbwork/out/ \
-    && /ydbwork/out/cli/apps/ydb/ydb version \
-    && tree /ydbwork/out/ \
-    && strip /ydbwork/out/ydb/apps/ydb/ydb \
+    && strip /ydbwork/out/ydb/apps/ydbd/ydbd /ydbwork/out/ydb/apps/ydb/ydb /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
 
 COPY local_ydb/ /ydbwork/local_ydb/
@@ -53,8 +47,6 @@ COPY --from=builder \
     /ydbwork/out/ydb/apps/ydb/ydb \
     /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     /
-
-RUN /ydb version --disable-checks
 
 # YDB grpc
 EXPOSE ${GRPC_TLS_PORT:-2135}

@@ -3168,7 +3168,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
                     && static_cast<TRequestBase *>(job->Payload)->GetType() == ERequestType::RequestLogWrite) {
                 TLogWrite &batch = *static_cast<TLogWrite*>(job->Payload);
 
-                if (auto span = request->SpanStack.Push(TWilson::PDisk, "PDisk.InForseti.InBatch")) {
+                if (auto span = request->SpanStack.Push(TWilson::PDisk, "PDisk.InScheduler.InLogWriteBatch")) {
                     span->Attribute("Batch.ReqId", static_cast<i64>(batch.ReqId.Id));
                 }
                 batch.AddToBatch(static_cast<TLogWrite*>(request));
@@ -3271,7 +3271,7 @@ void TPDisk::SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outL
 void TPDisk::AddJobToForseti(NSchLab::TCbs *cbs, TRequestBase *request, NSchLab::EJobKind jobKind) {
     LWTRACK(PDiskAddToScheduler, request->Orbit, PDiskId, request->ReqId.Id, HPSecondsFloat(request->CreationTime),
             request->Owner, request->IsFast, request->PriorityClass);
-    request->SpanStack.Push(TWilson::PDisk, "PDisk.InForseti");
+    request->SpanStack.Push(TWilson::PDisk, "PDisk.InScheduler");
     TIntrusivePtr<NSchLab::TJob> job = ForsetiScheduler.CreateJob();
     job->Payload = request;
     job->Cost = request->Cost;
@@ -3298,29 +3298,33 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         case ERequestType::RequestLogReadResultProcess:
             [[fallthrough]];
         case ERequestType::RequestLogSectorRestore:
-            request->SpanStack.PopOk();
-            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointLogReads");
+            if (auto span = request->SpanStack.PeekTop()) {
+                span->Event("move_to_batcher", {});
+            }
             JointLogReads.push_back(request);
             break;
         case ERequestType::RequestChunkReadPiece:
         {
             TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(request);
-            request->SpanStack.PopOk();
-            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkReads");
+            if (auto span = request->SpanStack.PeekTop()) {
+                span->Event("move_to_batcher", {});
+            }
             JointChunkReads.emplace_back(piece->SelfPointer.Get());
             piece->SelfPointer.Reset();
             // FIXME(cthulhu): Unreserve() for TChunkReadPiece is called while processing to avoid requeueing issues
             break;
         }
         case ERequestType::RequestChunkWritePiece:
-            request->SpanStack.PopOk();
-            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkWrites");
+            if (auto span = request->SpanStack.PeekTop()) {
+                span->Event("move_to_batcher", {});
+            }
             JointChunkWrites.push_back(request);
             break;
         case ERequestType::RequestChunkTrim:
         {
-            request->SpanStack.PopOk();
-            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkTrims");
+            if (auto span = request->SpanStack.PeekTop()) {
+                span->Event("move_to_batcher", {});
+            }
             TChunkTrim *trim = static_cast<TChunkTrim*>(request);
             JointChunkTrims.push_back(trim);
             break;
@@ -3331,9 +3335,10 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             while (log) {
                 TLogWrite *batch = log->PopFromBatch();
 
-                log->SpanStack.PopOk();
-                if (auto span = log->SpanStack.Push(TWilson::PDisk, "PDisk.InJointLogWrites")) {
-                    span->Attribute("HasCommitRecord", log->Signature.HasCommitRecord());
+                if (auto span = log->SpanStack.PeekTop()) {
+                    (*span)
+                        .Event("move_to_batcher", {})
+                        .Attribute("HasCommitRecord", log->Signature.HasCommitRecord());
                 }
                 JointLogWrites.push_back(log);
                 if (log->Signature.HasCommitRecord()) {
@@ -3345,8 +3350,9 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         }
         case ERequestType::RequestChunkForget:
         {
-            request->SpanStack.PopOk();
-            request->SpanStack.Push(TWilson::PDisk, "PDisk.InJointChunkForgets");
+            if (auto span = request->SpanStack.PeekTop()) {
+                span->Event("move_to_batcher", {});
+            }
             TChunkForget *forget = static_cast<TChunkForget*>(request);
             JointChunkForgets.push_back(std::unique_ptr<TChunkForget>(forget));
             break;

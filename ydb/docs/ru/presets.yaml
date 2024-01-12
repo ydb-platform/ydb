@@ -7,17 +7,14 @@ default:
       name: Михаил Бабич
       position: старший разработчик программного обеспечения
       profile: https://www.linkedin.com/in/mikhail-babich-807700270/
-      photo: ../_assets/babich.png
     bondar:
       name: Олег Бондарь
       position: CPO YDB
       profile: https://www.linkedin.com/in/olegbondar2000/
-      photo: ../_assets/bondar.png
     cherednik:
       name: Даниил Чередник
       position: старший разработчик программного обеспечения  
       profile: https://www.linkedin.com/in/daniil-c-1110165b/
-      photo: ../_assets/cherednik.png
     dmitriev:
       name: Алексей Дмитриев 
       position: технический и продуктовый менеджер в YDB

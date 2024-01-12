@@ -357,4 +357,9 @@ The `goose` utility allows you to manage migrations via the command line:
 - `goose redo` - re-apply the latest migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
 - `goose down` - rollback the last migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
 - `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`. 
-  > Be careful: the `goose reset` command will revert all your migrations using your statements in blocks `+goose Down`. This also means that all your data in the database will be erased.
+
+{% note warning %}
+
+Be careful: the `goose reset` command will revert all your migrations using your statements in blocks `+goose Down`. In many cases it might lead to all data in the database being erased. Make sure you regularly do backups and check that they can be restored to minimize impact of this risk.
+
+{% endnote %}

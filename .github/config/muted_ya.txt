@@ -1,9 +1,11 @@
 ydb/core/blobstorage/pdisk/ut TSectorMap.*
+ydb/core/blobstorage/ut_blobstorage CostMetricsGetBlock4Plus2.TestGet4Plus2BlockRequests10000Inflight1BlobSize1000
 ydb/core/blobstorage/ut_blobstorage Defragmentation.DoesItWork
 ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.*
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage [6/10]*
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestStorageLoad
+ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
@@ -13,8 +15,10 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/library/yql/providers/generic/connector/tests test.py.test_select_positive_postgresql*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
-ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadCleanCache
+ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
+ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
+ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/tests/fq/s3 *
 ydb/tests/fq/yds test_metrics_cleanup.py.TestCleanup.test_cleanup[v1]
@@ -22,6 +26,8 @@ ydb/tests/functional/audit *
 ydb/tests/functional/clickbench test.py.test_plans*
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
+ydb/tests/functional/restarts test_restarts.py.*
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud*
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*

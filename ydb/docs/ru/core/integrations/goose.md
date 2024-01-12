@@ -13,12 +13,12 @@ Goose – open-source инструмент, который помогает ве
 Утилита `goose` вызывается командой:
 
 ```
-$ goose <DB> <DSN> <COMMAND> <COMMAND_ARGUMENTS>
+$ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
 где:
 - `<DB>` - движок базы данных, в случае YDB следует писать `goose ydb`
-- `<DSN>` - строка подключения к базе данных. 
+- `<CONNECTION_STRING>` - строка подключения к базе данных. 
 - `<COMMAND>` - команда, которую требуется выполнить. Полный перечень команд доступен во встроенной справке (`goose help`).
 - `<COMMAND_ARGUMENTS>` - аргументы команды.
 
@@ -45,6 +45,12 @@ $ goose <DB> <DSN> <COMMAND> <COMMAND_ARGUMENTS>
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
+Давайте сохраним эту строку в переменную окружения для дальнейшего использования:
+
+```
+export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
+```
+
 Далее примеры вызова команд `goose` будут содержать именно эту строку подключения.
 
 ## Директория с файлами миграций
@@ -62,7 +68,7 @@ $ mkdir migrations && cd migrations
 Файл миграции можно создать командой `goose create`:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00001_create_first_table sql
+$ goose ydb $YDB_CONNECTION_STRING create 00001_create_first_table sql
 2024/01/12 11:52:29 Created new file: 20240112115229_00001_create_first_table.sql
 ```
 
@@ -122,7 +128,7 @@ DROP TABLE users;
 Проверим статус миграций:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:53:50     Applied At                  Migration
 2024/01/12 11:53:50     =======================================
 2024/01/12 11:53:50     Pending                  -- 20240112115229_00001_create_first_table.sql
@@ -132,14 +138,14 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Применим миграцию с помощью команды `goose up`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up
+$ goose ydb $YDB_CONNECTION_STRING up
 2024/01/12 11:55:18 OK   20240112115229_00001_create_first_table.sql (93.58ms)
 2024/01/12 11:55:18 goose: successfully migrated database to version: 20240112115229
 ```
 
 Проверим статус миграций `goose status`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:56:00     Applied At                  Migration
 2024/01/12 11:56:00     =======================================
 2024/01/12 11:56:00     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -190,7 +196,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 Давайте создадим второй файл миграции с добавлением колонки `password_hash` в таблицу `users`:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00002_add_column_password_hash_into_table_users sql
+$ goose ydb $YDB_CONNECTION_STRING create 00002_add_column_password_hash_into_table_users sql
 2024/01/12 12:00:57 Created new file: 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
@@ -211,7 +217,7 @@ ALTER TABLE users DROP COLUMN password_hash;
 Проверим статус миграций:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 12:02:40     Applied At                  Migration
 2024/01/12 12:02:40     =======================================
 2024/01/12 12:02:40     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -222,13 +228,13 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Применим вторую миграцию с помощью команды `goose up-by-one` (в отличие от `goose uo` команда `goose up-by-one` применяет ровно одну "следующую" миграцию):
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one
+$ goose ydb $YDB_CONNECTION_STRING up-by-one
 2024/01/12 12:04:56 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (59.93ms)
 ```
 
 Проверим статус миграций:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 12:05:17     Applied At                  Migration
 2024/01/12 12:05:17     =======================================
 2024/01/12 12:05:17     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -284,13 +290,13 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Откатим последнюю миграцию с помощью команды `goose down`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down
+$ goose ydb $YDB_CONNECTION_STRING down
 2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)
 ```
 
 Проверим статус миграций `goose status`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 13:07:36     Applied At                  Migration
 2024/01/12 13:07:36     =======================================
 2024/01/12 13:07:36     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -342,12 +348,12 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 ## "Горячий" список команд "goose"
 
 Утилита `goose` позволяет управлять миграциями через командную строку:
-- `goose status` - посмотреть статус применения миграций. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status`.  
-- `goose up` - применить все известные миграции. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up`.
-- `goose up-by-one` - применить ровно одну "следующую" миграцию. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one`.
-- `goose redo` - пере-применить последнюю миграцию. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
-- `goose down` - откатить последнюю миграцию. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
-- `goose reset` - откатить все миграции. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`.
+- `goose status` - посмотреть статус применения миграций. Например, `goose ydb $YDB_CONNECTION_STRING status`.  
+- `goose up` - применить все известные миграции. Например, `goose ydb $YDB_CONNECTION_STRING up`.
+- `goose up-by-one` - применить ровно одну "следующую" миграцию. Например, `goose ydb $YDB_CONNECTION_STRING up-by-one`.
+- `goose redo` - пере-применить последнюю миграцию. Например, `goose ydb $YDB_CONNECTION_STRING redo`.
+- `goose down` - откатить последнюю миграцию. Например, `goose ydb $YDB_CONNECTION_STRING down`.
+- `goose reset` - откатить все миграции. Например, `goose ydb $YDB_CONNECTION_STRING reset`.
 
 {% note warning %}
 

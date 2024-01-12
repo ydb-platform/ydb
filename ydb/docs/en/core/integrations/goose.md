@@ -13,12 +13,12 @@ Goose installation options are described in [its documentation](https://github.c
 After installation, the `goose` command line utility can be called:
 
 ```
-$ goose <DB> <DSN> <COMMAND> <COMMAND_ARGUMENTS>
+$ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 ```
 
 Where:
 - `<DB>` - database engine, for YDB you should write `goose ydb`
-- `<DSN>` - database connection string.
+- `<CONNECTION_STRING>` - database connection string.
 - `<COMMAND>` - the command to be executed. A complete list of commands is available in the built-in help (`goose help`).
 - `<COMMAND_ARGUMENTS>` - command arguments.
 
@@ -45,6 +45,12 @@ If connecting to a local YDB docker container, the connection string could look 
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
+Let's store this connection string to environment variable for following usage:
+
+```
+export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"
+```
+
 Further examples of calling `goose` commands will contain exactly this connection string.
 
 ## Directory with migration files
@@ -62,7 +68,7 @@ $ mkdir migrations && cd migrations
 The migration file can be generated using the `goose create` command:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00001_create_first_table sql
+$ goose ydb $YDB_CONNECTION_STRING create 00001_create_first_table sql
 2024/01/12 11:52:29 Created new file: 20240112115229_00001_create_first_table.sql
 ```
 
@@ -129,7 +135,7 @@ DROP TABLE users;
 We can check status of migrations:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:53:50     Applied At                  Migration
 2024/01/12 11:53:50     =======================================
 2024/01/12 11:53:50     Pending                  -- 20240112115229_00001_create_first_table.sql
@@ -139,14 +145,14 @@ Status `Pending` of migration means that migration has not been applied yet. You
 
 Let's apply migration using `goose up`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up
+$ goose ydb $YDB_CONNECTION_STRING up
 2024/01/12 11:55:18 OK   20240112115229_00001_create_first_table.sql (93.58ms)
 2024/01/12 11:55:18 goose: successfully migrated database to version: 20240112115229
 ```
 
 Let's check the status of migration through `goose status`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:56:00     Applied At                  Migration
 2024/01/12 11:56:00     =======================================
 2024/01/12 11:56:00     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -199,7 +205,7 @@ There are alternative options to see the applied changes:
 Let's make the second migration that adds a column `password_hash` to the `users` table:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00002_add_column_password_hash_into_table_users sql
+$ goose ydb $YDB_CONNECTION_STRING create 00002_add_column_password_hash_into_table_users sql
 2024/01/12 12:00:57 Created new file: 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
@@ -220,7 +226,7 @@ ALTER TABLE users DROP COLUMN password_hash;
 We can check the migration statuses again:
 
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 12:02:40     Applied At                  Migration
 2024/01/12 12:02:40     =======================================
 2024/01/12 12:02:40     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -231,13 +237,13 @@ Now we see the first migration in applied status and the second in pending statu
 
 Let's apply the second migration using `goose up-by-one`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one
+$ goose ydb $YDB_CONNECTION_STRING up-by-one
 2024/01/12 12:04:56 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (59.93ms)
 ```
 
 Let's check the migration status through `goose status`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 12:05:17     Applied At                  Migration
 2024/01/12 12:05:17     =======================================
 2024/01/12 12:05:17     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -295,13 +301,13 @@ All subsequent migration files should be created in the same way.
 
 Let's downgrade (revert) the latest migration using `goose down`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down
+$ goose ydb $YDB_CONNECTION_STRING down
 2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)
 ```
 
 Let's check the migration statuses through `goose status`:
 ```
-$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+$ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 13:07:36     Applied At                  Migration
 2024/01/12 13:07:36     =======================================
 2024/01/12 13:07:36     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
@@ -356,12 +362,12 @@ Let's check the changes again:
 ## Short list of "goose" commands
 
 The `goose` utility allows you to manage migrations via the command line:
-- `goose status` - view the status of applying migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status`.
-- `goose up` - apply all known migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up`.
-- `goose up-by-one` - apply exactly one “next” migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one`.
-- `goose redo` - re-apply the latest migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
-- `goose down` - rollback the last migration. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
-- `goose reset` - rollback all migrations. For example, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`. 
+- `goose status` - view the status of applying migrations. For example, `goose ydb $YDB_CONNECTION_STRING status`.
+- `goose up` - apply all known migrations. For example, `goose ydb $YDB_CONNECTION_STRING up`.
+- `goose up-by-one` - apply exactly one “next” migration. For example, `goose ydb $YDB_CONNECTION_STRING up-by-one`.
+- `goose redo` - re-apply the latest migration. For example, `goose ydb $YDB_CONNECTION_STRING redo`.
+- `goose down` - rollback the last migration. For example, `goose ydb $YDB_CONNECTION_STRING down`.
+- `goose reset` - rollback all migrations. For example, `goose ydb $YDB_CONNECTION_STRING reset`. 
 
 {% note warning %}
 

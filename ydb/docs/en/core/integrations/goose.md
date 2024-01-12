@@ -305,7 +305,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that the latest migration is no longer applied.
 
-Also we can see a changes through another options:
+Let's check the changes again:
 
 {% list tabs %}
 

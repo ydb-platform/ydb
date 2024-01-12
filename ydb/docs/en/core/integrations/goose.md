@@ -241,7 +241,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Both migration are fully applied.
 
-Also we can see a changes through another options:
+Let's use the same methods to see the new changes:
 
 {% list tabs %}
 

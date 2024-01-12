@@ -1897,7 +1897,7 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
 
         // Construct new EvWrite
         TVector<TCell> cells;
-        ui64 tableId = 0;
+        TTableId tableId;
         ui16 colCount = 0;
         for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
             NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
@@ -1906,8 +1906,9 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
                 continue;
 
             const auto& tableMeta = meta.GetTable();
-            Y_VERIFY_S(tableId == 0 || tableId == tableMeta.GetTableId().GetTableId(), "Only writes to one table is supported now");
-            tableId = tableMeta.GetTableId().GetTableId();
+            TTableId tableIdProto(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(), tableMeta.GetSchemaVersion());
+            Y_VERIFY_S(tableId == TTableId{} || tableId == tableIdProto, "Only writes to one table is supported now");
+            tableId = tableIdProto;
             const auto& writes = meta.GetWrites();
             Y_VERIFY_S(colCount == 0 || colCount == writes.GetColumns().size(), "Only equal column count is supported now.");
             colCount = writes.GetColumns().size();
@@ -1936,7 +1937,7 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evWrite.release(), 0, event->Cookie);

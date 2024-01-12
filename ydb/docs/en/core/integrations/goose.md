@@ -1,4 +1,4 @@
-# Versioning data schema and migration in YDB using "goose"
+# Data schema versioning and migration in YDB using "goose"
 
 ## Introduction
 
@@ -88,7 +88,12 @@ SELECT 'down SQL query';
 
 This migration file structure helps keep the instructions that lead to the next version of the database in context. It is also easy, without unnecessary distractions, to write instructions that roll back a database change.
 
-The migration file consists of two sections. The first is `+goose Up`, an area where we can record the migration steps. The second is `+goose Down`, an area in which we can write a step for invert making changes for the `+goose Up` steps. `Goose` carefully inserted placeholder queries:
+The migration file consists of two sections:
+
+1. `+goose Up` is an area where we can record the migration steps.
+2. `+goose Down` is an area where we can write queries to revert changes of the `+goose Up` steps. 
+
+Goose carefully inserted placeholder queries:
 
 ```
 SELECT 'up SQL query';

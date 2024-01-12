@@ -348,4 +348,9 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 - `goose redo` - пере-применить последнюю миграцию. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" redo`.
 - `goose down` - откатить последнюю миграцию. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down`.
 - `goose reset` - откатить все миграции. Например, `goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" reset`.
-  > Будьте осторожны: команда `goose reset` может удалить все ваши миграции, включая данные в таблицах. Это происходит за счет инструкций в блоке `+goose Down`.
+
+{% note warning %}
+
+Будьте осторожны: команда `goose reset` может удалить все ваши миграции, включая данные в таблицах. Это происходит за счет инструкций в блоке `+goose Down`. Регулярно делайте бекапы и проверяйте их на возможность восстановления, чтобы минимизировать этот риск.
+
+{% endnote %}

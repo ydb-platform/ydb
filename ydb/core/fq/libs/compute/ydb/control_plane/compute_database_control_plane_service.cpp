@@ -293,7 +293,6 @@ public:
         , YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
         , Counters(counters)
-        , IsLoadControlEnabled(Config.GetLoadControlConfig().GetEnable())
     {}
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_SERVICE_ACTOR";
@@ -343,19 +342,27 @@ public:
     }
 
     void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {
-        if (IsLoadControlEnabled) {
+        if (Config.GetYdb().GetLoadControlConfig().GetEnable()) {
             MonitoringClientActorId = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider()).release());
-            MonitoringActorId = Register(CreateDatabaseMonitoringActor(MonitoringClientActorId, Config.GetLoadControlConfig(), Counters).release());
+            MonitoringActorId = Register(CreateDatabaseMonitoringActor(MonitoringClientActorId, Config.GetYdb().GetLoadControlConfig(), Counters).release());
         }
     }
 
     void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig, const TString& databasesCacheReloadPeriod) {
         const auto& mapping = cmsConfig.GetDatabaseMapping();
+        auto inheritGlobalLoadConfig = Config.GetYdb().GetLoadControlConfig().GetInherit();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            const auto monitoringClientActor = IsLoadControlEnabled ? Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()) : TActorId{};
-            const auto databaseMonitoringActor = IsLoadControlEnabled ? Register(CreateDatabaseMonitoringActor(monitoringClientActor, Config.GetLoadControlConfig(), Counters).release()) : TActorId{};
+            TActorId monitoringClientActor;
+            TActorId databaseMonitoringActor;
+            const NConfig::TLoadControlConfig& loadConfig = inheritGlobalLoadConfig || config.GetLoadControlConfig().GetInherit()
+                ? Config.GetYdb().GetLoadControlConfig()
+                : config.GetLoadControlConfig();
+            if (loadConfig.GetEnable()) {
+                monitoringClientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(monitoringClientActor, loadConfig, Counters).release());
+            }
             Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, monitoringClientActor, databaseMonitoringActor});
         }
 
@@ -364,8 +371,15 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            const auto monitoringClientActor = IsLoadControlEnabled ? Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()) : TActorId{};
-            const auto databaseMonitoringActor = IsLoadControlEnabled ? Register(CreateDatabaseMonitoringActor(monitoringClientActor, Config.GetLoadControlConfig(), Counters).release()) : TActorId{};
+            TActorId monitoringClientActor;
+            TActorId databaseMonitoringActor;
+            const NConfig::TLoadControlConfig& loadConfig = inheritGlobalLoadConfig || config.GetLoadControlConfig().GetInherit()
+                ? Config.GetYdb().GetLoadControlConfig()
+                : config.GetLoadControlConfig();
+            if (loadConfig.GetEnable()) {
+                monitoringClientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(monitoringClientActor, loadConfig, Counters).release());
+            }
             Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, monitoringClientActor, databaseMonitoringActor};
         }
     }
@@ -391,6 +405,7 @@ public:
         hFunc(TEvYdbCompute::TEvCreateDatabaseRequest, Handle);
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
         hFunc(TEvYdbCompute::TEvCpuQuotaRequest, Handle);
+        hFunc(TEvYdbCompute::TEvCpuQuotaAdjust, Handle);
     )
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
@@ -402,18 +417,27 @@ public:
     }
 
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
-        if (IsLoadControlEnabled) {
-            Send(ev->Forward(GetMonitoringActorIdByScope(ev.Get()->Get()->Scope)));
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
         } else {
             Send(ev->Sender, new TEvYdbCompute::TEvCpuLoadResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load monitoring disabled"}}), 0, ev->Cookie);
         }
     }
 
     void Handle(TEvYdbCompute::TEvCpuQuotaRequest::TPtr& ev) {
-        if (IsLoadControlEnabled) {
-            Send(ev->Forward(GetMonitoringActorIdByScope(ev.Get()->Get()->Scope)));
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
         } else {
             Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+        }
+    }
+
+    void Handle(TEvYdbCompute::TEvCpuQuotaAdjust::TPtr& ev) {
+        auto actorId = GetMonitoringActorIdByScope(ev.Get()->Get()->Scope);
+        if (actorId != TActorId{}) {
+            Send(ev->Forward(actorId));
         }
     }
 
@@ -434,7 +458,6 @@ private:
     ::NMonitoring::TDynamicCounterPtr Counters;
     TActorId MonitoringClientActorId;
     TActorId MonitoringActorId;
-    const bool IsLoadControlEnabled;
 };
 
 std::unique_ptr<NActors::IActor> CreateComputeDatabaseControlPlaneServiceActor(const NFq::NConfig::TComputeConfig& config,

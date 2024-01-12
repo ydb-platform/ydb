@@ -80,6 +80,7 @@ public:
             DefaultQueryLoad = 0.1;
         }
         PendingQueueSize = config.GetPendingQueueSize();
+        CpuNumber = config.GetCpuNumber();
     }
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
@@ -95,6 +96,7 @@ public:
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
         hFunc(TEvYdbCompute::TEvCpuLoadResponse, Handle);
         hFunc(TEvYdbCompute::TEvCpuQuotaRequest, Handle);
+        hFunc(TEvYdbCompute::TEvCpuQuotaAdjust, Handle);
         cFunc(NActors::TEvents::TEvWakeup::EventType, SendCpuLoadRequest);
     )
 
@@ -128,22 +130,8 @@ public:
             Counters.CpuLoadRequest.Ok->Inc();
             *Counters.InstantLoadPercentage = static_cast<ui64>(InstantLoad * 100);
             *Counters.AverageLoadPercentage = static_cast<ui64>(AverageLoad * 100);
+            CheckPendingQueue();
             *Counters.QuotedLoadPercentage = static_cast<ui64>(QuotedLoad * 100);
-
-            auto now = TInstant::Now();
-            while (QuotedLoad < MaxClusterLoad && PendingQueue.size()) {
-                auto& ev = PendingQueue.front();
-                auto& request = *ev.Get()->Get();
-                if (request.Deadline && now >= request.Deadline) {
-                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::CANCELLED, NYql::TIssues{
-                        NYql::TIssue{TStringBuilder{} << "Deadline reached " << request.Deadline}}), 0, ev->Cookie);
-                } else {
-                    QuotedLoad += request.Quota;
-                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
-                }
-                PendingQueue.pop();
-                Counters.PendingQueueSize->Dec();
-            }
         } else {
             LOG_E("CPU Load Request FAILED: " << response.Issues.ToOneLineString());
             Counters.CpuLoadRequest.Error->Inc();
@@ -186,8 +174,28 @@ public:
                 }
             } else {
                 QuotedLoad += request.Quota;
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
                 *Counters.QuotedLoadPercentage = static_cast<ui64>(QuotedLoad * 100);
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+            }
+        }
+    }
+
+    void Handle(TEvYdbCompute::TEvCpuQuotaAdjust::TPtr& ev) {
+        if (CpuNumber) {
+            auto& request = *ev.Get()->Get();
+            if (request.Duration && request.Duration < AverageLoadInterval / 2 && request.Quota <= 1.0) {
+                auto load = (request.CpuSecondsConsumed * 1000 / request.Duration.MilliSeconds()) / CpuNumber;
+                auto quota = request.Quota ? request.Quota : DefaultQueryLoad;
+                if (quota > load) {
+                    auto adjustment = (quota - load) / 2;
+                    if (QuotedLoad > adjustment) {
+                        QuotedLoad -= adjustment;
+                    } else {
+                        QuotedLoad = 0.0;
+                    }
+                    CheckPendingQueue();
+                    *Counters.QuotedLoadPercentage = static_cast<ui64>(QuotedLoad * 100);
+                }
             }
         }
     }
@@ -210,6 +218,23 @@ public:
         }
     }
 
+    void CheckPendingQueue() {
+        auto now = TInstant::Now();
+        while (QuotedLoad < MaxClusterLoad && PendingQueue.size()) {
+            auto& ev = PendingQueue.front();
+            auto& request = *ev.Get()->Get();
+            if (request.Deadline && now >= request.Deadline) {
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::CANCELLED, NYql::TIssues{
+                    NYql::TIssue{TStringBuilder{} << "Deadline reached " << request.Deadline}}), 0, ev->Cookie);
+            } else {
+                QuotedLoad += request.Quota;
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(), 0, ev->Cookie);
+            }
+            PendingQueue.pop();
+            Counters.PendingQueueSize->Dec();
+        }
+    }
+
 private:
     TInstant StartCpuLoad;
     TInstant LastCpuLoad;
@@ -225,6 +250,7 @@ private:
     double DefaultQueryLoad;
     ui32 PendingQueueSize;
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
+    ui32 CpuNumber;
 };
 
 std::unique_ptr<NActors::IActor> CreateDatabaseMonitoringActor(const NActors::TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters) {

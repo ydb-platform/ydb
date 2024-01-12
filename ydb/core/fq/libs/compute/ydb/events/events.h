@@ -62,6 +62,7 @@ struct TEvYdbCompute {
         EvCpuLoadResponse,
         EvCpuQuotaRequest,
         EvCpuQuotaResponse,
+        EvCpuQuotaAdjust,
 
         EvEnd
     };
@@ -483,6 +484,17 @@ struct TEvYdbCompute {
 
         NYdb::EStatus Status;
         NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaAdjust : public NActors::TEventLocal<TEvCpuQuotaAdjust, EvCpuQuotaAdjust> {
+        TEvCpuQuotaAdjust(const TString& scope, TDuration duration, double cpuSecondsConsumed, double quota = 0.0)
+            : Scope(scope), Duration(duration), CpuSecondsConsumed(cpuSecondsConsumed), Quota(quota)
+        {}
+
+        TString Scope;
+        TDuration Duration;
+        double CpuSecondsConsumed;
+        double Quota; // if zero, default quota is used
     };
 };
 

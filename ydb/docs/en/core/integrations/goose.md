@@ -239,7 +239,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2024/01/12 12:05:17     Fri Jan 12 12:04:56 2024 -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
-Both migration applied.
+Both migration are fully applied.
 
 Also we can see a changes through another options:
 

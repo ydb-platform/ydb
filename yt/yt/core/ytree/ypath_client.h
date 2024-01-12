@@ -117,7 +117,13 @@ public:
 protected:
     TSharedRef SerializeBody() const override
     {
-        return SerializeProtoToRefWithEnvelope(*this);
+        // COPMAT(danilalexeev): legacy RPC codecs
+        if (Header_.has_request_codec()) {
+            YT_VERIFY(Header_.request_codec() == NYT::ToProto<int>(NCompression::ECodec::None));
+            return SerializeProtoToRefWithCompression(*this);
+        } else {
+            return SerializeProtoToRefWithEnvelope(*this);
+        }
     }
 };
 

@@ -35,6 +35,16 @@ size_t TBlobOutput::DoNext(void** ptr)
     return Blob_.Size() - previousSize;
 }
 
+TMutableRef TBlobOutput::RequestBuffer(size_t requiredSize)
+{
+    Reserve(Size() + requiredSize);
+    char* data;
+    size_t size = Next(&data);
+    YT_VERIFY(size >= requiredSize);
+    Undo(size - requiredSize);
+    return TMutableRef{data, size};
+}
+
 void TBlobOutput::DoUndo(size_t len)
 {
     YT_VERIFY(len <= Blob_.Size());

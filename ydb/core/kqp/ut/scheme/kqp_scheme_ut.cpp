@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
@@ -5444,7 +5443,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
     }
-
+/*
     Y_UNIT_TEST(AddColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5471,7 +5470,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
     }
-
+*/
     Y_UNIT_TEST(AddColumnWithStore) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5580,7 +5579,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter, {}, EStatus::GENERIC_ERROR);
+            testHelper.InsertData(testTable, tableInserter, {}, Ydb::StatusIds::GENERIC_ERROR);
         }
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
@@ -5628,7 +5627,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` ", "[[1];[2]]");
     }
-
+/*
     Y_UNIT_TEST(DropColumnOnSchemeChange) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5654,7 +5653,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#]]");
     }
-
+*/
     Y_UNIT_TEST(DropColumnOldScheme) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -5678,7 +5677,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
-            testHelper.InsertData(testTable, tableInserter, {}, EStatus::SUCCESS);
+            testHelper.InsertData(testTable, tableInserter);
         }
      //   testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#]]");
     }

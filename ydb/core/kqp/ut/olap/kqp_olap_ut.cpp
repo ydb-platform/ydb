@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -519,65 +518,23 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
-
         TLocalHelper lHelper(kikimr);
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForClickBench(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
         UNIT_ASSERT(testTable == "/Root/benchTable"); // TODO: check schema instead
-
         TClickHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
         UNIT_ASSERT(testTable == "/Root/tableWithNulls"); // TODO: check schema instead
         TTableWithNullsHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch();
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {

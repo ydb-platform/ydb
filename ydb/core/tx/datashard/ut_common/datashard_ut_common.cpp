@@ -1103,7 +1103,7 @@ static ui64 RunSchemeTx(
     return ev->Get()->Record.GetTxId();
 }
 
-std::tuple<TVector<ui64>, ui64> CreateShardedTable(
+std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         Tests::TServer::TPtr server,
         TActorId sender,
         const TString &root,
@@ -1224,12 +1224,12 @@ std::tuple<TVector<ui64>, ui64> CreateShardedTable(
 
     TString path = TStringBuilder() << root << "/" << name;
     const auto& shards = GetTableShards(server, sender, path);
-    const ui64 tableId = ResolveTableId(server, sender, path).PathId.LocalPathId;
+    TTableId tableId = ResolveTableId(server, sender, path);
 
     return {shards, tableId};
 }
 
-std::tuple<TVector<ui64>, ui64> CreateShardedTable(
+std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         Tests::TServer::TPtr server,
         TActorId sender,
         const TString &root,
@@ -1805,7 +1805,7 @@ void ExecSQL(Tests::TServer::TPtr server,
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }
 
-std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount) {
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount) {
     std::vector<ui32> columnIds(columns.size());
     std::iota(columnIds.begin(), columnIds.end(), 1);
 
@@ -1836,7 +1836,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(ui64 txId, NKik
 
     auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
     ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-    evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+    evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
     return evWrite;
 }
@@ -1869,7 +1869,7 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
     return resultRecord;
 }
 
-NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, ui64 tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus, NWilson::TTraceId traceId)
+NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns, ui32 rowCount, ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus, NWilson::TTraceId traceId)
 {
     auto request = MakeWriteRequest(txId, txMode, tableId, columns, rowCount);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus, std::move(traceId));

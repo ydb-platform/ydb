@@ -1165,6 +1165,14 @@
                 {
                     "default": true,
                     "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
                         "os": "LINUX"
                     }
                 },

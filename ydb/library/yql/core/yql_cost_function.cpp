@@ -44,7 +44,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
     TVector<TString> joinedTableKeys;
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = std::max(leftStats.Nrows,rightStats.Nrows);
+        newCard = leftStats.Nrows;
         joinedTableKeys = leftStats.KeyColumns;
         if (leftStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
@@ -53,7 +53,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         }
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
-        newCard = std::max(leftStats.Nrows,rightStats.Nrows);
+        newCard = rightStats.Nrows;
         joinedTableKeys = rightStats.KeyColumns;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;

@@ -72,7 +72,7 @@ $ ls
 20231215052248_00001_create_table_users.sql
 ```
 
-So, after executing the goose create command, a migration file `<timestamp>_00001_create_table_users.sql` will be created with the following content:
+After executing the `goose create` command, a migration file `<timestamp>_00001_create_table_users.sql` will be created with the following content :
 
 ```
 -- +goose Up

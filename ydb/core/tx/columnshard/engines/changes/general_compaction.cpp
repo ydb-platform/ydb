@@ -21,8 +21,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     {
-        auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()
-        NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false);
+        auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials();
+        NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), resultDataSchema, false);
         ui32 idx = 0;
         for (auto&& i : portions) {
             auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());

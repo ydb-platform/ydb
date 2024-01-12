@@ -11,11 +11,8 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurrentOperator() const {
-    const ui32 idx = CurrentOperatorIdx.Val();
-    AFL_VERIFY(idx < ExternalStorageOperators.size())("idx", idx)("size", ExternalStorageOperators.size());
-    auto result = ExternalStorageOperators[idx];
-    Y_ABORT_UNLESS(result);
-    return result;
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    return ExternalStorageOperator;
 }
 
 std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction() {
@@ -52,10 +49,8 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
     extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
-    ExternalStorageOperators.emplace_back(extStorageOperator);
-    if (CurrentOperatorIdx.Val() + 1 < (i64)ExternalStorageOperators.size()) {
-        CurrentOperatorIdx.Inc();
-    }
+    TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+    ExternalStorageOperator = extStorageOperator;
 }
 
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard)
@@ -67,20 +62,12 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
 }
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
-    AFL_VERIFY(ExternalStorageOperators.size());
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
-    ui32 cleanCount = ExternalStorageOperators.size() - 1;
     if (tierManager) {
         InitNewExternalOperator(tierManager);
     } else {
-        cleanCount = ExternalStorageOperators.size();
-    }
-    for (ui32 i = 0; i < cleanCount; ++i) {
-        if (ExternalStorageOperators[i].use_count() == 1) {
-            ExternalStorageOperators[i] = nullptr;
-        } else {
-            break;
-        }
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        ExternalStorageOperator = nullptr;
     }
 }
 

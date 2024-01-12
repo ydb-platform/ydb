@@ -14,10 +14,10 @@ private:
     using TBase = IBlobsStorageOperator;
     const ui64 TabletId;
     const NActors::TActorId TabletActorId;
-    TAtomicCounter CurrentOperatorIdx = 0;
-    std::deque<NWrappers::NExternalStorage::IExternalStorageOperator::TPtr> ExternalStorageOperators;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
+
     NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    TSpinLock ChangeOperatorLock;
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
 
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetCurrentOperator() const;

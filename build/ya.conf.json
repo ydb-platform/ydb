@@ -168,6 +168,14 @@
             },
             "formula": "build/platform/python/ymake_python2/resources.json"
         },
+        "python3": {
+            "executable": {
+                "python3": [
+                    "python3"
+                ]
+            },
+            "formula": "build/platform/python/ymake_python3/resources.json"
+        },
         "ya-tc": {
             "executable": {
                 "ya-tc": [
@@ -1152,6 +1160,41 @@
                 }
             }
         },
+        "python3": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "python3": {
+                    "bottle": "python3",
+                    "executable": "python3"
+                }
+            }
+        },
         "ya-tc": {
             "platforms": [
                 {
@@ -1365,6 +1408,10 @@
         },
         "python": {
             "description": "Run pseudo-python",
+            "visible": false
+        },
+        "python3": {
+            "description": "Run Python 3",
             "visible": false
         },
         "strip": {

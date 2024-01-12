@@ -23,7 +23,7 @@ namespace {
         }
         ui128 size = range.Size();
         size_t sizeLog = MostSignificantBit(size);
-        return ui8((range.Type() == TIpv6Address::Ipv4 ? 31 : 127) - sizeLog);
+        return ui8((range.Type() == TIpv6Address::Ipv4 ? 32 : 128) - sizeLog);
     }
 
     struct TRawIp4 {
@@ -235,7 +235,7 @@ namespace {
     SIMPLE_STRICT_UDF(TSubnetFromString, TOptionalString(TAutoMapString)) {
         TStringRef strRef = args[0].AsStringRef();
         TString str(strRef.Data(), strRef.Data() + strRef.Size());
-        TIpAddressRange range = TIpAddressRange::FromString(str);
+        TIpAddressRange range = TIpAddressRange::FromCompactString(str);
         auto res = SerializeSubnet(range);
         return res ? valueBuilder->NewString(res.GetRef()) : TUnboxedValue(TUnboxedValuePod());
     }
@@ -249,7 +249,7 @@ namespace {
         auto range = DeserializeSubnet(args[0].AsStringRef());
         result << (*range.Begin()).ToString();
         result << '/';
-        result << GetAddressRangePrefix(range);
+        result << ToString(GetAddressRangePrefix(range));
         return valueBuilder->NewString(result);
     }
 

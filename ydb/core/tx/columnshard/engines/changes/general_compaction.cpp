@@ -21,20 +21,20 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByFullBatches(TCon
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     {
-        auto dataSchema = schema->GetIndexInfo().ArrowSchemaWithSpecials()
+        auto resultDataSchema = resultSchema->GetIndexInfo().ArrowSchemaWithSpecials()
         NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false);
         ui32 idx = 0;
         for (auto&& i : portions) {
             auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
-            auto batch = i.GetBatch(dataSchema, *resultSchema, pkFieldNamesSet);
+            auto batch = i.GetBatch(dataSchema, *resultSchema);
             batch = resultSchema->NormalizeBatch(*dataSchema, batch);
             Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, resultSchema->GetIndexInfo().GetReplaceKey()));
             mergeStream.AddSource(batch, nullptr);
         }
-        batchResults = mergeStream.DrainAllParts(CheckPoints, indexFields);
+        batchResults = mergeStream.DrainAllParts(CheckPoints, resultDataSchema->fields());
     }
     Y_ABORT_UNLESS(batchResults.size());
-    for (auto&& i : batchResults) {
+    for (auto&& b : batchResults) {
         auto portions = MakeAppendedPortions(b, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), GranuleMeta.get(), context);
         Y_ABORT_UNLESS(portions.size());
         for (auto& portion : portions) {

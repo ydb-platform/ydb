@@ -7,3 +7,25 @@
 * работа с CDC, c использованием командного интерпретатора YDB CLI.
 
 @[YouTube](https://www.youtube.com/watch?v=BG6pPfQ0IHE)
+
+### Управляемый сервис YDB: настройка, применение, мониторинг {#2022-webinar-ydb-managment}
+Применение {{ ydb-name }} как управляемого сервиса позволяет разработчикам и архитекторам сосредоточиться на бизнес-задачах, а команда Yandex Cloud возьмёт на себя заботы о надёжности, производительности и ресурсной эффективности баз данных. 
+
+В вебинаре [ {{ team.zinal.name }} ]( {{ team.zinal.profile }} ) ( {{ team.zinal.position }} ) показал:
+* [YDB в целом и сервис YDB в Yandex Cloud](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=90s).
+* [Разворачиваем сервисы YDB](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=284s).
+* [Методы аутентификации пользователей, создание учётных записей](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=728s).
+* [Обзор web-интерфейса консоли Yandex Cloud в части YDB](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=1145s).
+* [Работа с YDB через клиент командной строки](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=1396s).
+* [Пример приложения на Java](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=1837s).
+* [Приложение на Python (serverless)](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=2466s).
+* [Стандартный генератор нагрузки YDB](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=2962s).
+* [Мониторинг кластера YDB под нагрузкой](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=3189s).
+* [Масштабирование кластера YDB](https://www.youtube.com/watch?v=d5NEDzsyp7Q&t=3417s).
+
+@[YouTube](https://www.youtube.com/watch?v=d5NEDzsyp7Q)
+
+### Scalability and Fault Tolerance in YDB (EN) {#2022-webinar-scalability}
+In this talk we will cover two layers of YDB: Tablet and BlobStorage layers that together provide fault tolerance, scalability, and user isolation.
+
+@[YouTube](https://www.youtube.com/watch?v=eYpyKXihGaY)

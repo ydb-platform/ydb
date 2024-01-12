@@ -1,0 +1,22 @@
+### Новости {{ ydb*name }} — обзор новых возможностей {#2020*webinar*ydb*news}
+[ {{ team.kovalenko.name }} ]( {{ team.kovalenko.profile }} ) ( {{ team.kovalenko.position }} ) сделал обзор новых возможностей БД: работа с JSON, системные таблицы и nodeJS SDK. Раньше пользователи Яндекс.Облака могли работать с Yandex Database только из виртуальных машин на платформе. Теперь это возможно через интернет.
+
+Из вебинара вы узнаете про:
+* Публикацию драйвера для системы сбора и анализа трейсов Jäger в Open Source.
+* Расширение возможностей для работы с JSON из YQL.
+* Системные таблицы для диагностики производительности запросов.
+* Публикацию в Open Source Node.js SDK.
+
+@[YouTube](https://youtu.be/6LMH4Q4uGBU)
+
+Ссылки на материалы:
+* [Jaeger Plugin к YDB доступен на GitHub](github.com/yandex-cloud/jaeger-ydb-store)
+* [Yandex Database Public Preview](cloud.yandex.ru/services/ydb)
+* [Python SDK](github.com/yandex-cloud/ydb-python-sdk)
+* [Go SDK](github.com/yandex-cloud/ydb-go-sdk)
+* [Java SDK](github.com/yandex-cloud/ydb-java-sdk)
+* [Node.js SDK](github.com/yandex-cloud/ydb-nodejs-sdk)
+
+
+
+

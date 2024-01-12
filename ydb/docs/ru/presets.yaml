@@ -51,6 +51,10 @@ default:
       name: Юлия Сидорина
       position: разработчик YDB
       profile: https://www.linkedin.com/in/yuliya-sidorina-a17ab6220/
+    smirnov:
+      name: Александр Смирнов
+      position: технический эксперт
+      profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/
     novozhilova:
       name: Софья Новожилова 
       position: занимается развитием аналитического направления платформы YDB

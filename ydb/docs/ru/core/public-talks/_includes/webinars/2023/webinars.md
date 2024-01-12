@@ -1,12 +1,12 @@
 ### Вебинар о релизе YDB v23.1 {#2023-webinar-ydb-23-1}
 В вебинаре рассказывается о поддержке изначального сканирования в CDC, атомарной замене индексов, и аудитном логе: 
-* Устройство [Change Data Capture](https://www.youtube.com/live/vzKoEVvESi0?si=PDu8VliKHNKn25iE&t=171) (механизм отслеживания изменения данных в таблицах) и улучшения этой системы в новом релизе. [{{ team.nizametdinov.name }}]({{ team.nizametdinov.profile }}) ({{ team.nizametdinov.position }}); 
-* Новая функциональность YDB – [аудитный лог](https://www.youtube.com/live/vzKoEVvESi0?si=umC_WpfI8XXpWrRY&t=925), которая позволяет отслеживать ключевые действия и события в системе. [{{ team.rykov.name }}]({{ team.rykov.profile }}) ({{ team.rykov.position }});
+* Устройство [Change Data Capture](https://www.youtube.com/live/vzKoEVvESi0?si=PDu8VliKHNKn25iE&t=171) (механизм отслеживания изменения данных в таблицах) и улучшения этой системы в новом релизе. [{{ team.nizametdinov.name }}]({{ team.nizametdinov.profile }}) ({{ team.nizametdinov.position }}). 
+* Новая функциональность YDB – [аудитный лог](https://www.youtube.com/live/vzKoEVvESi0?si=umC_WpfI8XXpWrRY&t=925), которая позволяет отслеживать ключевые действия и события в системе. [{{ team.rykov.name }}]({{ team.rykov.profile }}) ({{ team.rykov.position }}).
 * Улучшение в конфигурации [акторной системы]((https://www.youtube.com/live/vzKoEVvESi0?si=roXublyzdBy8UNjC&t=1177)). [{{ team.kriukov.name }}]({{ team.kriukov.profile }}) ({{ team.kriukov.position }})
-* Улучшения в форматах [передачи данных](https://www.youtube.com/watch?v=vzKoEVvESi0&t=1381s) между этапами выполнения запросов. [{{ team.gridnev.name }}]({{ team.gridnev.profile }}) ({{ team.gridnev.position }});
-* [Оптимизация производительности YDB](https://www.youtube.com/live/vzKoEVvESi0?si=vLEerc2xz9O9LABz&t=1896) – кеширование паттернов графов вычислений. [{{ team.kuznetcov.name }}]({{ team.kuznetcov.profile }}) ({{ team.kuznetcov.position }});
-* [Атомарное переименование](https://www.youtube.com/watch?v=vzKoEVvESi0&t=2122s) вторичных индексов. [{{ team.cherednik.name }}]({{ team.cherednik.profile }}) ({{ team.cherednik.position }});
-* [Поддержка вторичных индексов](https://www.youtube.com/watch?v=vzKoEVvESi0&t=2318s) в сканирующих запросах. [{{ team.sidorina.name }}]({{ team.sidorina.profile }}) ({{ team.sidorina.position }});
+* Улучшения в форматах [передачи данных](https://www.youtube.com/watch?v=vzKoEVvESi0&t=1381s) между этапами выполнения запросов. [{{ team.gridnev.name }}]({{ team.gridnev.profile }}) ({{ team.gridnev.position }}).
+* [Оптимизация производительности YDB](https://www.youtube.com/live/vzKoEVvESi0?si=vLEerc2xz9O9LABz&t=1896) – кеширование паттернов графов вычислений. [{{ team.kuznetcov.name }}]({{ team.kuznetcov.profile }}) ({{ team.kuznetcov.position }}).
+* [Атомарное переименование](https://www.youtube.com/watch?v=vzKoEVvESi0&t=2122s) вторичных индексов. [{{ team.cherednik.name }}]({{ team.cherednik.profile }}) ({{ team.cherednik.position }}).
+* [Поддержка вторичных индексов](https://www.youtube.com/watch?v=vzKoEVvESi0&t=2318s) в сканирующих запросах. [{{ team.sidorina.name }}]({{ team.sidorina.profile }}) ({{ team.sidorina.position }}).
 * Улучшения в переносе [предикатов на чтения](https://www.youtube.com/watch?v=vzKoEVvESi0&t=2454s) из таблиц. {{ team.surin.name }}.
 
 @[YouTube](https://www.youtube.com/watch?v=vzKoEVvESi0&t=69s)

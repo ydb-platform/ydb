@@ -203,6 +203,10 @@ bool TIpAddressRange::IsSingle() const {
     return Start_ == End_;
 }
 
+bool TIpAddressRange::IsComplete() const {
+    return ui128(Start_) == 0 && ui128(End_) == (Type() == TIpv6Address::Ipv6 ? ui128(-1) : ui128(ui32(-1)));
+}
+
 bool TIpAddressRange::Contains(const TIpAddressRange& other) const {
     return Start_ <= other.Start_ && End_ >= other.End_;
 }

@@ -982,8 +982,9 @@ private:
         if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
             internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
-            // internalSinkProto->SetSettings(google::protobuf::Any{});
+            NKqpProto::TKqpTableSinkSettings settingsProto;
             FillTableId(settings.Table().Cast(), *internalSinkProto.MutableTable());
+            FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
 
             const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
             for (const auto& column : settings.Columns().Cast()) {
@@ -992,7 +993,12 @@ private:
                 auto columnProto = internalSinkProto.AddColumns();
                 columnProto->SetId(columnMeta->Id);
                 columnProto->SetName(column.StringValue());
+                auto columnProtos = settingsProto.AddColumns();
+                columnProtos->SetId(columnMeta->Id);
+                columnProtos->SetName(column.StringValue());
             }
+
+            internalSinkProto.MutableSettings()->PackFrom(settingsProto);
         } else {
             YQL_ENSURE(false, "Unsupported sink type");
         }

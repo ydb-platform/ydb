@@ -765,7 +765,6 @@ protected:
 
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
-            // TODO: why only 1 sink???
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());

@@ -194,14 +194,6 @@ struct TEvPrivate {
             : NodeId(nodeId)
         { }
     };
-
-    struct TEvDropTempTable : public TEventLocal<TEvDropTempTable, EEv::EvDropTempTable> {
-        TString WorkingDir;
-        TString Name;
-        ui64 TxId;
-        TPathId PathId;
-    };
-
 }; // TEvPrivate
 
 } // NSchemeShard

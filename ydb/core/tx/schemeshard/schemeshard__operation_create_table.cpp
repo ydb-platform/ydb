@@ -646,7 +646,7 @@ public:
 
         if (schema.HasTemporary() && schema.GetTemporary()) {
             tableInfo->IsTemporary = true;
-            tableInfo->OwnerActorId = schema.GetOwnerActorId();
+            tableInfo->OwnerActorId = ActorIdFromProto(Transaction.GetTempTableOwnerActorId());
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;
@@ -698,14 +698,12 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         if (schema.HasTemporary() && schema.GetTemporary()) {
-            const auto& ownerActorIdStr = schema.GetOwnerActorId();
+            const auto& ownerActorId = tableInfo->OwnerActorId;
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing create temp table with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << ownerActorIdStr
+                    << ", OwnerActorId: " << ownerActorId
                     << ", PathId: " << newTable->PathId);
-            TActorId ownerActorId;
-            ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
             context.OnComplete.UpdateTempTablesToCreateState(
                 ownerActorId, newTable->PathId);
         }

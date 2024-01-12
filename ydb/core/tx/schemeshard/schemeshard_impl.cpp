@@ -2503,7 +2503,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::TTLSettings>(ttlSettings),
             NIceDb::TUpdate<Schema::Tables::IsBackup>(tableInfo->IsBackup),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
-            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId));
+            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()));
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -2515,7 +2515,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::IsBackup>(tableInfo->IsBackup),
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
-            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId));
+            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()));
     }
 
     for (auto col : tableInfo->Columns) {
@@ -4581,7 +4581,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         // for subscriptions on owners
         HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
-        HFuncTraced(TEvPrivate::TEvDropTempTable, Handle);
         HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
 
     default:
@@ -6200,9 +6199,9 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (TxIdToIndexBuilds.contains(txId)) {
         return Execute(CreateTxReply(ev), ctx);
+    } else if (BackgroundCleaningTxs.contains(txId)) {
+        return HandleBackgroundCleaningTransactionResult(ev);
     }
-
-    HandleBackgroundCleaningTransactionResult(ev);
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "no able to determine destination for message TEvModifySchemeTransactionResult: "
@@ -6256,8 +6255,10 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         Execute(CreateTxReply(txId), ctx);
         executed = true;
     }
-
-    HandleBackgroundCleaningCompletionResult(ev->Get()->Record.GetTxId());
+    if (BackgroundCleaningTxs.contains(txId)) {
+        HandleBackgroundCleaningCompletionResult(txId);
+        executed = true;
+    }
 
     if (executed) {
         return;
@@ -6426,6 +6427,27 @@ void TSchemeShard::ApplyPartitionConfigStoragePatch(
     if (patch.StorageRoomsSize()) {
         config.MutableStorageRooms()->CopyFrom(patch.GetStorageRooms());
     }
+}
+
+std::optional<TTempTableInfo> TSchemeShard::ResolveTempTableInfo(const TPathId& pathId) {
+    auto path = TPath::Init(pathId, this);
+    if (!path) {
+        return std::nullopt;
+    }
+    TTempTableInfo info;
+    info.Name = path.LeafName();
+    info.WorkingDir = path.Parent().PathString();
+
+    TTableInfo::TPtr table = Tables.at(path.Base()->PathId);
+    if (!table) {
+        return std::nullopt;
+    }
+    if (!table->IsTemporary) {
+        return std::nullopt;
+    }
+
+    info.OwnerActorId = table->OwnerActorId;
+    return info;
 }
 
 // Fills CreateTable transaction for datashard with the specified range

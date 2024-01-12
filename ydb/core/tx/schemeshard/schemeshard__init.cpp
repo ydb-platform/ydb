@@ -1794,16 +1794,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 tableInfo->IsBackup = std::get<8>(rec);
                 tableInfo->IsTemporary = std::get<10>(rec);
-                tableInfo->OwnerActorId = std::get<11>(rec);
+
+                auto ownerActorIdStr = std::get<11>(rec);
+                tableInfo->OwnerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
 
                 if (tableInfo->IsTemporary) {
-                    Y_VERIFY_S(!tableInfo->OwnerActorId.empty(),  "Empty OwnerActorId for temp table");
+                    Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
                     auto tempTablePath = TPath::Init(pathId, Self);
                     auto tempTableName = tempTablePath.LeafName();
                     auto tempTableWorkingDir = tempTablePath.Parent().PathString();
 
-                    TActorId ownerActorId;
-                    ownerActorId.Parse(tableInfo->OwnerActorId.c_str(), tableInfo->OwnerActorId.size());
+                    TActorId ownerActorId = tableInfo->OwnerActorId;
 
                     auto& tempTablesByOwner = Self->TempTablesState.TempTablesByOwner;
                     auto& nodeStates = Self->TempTablesState.NodeStates;

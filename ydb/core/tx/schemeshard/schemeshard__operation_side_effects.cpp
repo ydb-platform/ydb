@@ -830,17 +830,8 @@ void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorC
                 continue;
             }
 
-            auto tempTablePath = TPath::Init(pathId, ss);
-            auto tempTableName = tempTablePath.LeafName();
-            auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
             it->second.erase(tempTableIt);
-            ss->RemoveBackgroundCleaning(TBackgroundCleaningInfo(
-                std::move(tempTableWorkingDir),
-                std::move(tempTableName),
-                ownerActorId,
-                pathId)
-            );
+            ss->RemoveBackgroundCleaning(pathId);
         }
 
         if (it->second.empty()) {

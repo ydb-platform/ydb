@@ -4,122 +4,75 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TTempTableDropStarter: public TActorBootstrapped<TTempTableDropStarter> {
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::SCHEMESHARD_TEMP_TABLE_DROP_STARTER;
+NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathId& pathId) {
+    auto info = ResolveTempTableInfo(pathId);
+    if (!info) {
+        return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
-    explicit TTempTableDropStarter(const TActorId& ssActorId, THolder<TEvPrivate::TEvDropTempTable>&& req)
-        : SSActorId(ssActorId)
-        , Request(std::move(req)) // without txId
-    {
-    }
-
-    void Bootstrap() {
-        AllocateTxId();
-        Become(&TTempTableDropStarter::StateWork);
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
-private:
-    void AllocateTxId() {
-        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
-    }
-
-    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        Request->TxId = ev->Get()->TxId;
-        Send(SSActorId, Request.Release());
-        PassAway();
-    }
-
-private:
-    const TActorId SSActorId;
-    THolder<TEvPrivate::TEvDropTempTable> Request;
-};
-
-NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TBackgroundCleaningInfo& info) {
     auto& tempTablesByOwner = TempTablesState.TempTablesByOwner;
 
-    auto it = tempTablesByOwner.find(info.second);
+    auto it = tempTablesByOwner.find(info->OwnerActorId);
     if (it == tempTablesByOwner.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
-    auto tempTableIt = it->second.find(info.GetPathId());
+    auto tempTableIt = it->second.find(pathId);
     if (tempTableIt == it->second.end()) {
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
     auto ctx = ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCleaning "
-        "for temp table# " << JoinPath({info.first.first, info.first.second})
-        << ", ownerId# " << info.second
+        "for temp table# " << JoinPath({info->WorkingDir, info->Name})
+        << ", ownerId# " << info->OwnerActorId
         << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
         << ", rate# " << BackgroundCleaningQueue->GetRate()
         << ", in queue# " << BackgroundCleaningQueue->Size() << " cleaning events"
         << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
         << " at schemeshard " << TabletID());
 
-    auto ev = MakeHolder<TEvPrivate::TEvDropTempTable>();
-    ev->WorkingDir = info.first.first;
-    ev->Name = info.first.second;
-    ev->PathId = info.GetPathId();
+    auto txId = GetCachedTxId(ctx);
 
-    ctx.Register(new TTempTableDropStarter(ctx.SelfID, std::move(ev)));
-
-    return NOperationQueue::EStartStatus::EOperationRunning;
-}
-
-void TSchemeShard::HandleBackgroundCleaningCompletionResult(ui64 txId) {
-    auto txsIt = BackgroundCleaningTxs.find(txId);
-    if (txsIt == BackgroundCleaningTxs.end()) {
-        return;
-    }
-
-    auto tempTablePath = TPath::Init(txsIt->second, this);
-    auto tempTableName = tempTablePath.LeafName();
-    auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
-    BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
-        std::move(tempTableWorkingDir),
-        std::move(tempTableName),
-        TActorId(),
-        txsIt->second)
-    );
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvDropTempTable::TPtr& ev, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Start to drop temp table: " << JoinPath({ev->Get()->WorkingDir, ev->Get()->Name}));
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(ev->Get()->TxId), TabletID());
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), TabletID());
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-    modifyScheme.SetWorkingDir(ev->Get()->WorkingDir);
+    modifyScheme.SetWorkingDir(info->WorkingDir);
+    modifyScheme.SetInternal(true);
 
     auto& drop = *modifyScheme.MutableDrop();
-    drop.SetName(ev->Get()->Name);
+    drop.SetName(info->Name);
 
-    ui64 txId = ev->Get()->TxId;
-    BackgroundCleaningTxs[txId] = ev->Get()->PathId;
+    BackgroundCleaningTxs[txId] = pathId;
 
     Send(SelfId(), std::move(propose));
+
+    return NOperationQueue::EStartStatus::EOperationRunning;
 }
 
-void TSchemeShard::OnBackgroundCleaningTimeout(const TBackgroundCleaningInfo& info) {
-    auto ctx = ActorContext();
+void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
+    const auto& pathId = BackgroundCleaningTxs.at(txId);
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Background cleaning timeout "
-        "for temp table# " << JoinPath({info.first.first, info.first.second})
-        << ", ownerId# " << info.second
+    auto ctx = ActorContext();
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning CompletionResult "
+        "for txId# " << txId
+        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
+        << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
+        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
+        << " at schemeshard " << TabletID());
+
+    BackgroundCleaningQueue->OnDone(pathId);
+}
+
+void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
+    auto info = ResolveTempTableInfo(pathId);
+
+    auto ctx = ActorContext();
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "BackgroundCleaning timeout "
+        "for temp table# " << JoinPath({info->WorkingDir, info->Name})
+        << ", ownerId# " << info->OwnerActorId
         << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
         << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
         << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
@@ -199,17 +152,7 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
 
             auto& currentTempTables = itTempTables->second;
             for (auto& pathId: currentTempTables) {
-                auto tempTablePath = TPath::Init(pathId, this);
-                auto tempTableName = tempTablePath.LeafName();
-                auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
-
-                EnqueueBackgroundCleaning(
-                    TBackgroundCleaningInfo(
-                        std::move(tempTableWorkingDir),
-                        std::move(tempTableName),
-                        ownerActorId,
-                        pathId));
+                EnqueueBackgroundCleaning(pathId);
             }
             tempTablesByOwner.erase(itTempTables);
         }
@@ -249,16 +192,7 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     auto& currentTempTables = it->second;
 
     for (auto& pathId: currentTempTables) {
-        auto tempTablePath = TPath::Init(pathId, this);
-        auto tempTableName = tempTablePath.LeafName();
-        auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
-        EnqueueBackgroundCleaning(
-            TBackgroundCleaningInfo(
-                std::move(tempTableWorkingDir),
-                std::move(tempTableName),
-                ownerActorId,
-                pathId));
+        EnqueueBackgroundCleaning(pathId);
     }
     tempTablesByOwner.erase(it);
 
@@ -281,62 +215,46 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     return true;
 }
 
-void TSchemeShard::EnqueueBackgroundCleaning(const TBackgroundCleaningInfo& info) {
+void TSchemeShard::EnqueueBackgroundCleaning(const TPathId& pathId) {
     if (BackgroundCleaningQueue) {
-        BackgroundCleaningQueue->Enqueue(std::move(info));
+        BackgroundCleaningQueue->Enqueue(std::move(pathId));
     }
 }
 
-void TSchemeShard::RemoveBackgroundCleaning(const TBackgroundCleaningInfo& info) {
+void TSchemeShard::RemoveBackgroundCleaning(const TPathId& pathId) {
     if (BackgroundCleaningQueue) {
-        BackgroundCleaningQueue->Remove(std::move(info));
+        BackgroundCleaningQueue->Remove(std::move(pathId));
     }
 }
 
 void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result) {
-    const auto txId = result->Get()->Record.GetTxId();
+    const auto txId = TTxId(result->Get()->Record.GetTxId());
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Get TransactionResult of temp table drop with txId: " << txId);
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning TransactionResult "
+        "for txId# " << txId
+        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
+        << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
+        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
+        << " at schemeshard " << TabletID());
 
-    auto txsIt = BackgroundCleaningTxs.find(txId);
-    if (txsIt == BackgroundCleaningTxs.end()) {
-        return;
-    }
+    const auto& pathId = BackgroundCleaningTxs.at(txId);
 
     const NKikimrScheme::TEvModifySchemeTransactionResult &record = result->Get()->Record;
 
     switch (record.GetStatus()) {
-    case NKikimrScheme::EStatus::StatusAlreadyExists:
+    case NKikimrScheme::EStatus::StatusPathDoesNotExist:
     case NKikimrScheme::EStatus::StatusSuccess: {
-        auto tempTablePath = TPath::Init(txsIt->second, this);
-        auto tempTableName = tempTablePath.LeafName();
-        auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
-        BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
-            std::move(tempTableWorkingDir),
-            std::move(tempTableName),
-            TActorId(),
-            txsIt->second)
-        );
+        BackgroundCleaningQueue->OnDone(pathId);
         break;
     }
     case NKikimrScheme::EStatus::StatusAccepted:
-        Send(SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(txId));
+        Send(SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(record.GetTxId()));
         break;
     default: {
-        auto tempTablePath = TPath::Init(txsIt->second, this);
-        auto tempTableName = tempTablePath.LeafName();
-        auto tempTableWorkingDir = tempTablePath.Parent().PathString();
-
-        BackgroundCleaningQueue->OnDone(TBackgroundCleaningInfo(
-            std::move(tempTableWorkingDir),
-            std::move(tempTableName),
-            TActorId(),
-            txsIt->second)
-        );
+        BackgroundCleaningQueue->OnDone(pathId);
+        EnqueueBackgroundCleaning(pathId);
         break;
     }
     }

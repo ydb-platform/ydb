@@ -112,7 +112,7 @@ public:
                     tableDesc->SetPath(tableDesc->GetPath() + SessionId);
                     YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
                         "Create temp table with empty KqpTempTablesAgentActor");
-                    tableDesc->SetOwnerActorId(KqpTempTablesAgentActor.ToString());
+                    ActorIdToProto(KqpTempTablesAgentActor, modifyScheme.MutableTempTableOwnerActorId());
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

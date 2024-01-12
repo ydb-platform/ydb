@@ -156,4 +156,10 @@ struct TTempTablesState {
     THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
 };
 
+struct TTempTableInfo {
+    TString WorkingDir;
+    TString Name;
+    TActorId OwnerActorId;
+};
+
 }

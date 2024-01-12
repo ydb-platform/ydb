@@ -135,8 +135,8 @@ private:
     };
 
     using TBackgroundCleaningQueue = NOperationQueue::TOperationQueueWithTimer<
-        TBackgroundCleaningInfo,
-        TFifoQueue<TBackgroundCleaningInfo>,
+        TPathId,
+        TFifoQueue<TPathId>,
         TEvPrivate::EvRunBackgroundCleaning,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_CLEANING>;
@@ -147,12 +147,12 @@ private:
             : Self(self)
         { }
 
-        NOperationQueue::EStartStatus StartOperation(const TBackgroundCleaningInfo& info) override {
-            return Self->StartBackgroundCleaning(info);
+        NOperationQueue::EStartStatus StartOperation(const TPathId& pathId) override {
+            return Self->StartBackgroundCleaning(pathId);
         }
 
-        void OnTimeout(const TBackgroundCleaningInfo& info) override {
-            Self->OnBackgroundCleaningTimeout(info);
+        void OnTimeout(const TPathId& pathId) override {
+            Self->OnBackgroundCleaningTimeout(pathId);
         }
 
     private:
@@ -286,7 +286,7 @@ public:
 
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
-    THashMap<ui64, TPathId> BackgroundCleaningTxs;
+    THashMap<TTxId, TPathId> BackgroundCleaningTxs;
     NKikimrConfig::TBackgroundCleaningConfig::TRetrySettings BackgroundCleaningRetrySettings;
 
     // shardIdx -> clientId
@@ -854,8 +854,9 @@ public:
     void EnqueueBorrowedCompaction(const TShardIdx& shardIdx);
     void RemoveBorrowedCompaction(const TShardIdx& shardIdx);
 
-    void EnqueueBackgroundCleaning(const TBackgroundCleaningInfo& info);
-    void RemoveBackgroundCleaning(const TBackgroundCleaningInfo& info);
+    void EnqueueBackgroundCleaning(const TPathId& pathId);
+    void RemoveBackgroundCleaning(const TPathId& pathId);
+    std::optional<TTempTableInfo> ResolveTempTableInfo(const TPathId& pathId);
 
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
@@ -871,17 +872,16 @@ public:
     void BorrowedCompactionHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
     void UpdateBorrowedCompactionQueueMetrics();
 
-    NOperationQueue::EStartStatus StartBackgroundCleaning(const TBackgroundCleaningInfo& info);
-    void OnBackgroundCleaningTimeout(const TBackgroundCleaningInfo& info);
+    NOperationQueue::EStartStatus StartBackgroundCleaning(const TPathId& pathId);
+    void OnBackgroundCleaningTimeout(const TPathId& pathId);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
     bool CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev);
     void RetryNodeSubscribe(ui32 nodeId);
     void Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext& ctx);
     void HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
-    void HandleBackgroundCleaningCompletionResult(ui64 txId);
-    void Handle(TEvPrivate::TEvDropTempTable::TPtr& ev, const TActorContext& ctx);
-    void RemoveBackgroundCleaningInfo(const TBackgroundCleaningInfo& info);
+    void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
+    void RemoveBackgroundCleaningInfo(const TPathId& pathId);
     void ClearTempTablesState();
 
     struct TTxCleanDroppedSubDomains;

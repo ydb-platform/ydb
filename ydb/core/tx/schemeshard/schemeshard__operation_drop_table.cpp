@@ -597,14 +597,12 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
-        if (drop.HasTemporary() && drop.GetTemporary()) {
-            const auto& ownerActorIdStr = drop.GetOwnerActorId();
+        if (table->IsTemporary) {
+            const auto& ownerActorId = table->OwnerActorId;
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Processing drop temp table with Name: " << name
                     << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << ownerActorIdStr);
-            TActorId ownerActorId;
-            ownerActorId.Parse(ownerActorIdStr.c_str(), ownerActorIdStr.size());
+                    << ", OwnerActorId: " << ownerActorId);
             context.OnComplete.UpdateTempTablesToDropState(ownerActorId, path.Base()->PathId);
         }
 

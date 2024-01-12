@@ -53,7 +53,7 @@ void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 t
     auto* tx = ev->Record.MutableTransaction(0);
     auto* desc = tx->MutableCreateTable();
     desc->SetTemporary(true);
-    desc->SetOwnerActorId(ownerActorId.ToString());
+    ActorIdToProto(ownerActorId, tx->MutableTempTableOwnerActorId());
 
     runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
             new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },
@@ -67,10 +67,6 @@ void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& w
 
 void AsyncDropTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
     auto ev = DropTableRequest(txId, workingDir, scheme);
-    auto* tx = ev->Record.MutableTransaction(0);
-    auto* drop = tx->MutableDrop();
-    drop->SetTemporary(true);
-    drop->SetOwnerActorId(ownerActorId.ToString());
 
     runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
             new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },

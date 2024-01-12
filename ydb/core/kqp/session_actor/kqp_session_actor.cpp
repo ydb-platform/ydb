@@ -1885,7 +1885,7 @@ public:
 
             LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
             auto tempTablesManager = CreateKqpTempTablesManager(
-                std::move(TempTablesState), SelfId(), Settings.Database, KqpTempTablesAgentActor);
+                std::move(TempTablesState), SelfId(), Settings.Database);
 
             RegisterWithSameMailbox(tempTablesManager);
             return;

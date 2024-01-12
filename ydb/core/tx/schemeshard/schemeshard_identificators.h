@@ -41,47 +41,6 @@ public:
 };
 constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShardIdx);
 
-class TBackgroundCleaningInfo: public std::pair<std::pair<TString, TString>, TActorId> {
-    using TBase = std::pair<std::pair<TString, TString>, TActorId>;
-
-    TPathId PathId;
-public:
-    using TBase::TBase;
-
-    TBackgroundCleaningInfo(TString workingDir, TString name, TActorId ownerActorId, const TPathId& pathId)
-        : TBase({{std::move(workingDir), std::move(name)}, ownerActorId})
-        , PathId(pathId) {
-    }
-
-    TActorId GetOwnerId() const {
-        return second;
-    }
-
-    TString GetPath() const {
-        return first.second;
-    }
-
-    TString GetDatabase() const {
-        return first.first;
-    }
-
-    ui32 GetNodeId() const {
-        return second.NodeId();
-    }
-
-    TPathId GetPathId() const {
-        return PathId;
-    }
-
-    ui64 Hash() const noexcept {
-        return ::THash<TPathId>()(PathId);
-    }
-
-    bool operator==(const TBackgroundCleaningInfo& info) const {
-        return first.first == info.first.first && first.second == first.second;
-    }
-};
-
 STRONG_UI64_TYPE_DEF_DV(TStepId, 0, 0);
 constexpr TStepId InvalidStepId = TStepId();
 
@@ -191,10 +150,3 @@ template<>
 inline void Out<NKikimr::NSchemeShard::TShardIdx>(IOutputStream &o, const NKikimr::NSchemeShard::TShardIdx &x) {
     o << x.GetOwnerId() << ":" << x.GetLocalId();
 }
-
-template<>
-struct THash<NKikimr::NSchemeShard::TBackgroundCleaningInfo> {
-    inline ui64 operator()(const NKikimr::NSchemeShard::TBackgroundCleaningInfo &x) const noexcept {
-        return x.Hash();
-    }
-};

@@ -1,13 +1,8 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-OWNER(
-    eivanov89
-    g:kikimr
-)
-
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(3)
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
@@ -21,7 +16,6 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
-    ydb/core/cms
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers

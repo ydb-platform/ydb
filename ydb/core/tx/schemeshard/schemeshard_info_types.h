@@ -404,7 +404,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
     bool IsTemporary = false;
-    TString OwnerActorId;
+    TActorId OwnerActorId;
 
     TAlterTableInfo::TPtr AlterData;
 

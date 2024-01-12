@@ -1,6 +1,7 @@
 # Kafka API usage examples
 
-This article provides examples of usage the Kafka API to work with [topics](../../concepts/topic.md).
+This article provides examples of Kafka API usage to work with [{{ ydb-short-name }} topics](../../concepts/topic.md).
+
 
 Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 

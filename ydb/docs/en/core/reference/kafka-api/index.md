@@ -1,7 +1,9 @@
 # Kafka API
 
-YDB supports working with topics using [the Kafka version 3.4.0](https://kafka.apache.org/34/documentation.html). 
+{{ ydb-short-name }} supports working with [topics](../../concepts/topic.md) using [the Kafka protocol version 3.4.0](https://kafka.apache.org/34/documentation.html). It allows to integrate {{ ydb-short-name }} with applications originally developed to work with [Apache Kafka](https://kafka.apache.org/).
 
-[Kafka API usage limitations](constraints.md)
 
-[Kafka API usage examples](examples.md)
+The Kafka API  documentation contains the following sections:
+
+* [Usage examples](examples.md)
+* [Limitations](constraints.md)

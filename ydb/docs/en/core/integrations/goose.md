@@ -224,7 +224,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 We see first migration in applied status and second in pending status.
 
-Let's apply migration using `goose up-by-one`:
+Let's apply the second migration using `goose up-by-one`:
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" up-by-one
 2024/01/12 12:04:56 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (59.93ms)

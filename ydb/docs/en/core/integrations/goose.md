@@ -149,7 +149,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 Status `Pending` changed to timestamp `Fri Jan 12 11:55:18 2024` - this means that migration applied.
 
-Also we can see a changes through another options:
+There are alternative options to see the applied changes:
 
 {% list tabs %}
 

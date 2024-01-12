@@ -73,6 +73,14 @@ protected:
         return PassAway();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "StorageBalancer(" << Settings.StoragePool << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void ReassignNextTablet() {
         while (NextReassign != Operations.end() && ReassignInFlight < Settings.MaxInFlight) {
             auto tablet = Hive->FindTablet(NextReassign->first);

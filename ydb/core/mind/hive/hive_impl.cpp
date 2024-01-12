@@ -2414,6 +2414,16 @@ void THive::RemoveSubActor(ISubActor* subActor) {
     }
 }
 
+bool THive::StopSubActor(TSubActorId subActorId) {
+    for (auto* subActor : SubActors) {
+        if (subActor->GetId() == subActorId) {
+            subActor->Cleanup();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
     return IsValidMetricsCPU(metrics) || IsValidMetricsMemory(metrics) || IsValidMetricsNetwork(metrics);
 }

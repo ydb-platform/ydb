@@ -155,7 +155,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after the first migration](../_assets/goose-ydb-ui-after-first-migration.png)
 
 - Using YDB CLI
 

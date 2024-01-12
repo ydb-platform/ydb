@@ -24,7 +24,7 @@ Where:
 
 ## YDB connection string
 
-To connect to YDB you should use a connection string like
+To connect to YDB you should use a connection string like:
 
 ```
 <protocol>://<host>:<port>/<database_path>?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric

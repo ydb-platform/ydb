@@ -32,7 +32,7 @@ To connect to YDB you should use a connection string like
 
 Where:
 - `<protocol>` - connection protocol (`grpc` for an unsecured connection or `grpcs` for a secure [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) connection). The secure connection requires certificates. You should declare certificates like this: `export YDB_SSL_ROOT_CERTIFICATES_FILE=/path/to/ydb/certs/CA.pem`.
-- `<host>` - connection address of YDB.
+- `<host>` - hostname for connecting to YDB cluster.
 - `<port>` - port for connecting to YDB.
 - `<database_path>` - database in the YDB cluster.
 - `go_query_mode=scripting` - special `scripting` mode for executing queries by default in the YDB driver. In this mode, all requests from goose are sent to the YDB `scripting` service, which allows processing of both `DDL` and `DML` `SQL` statements.

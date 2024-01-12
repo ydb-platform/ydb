@@ -303,7 +303,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2024/01/12 13:07:36     Pending                  -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
-Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that latest migration downd.
+Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that the latest migration is no longer applied.
 
 Also we can see a changes through another options:
 

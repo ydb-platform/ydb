@@ -102,6 +102,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectNode::TPtr& ev) {
         IsPropagateInFlight = true;
     }
 
+    if (!record.NeedSchemeShardsSize()) {
+        return;
+    }
+
     std::vector<TSSId> ssIds;
     ssIds.reserve(record.NeedSchemeShardsSize());
     for (const auto& ssId : record.GetNeedSchemeShards()) {

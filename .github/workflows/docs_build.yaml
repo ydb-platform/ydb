@@ -7,6 +7,9 @@ on:
 
 jobs:
   build-docs:
+    concurrency:
+      group: docs-build-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

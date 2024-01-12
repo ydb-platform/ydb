@@ -282,50 +282,7 @@ public:
         auto seqNo = context.SS->StartRound(*txState);
         NKikimrTxColumnShard::TSchemaTxBody tx;
         context.SS->FillSeqNo(tx, seqNo);
-
-        {
-            NKikimrTxColumnShard::TCreateTable* create{};
-            if (tableInfo->IsStandalone()) {
-                Y_ABORT_UNLESS(tableInfo->ColumnShards.empty());
-                Y_ABORT_UNLESS(tableInfo->Description.HasSchema());
-
-                auto* init = tx.MutableInitShard();
-                init->SetDataChannelCount(tableInfo->Description.GetStorageConfig().GetDataChannelCount());
-                init->SetOwnerPathId(pathId.LocalPathId);
-                init->SetOwnerPath(path.PathString());
-
-                create = init->AddTables();
-                create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
-            } else {
-                Y_ABORT_UNLESS(tableInfo->OwnedColumnShards.empty());
-                Y_ABORT_UNLESS(!tableInfo->Description.HasSchema());
-                Y_ABORT_UNLESS(tableInfo->Description.HasSchemaPresetId());
-
-                create = tx.MutableEnsureTables()->AddTables();
-
-                if (tableInfo->Description.HasSchemaPresetVersionAdj()) {
-                    create->SetSchemaPresetVersionAdj(tableInfo->Description.GetSchemaPresetVersionAdj());
-                }
-
-                auto olapStorePath = path.FindOlapStore();
-                Y_ABORT_UNLESS(olapStorePath, "Unexpected failure to find a tablestore");
-                auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
-
-                const ui32 presetId = tableInfo->Description.GetSchemaPresetId();
-                Y_ABORT_UNLESS(storeInfo->SchemaPresets.contains(presetId),
-                    "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
-                auto& preset = storeInfo->SchemaPresets.at(presetId);
-                preset.Serialize(*create->MutableSchemaPreset());
-            }
-
-            Y_ABORT_UNLESS(create);
-            create->SetPathId(pathId.LocalPathId);
-
-            if (tableInfo->Description.HasTtlSettings()) {
-                create->MutableTtlSettings()->CopyFrom(tableInfo->Description.GetTtlSettings());
-            }
-        }
-
+        context.SS->FillSchemaTxBody(tx, pathId, *tableInfo);
         Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
 
         for (auto& shard : txState->Shards) {

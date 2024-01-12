@@ -200,7 +200,7 @@ private:
                     .IsResolved()
                     .NotDeleted()
                     .NotUnderDeleting()
-                    .IsTable();
+                    .IsTable(true);
 
                 if (!checks) {
                     explain = checks.GetError();

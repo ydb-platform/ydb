@@ -904,7 +904,13 @@ public:
         TString rangeBegin, TString rangeEnd,
         bool rangeBeginInclusive, bool rangeEndInclusive,
         bool newTable = false);
+//    void FillColumnTableDescriptionForShardIdx(
+//        TPathId tableId, TShardIdx shardIdx, NKikimrSchemeOp::TTableDescription* tableDescr,
+//        TString rangeBegin, TString rangeEnd,
+//        bool rangeBeginInclusive, bool rangeEndInclusive,
+//        bool newTable = false);
     void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr);
+    void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TColumnTableDescription* tableDescr);
     static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType,
                                         ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr);
     static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeInfo>& keyColTypes,
@@ -913,6 +919,7 @@ public:
 
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
+    void FillSchemaTxBody(NKikimrTxColumnShard::TSchemaTxBody& tx, const TPathId& pathId, const TColumnTableInfo& tableInfo);
 
     static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
     static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);

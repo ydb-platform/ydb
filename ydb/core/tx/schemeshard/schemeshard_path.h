@@ -59,7 +59,7 @@ public:
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsTable(bool incudeColumnTable = false, EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotBackupTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& NotAsyncReplicaTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;

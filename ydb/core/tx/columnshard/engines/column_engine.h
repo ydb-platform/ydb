@@ -327,6 +327,10 @@ public:
         return Snapshots.rbegin()->second;
     }
 
+    bool IsEmpty() const {
+        return Snapshots.empty();
+    }
+
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {
         return PrimaryKey;
     }

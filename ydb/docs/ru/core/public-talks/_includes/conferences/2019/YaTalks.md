@@ -6,7 +6,7 @@
 [Слайды доклада](https://storage.yandexcloud.net/ydb-public-talks/yatalks-ydb.pptx)
 
 ### {{ ydb-name }}: Distributed SQL база данных Яндекса {#2019-conf-yatalks-dist-sql}
-[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-shorn-name }}:
+[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал об основных моментах, связанных с выполнением распределенных запросов в {{ ydb-short-name }}:
 * Модель транзакций и уровни изоляции.
 * Особенности SQL-диалекта Yandex Query Language (YQL).
 * Многошаговые транзакции и механизм оптимистичных блокировок.

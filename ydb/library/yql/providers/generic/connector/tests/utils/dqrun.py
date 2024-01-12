@@ -31,6 +31,7 @@ Generic {
 
 {% set CLICKHOUSE = 'CLICKHOUSE' %}
 {% set POSTGRESQL = 'POSTGRESQL' %}
+{% set YDB = 'YDB' %}
 
 {% macro data_source(kind, cluster, host, port, username, password, protocol, database, schema) -%}
     ClusterMapping {
@@ -81,6 +82,21 @@ Generic {
     settings.clickhouse.password,
     CLICKHOUSE_PROTOCOL,
     cluster.database,
+    NONE)
+}}
+{% endfor %}
+
+{% for cluster in generic_settings.ydb_clusters %}
+
+{{ data_source(
+    YDB,
+    settings.ydb.cluster_name,
+    settings.ydb.host_internal,
+    settings.ydb.port_internal,
+    settings.ydb.username,
+    settings.ydb.password,
+    NATIVE,
+    settings.ydb.dbname,
     NONE)
 }}
 {% endfor %}

@@ -9,13 +9,14 @@ class Database:
 
     def __init__(self, name: str, kind: EDataSourceKind.ValueType):
         self.kind = kind
-
         match kind:
             case EDataSourceKind.POSTGRESQL:
                 # PostgreSQL implicitly converts all identifiers to lowercase,
                 # so we'd better make it first on our own
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
+                self.name = name[:255]
+            case EDataSourceKind.YDB:
                 self.name = name[:255]
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
@@ -45,6 +46,8 @@ class Database:
                 return f"Database {self.name} doesn't exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
+            case EDataSourceKind.YDB:
+                return f'database "{self.name}" does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -53,6 +56,8 @@ class Database:
             case EDataSourceKind.CLICKHOUSE:
                 return 'table does not exist'
             case EDataSourceKind.POSTGRESQL:
+                return 'table does not exist'
+            case EDataSourceKind.YDB:
                 return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

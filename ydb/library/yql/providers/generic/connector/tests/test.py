@@ -7,6 +7,8 @@ from utils.settings import Settings
 import clickhouse
 import join
 import postgresql
+import ydb_select
+
 from test_cases.collection import Collection
 import test_cases.join
 import test_cases.select_missing_database
@@ -18,6 +20,7 @@ from conftest import configure_runner
 import utils.dqrun as dqrun
 import utils.kqprun as kqprun
 import utils.postgresql
+import utils.ydb
 
 
 # Global collection of test cases dependent on environment
@@ -66,6 +69,24 @@ def test_select_positive_clickhouse(
     runner = configure_runner(runner=runner_type, settings=settings)
     clickhouse.select_positive(
         test_name=request.node.name, settings=settings, runner=runner, client=clickhouse_client, test_case=test_case
+    )
+
+@pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
+@pytest.mark.parametrize(
+    "test_case", tc_collection.get('select_positive_ydb'), ids=tc_collection.ids('select_positive_ydb')
+)
+@pytest.mark.usefixtures("settings")
+@pytest.mark.usefixtures("ydb_client")
+def test_select_positive_ydb(
+    request: pytest.FixtureRequest,
+    settings: Settings,
+    runner_type: Runner,
+    ydb_client: utils.ydb.Client,
+    test_case: test_cases.select_positive_common.TestCase,
+):
+    runner = configure_runner(runner=runner_type, settings=settings)
+    ydb_select.select_positive(
+        test_name=request.node.name, settings=settings, runner=runner, client=ydb_client, test_case=test_case
     )
 
 

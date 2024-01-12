@@ -7,5 +7,7 @@ def data_source_kind_alias(kind: EDataSourceKind.ValueType) -> str:
             return "ch"
         case EDataSourceKind.POSTGRESQL:
             return "pg"
+        case EDataSourceKind.YDB:
+            return "ydb"
         case _:
             raise Exception(f'invalid data source: {kind}')

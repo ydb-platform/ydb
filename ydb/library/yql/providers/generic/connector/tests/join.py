@@ -1,5 +1,6 @@
 from pathlib import Path
 import utils.postgresql
+import utils.ydb
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
@@ -10,6 +11,8 @@ from utils.settings import Settings
 
 import clickhouse
 import postgresql
+import ydb_select
+
 import test_cases.join
 
 LOGGER = make_logger(__name__)
@@ -22,6 +25,7 @@ def join(
     runner: Runner,
     clickhouse_client: clickhouse.Client,
     postgresql_client: utils.postgresql.Client,
+    ydb_client: utils.ydb.Client,
 ):
     # prepare tables
     for data_source in test_case.data_sources:
@@ -39,6 +43,14 @@ def join(
                 postgresql.prepare_table(
                     test_name=test_name,
                     client=postgresql_client,
+                    database=data_source.database,
+                    table_name=data_source.database.sql_table_name(data_source.table.name),
+                    data_in=data_source.table.data_in,
+                    schema=data_source.table.schema,
+                )
+            case EDataSourceKind.YDB:
+                ydb_select.prepare_table(
+                    client=ydb_client,
                     database=data_source.database,
                     table_name=data_source.database.sql_table_name(data_source.table.name),
                     data_in=data_source.table.data_in,

@@ -42,6 +42,7 @@ TEST_SRCS(
     clickhouse.py
     postgresql.py
     test.py
+    ydb_select.py
 )
 
 PEERDIR(
@@ -57,6 +58,7 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/tests/test_cases
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/public/api/protos
+    ydb/public/sdk/python
     yt/python/yt/yson
 )
 

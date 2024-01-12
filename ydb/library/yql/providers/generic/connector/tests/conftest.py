@@ -12,6 +12,7 @@ from utils.dqrun import DqRunner
 from utils.kqprun import KqpRunner
 from utils.runner import Runner
 import utils.postgresql
+import utils.ydb
 
 
 @pytest.fixture
@@ -29,6 +30,11 @@ def clickhouse_client(settings) -> utils.clickhouse.Client:
 @pytest.fixture
 def postgresql_client(settings) -> utils.postgresql.Client:
     return utils.postgresql.Client(settings.postgresql)
+
+
+@pytest.fixture
+def ydb_client(settings) -> utils.ydb.Client:
+    return utils.ydb.make_client(settings.ydb)
 
 
 ConnectorClient: TypeAlias = api.ConnectorStub

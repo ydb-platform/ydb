@@ -155,7 +155,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
 
 - Using YDB CLI
 
@@ -247,7 +247,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply second migration](../../../_assets/goose-ydb-ui-after-second-migration.png)
+  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
 
 - Using YDB CLI
 
@@ -303,7 +303,7 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 2024/01/12 13:07:36     Pending                  -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
 ```
 
-Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that latest migration downgraded.
+Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that latest migration downd.
 
 Also we can see a changes through another options:
 
@@ -311,7 +311,7 @@ Also we can see a changes through another options:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
 
 - Using YDB CLI
 

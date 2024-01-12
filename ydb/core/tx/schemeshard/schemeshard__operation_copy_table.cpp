@@ -35,7 +35,7 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, });
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -45,6 +45,17 @@ public:
                  DebugHint() << " HandleReply TEvProposeTransactionResult"
                  << " at tabletId# " << ssId
                  << " message# " << ev->Get()->Record.ShortDebugString());
+
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " HandleReply TEvProposeTransactionResult"
+            << " at tabletId# " << ssId
+            << " message# " << ev->Get()->Record.ShortDebugString());
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -63,18 +74,39 @@ public:
 
         Y_ABORT_UNLESS(txState->SourcePathId != InvalidPathId);
         Y_ABORT_UNLESS(txState->TargetPathId != InvalidPathId);
-        const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState->SourcePathId);
-        const TTableInfo::TPtr dstTableInfo = *context.SS->Tables.FindPtr(txState->TargetPathId);
-
-        Y_ABORT_UNLESS(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
-                 "CopyTable partition counts don't match");
+        TVector<TShardIdx> srcShardIdxs, dstShardIdxs;
+        if (const auto* srcTableInfoPtr = context.SS->Tables.FindPtr(txState->SourcePathId)) {
+            const auto srcTableInfo = *srcTableInfoPtr;
+            const auto dstTableInfo = *context.SS->Tables.FindPtr(txState->TargetPathId);
+            Y_ABORT_UNLESS(srcTableInfo->GetPartitions().size() == dstTableInfo->GetPartitions().size(),
+                "CopyTable partition counts don't match");
+            srcShardIdxs.reserve(dstTableInfo->GetPartitions().size());
+            dstShardIdxs.reserve(dstTableInfo->GetPartitions().size());
+            for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
+                srcShardIdxs.emplace_back(srcTableInfo->GetPartitions()[i].ShardIdx);
+                dstShardIdxs.emplace_back(dstTableInfo->GetPartitions()[i].ShardIdx);
+            }
+        } else if (context.SS->ColumnTables.contains(txState->SourcePathId) && context.SS->ColumnTables.contains(txState->TargetPathId)) {
+            const auto srcTableInfo = context.SS->ColumnTables.at(txState->SourcePathId);
+            const auto dstTableInfo = context.SS->ColumnTables.at(txState->TargetPathId);
+            Y_ABORT_UNLESS(srcTableInfo->OwnedColumnShards.size() == dstTableInfo->OwnedColumnShards.size(),
+                "CopyTable partition counts don't match");
+            srcShardIdxs.reserve(dstTableInfo->OwnedColumnShards.size());
+            dstShardIdxs.reserve(dstTableInfo->OwnedColumnShards.size());
+            for (ui32 i = 0; i < dstTableInfo->OwnedColumnShards.size(); ++i) {
+                srcShardIdxs.emplace_back(srcTableInfo->OwnedColumnShards[i]);
+                dstShardIdxs.emplace_back(dstTableInfo->OwnedColumnShards[i]);
+            }
+        } else {
+            Y_ABORT();
+        }
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
-        for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
-            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+        for (ui32 i = 0; i < dstShardIdxs.size(); ++i) {
+            TShardIdx srcShardIdx = srcShardIdxs[i];
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
 
-            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i].ShardIdx;
+            TShardIdx dstShardIdx = dstShardIdxs[i];
             TTabletId dstDatashardId = context.SS->ShardInfos[dstShardIdx].TabletID;
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -89,20 +121,39 @@ public:
                         << " at tablet# " << ssId);
 
             // Send "CreateTable + ReceiveParts" transaction to destination datashard
-            NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
-            context.SS->FillSeqNo(newShardTx, seqNo);
-            context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable());
-            newShardTx.MutableReceiveSnapshot()->SetTableId_Deprecated(txState->TargetPathId.LocalPathId);
-            newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
-            newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
-            newShardTx.MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
-
-            auto dstEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, newShardTx.SerializeAsString(), context.Ctx);
-            if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
-                dstEvent->Record.SetSubDomainPathId(subDomainPathId);
+            if (context.SS->Tables.contains(txState->TargetPathId)) {
+                NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
+                context.SS->FillSeqNo(newShardTx, seqNo);
+                context.SS->FillTableDescription(txState->TargetPathId, i, dstSchemaVersion, newShardTx.MutableCreateTable());
+                newShardTx.MutableReceiveSnapshot()->SetTableId_Deprecated(txState->TargetPathId.LocalPathId);
+                newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetOwnerId(txState->TargetPathId.OwnerId);
+                newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
+                newShardTx.MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
+                auto dstEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, newShardTx.SerializeAsString(), context.Ctx);
+                if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
+                    dstEvent->Record.SetSubDomainPathId(subDomainPathId);
+                }
+                context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.Release());
+            } else if (context.SS->ColumnTables.contains(txState->TargetPathId)) {
+                NKikimrTxColumnShard::TSchemaTxBody newShardTx;
+                auto tableInfo = context.SS->ColumnTables.at(txState->TargetPathId);
+                context.SS->FillSeqNo(newShardTx, seqNo);
+                context.SS->FillSchemaTxBody(newShardTx, txState->TargetPathId, *tableInfo);
+                TString columnShardTxBody;
+                Y_ABORT_UNLESS(newShardTx.SerializeToString(&columnShardTxBody));
+                auto dstEvent = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                    NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                    context.SS->TabletID(),
+                    context.Ctx.SelfID,
+                    ui64(OperationId.GetTxId()),
+                    columnShardTxBody,
+                    context.SS->SelectProcessingParams(txState->TargetPathId)
+                );
+                context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.release());
+            } else {
+                Y_ABORT();
             }
-            context.OnComplete.BindMsgToPipe(OperationId, dstDatashardId, dstShardIdx, dstEvent.Release());
-
+/*
             // Send "SendParts" transaction to source datashard
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
@@ -113,6 +164,7 @@ public:
             oldShardTx.SetReadOnly(true);
             auto srcEvent = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, oldShardTx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, srcDatashardId, srcShardIdx, srcEvent.Release());
+*/
         }
 
         txState->UpdateShardsInProgress();
@@ -325,7 +377,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
+                .IsTable(true)
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 
@@ -358,7 +410,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
+                    .FailOnExist(srcPath->PathType, acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -417,8 +469,37 @@ public:
             return result;
         }
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
-        TTableInfo::TPtr srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
+        TTableInfo::TPtr srcTableInfo;
+        if (srcPath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
+            srcTableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
+        } else if (srcPath->IsColumnTable()) {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(srcPath.Base()->PathId));
+            auto srcTable = context.SS->ColumnTables.at(srcPath.Base()->PathId);
+            srcTableInfo = MakeIntrusive<TTableInfo>();
+            srcTableInfo->AlterVersion = srcTable->AlterVersion;
+            THashMap<TString, ui32> nameToId;
+            for (const auto& column: srcTable->Description.GetSchema().GetColumns()) {
+                srcTableInfo->Columns[column.GetId()] = TTableInfo::TColumn(
+                    column.GetName(), column.GetId(), NScheme::TTypeInfo(column.GetTypeId()),
+                    column.GetTypeInfo().GetPgTypeMod(), column.GetNotNull()
+                );
+                nameToId[column.GetName()] = column.GetId();
+            }
+            srcTableInfo->KeyColumnIds.reserve(srcTable->Description.GetSchema().KeyColumnNamesSize());
+            for (const auto& key : srcTable->Description.GetSchema().GetKeyColumnNames()) {
+                srcTableInfo->KeyColumnIds.emplace_back(nameToId[key]);
+            }
+            auto& cp = *srcTableInfo->MutablePartitionConfig().MutableCompactionPolicy();
+            AppData()->DomainsInfo->GetDefaultSystemTablePolicy()->Serialize(cp);
+            TVector<TTableShardInfo> partitions;
+            partitions.reserve(srcTable->OwnedColumnShards.size());
+            for (const auto& shardIdx: srcTable->OwnedColumnShards) {
+                partitions.emplace_back(shardIdx, TString());
+            }
+            srcTableInfo->SetPartitioning(std::move(partitions));
+            //TODO fill table
+        }
 
         // do not allow copy from table with enabled external blobs
         {
@@ -528,7 +609,7 @@ public:
         newTable->CreateTxId = OperationId.GetTxId();
         newTable->LastTxId = OperationId.GetTxId();
         newTable->PathState = TPathElement::EPathState::EPathStateCreate;
-        newTable->PathType = TPathElement::EPathType::EPathTypeTable;
+        newTable->PathType = srcPath->PathType;
         newTable->UserAttrs->AlterData = userAttrs;
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
@@ -537,7 +618,9 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::CreateParts;
 
-        TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
+        TShardInfo datashardInfo = dstPath->IsTable() ?
+            TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId):
+            TShardInfo::ColumnShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
         auto newPartition = NTableState::ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
         for (const auto& part: newPartition) {
@@ -554,7 +637,18 @@ public:
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
-        context.SS->Tables[newTable->PathId] = tableInfo;
+        if (srcPath->IsTable()) {
+            context.SS->Tables[newTable->PathId] = tableInfo;
+        } else {
+            auto srcTable = context.SS->ColumnTables.at(srcPath.Base()->PathId);
+            auto newColumnTable = context.SS->ColumnTables.BuildNew(newTable->PathId, MakeIntrusive<TColumnTableInfo>(
+                tableInfo->AlterVersion, NKikimrSchemeOp::TColumnTableDescription(srcTable->Description),
+                NKikimrSchemeOp::TColumnTableSharding(srcTable->Sharding), Nothing()));
+            newColumnTable->OwnedColumnShards.reserve(tableInfo->GetPartitions().size());
+            for (const auto& p: tableInfo->GetPartitions()) {
+                newColumnTable->OwnedColumnShards.emplace_back(p.ShardIdx);
+            }
+        }
         context.SS->IncrementPathDbRefCount(newTable->PathId);
 
         if (parent.Base()->HasActiveChanges()) {
@@ -564,12 +658,14 @@ public:
 
         // Add dependencies on in-flight split operations for source table in case of CopyTable
         Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
-        for (auto splitTx: context.SS->Tables.at(srcPath.Base()->PathId)->GetSplitOpsInFlight()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        if (srcPath->IsTable()) {
+            for (auto splitTx : context.SS->Tables.at(srcPath.Base()->PathId)->GetSplitOpsInFlight()) {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TCopyTable Propose "
                             << " opId: " << OperationId
                             << " wait split ops in flight on src table " << splitTx);
-            context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+            }
         }
 
         context.OnComplete.ActivateTx(OperationId);

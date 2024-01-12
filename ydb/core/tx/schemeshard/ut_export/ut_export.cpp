@@ -16,7 +16,7 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
+    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& rowTables, const TVector<TString>& columnTables, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
 
@@ -89,11 +89,18 @@ namespace {
             });
         }
 
-        for (const auto& table : tables) {
+        for (const auto& table : rowTables) {
             TestCreateTable(runtime, schemeshardId, ++txId, dbName, table, {
                 NKikimrScheme::StatusAccepted,
                 NKikimrScheme::StatusAlreadyExists,
             });
+            env.TestWaitNotification(runtime, txId, schemeshardId);
+        }
+        for (const auto& table : columnTables) {
+            TestCreateColumnTable(runtime, schemeshardId, ++txId, dbName, table, {
+                NKikimrScheme::StatusAccepted,
+                NKikimrScheme::StatusAlreadyExists,
+                });
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
@@ -171,7 +178,7 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
-    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl) {
+    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& rowTables, const TVector<TString>& columnTables, const TString& requestTpl) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -181,7 +188,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         auto request = Sprintf(requestTpl.c_str(), port);
 
         TTestEnv env(runtime);
-        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
+        Run(runtime, env, rowTables, columnTables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
 
         for (auto &path : GetExportTargetPaths(request)) {
             auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
@@ -202,7 +209,33 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+        },
+        {}, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardColumnTable) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {}, {
+            R"(
+                Name: "Table"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "key" Type: "Utf8" NotNull: true}
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                }
+            )",
+            }, R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -225,7 +258,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 KeyColumnNames: ["key"]
                 UniformPartitionsCount: 2
             )",
-        }, R"(
+        },
+        {}, R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -253,7 +287,8 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+        },
+        {}, R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -305,7 +340,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             }
         )"};
 
-        Run(runtime, env, tables, Sprintf(R"(
+        Run(runtime, env, tables, {}, Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -1261,8 +1296,8 @@ partitioning_settings {
             }
         )", port);
 
-        Run(runtime, env, tables, request, expectedFailStatus);
-        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
+        Run(runtime, env, tables, {}, request, expectedFailStatus);
+        Run(runtime, env, tables, {}, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
 
     Y_UNIT_TEST(ShouldCheckQuotas) {

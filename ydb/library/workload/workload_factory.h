@@ -2,18 +2,10 @@
 
 #include "workload_query_generator.h"
 
-#include <memory>
+#include <library/cpp/object_factory/object_factory.h>
 
 namespace NYdbWorkload {
 
-enum class EWorkload {
-    STOCK,
-    KV,
-};
-
-class TWorkloadFactory {
-public:
-    std::shared_ptr<IWorkloadQueryGenerator> GetWorkloadQueryGenerator(const EWorkload& type, const TWorkloadParams* params);
-};
+    using TWorkloadFactory = NObjectFactory::TObjectFactory<TWorkloadParams, TString>;
 
 } // namespace NYdbWorkload

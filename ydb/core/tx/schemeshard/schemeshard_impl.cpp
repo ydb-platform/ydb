@@ -2278,11 +2278,17 @@ void TSchemeShard::PersistRemoveTx(NIceDb::TNiceDb& db, const TOperationId opId,
 }
 
 void TSchemeShard::PersistTable(NIceDb::TNiceDb& db, const TPathId tableId) {
-    Y_ABORT_UNLESS(Tables.contains(tableId));
-    const TTableInfo::TPtr tableInfo = Tables.at(tableId);
+    if (Tables.contains(tableId)) {
+        const TTableInfo::TPtr tableInfo = Tables.at(tableId);
 
-    PersistTableAltered(db, tableId, tableInfo);
-    PersistTablePartitioning(db, tableId, tableInfo);
+        PersistTableAltered(db, tableId, tableInfo);
+        PersistTablePartitioning(db, tableId, tableInfo);
+    } else if (ColumnTables.contains(tableId)) {
+        auto tableInfo = ColumnTables.at(tableId);
+        PersistColumnTable(db, tableId, *tableInfo);
+    } else {
+        Y_ABORT();
+    }
 }
 
 void TSchemeShard::PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels) {
@@ -6333,6 +6339,50 @@ bool TSchemeShard::FillSplitPartitioning(TVector<TString>& rangeEnds, const TCon
     return true;
 }
 
+void TSchemeShard::FillSchemaTxBody(NKikimrTxColumnShard::TSchemaTxBody& tx, const TPathId& pathId, const TColumnTableInfo& tableInfo) {
+    TPath path = TPath::Init(pathId, this);
+    NKikimrTxColumnShard::TCreateTable* create{};
+    if (tableInfo.IsStandalone()) {
+//        Y_ABORT_UNLESS(tableInfo.ColumnShards.empty());
+        Y_ABORT_UNLESS(tableInfo.Description.HasSchema());
+
+        auto* init = tx.MutableInitShard();
+        init->SetDataChannelCount(tableInfo.Description.GetStorageConfig().GetDataChannelCount());
+        init->SetOwnerPathId(pathId.LocalPathId);
+        init->SetOwnerPath(path.PathString());
+
+        create = init->AddTables();
+        create->MutableSchema()->CopyFrom(tableInfo.Description.GetSchema());
+    } else {
+        Y_ABORT_UNLESS(tableInfo.OwnedColumnShards.empty());
+        Y_ABORT_UNLESS(!tableInfo.Description.HasSchema());
+        Y_ABORT_UNLESS(tableInfo.Description.HasSchemaPresetId());
+
+        create = tx.MutableEnsureTables()->AddTables();
+
+        if (tableInfo.Description.HasSchemaPresetVersionAdj()) {
+            create->SetSchemaPresetVersionAdj(tableInfo.Description.GetSchemaPresetVersionAdj());
+        }
+
+        auto olapStorePath = path.FindOlapStore();
+        Y_ABORT_UNLESS(olapStorePath, "Unexpected failure to find a tablestore");
+        auto storeInfo = OlapStores.at(olapStorePath->PathId);
+
+        const ui32 presetId = tableInfo.Description.GetSchemaPresetId();
+        Y_ABORT_UNLESS(storeInfo->SchemaPresets.contains(presetId),
+            "Failed to find schema preset %" PRIu32 " in a tablestore", presetId);
+        auto& preset = storeInfo->SchemaPresets.at(presetId);
+        preset.Serialize(*create->MutableSchemaPreset());
+    }
+
+    Y_ABORT_UNLESS(create);
+    create->SetPathId(pathId.LocalPathId);
+
+    if (tableInfo.Description.HasTtlSettings()) {
+        create->MutableTtlSettings()->CopyFrom(tableInfo.Description.GetTtlSettings());
+    }
+}
+
 void TSchemeShard::ApplyPartitionConfigStoragePatch(
         NKikimrSchemeOp::TPartitionConfig& config,
         const NKikimrSchemeOp::TPartitionConfig& patch) const
@@ -6454,6 +6504,47 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     }
 }
 
+/*
+void TSchemeShard::FillColumnTableDescriptionForShardIdx(TPathId tableId, TShardIdx shardIdx, NKikimrSchemeOp::TTableDescription* tableDescr, TString rangeBegin, TString rangeEnd, bool rangeBeginInclusive, bool rangeEndInclusive, bool newTable) {
+    Y_VERIFY_S(ColumnTables.contains(tableId), "Unknown table id " << tableId);
+    const auto tinfo = ColumnTables.at(tableId);
+    TPathElement::TPtr pinfo = *PathsById.FindPtr(tableId);
+
+    TVector<ui32> keyColumnIds = tinfo->FillDescriptionCache(pinfo);
+    if (!tinfo->TableDescription.HasPath()) {
+        tinfo->TableDescription.SetPath(PathToString(pinfo));
+    }
+    tableDescr->CopyFrom(tinfo->TableDescription);
+
+    if (rangeBegin.empty()) {
+        // First partition starts with <NULL, NULL, ..., NULL> key
+        TVector<TCell> nullKey(keyColumnIds.size());
+        rangeBegin = TSerializedCellVec::Serialize(nullKey);
+    }
+
+    tableDescr->SetPartitionRangeBegin(std::move(rangeBegin));
+    tableDescr->SetPartitionRangeEnd(std::move(rangeEnd));
+    tableDescr->SetPartitionRangeBeginIsInclusive(rangeBeginInclusive);
+    tableDescr->SetPartitionRangeEndIsInclusive(rangeEndInclusive);
+
+    // Patch partition config for new-style shards
+    if (const auto* patch = tinfo->PerShardPartitionConfig.FindPtr(shardIdx)) {
+        ApplyPartitionConfigStoragePatch(
+            *tableDescr->MutablePartitionConfig(),
+            *patch);
+    }
+
+    if (tinfo->IsBackup) {
+        tableDescr->SetIsBackup(true);
+    }
+
+    if (tinfo->HasReplicationConfig()) {
+        tableDescr->MutableReplicationConfig()->CopyFrom(tinfo->ReplicationConfig());
+    }
+
+}
+*/
+
 // Fills CreateTable transaction that is sent to datashards
 void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion,
     NKikimrSchemeOp::TTableDescription* tableDescr)
@@ -6475,6 +6566,15 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
         std::move(rangeEnd),
         true /* rangeBeginInclusive */, false /* rangeEndInclusive */, true /* newTable */);
     FillTableSchemaVersion(schemaVersion, tableDescr);
+}
+
+
+void TSchemeShard::FillTableDescription(TPathId tableId, ui32 /*partitionIdx*/, ui64 schemaVersion,
+    NKikimrSchemeOp::TColumnTableDescription* tableDescr)
+{
+    Y_VERIFY_S(ColumnTables.contains(tableId), "Unknown table id " << tableId);
+    tableDescr->MutableSchema()->SetVersion(schemaVersion);
+    // TODO: Fill
 }
 
 bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeInfo firstKeyColType, ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr) {

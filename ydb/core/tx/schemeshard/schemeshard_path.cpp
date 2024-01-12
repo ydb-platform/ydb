@@ -348,12 +348,12 @@ const TPath::TChecker& TPath::TChecker::IsInsideCdcStreamPath(EStatus status) co
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::IsTable(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsTable(bool incudeColumnTable, EStatus status) const {
     if (Failed) {
         return *this;
     }
 
-    if (Path.Base()->IsTable()) {
+    if (Path.Base()->IsTable() || incudeColumnTable && Path.Base()->IsColumnTable()) {
         return *this;
     }
 

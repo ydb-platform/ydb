@@ -103,7 +103,7 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
                   .NotDeleted()
-                  .IsTable()
+                  .IsTable(true)
                   .IsCommonSensePath()
                   .IsTheSameDomain(firstPath);
 

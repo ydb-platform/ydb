@@ -47,6 +47,7 @@ namespace {
         { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
         { EOutputFormat::Csv, "Output in csv format" },
         { EOutputFormat::Tsv, "Output in tsv format" },
+        { EOutputFormat::Parquet, "Output in parquet format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -713,6 +714,7 @@ TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
 TResultSetPrinter::TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted)
     : Format(format)
     , IsInterrupted(isInterrupted)
+    , ParquetPrinter(std::make_unique<TResultSetParquetPrinter>(""))
 {}
 
 TResultSetPrinter::~TResultSetPrinter() {
@@ -750,6 +752,9 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
     case EOutputFormat::Tsv:
         PrintCsv(resultSet, "\t");
         break;
+    case EOutputFormat::Parquet:
+        ParquetPrinter->Print(resultSet);
+        break;
     default:
         throw TMisuseException() << "This command doesn't support " << Format << " output format";
     }
@@ -782,6 +787,9 @@ void TResultSetPrinter::EndResultSet() {
     case EOutputFormat::JsonUnicodeArray:
     case EOutputFormat::JsonBase64Array:
         Cout << ']' << Endl;
+        break;
+    case EOutputFormat::Parquet:
+        ParquetPrinter->Reset();
         break;
     default:
         break;

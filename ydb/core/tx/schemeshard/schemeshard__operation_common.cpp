@@ -429,13 +429,16 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
 bool NTableState::SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
     Y_ABORT_UNLESS(txState.TargetPathId != InvalidPathId);
-    const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
-
     THashSet<TShardIdx> srcShardIdxsLeft;
-    for (const auto& p : srcTableInfo->GetPartitions()) {
-        srcShardIdxsLeft.insert(p.ShardIdx);
+    if (const auto* srcTableInfo = context.SS->Tables.FindPtr(txState.SourcePathId)) {
+        for (const auto& p : (*srcTableInfo)->GetPartitions()) {
+            srcShardIdxsLeft.insert(p.ShardIdx);
+        }
     }
-
+    else if (context.SS->ColumnTables.contains(txState.SourcePathId)) {
+        const auto srcTableInfo = context.SS->ColumnTables.at(txState.SourcePathId);
+        srcShardIdxsLeft.insert(srcTableInfo->OwnedColumnShards.cbegin(), srcTableInfo->OwnedColumnShards.cend());
+    }
     for (const auto& shard : txState.Shards) {
         // Skip shards of the new table
         if (shard.Operation == TTxState::CreateParts)

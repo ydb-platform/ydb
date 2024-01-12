@@ -191,7 +191,7 @@ Also we can see a changes through another options:
 
 {% endlist %}
 
-Let's make the second migration with adding column `password_hash` to table `users`:
+Let's make the second migration that adds a column `password_hash` to the `users` table:
 
 ```
 $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" create 00002_add_column_password_hash_into_table_users sql

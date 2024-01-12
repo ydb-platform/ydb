@@ -222,7 +222,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
         }
     }
 
-    IncCounter(COUNTER_PREPARE_REQUEST);
+    IncCounter(COUNTER_WRITE_REQUEST);
 
     if (CheckDataTxRejectAndReply(ev, ctx)) {
         return;
@@ -252,6 +252,29 @@ ui64 EvWrite::Convertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode tx
             return TTxFlags::Immediate;
         default:
             Y_FAIL_S("Unexpected tx mode " << txMode);
+    }
+}
+
+NKikimrDataEvents::TEvWrite::ETxMode EvWrite::Convertor::GetTxMode(ui64 flags) {
+    if ((flags & TTxFlags::Immediate) && !(flags & TTxFlags::ForceOnline)) {
+        return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_IMMEDIATE;
+    }
+    else if (flags & TTxFlags::VolatilePrepare) {
+        return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_VOLATILE_PREPARE;
+    }
+    else {
+        return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_PREPARE;
+    }
+}
+
+NKikimrTxDataShard::TEvProposeTransactionResult::EStatus EvWrite::Convertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
+    switch (status) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+            return NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+            return NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;
+        default:
+            return NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
     }
 }
 }

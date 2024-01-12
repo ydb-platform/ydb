@@ -64,7 +64,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             << "Cannot perform transaction: out of disk space at tablet "
             << DataShard.TabletID() << " txId " << op->GetTxId();
 
-        DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+        DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
         writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
@@ -88,7 +88,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+                            DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
                             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err, DataShard.TabletID());
                             op->Abort(EExecutionUnitKind::FinishProposeWrite);

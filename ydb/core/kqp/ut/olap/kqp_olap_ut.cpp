@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
@@ -531,10 +532,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
 
         TLocalHelper lHelper(kikimr);
+        if (withSomeNulls)
+            lHelper.WithSomeNulls();
         NYdb::NLongTx::TClient client(kikimr.GetDriver());
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
@@ -1561,7 +1564,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1569,7 +1572,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
+            R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
+            R"(`resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1610,6 +1615,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` > `resource_id`)",
             R"(`level` IS NULL)",
             R"(`level` IS NOT NULL)",
+            R"(`message` IS NULL)",
+            R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
@@ -1833,15 +1840,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             for (auto& op : operators) {
                 if (op.GetMapSafe().at("Name") == "TableFullScan") {
                     UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
-                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
-                    int filterCmdCount = 0;
-                    std::string::size_type pos = 0;
-                    std::string filterCmd = R"("Filter":{)";
-                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
-                        ++filterCmdCount;
-                        pos += filterCmd.size();
-                    }
-                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                    const auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    UNIT_ASSERT(ssa.Contains(R"("Filter":{)"));
                 }
             }
         }
@@ -4923,9 +4923,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4942,9 +4939,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4961,9 +4955,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToInt) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
@@ -5028,9 +5019,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_Exists) {
-        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -5295,6 +5283,39 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cout << output << Endl;
         CompareYson(output, R"([[10u;]])");
     }
+
+    Y_UNIT_TEST(DuplicatesInIncomingBatch) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val1").AddNull();
+            tableInserter.AddRow().Add(3).Add("test_res_3").Add("val3").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
+            testHelper.InsertData(testTable, tableInserter);
+        }
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+    }
+
 }
 
 } // namespace NKqp

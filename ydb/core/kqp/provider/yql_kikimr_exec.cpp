@@ -1095,7 +1095,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     auto columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
-                                    columnBuild->SetColumnName(TString(constraint.Name().Value()));
+                                    columnBuild->SetColumnName(TString(columnName));
                                     FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), *columnBuild->mutable_default_from_literal());
                                 }
                             }

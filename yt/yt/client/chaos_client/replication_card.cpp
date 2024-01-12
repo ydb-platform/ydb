@@ -33,7 +33,7 @@ void FormatProgressWithProjection(
     segments.end(),
     replicationProgressProjection.From,
     [] (const auto& lhs, const auto& rhs) {
-            return CompareRows(lhs, rhs.LowerKey) <= 0;
+        return CompareRows(lhs, rhs.LowerKey) <= 0;
     });
 
     bool comma = false;
@@ -60,7 +60,6 @@ void FormatProgressWithProjection(
 }
 
 } // namespace NDetail
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -553,7 +553,12 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
         isStream = true;
     } else {
-        YQL_ENSURE(TKqlUpsertRows::Match(node.Get()) || TKqlUpsertRowsIndex::Match(node.Get()));
+
+        YQL_ENSURE(
+            TKqlUpsertRows::Match(node.Get()) ||
+            TKqlUpsertRowsIndex::Match(node.Get()) ||
+            TKqlInsertOnConflictUpdateRows::Match(node.Get())
+        );
 
         if (!EnsureListType(*input, ctx)) {
             return TStatus::Error;
@@ -872,7 +877,7 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%"})) {
+        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%", "??"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP binary operation: " << op->Content()
             ));

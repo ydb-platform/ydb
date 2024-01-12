@@ -205,7 +205,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpCnStreamLookup"), explainResult.GetAst());
+        } else {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        }
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$group").OptionalUint32(1).Build()
@@ -1224,7 +1229,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         size_t phase = 0;
         if (stats.query_phases().size() == 2) {
             phase = 1;
-        } else if (stats.query_phases().size() == 0) {
+        } else if (stats.query_phases().size() == 1) {
             phase = 0;
         } else {
             UNIT_ASSERT(false);

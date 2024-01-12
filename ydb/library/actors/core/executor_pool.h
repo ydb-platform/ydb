@@ -23,7 +23,20 @@ namespace NActors {
         }
     };
 
-    class IExecutorPool : TNonCopyable {
+    struct IActorThreadPool : TNonCopyable {
+
+        virtual ~IActorThreadPool() {
+        }
+
+        // lifecycle stuff
+        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
+        virtual void Start() = 0;
+        virtual void PrepareStop() = 0;
+        virtual void Shutdown() = 0;
+        virtual bool Cleanup() = 0;
+    };
+
+    class IExecutorPool : public IActorThreadPool {
     public:
         const ui32 PoolId;
 
@@ -86,13 +99,6 @@ namespace NActors {
         virtual void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) = 0;
         virtual TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, const TActorId& parentId) = 0;
         virtual TActorId Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) = 0;
-
-        // lifecycle stuff
-        virtual void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) = 0;
-        virtual void Start() = 0;
-        virtual void PrepareStop() = 0;
-        virtual void Shutdown() = 0;
-        virtual bool Cleanup() = 0;
 
         virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             // TODO: make pure virtual and override everywhere

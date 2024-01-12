@@ -3580,7 +3580,7 @@ The SQL/JSON standard borrows its definition for regular expressions from the LI
 
 Keep in mind that the pattern argument of like_regex is a JSON path string literal, written according to the rules given in Section 8.14.7. This means in particular that any backslashes you want to use in the regular expression must be doubled. For example, to match string values of the root document that contain only digits:
 
-$.* ? (@ like_regex "^\\d+$")
+`$.* ? (@ like_regex "^\\d+$")`
 
 ## 9.17. Sequence Manipulation Functions (NOT SUPPORTED) {#sequence-manipulation-functions}
 

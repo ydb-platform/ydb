@@ -27,12 +27,13 @@ struct TContext {
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
     TActorId ConnectionId;
-    TString ClientId;
+    TString KafkaClient;
 
 
     EAuthSteps AuthenticationStep = EAuthSteps::WAIT_HANDSHAKE;
     TString SaslMechanism;
 
+    TString GroupId;
     TString DatabasePath;
     TString FolderId;
     TString CloudId;
@@ -128,6 +129,9 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case Ydb::PersQueue::ErrorCode::ErrorCode::ACCESS_DENIED:
             return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
+        case Ydb::PersQueue::ErrorCode::ErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST:
+            return EKafkaErrors::OFFSET_OUT_OF_RANGE;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -159,5 +163,6 @@ NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, c
 NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetCommitRequestData>& message);
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message);
 NActors::IActor* CreateKafkaCreateTopicsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreateTopicsRequestData>& message);
+NActors::IActor* CreateKafkaCreatePartitionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TCreatePartitionsRequestData>& message);
 
 } // namespace NKafka

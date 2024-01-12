@@ -1651,6 +1651,16 @@ NJobTrackerClient::EJobState ConvertJobStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsDynamicTableRetriableError(const TError& error)
+{
+    // TODO(dgolear): Consider adding NoSuchTablet and TabletNotMounted errors?
+    return
+        error.FindMatching(NTabletClient::EErrorCode::RowIsBlocked) ||
+        error.FindMatching(NTabletClient::EErrorCode::BlockedRowWaitTimeout) ||
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchCell) ||
+        error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded);
+}
+
 bool IsRetriableError(const TError& error, bool retryProxyBanned)
 {
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
@@ -1659,13 +1669,14 @@ bool IsRetriableError(const TError& error, bool retryProxyBanned)
         return retryProxyBanned;
     }
 
-    //! Retriable error codes are based on the ones used in http client.
     return
+        NRpc::IsRetriableError(error) ||
         error.FindMatching(NRpc::EErrorCode::RequestQueueSizeLimitExceeded) ||
         error.FindMatching(NRpc::EErrorCode::TransportError) ||
         error.FindMatching(NRpc::EErrorCode::Unavailable) ||
         error.FindMatching(NRpc::EErrorCode::TransientFailure) ||
-        error.FindMatching(NSecurityClient::EErrorCode::RequestQueueSizeLimitExceeded);
+        error.FindMatching(NSecurityClient::EErrorCode::RequestQueueSizeLimitExceeded) ||
+        IsDynamicTableRetriableError(error);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

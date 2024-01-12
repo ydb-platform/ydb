@@ -366,6 +366,30 @@ public:
         return WriteAndRead<TInitProducerIdResponseData>(header, request);
     }
 
+    TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> topicsToPartions) {
+        Cerr << ">>>>> TOffsetCommitRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
+
+        TOffsetCommitRequestData request;
+        request.GroupId = groupId;
+
+        for (const auto& topicToPartitions : topicsToPartions) {
+            NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic topic;
+            topic.Name = topicToPartitions.first;
+            
+            for (auto partitionAndOffset : topicToPartitions.second) {
+                NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
+                partition.PartitionIndex = partitionAndOffset.first;
+                partition.CommittedOffset = partitionAndOffset.second;
+                topic.Partitions.push_back(partition);
+            }
+            request.Topics.push_back(topic);
+        }
+
+        return WriteAndRead<TOffsetCommitResponseData>(header, request);
+    }
+
     TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch) {
         std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
         msgs.emplace_back(partition, batch);
@@ -608,6 +632,25 @@ public:
         }
 
         return WriteAndRead<TCreateTopicsResponseData>(header, request);
+    }
+
+    TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TopicToCreate> topicsToCreate, bool validateOnly = false) {
+        Cerr << ">>>>> TCreateTopicsRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);
+        TCreatePartitionsRequestData request;
+        request.ValidateOnly = validateOnly;
+        request.TimeoutMs = 100;
+
+        for (auto& topicToCreate : topicsToCreate) {
+            NKafka::TCreatePartitionsRequestData::TCreatePartitionsTopic topic;
+            topic.Name = topicToCreate.Name;
+            topic.Count = topicToCreate.PartitionsNumber;
+
+            request.Topics.push_back(topic);
+        }
+
+        return WriteAndRead<TCreatePartitionsResponseData>(header, request);
     }
 
     void UnknownApiKey() {
@@ -1248,16 +1291,18 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     } // Y_UNIT_TEST(BalanceScenario)
     
-    Y_UNIT_TEST(OffsetFetchScenario) {
+    Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2");
 
-        TString topicName = "/Root/topic-0-test";
-        TString shortTopicName = "topic-0-test";
+        TString firstTopicName = "/Root/topic-0-test";
+        TString secondTopicName = "/Root/topic-1-test";
+        TString shortTopicName = "topic-1-test";
         TString notExistsTopicName = "/Root/not-exists";
         ui64 minActivePartitions = 10;
 
-        TString consumerName = "consumer-0";
-        TString consumer1Name = "consumer-1";
+        TString firstConsumerName = "consumer-0";
+        TString secondConsumerName = "consumer-1";
+        TString notExistsConsumerName = "notExists";
 
         TString key = "record-key";
         TString value = "record-value";
@@ -1268,10 +1313,23 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             auto result =
                 pqClient
-                    .CreateTopic(topicName,
+                    .CreateTopic(firstTopicName,
                                  NYdb::NTopic::TCreateTopicSettings()
-                                    .BeginAddConsumer(consumerName).EndAddConsumer()
-                                    .BeginAddConsumer(consumer1Name).EndAddConsumer()
+                                    .BeginAddConsumer(firstConsumerName).EndAddConsumer()
+                                    .BeginAddConsumer(secondConsumerName).EndAddConsumer()
+                                    .PartitioningSettings(minActivePartitions, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(secondTopicName,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                    .BeginAddConsumer(firstConsumerName).EndAddConsumer()
+                                    .BeginAddConsumer(secondConsumerName).EndAddConsumer()
                                     .PartitioningSettings(minActivePartitions, 100))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1300,90 +1358,89 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
+        auto recordsCount = 5;
         {
             // Produce
+
             TKafkaRecordBatch batch;
             batch.BaseOffset = 3;
             batch.BaseSequence = 5;
             batch.Magic = 2; // Current supported
-            batch.Records.resize(1);
-            batch.Records[0].Key = TKafkaRawBytes(key.Data(), key.Size());
-            batch.Records[0].Value = TKafkaRawBytes(value.Data(), value.Size());
-            batch.Records[0].Headers.resize(1);
-            batch.Records[0].Headers[0].Key = TKafkaRawBytes(headerKey.Data(), headerKey.Size());
-            batch.Records[0].Headers[0].Value = TKafkaRawBytes(headerValue.Data(), headerValue.Size());
+            batch.Records.resize(recordsCount);
 
-            auto msg = client.Produce(topicName, 0, batch);
+            for (auto i = 0; i < recordsCount; i++) {
+                batch.Records[i].Key = TKafkaRawBytes(key.Data(), key.Size());
+                batch.Records[i].Value = TKafkaRawBytes(value.Data(), value.Size());
+            }      
 
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            auto msg = client.Produce(firstTopicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, firstTopicName);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
         {
-            // Commit offset for consumer-0
-            auto settings = NTopic::TReadSessionSettings()
-                .AppendTopics(NTopic::TTopicReadSettings(topicName))
-                .ConsumerName("consumer-0");
-            auto topicReader = pqClient.CreateReadSession(settings);
-
-            auto m = Read(topicReader);
-            UNIT_ASSERT_EQUAL(m.size(), 1);
-
-            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-            auto& m0 = m[0].GetMessages()[0];
-            m0.Commit();
-        }
-
-        {
-            // Commit offset for consumer-1
-            auto settings = NTopic::TReadSessionSettings()
-                .AppendTopics(NTopic::TTopicReadSettings(topicName))
-                .ConsumerName("consumer-1");
-            auto topicReader = pqClient.CreateReadSession(settings);
-
-            auto m = Read(topicReader);
-            UNIT_ASSERT_EQUAL(m.size(), 1);
-
-            UNIT_ASSERT_EQUAL(m[0].GetMessages().size(), 1);
-            auto& m0 = m[0].GetMessages()[0];
-            m0.Commit();
-        }
-
-        {
-            // Check commited offset after produce
+            // Fetch offsets
             std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions[topicName] = std::vector<i32>{0, 1, 2, 3};
-            auto msg = client.OffsetFetch(consumerName, topicsToPartions);
+            topicsToPartions[firstTopicName] = std::vector<i32>{0, 1, 2, 3 };
+            auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             const auto& partitions = msg->Groups[0].Topics[0].Partitions;
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
-            UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 0);
+        }
+        
+        {
+            // Check commit
+            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
+            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+            }
+            offsets[firstTopicName] = partitionsAndOffsets;
+            offsets[shortTopicName] = partitionsAndOffsets;
+            auto msg = client.OffsetCommit(firstConsumerName, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            for (const auto& topic : msg->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    if (topic.Name.value() == firstTopicName) {
+                        if (partition.PartitionIndex == 0) {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                        }
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                    } 
+                }
+            }
         }
 
         {
-            // Check with short topic name
+            // Fetch offsets after commit
             std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions[shortTopicName] = std::vector<i32>{0, 1, 2, 3};
-            auto msg = client.OffsetFetch(consumerName, topicsToPartions);
+            topicsToPartions[firstTopicName] = std::vector<i32>{0, 1, 2 , 3 };
+            auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             const auto& partitions = msg->Groups[0].Topics[0].Partitions;
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
-            UNIT_ASSERT_VALUES_EQUAL(partition0->ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
         }
+
         {
-            // Check with nonexistent topic
+            // Check fetch offsets with nonexistent topic
             std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions["nonexTopic"] = std::vector<i32>{0, 1};
-            auto msg = client.OffsetFetch(consumerName, topicsToPartions);
+            topicsToPartions[notExistsTopicName] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
@@ -1393,10 +1450,30 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Check with nonexistent consumer 
+            // Check commit with nonexistent topic
+            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
+            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+            }
+            offsets[firstTopicName] = partitionsAndOffsets;
+            offsets[notExistsTopicName] = partitionsAndOffsets;
+
+            auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
+            for (const auto& topic : msg->Topics) {
+                for (const auto& partition : topic.Partitions) {
+                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+                }
+            }
+        }
+
+        {
+            // Check fetch offsets nonexistent consumer 
             std::map<TString, std::vector<i32>> topicsToPartions;
-            topicsToPartions[topicName] = std::vector<i32>{0, 1};
-            auto msg = client.OffsetFetch("nonexConsumer", topicsToPartions);
+            topicsToPartions[firstTopicName] = std::vector<i32>{0, 1};
+            auto msg = client.OffsetFetch(notExistsConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 2);
@@ -1406,22 +1483,45 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Check with 2 consumers
+            // Check commit with nonexistent consumer
+            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
+            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+            }
+            offsets[firstTopicName] = partitionsAndOffsets;
+
+            auto msg = client.OffsetCommit(notExistsConsumerName, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.back().Partitions.size(), minActivePartitions);
+            for (const auto& topic : msg->Topics) {
+                for (const auto& partition : topic.Partitions) {
+                   UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+                }
+            }
+        }
+
+        {
+            // Check fetch offsets with 2 consumers and topics
             TOffsetFetchRequestData request;
 
             TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
-            topic.Name = topicName;
+            topic.Name = firstTopicName;
             auto partitionIndexes = std::vector<int>{0};
             topic.PartitionIndexes = partitionIndexes;
 
+            TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics shortTopic;
+            shortTopic.Name = shortTopicName;
+            shortTopic.PartitionIndexes = partitionIndexes;
+
             TOffsetFetchRequestData::TOffsetFetchRequestGroup group0;
-            group0.GroupId = consumerName;
+            group0.GroupId = firstConsumerName;
             group0.Topics.push_back(topic);
             request.Groups.push_back(group0);
 
             TOffsetFetchRequestData::TOffsetFetchRequestGroup group1;
-            group1.GroupId = consumer1Name;
-            group1.Topics.push_back(topic);
+            group1.GroupId = secondConsumerName;
+            group1.Topics.push_back(shortTopic);
             request.Groups.push_back(group1);
 
             auto msg = client.OffsetFetch(request);
@@ -1430,7 +1530,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& group: msg->Groups) {
                 UNIT_ASSERT_VALUES_EQUAL(group.Topics.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].CommittedOffset, 1);
+                if (group.GroupId == firstConsumerName) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].CommittedOffset, 5);
+                } else if (group.GroupId == secondConsumerName) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].CommittedOffset, 0);
+                }
                 UNIT_ASSERT_VALUES_EQUAL(group.Topics[0].Partitions[0].ErrorCode, NONE_ERROR);
             }
         }
@@ -1644,6 +1748,159 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
     } // Y_UNIT_TEST(CreateTopicsScenario)
+
+    Y_UNIT_TEST(CreatePartitionsScenario) {
+
+        TInsecureTestServer testServer("2");
+
+        TString topic1Name = "/Root/topic-1-test";
+        TString shortTopic1Name = "topic-1-test";
+
+        TString topic2Name = "/Root/topic-2-test";
+        TString shortTopic2Name = "topic-2-test";
+
+        TString key = "record-key";
+        TString value = "record-value";
+        TString headerKey = "header-key";
+        TString headerValue = "header-value";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topic1Name,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                 .PartitioningSettings(10, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topic2Name,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                 .PartitioningSettings(20, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
+        {
+            // Validate only
+            auto msg = client.CreatePartitions({
+                TopicToCreate(topic1Name, 11),
+                TopicToCreate(topic2Name, 21)
+            }, true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), topic2Name);
+
+            auto result0 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_EQUAL(result0.GetTopicDescription().GetPartitions().size(), 10);
+
+            auto result1 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 20);
+        }
+
+        {
+            // Increase partitions number
+            auto msg = client.CreatePartitions({
+                TopicToCreate(shortTopic1Name, 11),
+                TopicToCreate(shortTopic2Name, 21)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), shortTopic2Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, NONE_ERROR);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+
+            auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result2.IsSuccess());
+            UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetPartitions().size(), 21);
+        }
+
+        {
+            // Check with two same topic names
+            auto msg = client.CreatePartitions({
+                TopicToCreate(shortTopic1Name, 11),
+                TopicToCreate(shortTopic1Name, 11)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, DUPLICATE_RESOURCE);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+
+            auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result2.IsSuccess());
+            UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetPartitions().size(), 21);
+        }
+
+        {
+            // Check with lesser partitions number
+            auto msg = client.CreatePartitions({ TopicToCreate(shortTopic1Name, 1) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+        }
+
+        {
+            // Check with nonexistent topic name
+            auto topicName = "NonExTopicName";
+            auto msg = client.CreatePartitions({ TopicToCreate(topicName, 1) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+        }
+    } // Y_UNIT_TEST(CreatePartitionsScenario)
 
     Y_UNIT_TEST(LoginWithApiKey) {
         TInsecureTestServer testServer;

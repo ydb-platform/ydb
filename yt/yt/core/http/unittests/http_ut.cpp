@@ -1305,7 +1305,7 @@ TEST_P(THttpServerTest, ConnectionsDropRoutine)
     Sleep(TDuration::MilliSeconds(220));
 
     EXPECT_CALL(*dialerMock, Dial).WillOnce(testing::Return(MakeFuture<IConnectionPtr>(nullptr)));
-    pool->Connect(address);
+    YT_UNUSED_FUTURE(pool->Connect(address));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

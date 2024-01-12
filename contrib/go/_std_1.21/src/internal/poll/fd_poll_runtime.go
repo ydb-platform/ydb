@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 	_ "unsafe" // for go:linkname
-
 )
 
 // runtimeNano returns the current value of the runtime clock in nanoseconds.

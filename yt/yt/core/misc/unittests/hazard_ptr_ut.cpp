@@ -137,7 +137,7 @@ TEST_F(THazardPtrTest, DelayedDeallocation)
     EXPECT_STREQ("AC!D", output.Str().c_str());
 
     EXPECT_TRUE(hazardPtr);
-    EXPECT_FALSE(MakeStrong(hazardPtr));
+    EXPECT_FALSE(NDetail::TryMakeStrongFromHazard(hazardPtr));
 
     ReclaimHazardPointers(/*flush*/ false);
 
@@ -170,7 +170,7 @@ TEST_F(THazardPtrTest, DelayedDeallocationWithMultipleHPs)
     EXPECT_STREQ("AC!D", output.Str().c_str());
 
     EXPECT_TRUE(hazardPtr1);
-    EXPECT_FALSE(MakeStrong(hazardPtr1));
+    EXPECT_FALSE(NDetail::TryMakeStrongFromHazard(hazardPtr1));
 
     ReclaimHazardPointers(/*flush*/ false);
 

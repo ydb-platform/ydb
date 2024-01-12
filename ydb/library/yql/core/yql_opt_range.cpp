@@ -519,4 +519,51 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
     return result;
 }
 
+TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_ENSURE(node->IsCallable("RangeToPg"));
+    const size_t numComponents = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
+        Cast<TTupleExprType>()->GetItems().front()->Cast<TTupleExprType>()->GetSize();
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedMap")
+            .Add(0, node->HeadPtr())
+            .Lambda(1)
+                .Param("range")
+                .Callable("StaticMap")
+                    .Arg(0, "range")
+                    .Lambda(1)
+                        .Param("boundary")
+                        .List()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (size_t i = 0; i < numComponents; ++i) {
+                                    if (i % 2 == 0) {
+                                        parent
+                                            .Callable(i, "Nth")
+                                                .Arg(0, "boundary")
+                                                .Atom(1, i)
+                                            .Seal();
+                                    } else {
+                                        parent
+                                            .Callable(i, "Map")
+                                                .Callable(0, "Nth")
+                                                    .Arg(0, "boundary")
+                                                    .Atom(1, i)
+                                                .Seal()
+                                                .Lambda(1)
+                                                    .Param("unwrapped")
+                                                    .Callable("ToPg")
+                                                        .Arg(0, "unwrapped")
+                                                    .Seal()
+                                                .Seal()
+                                            .Seal();
+                                    }
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
 }

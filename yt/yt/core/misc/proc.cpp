@@ -759,14 +759,14 @@ void SetUid(int uid)
 #ifdef _linux_
     const auto* passwd = getpwuid(uid);
     int gid = (passwd && errno == 0)
-      ? passwd->pw_gid
-      : uid; // fallback value.
+        ? passwd->pw_gid
+        : uid; // fallback value.
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-                << TErrorAttribute("uid", uid)
-                << TErrorAttribute("gid", gid)
-                << TError::FromSystem();
+            << TErrorAttribute("uid", uid)
+            << TErrorAttribute("gid", gid)
+            << TError::FromSystem();
     }
 
     if (setresuid(uid, uid, uid) != 0) {

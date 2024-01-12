@@ -22,6 +22,41 @@ using namespace NChunkClient;
 using namespace NTableClient;
 using namespace NSecurityClient;
 
+static const std::vector<TString> WellKnownAttributes = {
+    "append",
+    "teleport",
+    "primary",
+    "foreign",
+    "columns",
+    "rename_columns",
+    "ranges",
+    "file_name",
+    "executable",
+    "format",
+    "schema",
+    "sorted_by",
+    "row_count_limit",
+    "timestamp",
+    "retention_timestamp",
+    "output_timestamp",
+    "optimize_for",
+    "chunk_format",
+    "compression_codec",
+    "erasure_codec",
+    "auto_merge",
+    "transaction_id",
+    "security_tags",
+    "bypass_artifact_cache",
+    "schema_modification",
+    "partially_sorted",
+    "chunk_unique_keys",
+    "copy_file",
+    "chunk_sort_columns",
+    "cluster",
+    "clusters",
+    "create",
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TRichYPath::TRichYPath()
@@ -732,6 +767,11 @@ void FromProto(TRichYPath* path, const TString& protoPath)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+const std::vector<TString>& GetWellKnownRichYPathAttributes()
+{
+    return WellKnownAttributes;
+}
 
 } // namespace NYT::NYPath
 

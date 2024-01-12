@@ -7602,6 +7602,7 @@ struct TPeepHoleRules {
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
+        {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},

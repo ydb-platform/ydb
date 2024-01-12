@@ -40,7 +40,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
     inferers.reserve(requests.size());
 
     std::function<void(size_t)> runRead = [&](size_t i) {
-        inputs[i]->Read().ApplyUnique(BIND([&inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
+        YT_UNUSED_FUTURE(inputs[i]->Read().ApplyUnique(BIND([&inferers, &promises, &runRead, i = i](NYT::TErrorOr<NYT::TSharedRef>&& res){
             if (res.IsOK() && !res.Value()) {
                 // EOS
                 promises[i].Set();
@@ -75,7 +75,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
                 promises[i].Set(e);
             }
             runRead(i);
-        }));
+        })));
     };
     
     futures.reserve(requests.size());
@@ -107,13 +107,13 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
         request->set_format("<format=text>yson");
         promises.push_back(NYT::NewPromise<void>());
         futures.push_back(promises.back().ToFuture());
-        CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([&runRead, &inputs, i](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
+        YT_UNUSED_FUTURE(CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([&runRead, &inputs, i](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
             // first packet contains meta, skip it
             return stream->Read().ApplyUnique(BIND([&runRead, stream = std::move(stream), i, &inputs](NYT::TSharedRef&&) {
                 inputs[i] = std::move(stream);
                 runRead(i);
             }));
-        }));
+        })));
         ++i;
     }
     YQL_ENSURE(NYT::NConcurrency::WaitFor(AllSucceeded(futures)).IsOK(), "Excepted all promises to be resolved in InferSchemaFromTablesContents");

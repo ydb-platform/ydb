@@ -32,8 +32,16 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const NYql::NNodes::TExprBa
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDict(
     const NYql::NNodes::TDqPhyPrecompute& lookupKeys, const NYql::TKikimrTableDescription& table,
+    const TVector<NYql::NNodes::TExprBase>& columnsList,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool fixLookupKeys);
+
+NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDict(
+    const NYql::NNodes::TDqPhyPrecompute& lookupKeys, const NYql::TKikimrTableDescription& table,
     const THashSet<TString>& dataColumns, const THashSet<TString>& keyColumns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
+
+NYql::NNodes::TDqPhyPrecompute PrecomputeCondenseInputResult(const TCondenseInputResult& condenseResult,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 // Creates key selector using PK of given table
 NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableMetadataPtr tableMeta, NYql::TPositionHandle pos,

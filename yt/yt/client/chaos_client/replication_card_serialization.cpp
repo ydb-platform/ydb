@@ -226,7 +226,7 @@ void Serialize(const TReplicationProgress& replicationProgress, IYsonConsumer* c
                         .Item("lower_key").Value(segment.LowerKey ? segment.LowerKey : EmptyKey())
                         .Item("timestamp").Value(segment.Timestamp)
                     .EndMap();
-             })
+            })
             .Item("upper_key").Value(replicationProgress.UpperKey ? replicationProgress.UpperKey : EmptyKey())
         .EndMap();
 }

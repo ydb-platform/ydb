@@ -1,6 +1,6 @@
 package NYT.NYTree.NProto;
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/ytree";
+option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
 
 ////////////////////////////////////////////////////////////////////////////////
 

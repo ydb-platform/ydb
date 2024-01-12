@@ -1286,6 +1286,25 @@
             "Match": {"Type": "Callable", "Name": "Xor"}
         },
         {
+            "Name": "TCoUnaryArithmetic",
+            "Base": "TCallable",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "Arg", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoMinus",
+            "Base": "TCoUnaryArithmetic",
+            "Match": {"Type": "Callable", "Name": "Minus"}
+        },
+        {
+            "Name": "TCoAbs",
+            "Base": "TCoUnaryArithmetic",
+            "Match": {"Type": "Callable", "Name": "Abs"}
+        },
+        {
             "Name": "TCoBinaryArithmetic",
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},

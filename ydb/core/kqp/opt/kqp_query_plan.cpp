@@ -345,6 +345,7 @@ private:
                     else {
                         TArgContext c = std::get<TArgContext>(input);
                         writer.BeginObject();
+                      
                         auto input = LambdaInputs.find(c);
                         if (input != LambdaInputs.end()){
                             if (std::holds_alternative<ui32>(input->second)) {
@@ -515,17 +516,23 @@ private:
     }
 
     TString DescribeValue(const NKikimr::NClient::TValue& value) {
-        auto str = value.GetDataText();
-        switch (value.GetType().GetData().GetScheme()) {
-        case NScheme::NTypeIds::Utf8:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-            return "«" + str + "»";
-        default:
-            return str;
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Data) {
+            auto str = value.GetDataText();
+            switch (value.GetType().GetData().GetScheme()) {
+            case NScheme::NTypeIds::Utf8:
+            case NScheme::NTypeIds::Json:
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::String4k:
+            case NScheme::NTypeIds::String2m:
+                return "«" + str + "»";
+            default:
+                return str;
+            }
         }
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
+            return value.GetPgText();
+        }
+        Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(value.GetType().GetKind()));
     }
 
     void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {
@@ -1056,15 +1063,17 @@ private:
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoFlatMapBase& flatMap, TQueryPlanNode& planNode) {
         auto flatMapInputs = Visit(flatMap.Input().Ptr(), planNode);
 
-        if (flatMapInputs.size() == 1) {
+        if (flatMapInputs.size() >= 1) {
             auto input = flatMapInputs[0];
             auto newContext = CurrentArgContext.AddArg(flatMap.Lambda().Args().Arg(0).Ptr().Get());
 
             if (std::holds_alternative<ui32>(input)) {
                 LambdaInputs[newContext] = std::get<ui32>(input);
             } else {
-                auto content = std::get<TArgContext>(input);
-                LambdaInputs[newContext] = LambdaInputs.at(std::get<TArgContext>(input));
+                auto context = std::get<TArgContext>(input);
+                if (LambdaInputs.contains(context)){
+                    LambdaInputs[newContext] = LambdaInputs.at(context);
+                }
             }
         }
 
@@ -1234,11 +1243,35 @@ private:
         return AddOperator(planNode, "Delete", std::move(op));
     }
 
+    TString MakeJoinConditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {
+        TString result = "";
+
+        for (size_t i = 0; i < leftKeys.Size(); i++) {
+            result += leftKeys.Item(i).StringValue();
+            if (i != leftKeys.Size() - 1) {
+                result += ",";
+            }
+        }
+
+        result += " = ";
+
+        for (size_t i = 0; i < rightKeys.Size(); i++) {
+            result += rightKeys.Item(i).StringValue();
+            if (i != rightKeys.Size() - 1) {
+                result += ",";
+            }
+        }
+
+        return result;
+
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
 
         AddOptimizerEstimates(op, join);
 
@@ -1254,6 +1287,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
 
         AddOptimizerEstimates(op, join);
 
@@ -1291,6 +1326,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         AddOptimizerEstimates(op, join);
@@ -1305,6 +1342,8 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumns(), join.RightKeysColumns());
+
 
         AddOptimizerEstimates(op, join);
 

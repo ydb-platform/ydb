@@ -1154,9 +1154,9 @@
     ],
     "test.test[join-inmem_with_set_key--Debug]": [
         {
-            "checksum": "73d32db9cb5d3ec7c8893434222b161a",
-            "size": 1732,
-            "uri": "https://{canondata_backend}/1936947/a99026e839b7e22714c2a9a81971a3b5e3ed1eb4/resource.tar.gz#test.test_join-inmem_with_set_key--Debug_/opt.yql_patched"
+            "checksum": "03bb67f80e6481983e9d9bca5694551c",
+            "size": 2778,
+            "uri": "https://{canondata_backend}/1903885/71ee43a73f62c943cd2c83ad3cb710bb8b1d9fb0/resource.tar.gz#test.test_join-inmem_with_set_key--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-inmem_with_set_key--Plan]": [

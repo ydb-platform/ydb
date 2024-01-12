@@ -351,6 +351,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(QueryTimeoutImmediate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};
@@ -490,6 +491,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryCancelImmediate) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);

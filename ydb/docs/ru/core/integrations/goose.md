@@ -57,6 +57,8 @@ $ mkdir migrations && cd migrations
 
 ## Управление миграциями с помощью goose
 
+### Создание файлов миграций и применение их к базе
+
 Файл миграции можно создать командой `goose create`:
 
 ```
@@ -276,7 +278,66 @@ $ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scri
 
 {% endlist %}
 
-Все последующие миграции можно создавать и применять аналогичным образом.
+Все последующие миграции можно создавать аналогичным образом.
+
+### Откат миграции
+
+Откатим последнюю миграцию с помощью команды `goose down`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down
+2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)
+```
+
+Проверим статус миграций `goose status`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2024/01/12 13:07:36     Applied At                  Migration
+2024/01/12 13:07:36     =======================================
+2024/01/12 13:07:36     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
+2024/01/12 13:07:36     Pending                  -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
+```
+
+Статус `Fri Jan 12 12:04:56 2024` заменился на статус `Pending` - это означает, что последняя миграция успешно отменена. Мы также можем убедиться в этом и другими способами:
+
+{% list tabs %}
+
+- Используя YDB UI по адресу http://localhost:8765
+
+  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
+
+- Используя YDB CLI
+
+  ```
+  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  <table> users
+
+  Columns:
+  ┌────────────┬────────────┬────────┬─────┐
+  │ Name       │ Type       │ Family │ Key │
+  ├────────────┼────────────┼────────┼─────┤
+  │ id         │ Uint64?    │        │ K0  │
+  │ username   │ Utf8?      │        │     │
+  │ created_at │ Timestamp? │        │     │
+  └────────────┴────────────┴────────┴─────┘
+
+  Storage settings:
+  Store large values in "external blobs": false
+
+  Column families:
+  ┌─────────┬──────┬─────────────┬────────────────┐
+  │ Name    │ Data │ Compression │ Keep in memory │
+  ├─────────┼──────┼─────────────┼────────────────┤
+  │ default │      │ None        │                │
+  └─────────┴──────┴─────────────┴────────────────┘
+
+  Auto partitioning settings:
+  Partitioning by size: true
+  Partitioning by load: false
+  Preferred partition size (Mb): 2048
+  Min partitions count: 1
+  ```
+
+{% endlist %}
 
 ## "Горячий" список команд "goose"
 

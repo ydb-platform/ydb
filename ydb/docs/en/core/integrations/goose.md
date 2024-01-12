@@ -57,6 +57,8 @@ $ mkdir migrations && cd migrations
 
 ## Managing migrations using goose
 
+### Creating migration files and applying to database
+
 The migration file can be generated using the `goose create` command:
 
 ```
@@ -283,6 +285,68 @@ Also we can see a changes through another options:
 {% endlist %}
 
 All subsequent migration files should be created in the same way.
+
+### Downgrading migrations
+
+Let's downgrade latest migration using `goose down`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" down
+2024/01/12 13:07:18 OK   20240112120057_00002_add_column_password_hash_into_table_users.sql (43ms)
+```
+
+Let's check the status of migration through `goose status`:
+```
+$ goose ydb "grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric" status
+2024/01/12 13:07:36     Applied At                  Migration
+2024/01/12 13:07:36     =======================================
+2024/01/12 13:07:36     Fri Jan 12 11:55:18 2024 -- 20240112115229_00001_create_first_table.sql
+2024/01/12 13:07:36     Pending                  -- 20240112120057_00002_add_column_password_hash_into_table_users.sql
+```
+
+Status `Fri Jan 12 12:04:56 2024` changed to `Pending` - this means that latest migration downgraded.
+
+Also we can see a changes through another options:
+
+{% list tabs %}
+
+- Using YDB UI on http://localhost:8765
+
+  ![YDB UI after apply first migration](../../../_assets/goose-ydb-ui-after-first-migration.png)
+
+- Using YDB CLI
+
+  ```
+  $ ydb -e grpc://localhost:2136 -d /local scheme describe users
+  <table> users
+
+  Columns:
+  ┌────────────┬────────────┬────────┬─────┐
+  │ Name       │ Type       │ Family │ Key │
+  ├────────────┼────────────┼────────┼─────┤
+  │ id         │ Uint64?    │        │ K0  │
+  │ username   │ Utf8?      │        │     │
+  │ created_at │ Timestamp? │        │     │
+  └────────────┴────────────┴────────┴─────┘
+
+  Storage settings:
+  Store large values in "external blobs": false
+
+  Column families:
+  ┌─────────┬──────┬─────────────┬────────────────┐
+  │ Name    │ Data │ Compression │ Keep in memory │
+  ├─────────┼──────┼─────────────┼────────────────┤
+  │ default │      │ None        │                │
+  └─────────┴──────┴─────────────┴────────────────┘
+
+  Auto partitioning settings:
+  Partitioning by size: true
+  Partitioning by load: false
+  Preferred partition size (Mb): 2048
+  Min partitions count: 1
+  ```
+
+{% endlist %}
+
 
 ## Short list of "goose" commands
 

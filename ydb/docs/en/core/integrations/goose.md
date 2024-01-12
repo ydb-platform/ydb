@@ -45,7 +45,7 @@ If connecting to a local YDB docker container, the connection string could look 
 grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric
 ```
 
-Let's store this connection string to environment variable for following usage:
+Let's store this connection string to an environment variable to re-use it later:
 
 ```
 export YDB_CONNECTION_STRING="grpc://localhost:2136/local?go_query_mode=scripting&go_fake_tx=scripting&go_query_bind=declare,numeric"

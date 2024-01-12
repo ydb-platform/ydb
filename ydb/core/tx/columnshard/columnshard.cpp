@@ -36,8 +36,9 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
         for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage());
+            ActivateTiering(i.first, i.second.GetTieringUsage(), true);
         }
+        OnTieringModified();
 
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);

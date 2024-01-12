@@ -947,7 +947,7 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
+void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit) {
     Y_ABORT_UNLESS(!!Tiers);
     if (!!Tiers) {
         if (useTiering) {
@@ -956,7 +956,9 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering)
             Tiers->DisablePathId(pathId);
         }
     }
-    OnTieringModified();
+    if (!onTabletInit) {
+        OnTieringModified();
+    }
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {

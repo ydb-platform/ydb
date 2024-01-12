@@ -20,16 +20,17 @@ TTraceID TTraceID::GenerateNew() {
 }
 
 TString TTraceID::ToString() const {
-    TString result;
-    TStringOutput out(result);
-    Out(out);
-    return result;
+    TStringStream ss;
+    Out(ss);
+    return ss.Str();
 }
 
 void TTraceID::Out(IOutputStream &o) const {
-    char buf[240];
-    snprintf(buf, sizeof(buf), "[ID:%" PRIu64 ", Created: %s]", RandomID, TInstant::MicroSeconds(CreationTime).ToRfc822StringLocal().data());
-    o << buf;
+    o   << "["
+        << "ID: " << RandomID << ", "
+        << "Created: " << TInstant::MicroSeconds(CreationTime).ToRfc822StringLocal()
+        << "]";
+
 }
 
 bool TTraceID::operator<(const TTraceID &x) const {

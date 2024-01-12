@@ -29,6 +29,27 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return {runtime, server, sender};
     }
 
+    Y_UNIT_TEST_TWIN(Upsert, EvWrite) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions();
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
+        auto upsertObserver = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+        auto upsertResultObserver = ReplaceEvProposeTransactionResultWithEvWrite(runtime, rows);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
+
+        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+
+        UNIT_ASSERT_VALUES_EQUAL(table1state, "key = 0, value = 1\n"
+                                              "key = 2, value = 3\n"
+                                              "key = 4, value = 5\n");
+    }
+
     Y_UNIT_TEST(WriteImmediateOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 

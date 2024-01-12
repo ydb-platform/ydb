@@ -319,6 +319,8 @@ namespace NActors {
             TEventObserverHolder& operator=(TEventObserverHolder&& other) noexcept {
                 if (this != &other)
                 {
+                    Remove();
+                    
                     List = std::move(other.List);
                     Iter = std::move(other.Iter);
 

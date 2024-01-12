@@ -105,7 +105,7 @@ And
 SELECT 'down SQL query';
 ```
 
-We can replace this statements to statements for change the schema for the YDB database, which is accessible through the corresponding connection string.
+So that we can replace them with the real migration SQL queries for change the schema for the YDB database, which is accessible through the corresponding connection string.
 
 Let's edit the migration file `<timestamp>_00001_create_table_users.sql` so that when applying the migration we create a table with necessary schema, and when rolling back the migration we delete the created table:
 

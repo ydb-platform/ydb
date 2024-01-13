@@ -2,6 +2,7 @@
 
 #include <util/system/types.h>
 
+#include <memory>
 #include <string>
 
 namespace NYdb {

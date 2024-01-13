@@ -21,7 +21,7 @@
 
 #include <cstdlib>
 #include <algorithm>
-
+#include <stdexcept>
 
 #include <common/mremap.h>
 //#include <common/getPageSize.h>

@@ -105,12 +105,12 @@ class TestS3Formats:
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
         client.create_storage_connection("btct", "fbucket")
 
-        sql = f'''
+        sql = '''
             PRAGMA s3.UseBlocksSource="true";
             SELECT
                 *
             FROM btct.`btct.parquet`
-            WITH (format=`parquet`, 
+            WITH (format=`parquet`,
                 SCHEMA=(
                     hash STRING,
                     version INT64,
@@ -135,7 +135,6 @@ class TestS3Formats:
         issues = describe_result.query.issue[0].issues
         assert "Error while reading file btct.parquet" in issues[0].message
         assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
-
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

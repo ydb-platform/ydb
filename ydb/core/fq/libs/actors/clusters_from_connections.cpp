@@ -120,11 +120,7 @@ void FillGenericClusterConfigBase(
     clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
     clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
     FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
-
-    // Since resolver always returns secure ports, we'll always ask for secure connections
-    // between remote Connector and the data source:
-    // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.cpp#L24
-    clusterCfg.SetUseSsl(true);
+    clusterCfg.SetUseSsl(!common.GetDisableSslForGenericDataSources());
 
     // In YQv1 we just hardcode desired protocols here.
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.

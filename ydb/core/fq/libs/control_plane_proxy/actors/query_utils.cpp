@@ -149,7 +149,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                     )",
                 "auth_method"_a = ToString(authMethod),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
         case EYdbComputeAuth::MDB_BASIC:
             return fmt::format(
                 R"(,
@@ -163,7 +163,7 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                 "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
                 "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'),
                 "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
-                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k2" + name : TString{}, '"'));
+                "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '"'));
     }
 }
 
@@ -185,11 +185,12 @@ TString MakeCreateExternalDataSourceQuery(
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
                     PROTOCOL="{protocol}",
-                    USE_TLS="true"
+                    USE_TLS="{use_tls}"
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'),
-                "protocol"_a = common.GetUseNativeProtocolForClickHouse() ? "NATIVE" : "HTTP");
+                "protocol"_a = common.GetUseNativeProtocolForClickHouse() ? "NATIVE" : "HTTP",
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true");
         break;
         case FederatedQuery::ConnectionSetting::kDataStreams:
         break;
@@ -213,11 +214,12 @@ TString MakeCreateExternalDataSourceQuery(
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
                     PROTOCOL="NATIVE",
-                    USE_TLS="true"
+                    USE_TLS="{use_tls}"
                     {schema}
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"'),
                 "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
+                "use_tls"_a = common.GetDisableSslForGenericDataSources() ? "false" : "true",
                 "schema"_a =  schema ? ", SCHEMA=" + EncloseAndEscapeString(schema, '"') : TString{});
         break;
     }

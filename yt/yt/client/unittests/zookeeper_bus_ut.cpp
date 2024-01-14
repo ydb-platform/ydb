@@ -57,7 +57,7 @@ public:
     {
         EXPECT_EQ(1, std::ssize(message));
         auto replyMessage = Serialize(Message_);
-        YT_UNUSED_FUTURE(replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+        YT_UNUSED_FUTURE(replyBus->Send(replyMessage));
     }
 
 private:
@@ -133,7 +133,7 @@ public:
 
         std::vector<TFuture<void>> results;
         for (int i = 0; i < numRequests; ++i) {
-            if (auto result = bus->Send(CreateMessage(10), NBus::TSendOptions(EDeliveryTrackingLevel::None))) {
+            if (auto result = bus->Send(CreateMessage(10))) {
                 results.push_back(result);
             }
         }

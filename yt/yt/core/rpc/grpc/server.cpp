@@ -968,7 +968,7 @@ private:
                 YT_LOG_WARNING(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
-                YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage), NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+                YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage)));
             }
         }
 

@@ -200,7 +200,7 @@ TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -228,7 +228,7 @@ TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -256,7 +256,7 @@ TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -284,7 +284,7 @@ TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -308,7 +308,7 @@ TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -374,7 +374,7 @@ TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -398,7 +398,7 @@ TEST_F(TSslTest, OptionalAndDisabledEncryptionMode)
     EXPECT_FALSE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -462,7 +462,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
 
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
-        auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         Cerr << sendFuture.Get().GetMessage() << Endl;
         EXPECT_TRUE(sendFuture.Get().IsOK());
     }
@@ -500,7 +500,7 @@ TEST_F(TSslTest, FullVerificationMode)
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(sendFuture.Get().IsOK());
 
     server->Stop()
@@ -550,7 +550,7 @@ TEST_F(TSslTest, FullVerificationAlternativeHostName)
     EXPECT_TRUE(bus->IsEncrypted());
 
     auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_NO_THROW(sendFuture.Get().ThrowOnError());
 
     server->Stop()
@@ -582,7 +582,7 @@ TEST_F(TSslTest, ServerCipherList)
 
     for (int i = 0; i < 2; ++i) {
         auto message = CreateMessage(1);
-        auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         Cerr << sendFuture.Get().GetMessage() << Endl;
         EXPECT_TRUE(sendFuture.Get().IsOK());
     }

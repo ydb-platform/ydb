@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2023.3)
+VERSION(2023.4)
 
 LICENSE(Apache-2.0)
 
@@ -640,6 +640,7 @@ RESOURCE_FILES(
     tzdata/zoneinfo/tzdata.zi
     tzdata/zoneinfo/zone.tab
     tzdata/zoneinfo/zone1970.tab
+    tzdata/zoneinfo/zonenow.tab
     tzdata/zones
 )
 

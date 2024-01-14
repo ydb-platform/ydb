@@ -11,10 +11,15 @@ namespace NYT {
 struct THistoricUsageAggregationParameters
 {
     THistoricUsageAggregationParameters() = default;
-    explicit THistoricUsageAggregationParameters(EHistoricUsageAggregationMode mode, double emaAlpha = 0.0);
+    explicit THistoricUsageAggregationParameters(
+        EHistoricUsageAggregationMode mode,
+        double emaAlpha = 0.0,
+        bool resetOnNewParameters = true);
     explicit THistoricUsageAggregationParameters(const THistoricUsageConfigPtr& config);
 
-    bool operator==(const THistoricUsageAggregationParameters& other) const;
+    bool operator==(const THistoricUsageAggregationParameters& other) const = default;
+
+    static constexpr double DefaultEmaAlpha = 0.1;
 
     EHistoricUsageAggregationMode Mode = EHistoricUsageAggregationMode::None;
 
@@ -23,6 +28,8 @@ struct THistoricUsageAggregationParameters
     //! historic usage as the usage ratio alpha seconds ago.
     //! EMA for unevenly spaced time series was adapted from here: https://clck.ru/HaGZs
     double EmaAlpha = 0.0;
+
+    bool ResetOnNewParameters = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,6 +38,7 @@ class THistoricUsageAggregator
 {
 public:
     THistoricUsageAggregator();
+    explicit THistoricUsageAggregator(const THistoricUsageAggregationParameters& parameters);
     THistoricUsageAggregator(const THistoricUsageAggregator& other) = default;
     THistoricUsageAggregator& operator=(const THistoricUsageAggregator& other) = default;
 
@@ -43,12 +51,19 @@ public:
 
     double GetHistoricUsage() const;
 
+    //! Simulates combination of UpdateAt(now, value) + GetHistoricUsage without changing the state
+    double SimulateUpdate(TInstant now, double value) const;
+
 private:
     THistoricUsageAggregationParameters Parameters_;
 
     double ExponentialMovingAverage_;
 
     TInstant LastExponentialMovingAverageUpdateTime_;
+
+    bool ShouldFlush() const;
+
+    double ApplyUpdate(double current, TInstant now, double value) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

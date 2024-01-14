@@ -51,7 +51,12 @@ using TFairShareCallbackQueueFactory = std::function<IFairShareCallbackQueuePtr(
 IDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
-    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue);
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    THistoricUsageAggregationParameters aggregatorParameters =
+        THistoricUsageAggregationParameters{
+            EHistoricUsageAggregationMode::ExponentialMovingAverage,
+            /*emaAlpha*/ THistoricUsageAggregationParameters::DefaultEmaAlpha,
+        });
 
 ////////////////////////////////////////////////////////////////////////////////
 

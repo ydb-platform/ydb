@@ -32,6 +32,8 @@ PARTITION_MODS = ('SEQUENTIAL', 'MODULO')
 DEFAULT_TIDY_CONFIG = "build/config/tests/clang_tidy/config.yaml"
 DEFAULT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_default_map.json"
 PROJECT_TIDY_CONFIG_MAP_PATH = "build/yandex_specific/config/clang_tidy/tidy_project_map.json"
+KTLINT_CURRENT_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint/.editorconfig"
+KTLINT_OLD_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint_old/.editorconfig"
 
 
 tidy_config_map = None
@@ -651,8 +653,13 @@ def onadd_check(unit, *args):
         fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "ktlint":
         test_timeout = '120'
-        ktlint_binary = '$(KTLINT_OLD)/run.bat' if unit.get('_USE_KTLINT_OLD') == 'yes' else '$(KTLINT)/run.bat'
-        extra_test_dart_data['KTLINT_BINARY'] = ktlint_binary
+        if unit.get('_USE_KTLINT_OLD') == 'yes':
+            extra_test_data = serialize_list([KTLINT_OLD_EDITOR_CONFIG])
+            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT_OLD)/run.bat'
+            extra_test_dart_data['USE_KTLINT_OLD'] = 'yes'
+        else:
+            extra_test_data = serialize_list([KTLINT_CURRENT_EDITOR_CONFIG])
+            extra_test_dart_data['KTLINT_BINARY'] = '$(KTLINT)/run.bat'
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS'):
             return

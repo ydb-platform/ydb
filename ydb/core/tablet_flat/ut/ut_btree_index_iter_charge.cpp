@@ -68,7 +68,7 @@ namespace {
         AssertTouchedTheSame(part, bTree.Touched, flat.Touched, message);
     }
 
-    TPartEggs MakePart(TConf&& conf, ui32 rows, ui32 levels) {
+    TPartEggs MakePart(TConf&& conf, bool runs, ui32 rows, ui32 levels) {
         TLayoutCook lay;
 
         lay
@@ -89,7 +89,17 @@ namespace {
 
         const auto part = *eggs.Lone();
 
-        UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        if (runs) {
+            UNIT_ASSERT_GT(part.Slices->size(), 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        }
+        Cerr << " + Slices" << Endl;
+        for (const auto &slice : *part.Slices) {
+            Cerr << " | ";
+            slice.Describe(Cerr);
+            Cerr << Endl;
+        }
         Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
@@ -270,7 +280,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckPart(TConf&& conf, ui32 rows, ui32 levels) {
-        TPartEggs eggs = MakePart(std::move(conf), rows, levels);
+        TPartEggs eggs = MakePart(std::move(conf), false, rows, levels);
         const auto part = *eggs.Lone();
 
         CheckSeekRowId(part);
@@ -385,7 +395,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckPart(TConf&& conf, ui32 rows, ui32 levels) {
-        TPartEggs eggs = MakePart(std::move(conf), rows, levels);
+        TPartEggs eggs = MakePart(std::move(conf), false, rows, levels);
         const auto part = *eggs.Lone();
 
         auto tags = TVector<TTag>();
@@ -436,7 +446,13 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }, env, message, failsAllowed);
     }
 
-    void CheckSeekKey(const TPartEggs& eggs) {
+    EReady Next(TRunIt& iter, TTouchEnv& env, bool reverse, const TString& message, ui32 failsAllowed = 10) {
+        return Retry([&]() {
+            return reverse ? iter.Prev() : iter.Next();
+        }, env, message, failsAllowed);
+    }
+
+    void CheckIterateKey(const TPartEggs& eggs) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
@@ -466,47 +482,81 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                         TRunIt flat(flatRun, tags, eggs.Scheme->Keys, &flatEnv);
                         TRunIt bTree(btreeRun, tags, eggs.Scheme->Keys, &bTreeEnv);
 
-                        TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
-                        for (auto c : key) {
-                            message << c.AsValue<ui32>() << " ";
+                        {
+                            TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
+                            for (auto c : key) {
+                                message << c.AsValue<ui32>() << " ";
+                            }
+                            EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, message);
+                            EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, message);
+                            AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                            AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
                         }
-                        
-                        EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, message);
-                        EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, message);
-                        AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+
+                        for (ui32 steps = 1; steps < 3; steps++) {
+                            TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
+                            for (auto c : key) {
+                                message << c.AsValue<ui32>() << " ";
+                            }
+                            message << " --> " << steps << " steps ";
+                            EReady bTreeReady = Next(bTree, bTreeEnv, reverse, message);
+                            EReady flatReady = Next(flat, flatEnv, reverse, message);
+                            AssertEqual(bTree, bTreeReady, flat, flatReady, message);
+                            AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+                        }
                     }
                 }
             }
         }
     }
 
-    void CheckPart(TConf&& conf, ui32 rows, ui32 levels) {
-        TPartEggs eggs = MakePart(std::move(conf), rows, levels);
+    void CheckPart(TConf&& conf, bool runs, ui32 rows, ui32 levels) {
+        TPartEggs eggs = MakePart(std::move(conf), runs, rows, levels);
         const auto part = *eggs.Lone();
 
-        CheckSeekKey(eggs);
+        CheckIterateKey(eggs);
     }
 
-    Y_UNIT_TEST(NoNodes) {
+    Y_UNIT_TEST(NoNodes_SingleRun) {
         NPage::TConf conf;
 
-        CheckPart(std::move(conf), 40, 0);
+        CheckPart(std::move(conf), false, 40, 0);
     }
 
-    Y_UNIT_TEST(OneNode) {
+    Y_UNIT_TEST(OneNode_SingleRun) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
 
-        CheckPart(std::move(conf), 40, 1);
+        CheckPart(std::move(conf), false, 40, 1);
     }
 
-    Y_UNIT_TEST(FewNodes) {
+    Y_UNIT_TEST(FewNodes_SingleRun) {
         NPage::TConf conf;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 
-        CheckPart(std::move(conf), 40, 3);
+        CheckPart(std::move(conf), false, 40, 3);
+    }
+
+    Y_UNIT_TEST(NoNodes_ManyRuns) {
+        NPage::TConf conf;
+
+        CheckPart(std::move(conf), true, 40, 0);
+    }
+
+    Y_UNIT_TEST(OneNode_ManyRuns) {
+        NPage::TConf conf;
+        conf.Group(0).PageRows = 2;
+
+        CheckPart(std::move(conf), true, 40, 1);
+    }
+
+    Y_UNIT_TEST(FewNodes_ManyRuns) {
+        NPage::TConf conf;
+        conf.Group(0).PageRows = 2;
+        conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+
+        CheckPart(std::move(conf), true, 40, 3);
     }
 }
 

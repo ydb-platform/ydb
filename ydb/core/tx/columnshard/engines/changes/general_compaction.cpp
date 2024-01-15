@@ -222,7 +222,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnPortionsKind(insertedPortionsSize, compactedPortionsSize, otherPortionsSize);
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
 
-    if (AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
+    if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
         BuildAppendedPortionsByChunks(context);
     } else {
         BuildAppendedPortionsByFullBatches(context);

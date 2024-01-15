@@ -42,7 +42,7 @@ TMutableRef TBlobOutput::RequestBuffer(size_t requiredSize)
     size_t size = Next(&data);
     YT_VERIFY(size >= requiredSize);
     Undo(size - requiredSize);
-    return TMutableRef{data, size};
+    return TMutableRef(data, size);
 }
 
 void TBlobOutput::DoUndo(size_t len)

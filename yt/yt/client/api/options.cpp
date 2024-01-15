@@ -8,7 +8,7 @@
 
 #include <util/system/env.h>
 
-namespace NYT::NClient::NCache {
+namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,4 +45,4 @@ const NApi::TClientOptions& GetClientOpsFromEnvStatic()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NClient::NCache
+} // namespace NYT::NApi

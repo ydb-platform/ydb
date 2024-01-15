@@ -1,5 +1,12 @@
 #include "periodic_executor.h"
 
+#include <yt/yt/core/actions/bind.h>
+#include <yt/yt/core/actions/invoker_util.h>
+
+#include <yt/yt/core/concurrency/thread_affinity.h>
+
+#include <yt/yt/core/misc/jitter.h>
+
 #include <yt/yt/core/utilex/random.h>
 
 namespace NYT::NConcurrency {
@@ -14,11 +21,89 @@ TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
     };
 }
 
+void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
+{
+    registrar.ExternalClassParameter("period", &TThat::Period)
+        .Default();
+    registrar.ExternalClassParameter("splay", &TThat::Splay)
+        .Default(TDuration::Zero());
+    registrar.ExternalClassParameter("jitter", &TThat::Jitter)
+        .Default(TThat::DefaultJitter);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDefaultInvocationTimePolicy::TDefaultInvocationTimePolicy(
+    const TOptions& options)
+    : TPeriodicExecutorOptions(options)
+{ }
+
+void TDefaultInvocationTimePolicy::ProcessResult()
+{ }
+
+TInstant TDefaultInvocationTimePolicy::KickstartDeadline()
+{
+    return TInstant::Now() + RandomDuration(Splay);
+}
+
+bool TDefaultInvocationTimePolicy::IsEnabled()
+{
+    return Period.has_value();
+}
+
+bool TDefaultInvocationTimePolicy::ShouldKickstart(const TOptions& newOptions)
+{
+    return ShouldKickstart(newOptions.Period);
+}
+
+bool TDefaultInvocationTimePolicy::ShouldKickstart(const std::optional<TDuration>& period)
+{
+    return period && (!Period || *period < *Period);
+}
+
+void TDefaultInvocationTimePolicy::SetOptions(TOptions newOptions)
+{
+    TPeriodicExecutorOptions::operator=(newOptions);
+}
+
+void TDefaultInvocationTimePolicy::SetOptions(std::optional<TDuration> period)
+{
+    Period = period;
+}
+
+TInstant TDefaultInvocationTimePolicy::NextDeadline()
+{
+    auto randomGenerator = [] () {
+        double rand = RandomNumber<double>();
+
+        return 2.0 * rand - 1.0;
+    };
+
+    //! Jitter is divided by 2 for historical reasons.
+    return TInstant::Now() + ApplyJitter(*Period, Jitter / 2.0, randomGenerator);
+}
+
+bool TDefaultInvocationTimePolicy::IsOutOfBandProhibited()
+{
+    return false;
+}
+
+void TDefaultInvocationTimePolicy::Reset()
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TPeriodicExecutor::TPeriodicExecutor(
     IInvokerPtr invoker,
-    TClosure callback,
+    TPeriodicCallback callback,
     std::optional<TDuration> period)
     : TPeriodicExecutor(
         std::move(invoker),
@@ -28,59 +113,17 @@ TPeriodicExecutor::TPeriodicExecutor(
 
 TPeriodicExecutor::TPeriodicExecutor(
     IInvokerPtr invoker,
-    TClosure callback,
-    TPeriodicExecutorOptions options)
-    : TRecurringExecutorBase(std::move(invoker), std::move(callback))
-    , Period_(options.Period)
-    , Splay_(options.Splay)
-    , Jitter_(options.Jitter)
+    TPeriodicCallback callback,
+    NConcurrency::TPeriodicExecutorOptions options)
+    : TBase(
+        std::move(invoker),
+        std::move(callback),
+        options)
 { }
 
 void TPeriodicExecutor::SetPeriod(std::optional<TDuration> period)
 {
-    auto guard = Guard(SpinLock_);
-    auto oldPeriod = Period_;
-    Period_ = period;
-
-    if (period && (!oldPeriod || *period < *oldPeriod)) {
-        KickStartInvocationIfNeeded();
-    }
-}
-
-TDuration TPeriodicExecutor::NextDelay()
-{
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
-
-    if (Jitter_ == 0.0) {
-        return *Period_;
-    } else {
-        auto period = *Period_;
-        period += RandomDuration(period) * Jitter_ - period * Jitter_ / 2.;
-        return period;
-    }
-}
-
-void TPeriodicExecutor::ScheduleFirstCallback()
-{
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
-
-    if (Period_) {
-        PostDelayedCallback(RandomDuration(Splay_));
-    }
-}
-
-void TPeriodicExecutor::ScheduleCallback()
-{
-    VERIFY_SPINLOCK_AFFINITY(SpinLock_);
-
-    if (Period_) {
-        PostDelayedCallback(NextDelay());
-    }
-}
-
-TError TPeriodicExecutor::MakeStoppedError()
-{
-    return TError(NYT::EErrorCode::Canceled, "Periodic executor is stopped");
+    TBase::SetOptions(period);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

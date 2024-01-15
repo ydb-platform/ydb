@@ -727,10 +727,16 @@ DELEGATE_METHOD(TFuture<void>, AlterQuery, (
     const TAlterQueryOptions& options),
     (queryId, options))
 
-DELEGATE_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (
+DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
     const TString& bundleName,
-    const TGetBundleConfigOptions& options),
+    const NBundleControllerClient::TGetBundleConfigOptions& options),
     (bundleName, options))
+
+DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
+    const TString& bundleName,
+    const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+    const NBundleControllerClient::TSetBundleConfigOptions& options),
+    (bundleName, bundleConfig, options))
 
 #undef DELEGATE_METHOD
 

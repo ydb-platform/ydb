@@ -11,6 +11,7 @@ ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
+ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail

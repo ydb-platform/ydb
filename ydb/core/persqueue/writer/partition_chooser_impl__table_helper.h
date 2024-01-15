@@ -177,7 +177,7 @@ public:
                     PartitionId_ = tt.GetOptional().GetUint32();
                     CreateTime = list.GetStruct(1).GetOptional().GetUint64();
                     AccessTime = accessTime;
-                    //SeqNo_ = list.GetStruct(3).GetOptional().GetUint64();
+                    SeqNo_ = list.GetStruct(3).GetOptional().GetUint64();
                 }
             }
         }

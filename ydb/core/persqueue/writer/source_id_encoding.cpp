@@ -20,17 +20,15 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Topic AS Utf8; "
-                   "DECLARE $SourceId AS Utf8; "
-                   "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
-                   //"SELECT Partition, CreateTime, AccessTime, SeqNo FROM `" << path << "` "
+                   "DECLARE $SourceId AS Utf8;\n"
+                   "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `" << path << "` "
                    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
         case ESourceIdTableGeneration::PartitionMapping:
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint64; "
                    "DECLARE $Topic AS Utf8; "
-                   "DECLARE $SourceId AS Utf8; "
-                   "SELECT Partition, CreateTime, AccessTime FROM `"
-                   //"SELECT Partition, CreateTime, AccessTime, SeqNo FROM `"
+                   "DECLARE $SourceId AS Utf8;\n"
+                   "SELECT Partition, CreateTime, AccessTime, SeqNo FROM `"
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
@@ -61,12 +59,10 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
-                   "DECLARE $AccessTime AS Uint64;\n"
-                   "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
-                   //"DECLARE $SeqNo AS Uint64;\n"
-                   //"UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                   //                           "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
+                   "DECLARE $AccessTime AS Uint64;"
+                   "DECLARE $SeqNo AS Uint64;\n"
+                   "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
         case ESourceIdTableGeneration::PartitionMapping:
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
@@ -75,13 +71,10 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $Partition AS Uint32; "
                    "DECLARE $CreateTime AS Uint64; "
                    "DECLARE $AccessTime AS Uint64; "
+                   "DECLARE $SeqNo AS Uint64;\n"
                    "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
-                    << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
-                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
-                   //"DECLARE $SeqNo AS Uint64;\n"
-                   //"UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
-                   // << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
-                   //                           "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
+                    << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
+                                              "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
         default:
             Y_ABORT();
     }

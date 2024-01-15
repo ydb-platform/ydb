@@ -12,8 +12,27 @@ using namespace NKikimr::NPQ;
 static constexpr bool SMEnabled = true;
 static constexpr bool SMDisabled = false;
 
-NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled) {
-    Cerr << ">>>>> SplitMergeEnabled=" << SplitMergeEnabled << Endl;
+void AddPartition(NKikimrSchemeOp::TPersQueueGroupDescription& conf,
+                  ui32 id,
+                  const std::optional<TString>&& boundaryFrom,
+                  const std::optional<TString>&& boundaryTo,
+                  std::vector<ui32> children = {}) { 
+    auto* p = conf.AddPartitions();
+    p->SetPartitionId(id);
+    p->SetTabletId(1000 + id);
+    p->SetStatus(children.empty() ? NKikimrPQ::ETopicPartitionStatus::Active : NKikimrPQ::ETopicPartitionStatus::Inactive);
+    if (boundaryFrom) {
+        p->MutableKeyRange()->SetFromBound(boundaryFrom.value());
+    }
+    if (boundaryTo) {
+        p->MutableKeyRange()->SetToBound(boundaryTo.value());
+    }
+    for(ui32 c : children) {
+        p->AddChildPartitionIds(c);
+    }
+}
+
+NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig0(bool SplitMergeEnabled) {
     NKikimrSchemeOp::TPersQueueGroupDescription result;
     NKikimrPQ::TPQTabletConfig* config =  result.MutablePQTabletConfig();
 
@@ -26,83 +45,17 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
     config->SetTopicName("/Root/topic-1");
     config->SetTopicPath("/Root");
 
-    {
-        auto* p = result.AddPartitions();
-        p->SetPartitionId(0);
-        p->SetTabletId(1000);
-        p->MutableKeyRange()->SetToBound("C");
-    }
+    return result;
+}
 
-    {
-        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
-        p->SetPartitionId(0);
-        p->SetTabletId(1000);
-        p->MutableKeyRange()->SetToBound("C");
-    }
+NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled) {
+    NKikimrSchemeOp::TPersQueueGroupDescription result = CreateConfig0(SplitMergeEnabled);
 
-    {
-        auto* p = result.AddPartitions();
-        p->SetPartitionId(1);
-        p->SetTabletId(1001);
-        p->MutableKeyRange()->SetFromBound("C");
-        p->MutableKeyRange()->SetToBound("F");
-    }
-
-    {
-        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
-        p->SetPartitionId(1);
-        p->SetTabletId(1001);
-        p->MutableKeyRange()->SetFromBound("C");
-        p->MutableKeyRange()->SetToBound("F");
-    }
-
-    {
-        auto* p = result.AddPartitions();
-        p->SetPartitionId(2);
-        p->SetTabletId(1002);
-        p->MutableKeyRange()->SetFromBound("F");
-    }
-
-    {
-        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
-        p->SetPartitionId(2);
-        p->SetTabletId(1002);
-        p->MutableKeyRange()->SetFromBound("F");
-    }
-
-    {
-        auto* p = result.AddPartitions();
-        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
-        p->SetPartitionId(3);
-        p->SetTabletId(1003);
-        p->MutableKeyRange()->SetFromBound("D");
-        p->AddChildPartitionIds(4);
-    }
-
-    {
-        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
-        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Inactive);
-        p->SetPartitionId(3);
-        p->SetTabletId(1003);
-        p->MutableKeyRange()->SetFromBound("D");
-        p->AddChildPartitionIds(4);
-    }
-
-    {
-        auto* p = result.AddPartitions();
-        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
-        p->SetPartitionId(4);
-        p->SetTabletId(1004);
-        p->MutableKeyRange()->SetFromBound("D");
-    }
-
-    {
-        auto* p = result.MutablePQTabletConfig()->AddAllPartitions();
-        p->SetStatus(::NKikimrPQ::ETopicPartitionStatus::Active);
-        p->SetPartitionId(4);
-        p->SetTabletId(1004);
-        p->MutableKeyRange()->SetFromBound("D");
-    }
+    AddPartition(result, 0, {}, "C");
+    AddPartition(result, 1, "C", "F");
+    AddPartition(result, 2, "F", {});
+    AddPartition(result, 3, "D", {}, {4});
+    AddPartition(result, 4, "D", {});
 
     return result;
 }
@@ -231,14 +184,17 @@ NPersQueue::TTopicConverterPtr CreateTopicConverter() {
     return NPersQueue::TTopicNameConverter::ForFirstClass(CreateConfig(SMDisabled).GetPQTabletConfig());
 }
 
-TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMergeEnabled, const TString& sourceId, std::optional<ui32> preferedPartition = std::nullopt) {
-    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
+                                   const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                   const TString& sourceId,
+                                   std::optional<ui32> preferedPartition = std::nullopt) {
 
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
     TWriteSessionMock* mock = new TWriteSessionMock();
 
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
     server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActorM(parentId, 
-                                                                                   CreateConfig(spliMergeEnabled),
+                                                                                   config,
                                                                                    fullConverter,
                                                                                    sourceId,
                                                                                    preferedPartition,
@@ -247,14 +203,26 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMer
     mock->Promise.GetFuture().GetValueSync();
 
     return mock;
+
 }
 
-void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId) {
+TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMergeEnabled, const TString& sourceId, std::optional<ui32> preferedPartition = std::nullopt) {
+    auto config = CreateConfig(spliMergeEnabled);
+    return ChoosePartition(server, config, sourceId, preferedPartition);
+}
+
+void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0) {
+    auto node = server.GetRuntime()->GetAnyNodeActorSystem();
+    node->Send(
+        NKikimr::NMetadata::NProvider::MakeServiceId(node->NodeId),
+        new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
+    );
+
+    Sleep(TDuration::Seconds(1)); // TODO
+
     const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                : ESourceIdTableGeneration::SrcIdMeta2;
-
-    Cerr << ">>>>> pqConfig.GetTopicsAreFirstClassCitizen()=" << pqConfig.GetTopicsAreFirstClassCitizen() << Endl;
 
     NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
     NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
@@ -264,18 +232,69 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
     TString query;
     if (pqConfig.GetTopicsAreFirstClassCitizen()) {
         query = TStringBuilder() << "--!syntax_v1\n"
-            "UPSERT INTO `//Root/.metadata/TopicPartitionsMapping` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
+            "UPSERT INTO `//Root/.metadata/TopicPartitionsMapping` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
                                               "(" << encoded.KeysHash << ", \"" << fullConverter->GetClientsideName() << "\", \"" 
                                               << encoded.EscapedSourceId << "\", "<< TInstant::Now().MilliSeconds() << ", "
-                                              << TInstant::Now().MilliSeconds() << ", " << partitionId << ");";
+                                              << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << ");";
     } else {
         query = TStringBuilder() << "--!syntax_v1\n"
-                    "UPSERT INTO `/Root/PQ/SourceIdMeta2` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES ("
+                    "UPSERT INTO `/Root/PQ/SourceIdMeta2` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition, SeqNo) VALUES ("
                   << encoded.Hash << ", \"" << fullConverter->GetClientsideName() << "\", \"" << encoded.EscapedSourceId << "\", "
-                  << TInstant::Now().MilliSeconds() << ", " << TInstant::Now().MilliSeconds() << ", " << partitionId << "); ";
+                  << TInstant::Now().MilliSeconds() << ", " << TInstant::Now().MilliSeconds() << ", " << partitionId << ", " << seqNo << "); ";
     }
     Cerr << "Run query:\n" << query << Endl;
     auto scResult = server.AnnoyingClient->RunYqlDataQuery(query);
+}
+
+TMaybe<NYdb::TResultSet> SelectTable(NPersQueue::TTestServer& server, const TString& sourceId) {
+    const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
+    auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
+                                                               : ESourceIdTableGeneration::SrcIdMeta2;
+
+    NPersQueue::TTopicConverterPtr fullConverter = CreateTopicConverter();
+    NKikimr::NPQ::NSourceIdEncoding::TEncodedSourceId encoded = NSourceIdEncoding::EncodeSrcId(
+                fullConverter->GetTopicForSrcIdHash(), sourceId, tableGeneration
+        );
+
+    TString query;
+    if (pqConfig.GetTopicsAreFirstClassCitizen()) {
+        query = TStringBuilder() << "--!syntax_v1\n"
+            "SELECT Partition, SeqNo "
+            "FROM  `//Root/.metadata/TopicPartitionsMapping` "
+            "WHERE Hash = " << encoded.KeysHash << 
+            "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
+            "  AND ProducerId = \"" << encoded.EscapedSourceId << "\"";
+    } else {
+        query = TStringBuilder() << "--!syntax_v1\n"
+            "SELECT Partition, SeqNo "
+            "FROM  `/Root/PQ/SourceIdMeta2` "
+            "WHERE Hash = " << encoded.KeysHash << 
+            "  AND Topic = \"" << fullConverter->GetClientsideName() << "\"" <<
+            "  AND SourceId = \"" << encoded.EscapedSourceId << "\"";
+    }
+    Cerr << "Run query:\n" << query << Endl;
+    return server.AnnoyingClient->RunYqlDataQuery(query);
+}
+
+void AssertTableEmpty(NPersQueue::TTestServer& server, const TString& sourceId) {
+    auto result = SelectTable(server, sourceId);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 0, "Table must not contains SourceId='" << sourceId << "'");
+}
+
+void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo) {
+    auto result = SelectTable(server, sourceId);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->RowsCount(), 1, "Table must contains SourceId='" << sourceId << "'");
+    
+    NYdb::TResultSetParser parser(*result);
+    UNIT_ASSERT(parser.TryNextRow());
+    NYdb::TValueParser p(parser.GetValue(0));
+    NYdb::TValueParser s(parser.GetValue(1));
+    UNIT_ASSERT_VALUES_EQUAL(*p.GetOptionalUint32().Get(), partitionId);
+    UNIT_ASSERT_VALUES_EQUAL(*s.GetOptionalUint64().Get(), seqNo);
 }
 
 using namespace NKikimr;
@@ -320,25 +339,84 @@ private:
 };
 
 
-TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui64 tabletId, ETopicPartitionStatus status) {
+TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui32 partitionId, ETopicPartitionStatus status) {
     TPQTabletMock* mock = new TPQTabletMock(status);
     auto actorId = server.GetRuntime()->Register(mock);
-    NKikimr::NTabletPipe::NTest::TPipeMock::Register(tabletId, actorId);
+    NKikimr::NTabletPipe::NTest::TPipeMock::Register(partitionId + 1000, actorId);
     return mock;
 }
 
-
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
+NPersQueue::TTestServer CreateServer() {
     NPersQueue::TTestServer server{};
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
+    return server;
+}
 
-    CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1001, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1003, ETopicPartitionStatus::Inactive);
-    CreatePQTabletMock(server, 1004, ETopicPartitionStatus::Active);
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_NewSourceId_Test) {
+    // We check the scenario when writing is performed with a new SourceID
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "A_Source_0");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+    AssertTable(server, "A_Source_0", 0, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryTrue_Test) {
+    // We check the partition selection scenario when we have already written with the 
+    // specified SourceID, the partition to which we wrote is active, and the partition
+    // boundaries coincide with the distribution.
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_1", 0);
+    auto r = ChoosePartition(server, config, "A_Source_1");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+    AssertTable(server, "A_Source_1", 0, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryFalse_Test) {
+    // We check the partition selection scenario when we have already written with the 
+    // specified SourceID, the partition to which we wrote is active, and the partition
+    // boundaries is not coincide with the distribution.
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_2", 1);
+    auto r = ChoosePartition(server, config, "A_Source_2");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    AssertTable(server, "A_Source_2", 1, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 3, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 4, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMEnabled, "A_Source");
@@ -381,14 +459,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
-    NPersQueue::TTestServer server{};
-    server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
-    server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
-    server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
+    NPersQueue::TTestServer server = CreateServer();
 
-    CreatePQTabletMock(server, 1000, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1001, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1002, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
 
     {
         auto r = ChoosePartition(server, SMDisabled, "A_Source");

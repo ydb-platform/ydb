@@ -1,7 +1,7 @@
 # Kafka API constraints
 
-
 YDB supports [Apache Kafka protocol](https://kafka.apache.org/protocol.html) version 3.4.0 with the following constraints:
+
 
 1. Only authenticated connections are allowed.
 

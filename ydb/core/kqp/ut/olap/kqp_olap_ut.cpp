@@ -5264,7 +5264,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(2).Add("test_res_2").Add("val1").AddNull();
             tableInserter.AddRow().Add(3).Add("test_res_3").Add("val3").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
         while (csController->GetIndexations().Val() == 0) {
             Cout << "Wait indexation..." << Endl;

@@ -20,7 +20,7 @@ The examples use:
 
 ### Writing via Kafka Java SDK
 
-This example includes a code snippet for writing data to a topic via Kafka Java SDK.
+This example includes a code snippet for writing data to a topic via [Kafka API](https://kafka.apache.org/documentation/).
 
   ```java
   String HOST = "ydb:9093";

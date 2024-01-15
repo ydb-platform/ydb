@@ -206,6 +206,7 @@ protected:
     friend class TTxMonEvent_RebalanceFromScratch;
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
+    friend class TTxMonEvent_Subactors;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -957,6 +958,7 @@ protected:
 
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
+    bool StopSubActor(TSubActorId subActorId);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

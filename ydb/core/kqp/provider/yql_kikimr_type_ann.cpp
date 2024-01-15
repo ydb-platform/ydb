@@ -1655,6 +1655,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         auto settings = NCommon::ParseCommitSettings(node, ctx);
 
         bool isFlushCommit = false;
+        bool isRollback = false;
         if (settings.Mode) {
             auto mode = settings.Mode.Cast().Value();
 
@@ -1665,6 +1666,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
 
             isFlushCommit = (mode == KikimrCommitModeFlush());
+            isRollback = (mode == KikimrCommitModeRollback());
         }
 
         if (!settings.EnsureEpochEmpty(ctx)) {
@@ -1682,8 +1684,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             default:
                 if (!isFlushCommit) {
+                    auto opName = isRollback ? "ROLLBACK" : "COMMIT";
                     ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                        << "COMMIT not supported inside Kikimr query"));
+                        << opName << " not supported inside YDB query"));
 
                     return TStatus::Error;
                 }

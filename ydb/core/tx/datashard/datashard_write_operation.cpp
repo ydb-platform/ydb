@@ -245,6 +245,7 @@ void TValidatedWriteTx::ComputeTxSize() {
 
 TWriteOperation* TWriteOperation::CastWriteOperation(TOperation::TPtr op)
 {
+    Y_ABORT_UNLESS(op->IsWriteTx());
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_ABORT_UNLESS(writeOp);
     return writeOp;
@@ -453,7 +454,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(
 
 void TWriteOperation::FinalizeWriteTxPlan()
 {
-    Y_ABORT_UNLESS(IsDataTx());
+    Y_ABORT_UNLESS(IsWriteTx());
     Y_ABORT_UNLESS(!IsImmediate());
     Y_ABORT_UNLESS(!IsKqpScanTransaction());
 
@@ -494,8 +495,7 @@ public:
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
 
-        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
         writeOp->FinalizeWriteTxPlan();
 

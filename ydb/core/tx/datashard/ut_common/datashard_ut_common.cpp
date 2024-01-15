@@ -1877,11 +1877,11 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
 
 
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
+TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
     if (rows.empty())
         return {};
 
-    return runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
+    auto requestObserver = runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != TEvDataShard::EvProposeTransaction)
             return;
 
@@ -1939,18 +1939,21 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionWithEvWri
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
+        // Copy locks
+        if (tx.HasLockTxId())
+            evWrite->Record.SetLockTxId(tx.GetLockTxId());
+        if (tx.HasLockNodeId())
+            evWrite->Record.SetLockNodeId(tx.GetLockNodeId());
+        if (tx.GetKqpTransaction().HasLocks())
+            evWrite->Record.MutableLocks()->CopyFrom(tx.GetKqpTransaction().GetLocks());
+
         // Replace event
         auto handle = new IEventHandle(event->Recipient, event->Sender, evWrite.release(), 0, event->Cookie);
         handle->Rewrite(handle->GetTypeRewrite(), event->GetRecipientRewrite());
         event.Reset(handle);
     });
-}
 
-TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWithEvWrite(TTestActorRuntime& runtime, TEvWriteRows& rows) {
-    if (rows.empty())
-        return {};
-
-    return runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
+    auto responseObserver = runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() != NEvents::TDataEvents::EvWriteResult)
             return;
 
@@ -1971,6 +1974,8 @@ TTestActorRuntimeBase::TEventObserverHolder ReplaceEvProposeTransactionResultWit
         handle->Rewrite(handle->GetTypeRewrite(), event->GetRecipientRewrite());
         event.Reset(handle);
     });
+
+    return {std::move(requestObserver), std::move(responseObserver)};
 }
 
 void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)

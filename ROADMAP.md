@@ -97,6 +97,7 @@ We use the following symbols as abbreviations:
 1. ㉔ **ActorSystem performance optimizations**
 1. ㉔ Optimize **ActorSystem for ARM processors**
 1. ㉔ **Effortless initial cluster deployment** (provide only nodes and disks description)
+1. ㉔ **Reduce number of BlobStorage groups** for a database (add ability to remove unneeded groups)
 1. ㉓ **"One leg" storage migration without downtime** (migrate 1/3 of the cluster from one AZ to another for mirror3-dc erasure encoding)
 1. ✅ ㉓ **ActorSystem 1.5** (dynamically reassign threads in different thread pools)
 1. ✅ ㉓ **Publish an utility for BlobStorage management** (it's called ds_tool for now, improve it and open)
@@ -106,7 +107,7 @@ We use the following symbols as abbreviations:
 1. ㉓ **BSC manages static group** (reconfiguration of the static BlobStorage group must be done BlobStorage Controller as for any other group)
 1. ㉓ **(Semi-)Hard disk space separation** (Better guarantees for disk space usage by VDisks on a single PDisk)
 1. ㉓ **Reduce space amplification** (Optimize storage layer)
-1. ㉓ **Storage nodes decommission** (Add ability to remove storage nodes)
+1. ✅ ㉓ **Storage nodes decommission** (Add ability to remove storage nodes)
 
 ## Analytical Capabilities
 1. ㉔ **Backup** for column tables

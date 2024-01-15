@@ -349,6 +349,7 @@ namespace NActors {
             TEventObserverCollection* List;
             TEventObserverCollection::iterator Iter;
         };
+        using TEventObserverHolderPair = std::pair<TEventObserverHolder,TEventObserverHolder>;
 
         // An example of using AddObserver in unit tests
         /*

@@ -36,8 +36,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
-        auto upsertObserver = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
-        auto upsertResultObserver = ReplaceEvProposeTransactionResultWithEvWrite(runtime, rows);
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));

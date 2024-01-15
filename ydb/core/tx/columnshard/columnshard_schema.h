@@ -510,13 +510,13 @@ struct Schema : NIceDb::Schema {
 
     // IndexColumns activities
 
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+    static void IndexColumns_Write(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
         auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
         auto rowProto = row.GetMeta().SerializeToProto();
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
-        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
                 NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
                 NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
@@ -528,24 +528,24 @@ struct Schema : NIceDb::Schema {
             );
     }
 
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+    static void IndexColumns_Erase(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 
-    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
+    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector,
         const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback);
 
     // IndexCounters
 
-    static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 index, ui32 counterId, ui64 value) {
-        db.Table<IndexCounters>().Key(index, counterId).Update(
+    static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 counterId, ui64 value) {
+        db.Table<IndexCounters>().Key(0, counterId).Update(
             NIceDb::TUpdate<IndexCounters::ValueUI64>(value)
         );
     }
 
-    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
-        auto rowset = db.Table<IndexCounters>().Prefix(index).Select();
+    static bool IndexCounters_Load(NIceDb::TNiceDb& db, const std::function<void(ui32 id, ui64 value)>& callback) {
+        auto rowset = db.Table<IndexCounters>().Prefix(0).Select();
         if (!rowset.IsReady())
             return false;
 

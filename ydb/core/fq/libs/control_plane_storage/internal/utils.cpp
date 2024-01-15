@@ -304,10 +304,10 @@ TString GetPrettyStatistics(const TString& statistics) {
 
 namespace {
 
-const NJson::TJsonValue* GetStatisticsRoot(const NJson::TJsonValue& allStatistics) {
+const NJson::TJsonValue* GetStatisticsRoot(const NJson::TJsonValue& allStatistics, std::string_view v1Pointer = "Graph=0") {
     const NJson::TJsonValue* root = nullptr;
-    if (!allStatistics.GetValuePointer("ResultSet", &root)) {
-        allStatistics.GetValuePointer("Graph=0", &root);
+    if (!(root = allStatistics.GetValueByPath("ResultSet"))) {
+        root = allStatistics.GetValueByPath(v1Pointer);
     }
     return root;
 }
@@ -325,12 +325,21 @@ std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJson
                 continue;
             }
 
+            constexpr std::string_view v1Prefix = "Source=";
             constexpr std::string_view v2Prefix = "Ingress=";
-            if (!partKey.StartsWith(v2Prefix)) {
+            std::string_view matchedPrefix;
+            std::string_view ingressPath;
+            if (partKey.StartsWith(v1Prefix)) {
+                matchedPrefix = v1Prefix;
+                ingressPath = "Stage=Total.IngressBytes.sum";
+            } else if (partKey.StartsWith(v2Prefix)) {
+                matchedPrefix = v2Prefix;
+                ingressPath = "Ingress.Bytes.sum";
+            } else {
                 continue;
             }
-            if (auto valuePtr = partStats.GetValueByPath("Ingress.Bytes.sum")) {
-                TString valueKey{partKey, v2Prefix.size(), partKey.size() - v2Prefix.size()};
+            if (auto valuePtr = partStats.GetValueByPath(ingressPath)) {
+                TString valueKey{partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size()};
                 i64 value = valuePtr->GetIntegerSafe();
                 aggregatedStats[valueKey] += value;
                 break;
@@ -339,16 +348,10 @@ std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJson
     }
     return aggregatedStats;
 }
-}
 
-void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
-    NJson::TJsonValue statsJson;
-    if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
-        return;
-    }
-
-    auto root = GetStatisticsRoot(statsJson);
-    if (!root || !root->IsMap()) {
+void CollectTotalStatistics(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, const NJson::TJsonValue& stats) {
+    const NJson::TJsonValue* root = GetStatisticsRoot(stats, "Graph=0.TaskRunner.Stage=Total");
+    if (!root) {
         return;
     }
 
@@ -366,6 +369,13 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
             newValue->set_value(jsonField->GetIntegerSafe());
         }
     }
+}
+
+void CollectDetalizationStatistics(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, const NJson::TJsonValue& stats) {
+    const NJson::TJsonValue* root = GetStatisticsRoot(stats);
+    if (!root) {
+        return;
+    }
 
     std::unordered_map<TString, i64> aggregatedStatistics = AggregateStatisticsBySources(*root);
     for (const auto& [source, ingress] : aggregatedStatistics) {
@@ -373,6 +383,17 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         newEntry->set_name(source);
         newEntry->set_value(ingress);
     }
+}
+}
+
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
+    NJson::TJsonValue statsJson;
+    if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
+        return;
+    }
+
+    CollectTotalStatistics(dest, statsJson);
+    CollectDetalizationStatistics(dest, statsJson);
 }
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {

@@ -136,7 +136,7 @@ void CheckResult(std::vector<TVersionedRow> expected, IVersionedReaderPtr reader
     std::vector<TVersionedRow> actual;
     actual.reserve(100);
 
-    while (auto batch = reader->Read({.MaxRowsPerRead = 100})) {
+    while (auto batch = reader->Read({.MaxRowsPerRead = 20})) {
         if (batch->IsEmpty()) {
             ASSERT_TRUE(reader->GetReadyEvent().Get().IsOK());
             continue;
@@ -193,7 +193,7 @@ std::vector<std::pair<ui32, ui32>> GetTimestampIndexRanges(
             ++upperTimestampIndex;
         }
 
-        indexRanges.push_back(std::make_pair(lowerTimestampIndex, upperTimestampIndex));
+        indexRanges.push_back(std::pair(lowerTimestampIndex, upperTimestampIndex));
     }
     return indexRanges;
 }

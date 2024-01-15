@@ -31,14 +31,14 @@ INSTANTIATE_TEST_SUITE_P(
     TTimeFormulaParseTest,
     TTimeFormulaParseTest,
     ::testing::Values(
-        std::make_tuple("", true),
-        std::make_tuple("hours == 0", true),
-        std::make_tuple("minutes == 0", true),
-        std::make_tuple("hours % 2 == 0 && minutes == 1", true),
-        std::make_tuple("hours * 100 + minutes >= 1030", true),
-        std::make_tuple("seconds < 10", false),
-        std::make_tuple("HOURS > 10", false),
-        std::make_tuple("hours ++ 1", false)
+        std::tuple("", true),
+        std::tuple("hours == 0", true),
+        std::tuple("minutes == 0", true),
+        std::tuple("hours % 2 == 0 && minutes == 1", true),
+        std::tuple("hours * 100 + minutes >= 1030", true),
+        std::tuple("seconds < 10", false),
+        std::tuple("HOURS > 10", false),
+        std::tuple("hours ++ 1", false)
 ));
 
 class TTimeFormulaCorrectnessTest
@@ -73,12 +73,12 @@ INSTANTIATE_TEST_SUITE_P(
     TTimeFormulaCorrectnessTest,
     TTimeFormulaCorrectnessTest,
     ::testing::Values(
-        std::make_tuple("1", 24 * 60),
-        std::make_tuple("hours == 0", 60),
-        std::make_tuple("minutes == 0", 24),
-        std::make_tuple("hours % 2 == 0 && minutes == 1", 12),
-        std::make_tuple("hours * 100 + minutes >= 1030", 24 * 60 - (10 * 60 + 30)),
-        std::make_tuple("minutes % 5 == 3 || minutes % 5 == 0", 24 * 60 / 5 * 2)
+        std::tuple("1", 24 * 60),
+        std::tuple("hours == 0", 60),
+        std::tuple("minutes == 0", 24),
+        std::tuple("hours % 2 == 0 && minutes == 1", 12),
+        std::tuple("hours * 100 + minutes >= 1030", 24 * 60 - (10 * 60 + 30)),
+        std::tuple("minutes % 5 == 3 || minutes % 5 == 0", 24 * 60 / 5 * 2)
 ));
 
 ////////////////////////////////////////////////////////////////////////////////

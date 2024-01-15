@@ -36,7 +36,7 @@ protected:
         }
     };
 
-    virtual void OnInternalResultError(const TString& errorMessage) = 0;
+    virtual void OnInternalResultError(Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
     virtual void OnInternalResultSuccess(TResponse&& response) = 0;
 public:
     void Bootstrap(const TActorContext& /*ctx*/) {
@@ -55,7 +55,7 @@ public:
     void Handle(typename TEvRequestInternalResult::TPtr& ev) {
         if (!ev->Get()->GetFuture().HasValue() || ev->Get()->GetFuture().HasException()) {
             ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
-            OnInternalResultError("cannot receive result from future");
+            OnInternalResultError(Ydb::StatusIds::INTERNAL_ERROR, "cannot receive result from future");
             return;
         }
         auto f = ev->Get()->GetFuture();
@@ -64,7 +64,7 @@ public:
             AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("error_message", response.DebugString())("request", ProtoRequest.DebugString());
             NYql::TIssues issue;
             NYql::IssuesFromMessage(response.operation().issues(), issue);
-            OnInternalResultError(issue.ToString());
+            OnInternalResultError(response.operation().status(), issue.ToString());
             return;
         }
         OnInternalResultSuccess(std::move(response));
@@ -101,8 +101,8 @@ private:
     const TConfig Config;
     ui32 Retry = 0;
 protected:
-    virtual void OnInternalResultError(const TString& errorMessage) override {
-        TBase::template Sender<TEvRequestFailed>(errorMessage).SendTo(CallbackActorId);
+    virtual void OnInternalResultError(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+        TBase::template Sender<TEvRequestFailed>(status, errorMessage).SendTo(CallbackActorId);
         TBase::PassAway();
     }
     virtual void OnInternalResultSuccess(TResponse&& response) override {

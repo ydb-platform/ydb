@@ -1282,9 +1282,9 @@
     ],
     "test.test[join-inmem_with_set_key_any--Debug]": [
         {
-            "checksum": "f358a04c22f3bbdb6284c9ee2bb7992e",
-            "size": 1791,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_join-inmem_with_set_key_any--Debug_/opt.yql_patched"
+            "checksum": "0edaf3acbdc3244f85b9ce47868fac9b",
+            "size": 2837,
+            "uri": "https://{canondata_backend}/1903885/6dbb180a1fb0bec551465ca4925bd6f374b599c7/resource.tar.gz#test.test_join-inmem_with_set_key_any--Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-inmem_with_set_key_any--Plan]": [
@@ -1652,9 +1652,9 @@
     ],
     "test.test[key_filter-contains_tuples_no_keyfilter-default.txt-Debug]": [
         {
-            "checksum": "4cded44af743353562df353bb5fee8fa",
-            "size": 3222,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_key_filter-contains_tuples_no_keyfilter-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5b1f1de904a3054113ea35f81936dc43",
+            "size": 3291,
+            "uri": "https://{canondata_backend}/1942100/9017d73811f974261c96a9a333f3aaff5abeafff/resource.tar.gz#test.test_key_filter-contains_tuples_no_keyfilter-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[key_filter-contains_tuples_no_keyfilter-default.txt-Plan]": [
@@ -3216,9 +3216,9 @@
     ],
     "test.test[window-win_func_spec_with_part--Debug]": [
         {
-            "checksum": "bb6f7b78db19c2e717478ba1514b546d",
-            "size": 4351,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_window-win_func_spec_with_part--Debug_/opt.yql_patched"
+            "checksum": "024d2588525eaaa2ec4139436e0b5598",
+            "size": 4458,
+            "uri": "https://{canondata_backend}/1031349/2c567f6ebb3b1bf913dc760b3d43aee2490156f2/resource.tar.gz#test.test_window-win_func_spec_with_part--Debug_/opt.yql_patched"
         }
     ],
     "test.test[window-win_func_spec_with_part--Plan]": [

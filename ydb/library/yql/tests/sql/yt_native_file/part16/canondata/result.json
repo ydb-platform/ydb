@@ -475,6 +475,27 @@
             "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_column_order-union_all-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[compute_range-pg_compare-default.txt-Debug]": [
+        {
+            "checksum": "7a435f9876f12e82e4f4b6fe365e6a53",
+            "size": 1166,
+            "uri": "https://{canondata_backend}/1899731/7e6810220d247fa23514a398a4d944bfba6aaf24/resource.tar.gz#test.test_compute_range-pg_compare-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_compare-default.txt-Plan]": [
+        {
+            "checksum": "55515ae638f317612d048052be489bfd",
+            "size": 1740,
+            "uri": "https://{canondata_backend}/1899731/7e6810220d247fa23514a398a4d944bfba6aaf24/resource.tar.gz#test.test_compute_range-pg_compare-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[compute_range-pg_compare-default.txt-Results]": [
+        {
+            "checksum": "208a36832d48189728ed3209257c08cf",
+            "size": 19034,
+            "uri": "https://{canondata_backend}/1899731/7e6810220d247fa23514a398a4d944bfba6aaf24/resource.tar.gz#test.test_compute_range-pg_compare-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[compute_range-repeated_keyranges_in_and-default.txt-Debug]": [
         {
             "checksum": "d8cd75c1cd1b39232f38c1c6bb521790",
@@ -582,9 +603,9 @@
     ],
     "test.test[expr-as_dict_list_key-default.txt-Debug]": [
         {
-            "checksum": "1f12721ea5d1fa7fafdce8cad7096ad7",
-            "size": 888,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_expr-as_dict_list_key-default.txt-Debug_/opt.yql"
+            "checksum": "fd72ffa72c4f1a72b0a302c7caa94aaf",
+            "size": 1008,
+            "uri": "https://{canondata_backend}/1931696/3a376675fd617866ad99bc01a5e0f89cf4a8b18e/resource.tar.gz#test.test_expr-as_dict_list_key-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-as_dict_list_key-default.txt-Plan]": [
@@ -596,9 +617,9 @@
     ],
     "test.test[expr-as_dict_list_key-default.txt-Results]": [
         {
-            "checksum": "a696c4898bc2c31d972e221591e32327",
-            "size": 6952,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_expr-as_dict_list_key-default.txt-Results_/results.txt"
+            "checksum": "7bc5849e1d7b365c855739671bd01887",
+            "size": 5643,
+            "uri": "https://{canondata_backend}/1931696/3a376675fd617866ad99bc01a5e0f89cf4a8b18e/resource.tar.gz#test.test_expr-as_dict_list_key-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-as_struct_syntax-default.txt-Debug]": [
@@ -1428,16 +1449,16 @@
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Debug]": [
         {
-            "checksum": "b5483704d8d0bca64ca2027ab2d2a00e",
-            "size": 3855,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Debug_/opt.yql"
+            "checksum": "2717a772d77025e81b75d42d41aeefd7",
+            "size": 4287,
+            "uri": "https://{canondata_backend}/1814674/76ae7e4a26a3fb34f020c3a2956bf4ea4b655461/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Debug_/opt.yql"
         }
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Plan]": [
         {
-            "checksum": "c4c7bef845afc95d4f164ff105eed473",
-            "size": 7116,
-            "uri": "https://{canondata_backend}/1924537/d66bfe69aa802f6a81aadbac897621b721f31b4b/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Plan_/plan.txt"
+            "checksum": "ba2926eee00384f6f8549945a69b00c8",
+            "size": 8048,
+            "uri": "https://{canondata_backend}/1814674/76ae7e4a26a3fb34f020c3a2956bf4ea4b655461/resource.tar.gz#test.test_optimizers-yql-8041-fuse_with_desc_map--Plan_/plan.txt"
         }
     ],
     "test.test[optimizers-yql-8041-fuse_with_desc_map--Results]": [

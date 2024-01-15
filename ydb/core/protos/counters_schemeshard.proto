@@ -193,6 +193,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateView = 155                [(CounterOpts) = {Name: "InFlightOps/CreateView"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterView = 156                 [(CounterOpts) = {Name: "InFlightOps/AlterView"}];
     COUNTER_IN_FLIGHT_OPS_TxDropView = 157                  [(CounterOpts) = {Name: "InFlightOps/DropView"}];
+
+    COUNTER_GRAPHSHARD_COUNT = 158 [(CounterOpts) = {Name: "GraphShards"}];
 }
 
 enum ECumulativeCounters {
@@ -533,4 +535,5 @@ enum ETxTypes {
 
     TXTYPE_PERSQUEUE_PROPOSE_RESULT = 83                  [(TxTypeOpts) = {Name: "TxPersQueueProposeResult"}];
     TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT = 84           [(TxTypeOpts) = {Name: "TxProposeTransactionAttachResult"}];
+    TXTYPE_UPDATE_DOMAIN_REPLY = 85                       [(TxTypeOpts) = {Name: "TxUpdateDomainReply"}];
 }

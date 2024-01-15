@@ -173,7 +173,7 @@ namespace NKikimr::NStorage {
                 break;
         }
 
-        if (NodeListObtained && StorageConfigLoaded && change) {
+        if (change && NodeListObtained && StorageConfigLoaded) {
             UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
             IssueNextBindRequest();
             processPendingEvents();
@@ -202,8 +202,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartDistributedConfigKeeper() {
-        return;
-        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig));
+        auto *appData = AppData();
+        if (!appData->DynamicNameserviceConfig || SelfId().NodeId() <= appData->DynamicNameserviceConfig->MaxStaticNodeId) {
+            // start distributed configuration machinery only on static nodes
+            DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig));
+        }
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {

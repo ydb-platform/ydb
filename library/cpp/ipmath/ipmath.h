@@ -26,13 +26,22 @@ public:
     static TIpAddressRangeBuilder From(const TStringBuf from);
 
     /**
-     * Parses a string tormatted in Classless Iter-Domain Routing (CIDR) notation.
+     * Parses a string formatted in Classless Inter-Domain Routing (CIDR) notation.
      * @param str a CIDR-formatted string, e.g. "192.168.0.0/16"
      * @return a new TIpAddressRange
      * @throws TInvalidIpRangeException if the string cannot be parsed.
      */
     static TIpAddressRange FromCidrString(const TStringBuf str);
     static TMaybe<TIpAddressRange> TryFromCidrString(const TStringBuf str);
+
+    /**
+     * Parses a string formatted in compact Classless Inter-Domain Routing (CIDR) notation with node address.
+     * @param str a CIDR-formatted string with node address, e.g. "192.168.1.24/16"
+     * @return a new TIpAddressRange
+     * @throws TInvalidIpRangeException if the string cannot be parsed.
+     */
+    static TIpAddressRange FromCompactString(const TStringBuf str);
+    static TMaybe<TIpAddressRange> TryFromCompactString(const TStringBuf str);
 
     /**
      * Parses a string formatted as two dash-separated addresses.
@@ -99,6 +108,8 @@ public:
 private:
     void Init(TIpv6Address, TIpv6Address);
 
+    static TMaybe<TIpAddressRange> TryFromCidrStringImpl(const TStringBuf str, bool compact);
+
     TIpv6Address Start_;
     TIpv6Address End_;
 };
@@ -129,8 +140,11 @@ public:
     TIpAddressRangeBuilder& To(TIpv6Address);
 
     TIpAddressRangeBuilder& WithPrefix(ui8 len);
+    TIpAddressRangeBuilder& WithMaskedPrefix(ui8 len);
 
 private:
+    TIpAddressRangeBuilder& WithPrefixImpl(ui8 len, bool checkLowerBound);
+
     TIpv6Address Start_;
     TIpv6Address End_;
 };

@@ -46,7 +46,7 @@ public:
     ui64 Errors = 0;
 };
 
-void SendQueryRequest(const TActorContext& ctx, NYdbWorkload::TQueryInfo& q, const TString& session, const TString& workingDir) {
+void SendQueryRequest(const TActorContext& ctx, NYdbWorkload::TQueryInfo& q, const NKikimrKqp::EQueryType queryType, const TString& session, const TString& workingDir) {
     TString query_text = TString(q.Query);
     auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
@@ -55,7 +55,7 @@ void SendQueryRequest(const TActorContext& ctx, NYdbWorkload::TQueryInfo& q, con
     request->Record.MutableRequest()->SetDatabase(workingDir);
 
     request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    request->Record.MutableRequest()->SetType(queryType);
     request->Record.MutableRequest()->SetQuery(query_text);
 
     request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
@@ -89,6 +89,7 @@ public:
             TString working_dir,
             std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> workload_query_gen,
             ui64 workload_type,
+            NKikimrKqp::EQueryType queryType,
             ui64 parentTag,
             ui64 workerTag,
             TInstant endTimestamp,
@@ -101,6 +102,7 @@ public:
         , ParentTag(parentTag)
         , WorkerTag(workerTag)
         , EndTimestamp(endTimestamp)
+        , QueryType(queryType)
         , LatencyHist(60000, 2)
         , Transactions(transactions)
         , TransactionsBytesWritten(transactionsBytesWritten)
@@ -180,7 +182,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " using session: " << WorkerSession);
 
-        SendQueryRequest(ctx, q, WorkerSession, WorkingDir);
+        SendQueryRequest(ctx, q, QueryType, WorkerSession, WorkingDir);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -214,6 +216,7 @@ private:
     TInstant EndTimestamp;
     NYdbWorkload::TQueryInfoList Queries;
     TString WorkerSession = "wrong sessionId";
+    NKikimrKqp::EQueryType QueryType;
 
     // monitoring
     NHdr::THistogram LatencyHist;
@@ -242,6 +245,10 @@ public:
         DeleteTableOnFinish = cmd.GetDeleteTableOnFinish();
         WorkingDir = cmd.GetWorkingDir();
         WorkloadType = cmd.GetWorkloadType();
+        Y_ABORT_UNLESS(cmd.GetQueryType() == "generic" || cmd.GetQueryType() == "data");
+        QueryType = cmd.GetQueryType() == "generic"
+            ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+            : NKikimrKqp::QUERY_TYPE_SQL_DML;
         DurationSeconds = cmd.GetDurationSeconds();
         NumOfSessions = cmd.GetNumOfSessions();
         IncreaseSessions = cmd.GetIncreaseSessions();
@@ -530,7 +537,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
             << " Creating request for init query, need to exec: " << InitData.size() + 1 << " session: " << TableSession);
 
-        SendQueryRequest(ctx, q, TableSession, WorkingDir);
+        SendQueryRequest(ctx, q, QueryType, TableSession, WorkingDir);
     }
 
     void HandleDataQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -627,6 +634,7 @@ private:
             WorkingDir,
             WorkloadQueryGen,
             WorkloadType,
+            QueryType,
             Tag,
             Workers.size(),
             TestStartTime + TDuration::Seconds(DurationSeconds),
@@ -659,6 +667,7 @@ private:
     bool IncreaseSessions = false;
     size_t ResultsReceived = 0;
     NYdbWorkload::EWorkload WorkloadClass;
+    NKikimrKqp::EQueryType QueryType;
 
     NYdbWorkload::TQueryInfoList InitData;
 

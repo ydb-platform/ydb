@@ -39,7 +39,7 @@ const std::optional<R>& TCoroutine<R(TArgs...)>::Run(TParams&& ... params)
 {
     static_assert(sizeof...(TParams) == sizeof...(TArgs),
         "TParams<> and TArgs<> have different length");
-    Arguments_ = std::make_tuple(std::forward<TParams>(params)...);
+    Arguments_ = std::tuple(std::forward<TParams>(params)...);
     JumpToCoroutine();
     return Result_;
 }
@@ -83,7 +83,7 @@ bool TCoroutine<void(TArgs...)>::Run(TParams&& ... params)
 {
     static_assert(sizeof...(TParams) == sizeof...(TArgs),
         "TParams<> and TArgs<> have different length");
-    Arguments_ = std::make_tuple(std::forward<TParams>(params)...);
+    Arguments_ = std::tuple(std::forward<TParams>(params)...);
     JumpToCoroutine();
     return Result_;
 }

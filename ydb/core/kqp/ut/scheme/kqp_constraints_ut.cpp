@@ -490,11 +490,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                                        result.GetIssues().ToString());
         }
 
-        {
-            TString query = R"(
-                UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
-            )";
-
+        auto fQuery = [&](TString query) -> TString {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.KeepInQueryCache(true);
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
@@ -507,12 +503,32 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
-        }
+            if (result.GetResultSets().size() > 0)  
+                return NYdb::FormatResultSetYson(result.GetResultSet(0));
+            return "";
+        };
+
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+        )");
+
+        auto fCompareTable = [&](TString expected) {
+            TString query = R"(
+                SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
+            )";
+            CompareYson(expected, fQuery(query));
+        };
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"]]
+            ]
+        )");
 
         {
             auto query = R"(
                 --!syntax_v1
-                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Exists Int32 NOT NULL DEFAULT 1;
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value2 Int32 NOT NULL DEFAULT 1;
             )";
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -522,51 +538,40 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         Sleep(TDuration::Seconds(3));
 
-        {
-            TString query = R"(
-                INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
-            )";
+        fQuery(R"(
+            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+        )");
 
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.KeepInQueryCache(true);
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];[1]];[[2u];["New"];[1]]
+            ]
+        )");
 
-            auto result =
-                session
-                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
-                                      execSettings)
-                    .ExtractValueSync();
+        
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
+        )");
 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                                       result.GetIssues().ToString());
-        }
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];[1]];[[2u];["New"];[2]]
+            ]
+        )");
 
-        {
-            TString query = R"(
-                SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
-            )";
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
+        )");        
 
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.KeepInQueryCache(true);
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
+        )");
 
-            auto result =
-                session
-                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
-                                      execSettings)
-                    .ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-                                       result.GetIssues().ToString());
-
-            Cerr << NYdb::FormatResultSetYson(result.GetResultSet(0)) << Endl;
-            CompareYson(R"(
-                    [
-                        [[1u];["Old"];[1]];[[2u];["New"];[1]]
-                    ]
-                )",
-                NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        }
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];[1]];[[2u];["OldNew"];[2]];[[3u];["BrandNew"];[1]]
+            ]
+        )");
 
     }
 

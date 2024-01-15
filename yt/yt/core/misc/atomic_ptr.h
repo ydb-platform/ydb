@@ -1,15 +1,10 @@
 #pragma once
 
 #include "hazard_ptr.h"
-#include "intrusive_ptr.h"
+
+#include <library/cpp/yt/memory/intrusive_ptr.h>
 
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Overload for TIntrusivePtr<T> MakeStrong(T* p).
-template <class T>
-TIntrusivePtr<T> MakeStrong(const THazardPtr<T>& ptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

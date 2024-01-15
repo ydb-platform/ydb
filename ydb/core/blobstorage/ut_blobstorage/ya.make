@@ -60,6 +60,7 @@ REQUIREMENTS(ram:32)
 END()
 
 RECURSE_FOR_TESTS(
+    ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
     ut_donor

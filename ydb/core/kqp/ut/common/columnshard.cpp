@@ -16,6 +16,10 @@ namespace NKqp {
         return Kikimr;
     }
 
+    TTestActorRuntime& TTestHelper::GetRuntime() {
+        return *Kikimr.GetTestServer().GetRuntime();
+    }
+
     NYdb::NTable::TSession& TTestHelper::GetSession() {
         return Session;
     }

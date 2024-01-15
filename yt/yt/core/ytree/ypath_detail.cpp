@@ -364,7 +364,7 @@ std::vector<IAttributeDictionary::TKeyValuePair> TSupportsAttributes::TCombinedA
                 auto value = provider->FindBuiltinAttribute(descriptor.InternedKey);
                 if (value) {
                     auto key = descriptor.InternedKey.Unintern();
-                    pairs.push_back(std::make_pair(std::move(key), std::move(value)));
+                    pairs.push_back(std::pair(std::move(key), std::move(value)));
                 }
             }
         }
@@ -582,7 +582,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
             &TSupportsAttributes::DoGetAttributeFragment,
             key,
             TYPath(tokenizer.GetInput())));
-   }
+    }
 }
 
 namespace {

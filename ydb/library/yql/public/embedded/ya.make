@@ -39,8 +39,20 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/yt_download
     ydb/library/yql/providers/yt/lib/yt_url_lister
     ydb/library/yql/providers/yt/provider
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    no_llvm
+)
+
+RECURSE_FOR_TESTS(
+    ut
+    ut/no_llvm
+)
+

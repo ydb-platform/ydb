@@ -179,7 +179,7 @@ TString ToString(const TDataStatistics& statistics)
 
 TCodecStatistics& TCodecStatistics::Append(const TCodecDuration& codecTime)
 {
-    return Append(std::make_pair(codecTime.Codec, codecTime.CpuDuration));
+    return Append(std::pair(codecTime.Codec, codecTime.CpuDuration));
 }
 
 TCodecStatistics& TCodecStatistics::Append(const std::pair<ECodec, TDuration>& codecTime)

@@ -371,7 +371,8 @@ class TestBindings:
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_s3_insert(self, kikimr, s3, client):
+    @pytest.mark.parametrize("bindings_mode", ["BM_DROP_WITH_WARNING"])
+    def test_s3_insert(self, kikimr, s3, client, bindings_mode, yq_version):
 
         resource = boto3.resource(
             "s3",
@@ -401,6 +402,10 @@ class TestBindings:
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        if yq_version == "v2":
+            issues = str(client.describe_query(query_id).result.query.issue)
+            assert "message: \"Please remove \\\'bindings.\\\' from your query, the support for this syntax will be dropped soon" in issues
+            assert "severity: 2" in issues
 
         sql = R'''
             select foo, bar from bindings.`s3binding`;
@@ -408,6 +413,10 @@ class TestBindings:
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        if yq_version == "v2":
+            issues = str(client.describe_query(query_id).result.query.issue)
+            assert "message: \"Please remove \\\'bindings.\\\' from your query, the support for this syntax will be dropped soon" in issues
+            assert "severity: 2" in issues
 
         data = client.get_result_data(query_id)
         result_set = data.result.result_set

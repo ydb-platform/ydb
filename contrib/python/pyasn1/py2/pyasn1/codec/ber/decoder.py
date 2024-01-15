@@ -4,7 +4,10 @@
 # Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 # License: https://pyasn1.readthedocs.io/en/latest/license.html
 #
+import io
 import os
+import sys
+
 
 from pyasn1 import debug
 from pyasn1 import error
@@ -1762,7 +1765,14 @@ class SingleItemDecoder(object):
 
             if state is stDecodeValue:
                 if not options.get('recursiveFlag', True) and not substrateFun:  # deprecate this
-                    substrateFun = lambda a, b, c: (a, b[:c])
+                    def substrateFun(asn1Object, _substrate, _length, _options):
+                        """Legacy hack to keep the recursiveFlag=False option supported.
+
+                        The decode(..., substrateFun=userCallback) option was introduced in 0.1.4 as a generalization
+                        of the old recursiveFlag=False option. Users should pass their callback instead of using
+                        recursiveFlag.
+                        """
+                        yield asn1Object
 
                 original_position = substrate.tell()
 
@@ -1783,9 +1793,13 @@ class SingleItemDecoder(object):
                             yield value
 
                     bytesRead = substrate.tell() - original_position
-                    if bytesRead != length:
+                    if not substrateFun and bytesRead != length:
                         raise PyAsn1Error(
                             "Read %s bytes instead of expected %s." % (bytesRead, length))
+                    elif substrateFun and bytesRead > length:
+                        # custom substrateFun may be used for partial decoding, reading less is expected there
+                        raise PyAsn1Error(
+                            "Read %s bytes are more than expected %s." % (bytesRead, length))
 
                 if LOG:
                    LOG('codec %s yields type %s, value:\n%s\n...' % (
@@ -1959,6 +1973,27 @@ class Decoder(object):
             may not be required. Most common reason for it to require is that
             ASN.1 structure is encoded in *IMPLICIT* tagging mode.
 
+        substrateFun: :py:class:`Union[
+                Callable[[pyasn1.type.base.PyAsn1Item, bytes, int],
+                         Tuple[pyasn1.type.base.PyAsn1Item, bytes]],
+                Callable[[pyasn1.type.base.PyAsn1Item, io.BytesIO, int, dict],
+                         Generator[Union[pyasn1.type.base.PyAsn1Item,
+                                         pyasn1.error.SubstrateUnderrunError],
+                                   None, None]]
+            ]`
+            User callback meant to generalize special use cases like non-recursive or
+            partial decoding. A 3-arg non-streaming variant is supported for backwards
+            compatiblilty in addition to the newer 4-arg streaming variant.
+            The callback will receive the uninitialized object recovered from substrate
+            as 1st argument, the uninterpreted payload as 2nd argument, and the length
+            of the uninterpreted payload as 3rd argument. The streaming variant will
+            additionally receive the decode(..., **options) kwargs as 4th argument.
+            The non-streaming variant shall return an object that will be propagated
+            as decode() return value as 1st item, and the remainig payload for further
+            decode passes as 2nd item.
+            The streaming variant shall yield an object that will be propagated as
+            decode() return value, and leave the remaining payload in the stream.
+
         Returns
         -------
         : :py:class:`tuple`
@@ -1997,6 +2032,31 @@ class Decoder(object):
         """
         substrate = asSeekableStream(substrate)
 
+        if "substrateFun" in options:
+            origSubstrateFun = options["substrateFun"]
+
+            def substrateFunWrapper(asn1Object, substrate, length, options=None):
+                """Support both 0.4 and 0.5 style APIs.
+
+                substrateFun API has changed in 0.5 for use with streaming decoders. To stay backwards compatible,
+                we first try if we received a streaming user callback. If that fails,we assume we've received a
+                non-streaming v0.4 user callback and convert it for streaming on the fly
+                """
+                try:
+                    substrate_gen = origSubstrateFun(asn1Object, substrate, length, options)
+                except TypeError:
+                    _type, _value, traceback = sys.exc_info()
+                    if traceback.tb_next:
+                        # Traceback depth > 1 means TypeError from inside user provided function
+                        raise
+                    # invariant maintained at Decoder.__call__ entry
+                    assert isinstance(substrate, io.BytesIO)  # nosec assert_used
+                    substrate_gen = Decoder._callSubstrateFunV4asV5(origSubstrateFun, asn1Object, substrate, length)
+                for value in substrate_gen:
+                    yield value
+
+            options["substrateFun"] = substrateFunWrapper
+
         streamingDecoder = cls.STREAMING_DECODER(
             substrate, asn1Spec, **options)
 
@@ -2012,6 +2072,16 @@ class Decoder(object):
 
             return asn1Object, tail
 
+    @staticmethod
+    def _callSubstrateFunV4asV5(substrateFunV4, asn1Object, substrate, length):
+        substrate_bytes = substrate.read()
+        if length == -1:
+            length = len(substrate_bytes)
+        value, nextSubstrate = substrateFunV4(asn1Object, substrate_bytes, length)
+        nbytes = substrate.write(nextSubstrate)
+        substrate.truncate()
+        substrate.seek(-nbytes, os.SEEK_CUR)
+        yield value
 
 #: Turns BER octet stream into an ASN.1 object.
 #:

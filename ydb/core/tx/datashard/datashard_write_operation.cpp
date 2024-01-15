@@ -67,7 +67,7 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
     if (!tableInfoPtr) {
         ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-        ErrStr = TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist";
+        ErrStr = TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist.";
         return false;
     }
     TableInfo = tableInfoPtr->Get();
@@ -129,7 +129,37 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
         }
     }
 
-    TableId = TTableId(tableIdRecord.ownerid(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
+    for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx)
+    {
+        ui64 keyBytes = 0;
+        for (ui16 keyColIdx = 0; keyColIdx < TableInfo->KeyColumnIds.size(); ++keyColIdx) {
+            const auto& cellType = TableInfo->KeyColumnTypes[keyColIdx];
+            const TCell& cell = Matrix.GetCell(rowIdx, keyColIdx);
+            if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
+                ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+                ErrStr = TStringBuilder() << "Keys with Uint8 column values >127 are currently prohibited";
+                return false;
+            }
+            keyBytes += cell.IsNull() ? 1 : cell.Size();
+        }
+
+        if (keyBytes > NLimits::MaxWriteKeySize) {
+            ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+            ErrStr = TStringBuilder() << "Row key size of " << keyBytes << " bytes is larger than the allowed threshold " << NLimits::MaxWriteKeySize;
+            return false;
+        }
+
+        for (ui16 valueColIdx = TableInfo->KeyColumnIds.size(); valueColIdx < Matrix.GetColCount(); ++valueColIdx) {
+            const TCell& cell = Matrix.GetCell(rowIdx, valueColIdx);
+            if (cell.Size() > NLimits::MaxWriteValueSize) {
+                ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+                ErrStr = TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize;
+                return false;
+            }
+        }
+    }    
+
+    TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
     return true;
 }
 
@@ -213,6 +243,14 @@ void TValidatedWriteTx::ComputeTxSize() {
     TxSize = sizeof(TValidatedWriteTx);
 }
 
+TWriteOperation* TWriteOperation::CastWriteOperation(TOperation::TPtr op)
+{
+    Y_ABORT_UNLESS(op->IsWriteTx());
+    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
+    Y_ABORT_UNLESS(writeOp);
+    return writeOp;
+}
+
 TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc, const TActorContext& ctx)
     : TOperation(op)
     , Ev(ev)
@@ -227,9 +265,6 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::T
     Orbit = std::move(Ev->Get()->MoveOrbit());
 
     BuildWriteTx(self, txc, ctx);
-
-    // First time parsing, so we can fail
-    Y_DEBUG_ABORT_UNLESS(WriteTx->Ready());
 
     TrackMemory();
 }
@@ -419,7 +454,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(
 
 void TWriteOperation::FinalizeWriteTxPlan()
 {
-    Y_ABORT_UNLESS(IsDataTx());
+    Y_ABORT_UNLESS(IsWriteTx());
     Y_ABORT_UNLESS(!IsImmediate());
     Y_ABORT_UNLESS(!IsKqpScanTransaction());
 
@@ -460,8 +495,7 @@ public:
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
 
-        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
         writeOp->FinalizeWriteTxPlan();
 

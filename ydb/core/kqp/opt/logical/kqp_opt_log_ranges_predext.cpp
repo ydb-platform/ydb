@@ -374,34 +374,40 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     {
             auto buildLookup = [&] (TExprNode::TPtr keys, TMaybe<TExprBase>& result) {
                 if (indexName) {
-                    if (kqpCtx.IsDataQuery()) {
+                    if (kqpCtx.IsScanQuery()) {
+                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
+                            result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
+                                .Table(read.Table())
+                                .Columns(read.Columns())
+                                .LookupKeys(keys)
+                                .Index(indexName.Cast())
+                                .LookupKeys(keys)
+                                .Done();
+                        }
+                    } else {
                         result = Build<TKqlLookupIndex>(ctx, node.Pos())
                             .Table(read.Table())
                             .Columns(read.Columns())
                             .LookupKeys(keys)
                             .Index(indexName.Cast())
                             .Done();
-                    } else if (kqpCtx.IsScanQuery() && kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                        result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
+                    }
+                } else {
+                    if (kqpCtx.IsScanQuery()) {
+                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
+                            result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                                .Table(read.Table())
+                                .Columns(read.Columns())
+                                .LookupKeys(keys)
+                                .Done();
+                        }
+                    } else {
+                        result = Build<TKqlLookupTable>(ctx, node.Pos())
                             .Table(read.Table())
                             .Columns(read.Columns())
                             .LookupKeys(keys)
-                            .Index(indexName.Cast())
-                            .LookupKeys(keys)
                             .Done();
                     }
-                } else if (kqpCtx.IsDataQuery()) {
-                    result = Build<TKqlLookupTable>(ctx, node.Pos())
-                        .Table(read.Table())
-                        .Columns(read.Columns())
-                        .LookupKeys(keys)
-                        .Done();
-                } else if (kqpCtx.IsScanQuery() && kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                    result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                        .Table(read.Table())
-                        .Columns(read.Columns())
-                        .LookupKeys(keys)
-                        .Done();
                 }
             };
 

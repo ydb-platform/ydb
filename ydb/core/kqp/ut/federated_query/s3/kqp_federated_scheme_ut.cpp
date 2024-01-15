@@ -17,7 +17,7 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
-    Y_UNIT_TEST(CreateExternalTable) {
+    Y_UNIT_TEST(ExternalTableDdl) {
         enum EEx {
             Empty,
             IfExists,
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         // create already existing table
         checkCreate(false, EEx::Empty, 0); // already
-        //checkCreate(true, EEx::IfNotExists, 0);
+        checkCreate(true, EEx::IfNotExists, 0);
         checkTableExists(true, 0);
 
         // usual drop
@@ -129,21 +129,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         checkDrop(false, EEx::Empty, 0); // no such table
 
         // drop if exists
-        //checkDrop(true, EEx::IfExists, 0);
+        checkDrop(true, EEx::IfExists, 0);
         checkTableExists(false, 0);
 
         // failed attempt to drop nonexisting table
         checkDrop(false, EEx::Empty, 0);
 
         // create with if not exists
-        //checkCreate(true, EEx::IfNotExists, 1); // real creation
-        //checkTableExists(true, 1);
-        //checkCreate(true, EEx::IfNotExists, 1);
+        checkCreate(true, EEx::IfNotExists, 1); // real creation
+        checkTableExists(true, 1);
+        checkCreate(true, EEx::IfNotExists, 1);
 
         // drop if exists
-        //checkDrop(true, EEx::IfExists, 1); // real drop
-        //checkTableExists(false, 1);
-        //checkDrop(true, EEx::IfExists, 1);
+        checkDrop(true, EEx::IfExists, 1); // real drop
+        checkTableExists(false, 1);
+        checkDrop(true, EEx::IfExists, 1);
     }
 }
 

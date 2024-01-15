@@ -18,7 +18,7 @@ TString TLogoBlobID::ToString() const {
 
 void TLogoBlobID::Out(IOutputStream &o) const {
     char buf[240];
-    sprintf(buf,
+    snprintf(buf, sizeof(buf),
         "[%" PRIu64 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 "]",
         TabletID(),
         Generation(),

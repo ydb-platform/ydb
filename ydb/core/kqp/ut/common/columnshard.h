@@ -68,6 +68,7 @@ namespace NKqp {
     public:
         TTestHelper(const TKikimrSettings& settings);
         TKikimrRunner& GetKikimr();
+        TTestActorRuntime& GetRuntime();
         NYdb::NTable::TSession& GetSession();
         void CreateTable(const TColumnTableBase& table);
         void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);

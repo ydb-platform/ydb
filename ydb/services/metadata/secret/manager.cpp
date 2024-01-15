@@ -46,18 +46,6 @@ NModifications::TOperationParsingResult TAccessManager::DoBuildPatchFromSettings
     return result;
 }
 
-NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TAccessManager::DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& /*settings*/,
-    const NMetadata::IClassBehaviour::TPtr& /*manager*/, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& /*context*/) const {
-    return NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Prepare operations for SECRET_ACCESS objects are not supported");
-}
-
-NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TAccessManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
-    return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Execution of prepare operations for SECRET_ACCESS objects is not supported"));
-}
-
 NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
     TInternalModificationContext& context) const {
     static const TString ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
@@ -110,18 +98,6 @@ void TSecretManager::DoPrepareObjectsBeforeModification(std::vector<TSecret>&& p
         }
     }
     TActivationContext::Register(new TSecretPreparationActor(std::move(patchedObjects), controller, context));
-}
-
-NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TSecretManager::DoPrepare(NKqpProto::TKqpSchemeOperation& /*schemeOperation*/, const NYql::TObjectSettingsImpl& /*settings*/,
-    const NMetadata::IClassBehaviour::TPtr& /*manager*/, NMetadata::NModifications::IOperationsManager::TInternalModificationContext& /*context*/) const {
-    return NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Prepare operations for SECRET objects are not supported");
-}
-
-NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TSecretManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
-    return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
-        "Execution of prepare operations for SECRET objects is not supported"));
 }
 
 }

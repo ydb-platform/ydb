@@ -262,7 +262,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 4, 4.1, 4.2, 4.3,
                 5, 5.1,
                 6, 6.1, 6.2
-             }
+            }
         },
         {
             /* Name */ "eightSortedSegments",
@@ -286,7 +286,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 5, 5.1,
                 6, 6.1, 6.2,
                 7, 7.1
-             }
+            }
         }
     };
 
@@ -1212,7 +1212,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             EXPECT_TRUE(segment.IsDefinedAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedLeftLimit, segment.LeftLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedRightLimit, segment.RightLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
-            auto expectedLeftRightLimit = std::make_pair(expectedLeftLimit, expectedRightLimit);
+            auto expectedLeftRightLimit = std::pair(expectedLeftLimit, expectedRightLimit);
             EXPECT_EQ(expectedLeftRightLimit, segment.LeftRightLimitAt(arg)) << testCaseMsg << ". " << sampleMsg;
             EXPECT_EQ(expectedLeftLimit, segment.ValueAt(arg)) << testCaseMsg << ". " << sampleMsg;
         }

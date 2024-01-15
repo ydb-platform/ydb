@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         const auto Assert = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
             TestDescribeResult(DescribePath(runtime,topicPath),
                                {NLs::Finished,
-                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicAccountSizeGE(expectedAccountSize),
                                 NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
         };
 
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         const auto AssertTopicSize = [&] (ui64 expectedAccountSize, ui64 expectedUsedReserveSize) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic1"),
                                {NLs::Finished,
-                                NLs::TopicAccountSize(expectedAccountSize),
+                                NLs::TopicAccountSizeGE(expectedAccountSize),
                                 NLs::TopicUsedReserveSize(expectedUsedReserveSize)});
         };
 

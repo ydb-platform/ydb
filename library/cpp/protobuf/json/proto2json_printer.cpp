@@ -408,10 +408,10 @@ namespace NProtobufJson {
 
     void TProto2JsonPrinter::PrintKeyValue(const NProtoBuf::Message& proto,
                                            IJsonOutput& json) {
-        const FieldDescriptor* keyField = proto.GetDescriptor()->FindFieldByName("key");
+        const FieldDescriptor* keyField = proto.GetDescriptor()->map_key();
         Y_ABORT_UNLESS(keyField, "Map entry key field not found.");
         TString key = MakeKey(proto, *keyField);
-        const FieldDescriptor* valueField = proto.GetDescriptor()->FindFieldByName("value");
+        const FieldDescriptor* valueField = proto.GetDescriptor()->map_value();
         Y_ABORT_UNLESS(valueField, "Map entry value field not found.");
         PrintSingleField(proto, *valueField, json, key, true);
     }

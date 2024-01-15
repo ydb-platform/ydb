@@ -523,8 +523,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             "(let $2 (StructType '('\"x\" $1) '('\"y\" $1)))\n"
             "(let $3 (Int32 '1))\n"
             "(let $4 (Int32 '\"2\"))\n"
-            "(return (RangeOr (RangeAnd (Range $2 (lambda '($5) (== (Member $5 '\"x\") $3))) (Range $2 (lambda '($6) (== (Member $6 '\"y\") $4)))) (Range $2 (lambda '($7) (< (Member $7 '\"x\") $3))) (RangeAnd (Range $2 (lambda '($8) (== (Memb"
-            "er $8 '\"x\") $3))) (Range $2 (lambda '($9) (< (Member $9 '\"y\") $4))))))\n"
+            "(return (RangeOr (Range $2 (lambda '($5) (< (Member $5 '\"x\") $3))) (RangeAnd (Range $2 (lambda '($6) (== (Member $6 '\"x\") $3))) (Range $2 (lambda '($7) (< (Member $7 '\"y\") $4)))) (RangeAnd (Range $2 (lambda '($8) (== (Member $8 '\"x\") $3))) (Range $2 (lambda '($9) (== (Member $9 '\"y\") $4))))))\n"
             ")\n";
 
         TExprContext exprCtx;

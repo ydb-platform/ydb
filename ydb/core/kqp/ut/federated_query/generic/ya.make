@@ -1,6 +1,24 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-FORK_SUBTESTS()
+IF (AUTOCHECK) 
+    # Split tests to chunks only when they're running on different machines with distbuild,
+    # otherwise this directive will slow down local test execution.
+    # Look through https://st.yandex-team.ru/DEVTOOLSSUPPORT-39642 for more information.
+    FORK_SUBTESTS()
+
+    # TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
+    TAG(
+        ya:external
+        ya:force_sandbox
+        ya:fat
+    )
+
+    REQUIREMENTS(
+        container:4467981730
+        cpu:all
+        dns:dns64
+    )
+ENDIF()
 
 SRCS(
     ch_recipe_ut_helpers.cpp
@@ -20,9 +38,7 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
 )
 
-INCLUDE(${ARCADIA_ROOT}/library/recipes/clickhouse/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/library/recipes/postgresql/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/providers/generic/connector/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 YQL_LAST_ABI_VERSION()
 

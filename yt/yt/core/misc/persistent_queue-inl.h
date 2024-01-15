@@ -60,7 +60,7 @@ TPersistentQueueIterator<T, ChunkSize>::TPersistentQueueIterator(
     TChunkPtr chunk,
     size_t index)
     : CurrentChunk_(std::move(chunk))
-      , CurrentIndex_(index)
+    , CurrentIndex_(index)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

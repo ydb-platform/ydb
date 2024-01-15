@@ -77,6 +77,7 @@ from hypothesis.internal.compat import (
 from hypothesis.internal.conjecture.utils import calc_label_from_cls, check_sample
 from hypothesis.internal.entropy import get_seeder_and_restorer
 from hypothesis.internal.floats import float_of
+from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
     define_function_signature,
     get_pretty_function_description,
@@ -129,7 +130,11 @@ from hypothesis.strategies._internal.strings import (
     OneCharStringStrategy,
     TextStrategy,
 )
-from hypothesis.strategies._internal.utils import cacheable, defines_strategy
+from hypothesis.strategies._internal.utils import (
+    cacheable,
+    defines_strategy,
+    to_jsonable,
+)
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import RepresentationPrinter
 
@@ -2098,8 +2103,11 @@ class DataObject:
         result = self.conjecture_data.draw(strategy)
         self.count += 1
         printer = RepresentationPrinter(context=current_build_context())
-        printer.text(f"Draw {self.count}")
-        printer.text(": " if label is None else f" ({label}): ")
+        desc = f"Draw {self.count}{'' if label is None else f' ({label})'}: "
+        if TESTCASE_CALLBACKS:
+            self.conjecture_data._observability_args[desc] = to_jsonable(result)
+
+        printer.text(desc)
         printer.pretty(result)
         note(printer.getvalue())
         return result

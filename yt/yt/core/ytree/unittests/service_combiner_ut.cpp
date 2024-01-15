@@ -78,7 +78,7 @@ TEST(TYPathServiceCombinerTest, Simple)
                         .Item("subkey1").Value("abc")
                         .Item("subkey2").Value(3.1415926)
                     .EndMap()
-               .EndMap();
+                .EndMap();
         }));
     IYPathServicePtr service2 = IYPathService::FromProducer(BIND([] (IYsonConsumer* consumer) {
             BuildYsonFluently(consumer)

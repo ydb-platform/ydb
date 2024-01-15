@@ -1444,20 +1444,20 @@ protected:
             }
             settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
             settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
-            AccessServiceValidator = Register(NCloud::CreateAccessService(settings), TMailboxType::Simple, AppData()->UserPoolId);
+            AccessServiceValidator = Register(NCloud::CreateAccessService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheAccessServiceAuthentication()) {
                 AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
                                                           AccessServiceValidator,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
             if (Config.GetCacheAccessServiceAuthorization()) {
                 AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
                                                           AccessServiceValidator,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 
@@ -1467,13 +1467,13 @@ protected:
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
             }
-            UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::Simple, AppData()->UserPoolId);
+            UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheUserAccountService()) {
                 UserAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
                                                       UserAccountService,
                                                       Config.GetGrpcCacheSize(),
                                                       TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                      TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                      TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 
@@ -1483,13 +1483,13 @@ protected:
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
             }
-            ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::Simple, AppData()->UserPoolId);
+            ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheServiceAccountService()) {
                 ServiceAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
                                                          ServiceAccountService,
                                                          Config.GetGrpcCacheSize(),
                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                         TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                         TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 

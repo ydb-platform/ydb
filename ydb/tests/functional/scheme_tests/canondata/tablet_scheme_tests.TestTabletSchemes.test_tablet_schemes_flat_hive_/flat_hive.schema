@@ -31,6 +31,11 @@
                 "ColumnId": 5,
                 "ColumnName": "HiveId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -41,7 +46,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

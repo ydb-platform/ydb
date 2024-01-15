@@ -64,7 +64,7 @@ IColumnConverterPtr CreateColumnConvert(
 
 TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
     TRange<TUnversionedRow> rows,
-    const std::vector<TColumnSchema>& columnSchema)
+    const THashMap<int, TColumnSchema>& columnSchema)
 {
     TConvertedColumnRange convertedColumnsRange;
     if (rows.size() == 0) {
@@ -79,6 +79,10 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         for (const auto* item = firstRow.Begin(); item != firstRow.End(); ++item) {
             IdsToIndexes_[item->Id] = std::ssize(ColumnIds_);
             ColumnIds_.push_back(item->Id);
+            auto iterSchema = columnSchema.find(item->Id);
+            if (iterSchema == columnSchema.end()) {
+                THROW_ERROR_EXCEPTION("Column with Id %v has no schema", item->Id);
+            }
         }
     }
     IsFirstBatch_ = false;
@@ -90,15 +94,18 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
         TUnversionedRowValues rowValues(ColumnIds_.size(), nullptr);
         for (const auto* item = row.Begin(); item != row.End(); ++item) {
             auto iter = IdsToIndexes_.find(item->Id);
-            YT_VERIFY(iter != IdsToIndexes_.end());
+            if(iter == IdsToIndexes_.end()) {
+                THROW_ERROR_EXCEPTION("Column with Id %v has no schema", item->Id);
+            }
             rowValues[iter->second] = item;
         }
         rowsValues.push_back(std::move(rowValues));
     }
 
     for (int offset = 0; offset < std::ssize(ColumnIds_); offset++) {
-        YT_VERIFY(ColumnIds_[offset] >= 0 && ColumnIds_[offset] < std::ssize(columnSchema));
-        auto converter = CreateColumnConvert(columnSchema[ColumnIds_[offset]], ColumnIds_[offset], offset);
+        auto iterSchema = columnSchema.find(ColumnIds_[offset]);
+        YT_VERIFY(iterSchema != columnSchema.end());
+        auto converter = CreateColumnConvert(iterSchema->second, ColumnIds_[offset], offset);
         auto columns = converter->Convert(rowsValues);
         convertedColumnsRange.push_back(columns);
     }

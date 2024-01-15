@@ -141,10 +141,22 @@ class BitStringDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((3, 2, 0, 169, 3, 2, 1, 138)), str2octs(''))
 
+    def testDefModeChunkedSubstV04(self):
+        assert decoder.decode(
+            ints2octs((35, 8, 3, 2, 0, 169, 3, 2, 1, 138)),
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((3, 2, 0, 169, 3, 2, 1, 138)), str2octs(''))
+
     def testIndefModeChunkedSubst(self):
         assert decoder.decode(
             ints2octs((35, 128, 3, 2, 0, 169, 3, 2, 1, 138, 0, 0)),
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs((3, 2, 0, 169, 3, 2, 1, 138, 0, 0)), str2octs(''))
+
+    def testIndefModeChunkedSubstV04(self):
+        assert decoder.decode(
+            ints2octs((35, 128, 3, 2, 0, 169, 3, 2, 1, 138, 0, 0)),
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs((3, 2, 0, 169, 3, 2, 1, 138, 0, 0)), str2octs(''))
 
     def testTypeChecking(self):
@@ -185,11 +197,26 @@ class OctetStringDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111, 120)), str2octs(''))
 
+    def testDefModeChunkedSubstV04(self):
+        assert decoder.decode(
+            ints2octs(
+                (36, 23, 4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111, 120)),
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111, 120)), str2octs(''))
+
     def testIndefModeChunkedSubst(self):
         assert decoder.decode(
             ints2octs((36, 128, 4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111,
                        120, 0, 0)),
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs(
+            (4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111, 120, 0, 0)), str2octs(''))
+
+    def testIndefModeChunkedSubstV04(self):
+        assert decoder.decode(
+            ints2octs((36, 128, 4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111,
+                       120, 0, 0)),
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs(
             (4, 4, 81, 117, 105, 99, 4, 4, 107, 32, 98, 114, 4, 4, 111, 119, 110, 32, 4, 3, 102, 111, 120, 0, 0)), str2octs(''))
 
@@ -245,12 +272,27 @@ class ExpTaggedOctetStringDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120)), str2octs(''))
 
+    def testDefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((101, 17, 4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120)),
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120)), str2octs(''))
+
     def testIndefModeSubst(self):
         assert decoder.decode(
             ints2octs((
                       101, 128, 36, 128, 4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120, 0,
                       0, 0, 0)),
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs(
+            (36, 128, 4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120, 0, 0, 0, 0)), str2octs(''))
+
+    def testIndefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((
+                      101, 128, 36, 128, 4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120, 0,
+                      0, 0, 0)),
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs(
             (36, 128, 4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120, 0, 0, 0, 0)), str2octs(''))
 
@@ -680,10 +722,23 @@ class SequenceDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)), str2octs(''))
 
+    def testWithOptionalAndDefaultedDefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((48, 18, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)),
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)), str2octs(''))
+
     def testWithOptionalAndDefaultedIndefModeSubst(self):
         assert decoder.decode(
             ints2octs((48, 128, 5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)),
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs(
+            (5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)), str2octs(''))
+
+    def testWithOptionalAndDefaultedIndefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((48, 128, 5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)),
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs(
             (5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)), str2octs(''))
 
@@ -1166,10 +1221,23 @@ class SetDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)), str2octs(''))
 
+    def testWithOptionalAndDefaultedDefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((49, 18, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)),
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1)), str2octs(''))
+
     def testWithOptionalAndDefaultedIndefModeSubst(self):
         assert decoder.decode(
             ints2octs((49, 128, 5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)),
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs(
+            (5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)), str2octs(''))
+
+    def testWithOptionalAndDefaultedIndefModeSubstV04(self):
+        assert decoder.decode(
+            ints2octs((49, 128, 5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)),
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs(
             (5, 0, 36, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0, 2, 1, 1, 0, 0)), str2octs(''))
 
@@ -1498,11 +1566,25 @@ class AnyDecoderTestCase(BaseTestCase):
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
         ) == (ints2octs((4, 3, 102, 111, 120)), str2octs(''))
 
+    def testByUntaggedSubstV04(self):
+        assert decoder.decode(
+            ints2octs((4, 3, 102, 111, 120)),
+            asn1Spec=self.s,
+            substrateFun=lambda a, b, c: (b, b[c:])
+        ) == (ints2octs((4, 3, 102, 111, 120)), str2octs(''))
+
     def testTaggedExSubst(self):
         assert decoder.decode(
             ints2octs((164, 5, 4, 3, 102, 111, 120)),
             asn1Spec=self.s,
             substrateFun=lambda a, b, c, d: streaming.readFromStream(b, c)
+        ) == (ints2octs((164, 5, 4, 3, 102, 111, 120)), str2octs(''))
+
+    def testTaggedExSubstV04(self):
+        assert decoder.decode(
+            ints2octs((164, 5, 4, 3, 102, 111, 120)),
+            asn1Spec=self.s,
+            substrateFun=lambda a, b, c: (b, b[c:])
         ) == (ints2octs((164, 5, 4, 3, 102, 111, 120)), str2octs(''))
 
 
@@ -1839,6 +1921,50 @@ class CompressedFilesTestCase(BaseTestCase):
                     assert values == [12, (1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1)] * 1000
         finally:
             os.remove(path)
+
+
+class NonStreamingCompatibilityTestCase(BaseTestCase):
+    def setUp(self):
+        from pyasn1 import debug
+        BaseTestCase.setUp(self)
+        debug.setLogger(None)  # undo logger setup from BaseTestCase to work around unrelated issue
+
+    def testPartialDecodeWithCustomSubstrateFun(self):
+        snmp_req_substrate = ints2octs((
+            0x30, 0x22, 0x02, 0x01, 0x01, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0xa0, 0x15, 0x02, 0x04, 0x69,
+            0x30, 0xdb, 0xeb, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00, 0x30, 0x07, 0x30, 0x05, 0x06, 0x01, 0x01, 0x05, 0x00))
+        seq, next_substrate = decoder.decode(
+            snmp_req_substrate, asn1Spec=univ.Sequence(),
+            recursiveFlag=False, substrateFun=lambda a, b, c: (a, b[:c])
+        )
+        assert seq.isSameTypeWith(univ.Sequence)
+        assert next_substrate == snmp_req_substrate[2:]
+        version, next_substrate = decoder.decode(
+            next_substrate, asn1Spec=univ.Integer(), recursiveFlag=False,
+            substrateFun=lambda a, b, c: (a, b[:c])
+        )
+        assert version == 1
+
+    def testPartialDecodeWithDefaultSubstrateFun(self):
+        substrate = ints2octs((
+            0x04, 0x0e, 0x30, 0x0c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x3c, 0x03, 0x02
+        ))
+        result, rest = decoder.decode(substrate, recursiveFlag=False)
+        assert result.isSameTypeWith(univ.OctetString)
+        assert rest == substrate[2:]
+
+    def testPropagateUserException(self):
+        substrate = io.BytesIO(ints2octs((0x04, 0x00)))
+
+        def userSubstrateFun(_asn1Object, _substrate, _length, _options):
+            raise TypeError("error inside user function")
+
+        try:
+            decoder.decode(substrate, asn1Spec=univ.OctetString, substrateFun=userSubstrateFun)
+        except TypeError as exc:
+            assert str(exc) == "error inside user function"
+        else:
+            raise AssertionError("decode() must not hide TypeError from inside user provided callback")
 
 
 suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

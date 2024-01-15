@@ -10,11 +10,12 @@
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ref_tracked.h>
 
 #include <yt/yt/core/profiling/tscp.h>
 
 #include <library/cpp/yt/threading/notification_handle.h>
+
+#include <library/cpp/yt/memory/ref_tracked.h>
 
 #include <util/system/thread.h>
 

@@ -10,6 +10,8 @@ SRCS(
     kqp_opt_phy_update_index.cpp
     kqp_opt_phy_update.cpp
     kqp_opt_phy_upsert_index.cpp
+    kqp_opt_phy_returning.cpp
+    kqp_opt_phy_upsert_defaults.cpp
 )
 
 PEERDIR(

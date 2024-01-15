@@ -1572,10 +1572,9 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
-            const ui64 i = inputIndex; // Crutch for clang
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
-            CA_LOG_D("Create source for input " << i << " " << inputDesc);
+            CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
             try {
                 std::tie(source.AsyncInput, source.Actor) = AsyncIoFactory->CreateDqSource(
                     IDqAsyncIoFactory::TSourceArguments {
@@ -1593,7 +1592,8 @@ protected:
                         .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
-                        .Arena = Task.GetArena()
+                        .Arena = Task.GetArena(),
+                        .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1606,8 +1606,7 @@ protected:
                 std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
                 Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& inputDesc = Task.GetInputs(inputIndex);
-                const ui64 i = inputIndex; // Crutch for clang
-                CA_LOG_D("Create transform for input " << i << " " << inputDesc.ShortDebugString());
+                CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
                 try {
                     std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                         IDqAsyncIoFactory::TInputTransformArguments {
@@ -1623,7 +1622,8 @@ protected:
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
                             .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = TaskRunner->GetAllocatorPtr()
+                            .Alloc = TaskRunner->GetAllocatorPtr(),
+                            .TraceId = ComputeActorSpan.GetTraceId()
                         });
                 } catch (const std::exception& ex) {
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
@@ -1642,8 +1642,7 @@ protected:
                 std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
                 Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& outputDesc = Task.GetOutputs(outputIndex);
-                const ui64 i = outputIndex; // Crutch for clang
-                CA_LOG_D("Create transform for output " << i << " " << outputDesc.ShortDebugString());
+                CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
                 try {
                     std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
                         IDqAsyncIoFactory::TOutputTransformArguments {
@@ -1671,8 +1670,7 @@ protected:
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             Y_ABORT_UNLESS(outputDesc.HasSink());
             sink.Type = outputDesc.GetSink().GetType();
-            const ui64 i = outputIndex; // Crutch for clang
-            CA_LOG_D("Create sink for output " << i << " " << outputDesc);
+            CA_LOG_D("Create sink for output " << outputIndex << " " << outputDesc);
             try {
                 std::tie(sink.AsyncOutput, sink.Actor) = AsyncIoFactory->CreateDqSink(
                     IDqAsyncIoFactory::TSinkArguments {
@@ -1827,15 +1825,13 @@ protected:
     bool AllAsyncOutputsFinished() const {
         for (const auto& [outputIndex, sinkInfo] : SinksMap) {
             if (!sinkInfo.FinishIsAcknowledged) {
-                ui64 index = outputIndex; // Crutch for logging through lambda.
-                CA_LOG_D("Waiting finish of sink[" << index << "]");
+                CA_LOG_D("Waiting finish of sink[" << outputIndex << "]");
                 return false;
             }
         }
         for (const auto& [outputIndex, transformInfo] : OutputTransformsMap) {
             if (!transformInfo.FinishIsAcknowledged) {
-                ui64 index = outputIndex; // Crutch for logging through lambda.
-                CA_LOG_D("Waiting finish of transform[" << index << "]");
+                CA_LOG_D("Waiting finish of transform[" << outputIndex << "]");
                 return false;
             }
         }

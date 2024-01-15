@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <util/generic/string.h>
 #include <optional>
 
@@ -7,20 +9,29 @@ namespace NKikimr {
 class TConclusionStatus {
 private:
     std::optional<TString> ErrorMessage;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
     TConclusionStatus() = default;
-    TConclusionStatus(const TString& errorMessage)
-        : ErrorMessage(errorMessage) {
+    TConclusionStatus(const TString& errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
+        : ErrorMessage(errorMessage)
+        , Status(status)
+    {
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 
-    TConclusionStatus(const char* errorMessage)
-        : ErrorMessage(errorMessage) {
+    TConclusionStatus(const char* errorMessage, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::INTERNAL_ERROR)
+        : ErrorMessage(errorMessage)
+        , Status(status)
+    {
         Y_ABORT_UNLESS(!!ErrorMessage);
     }
 public:
 
     const TString& GetErrorMessage() const {
         return ErrorMessage ? *ErrorMessage : Default<TString>();
+    }
+
+    Ydb::StatusIds::StatusCode GetStatus() const {
+        return Status;
     }
 
     static TConclusionStatus Fail(const char* errorMessage) {

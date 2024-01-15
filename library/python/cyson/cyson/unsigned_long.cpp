@@ -21,12 +21,22 @@
 #define Py_TPFLAGS_CHECKTYPES 0
 #endif
 
+#if PY_VERSION_HEX < 0x030c0000
+#define GetSize(obj) Py_SIZE(obj)
+#define IsNegative(obj) GetSize(obj) < 0
+#define IsPositive(obj) GetSize(obj) >= 0
+#else
+#define GetSize(obj) (((PyLongObject*)obj)->long_value.lv_tag >> _PyLong_NON_SIZE_BITS)
+#define IsNegative(obj) ((((PyLongObject*)obj)->long_value.lv_tag & _PyLong_SIGN_MASK) & 2)
+#define IsPositive(obj) !IsNegative(obj)
+#endif
+
 namespace NCYson {
     static NPrivate::TPyObjectPtr PyUnsignedLong_ReprPtr;
 
     static void SetNegativeValueError(PyObject* obj, PyTypeObject* type) {
         assert(PyLong_Check(obj));
-        assert(Py_SIZE(obj) < 0);
+        assert(IsNegative(obj));
 
         PyObject* repr = ConvertPyLongToPyBytes(obj);
 
@@ -58,12 +68,12 @@ namespace NCYson {
 
         assert(PyLong_Check(obj));
 
-        size = Py_SIZE(obj);
-        if (size < 0) {
+        if (IsNegative(obj)) {
             SetNegativeValueError((PyObject*)obj, &PyUnsignedLong_Type);
             return nullptr;
         }
 
+        size = GetSize(obj);
         result = PyLong_Type.tp_alloc(&PyUnsignedLong_Type, size);
         if (Y_UNLIKELY(!result)) {
             return nullptr;
@@ -73,8 +83,15 @@ namespace NCYson {
 
         Py_SET_SIZE(result, size);
 
+#if PY_VERSION_HEX >= 0x030c0000
+        ((PyLongObject*)result)->long_value.lv_tag = obj->long_value.lv_tag;
+#endif
         for (index = 0; index < size; ++index) {
+#if PY_VERSION_HEX < 0x030c0000
             ((PyLongObject*)result)->ob_digit[index] = obj->ob_digit[index];
+#else
+            ((PyLongObject*)result)->long_value.ob_digit[index] = obj->long_value.ob_digit[index];
+#endif
         }
 
         return result;
@@ -106,7 +123,7 @@ namespace NCYson {
 
         assert(IsExactPyUInt(result));
 
-        if (Py_SIZE(result) < 0) {
+        if (IsNegative(result)) {
             SetNegativeValueError(result, type);
             Py_DECREF(result);
             return nullptr;
@@ -135,7 +152,7 @@ namespace NCYson {
 #define UNSIGNED_LONG_OPERATION(SLOT, ...)                                                                       \
     static PyObject* unsigned_long_##SLOT(Y_MAP_ARGS_WITH_LAST(PYOBJECT_ARG, PYOBJECT_ARG_LAST, __VA_ARGS__)) {  \
         PyObject* result = PyLong_Type.tp_as_number->nb_##SLOT(__VA_ARGS__);                                     \
-        if (result && PyLong_CheckExact(result) && (Py_SIZE(result) >= 0)) {                                     \
+        if (result && PyLong_CheckExact(result) && (IsPositive(result))) {                                       \
             PyObject* tmp = result;                                                                              \
             result = ConstructPyUIntFromPyLong((PyLongObject*)tmp);                                              \
             Py_DECREF(tmp);                                                                                      \
@@ -287,6 +304,9 @@ namespace NCYson {
 #endif
 #if PY_VERSION_HEX >= 0x030800b4 && PY_VERSION_HEX < 0x03090000
         0, /*tp_print*/
+#endif
+#if PY_VERSION_HEX >= 0x030c0000
+        0, /*tp_watched*/
 #endif
     };
 }

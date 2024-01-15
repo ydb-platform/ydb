@@ -6,8 +6,7 @@
 
 package fuzz
 
-import _ "unsafe"
-// for go:linkname
+import _ "unsafe" // for go:linkname
 
 //go:linkname libfuzzerTraceCmp1 runtime.libfuzzerTraceCmp1
 //go:linkname libfuzzerTraceCmp2 runtime.libfuzzerTraceCmp2

@@ -49,8 +49,10 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
 
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
+    std::shared_ptr<TModuleFactories> Factories;
+
 public:
-    TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
+    TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -285,13 +287,6 @@ public:
 class TWhiteBoardServiceInitializer : public IKikimrServicesInitializer {
 public:
     TWhiteBoardServiceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
-class TNodeIdentifierInitializer : public IKikimrServicesInitializer {
-public:
-    TNodeIdentifierInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -612,5 +607,13 @@ public:
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
+
+class TGraphServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TGraphServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

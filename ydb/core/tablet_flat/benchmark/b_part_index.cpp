@@ -70,7 +70,7 @@ namespace {
 
             Cerr << "DataBytes = " << part->Stat.Bytes << " DataPages = " << IndexTools::CountMainPages(*part) << Endl;
             Cerr << "FlatIndexBytes = " << part->GetPageSize(part->IndexPages.Groups[groups ? 1 : 0], {}) << " BTreeIndexBytes = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].IndexSize << Endl;
-            Cerr << "Levels = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].LevelsCount << Endl;
+            Cerr << "Levels = " << part->IndexPages.BTreeGroups[groups ? 1 : 0].LevelCount << Endl;
 
             // 100 MB
             UNIT_ASSERT_GE(part->Stat.Bytes, 100ull*1024*1024);

@@ -168,7 +168,7 @@ namespace {
     {
         if (part.IndexPages.BTreeGroups) {
             auto meta = part.IndexPages.BTreeGroups.front();
-            if (meta.LevelsCount) {
+            if (meta.LevelCount) {
                 BTreeIndexNode(part, meta);
             } else {
                 Out

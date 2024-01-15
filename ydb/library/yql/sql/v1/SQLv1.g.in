@@ -568,11 +568,11 @@ values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
 
-create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE object_ref
+create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
     with_table_settings
 ;
 
-drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE object_ref;
+drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW object_ref
     with_table_settings
@@ -585,7 +585,7 @@ upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?
 ;
-create_object_stmt: CREATE OBJECT object_ref
+create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?
 ;
@@ -597,7 +597,7 @@ alter_object_stmt: ALTER OBJECT object_ref
 ;
 alter_object_features: SET object_features;
 
-drop_object_stmt: DROP OBJECT object_ref
+drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
     LPAREN TYPE object_type_ref RPAREN
     drop_object_features?
 ;
@@ -611,7 +611,7 @@ object_features: object_feature | LPAREN object_feature (COMMA object_feature)* 
 
 object_type_ref: an_id_or_type;
 
-create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
+create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) (IF NOT EXISTS)? simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
     table_inherits?
     table_partition_by?
     with_table_settings?

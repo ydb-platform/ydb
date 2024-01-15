@@ -309,6 +309,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     value Utf8 NOT NULL
                 )
             ) AS t1 JOIN `ydb_table` AS t2 ON t1.key = t2.key
+            ORDER BY key
         )"
         , "external_source"_a = externalDataSourceName
         , "ydb_table"_a = ydbTable)).ExtractValueSync();
@@ -448,6 +449,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     value Utf8 NOT NULL
                 )
             ) AS t1 JOIN `ydb_table` AS t2 ON t1.key = t2.key
+            ORDER BY key
         )"
         , "external_source"_a = externalDataSourceName
         , "ydb_table"_a = ydbTable)).ExtractValueSync();

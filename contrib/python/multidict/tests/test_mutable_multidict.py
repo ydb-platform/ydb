@@ -44,6 +44,7 @@ class TestMutableMultiDict:
 
         default = object()
         assert d.getall("some_key", default) is default
+        assert d.getall(key="some_key", default=default) is default
 
     def test_add(self, cls):
         d = cls()
@@ -124,7 +125,7 @@ class TestMutableMultiDict:
     def test_set_default(self, cls):
         d = cls([("key", "one"), ("key", "two")], foo="bar")
         assert "one" == d.setdefault("key", "three")
-        assert "three" == d.setdefault("otherkey", "three")
+        assert "three" == d.setdefault(key="otherkey", default="three")
         assert "otherkey" in d
         assert "three" == d["otherkey"]
 
@@ -163,6 +164,7 @@ class TestMutableMultiDict:
         d = cls(other="val")
 
         assert "default" == d.pop("key", "default")
+        assert "default" == d.pop(key="key", default="default")
         assert "other" in d
 
     def test_pop_raises(self, cls):
@@ -229,6 +231,7 @@ class TestMutableMultiDict:
     def test_popall_default(self, cls):
         d = cls()
         assert "val" == d.popall("key", "val")
+        assert "val" == d.popall(key="key", default="val")
 
     def test_popall_key_error(self, cls):
         d = cls()

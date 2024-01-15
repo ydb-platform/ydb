@@ -114,7 +114,6 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
-#include <ydb/core/client/server/msgbus_server_tracer.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -216,7 +215,7 @@ namespace Tests {
 
         SetupLogging();
 
-        SetupMessageBus(Settings->Port, Settings->TracePath);
+        SetupMessageBus(Settings->Port);
         SetupDomains(app);
 
         app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
@@ -287,23 +286,14 @@ namespace Tests {
         SetupStorage();
     }
 
-    void TServer::SetupMessageBus(ui16 port, const TString &tracePath) {
+    void TServer::SetupMessageBus(ui16 port) {
         if (port) {
             Bus = NBus::CreateMessageQueue(NBus::TBusQueueConfig());
-            if (tracePath) {
-                BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer(
-                    Bus.Get(),
-                    BusServerSessionConfig,
-                    tracePath,
-                    port
-                ));
-            } else {
-                BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
-                    Bus.Get(),
-                    BusServerSessionConfig,
-                    port
-                ));
-            }
+            BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
+                Bus.Get(),
+                BusServerSessionConfig,
+                port
+            ));
         }
     }
 
@@ -728,7 +718,7 @@ namespace Tests {
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                &NStat::CreateStatisticsAggregatorForTests, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 
@@ -934,14 +924,6 @@ namespace Tests {
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
 
                 Cerr << "NMsgBusProxy registered on Port " << Settings->Port << " GrpsPort " << Settings->GrpcPort << Endl;
-            }
-
-            {
-                IActor* traceService = BusServer->CreateMessageBusTraceService();
-                if (traceService) {
-                    TActorId traceServiceId = Runtime->Register(traceService, nodeIdx, Runtime->GetAppData(nodeIdx).IOPoolId, TMailboxType::Simple, 0);
-                    Runtime->RegisterService(NMessageBusTracer::MakeMessageBusTraceServiceID(), traceServiceId, nodeIdx);
-                }
             }
         }
         {
@@ -1389,37 +1371,6 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
     }
 
-
-    void TClient::ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path) {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
-        request->Record.SetCommand(command);
-        if (path)
-            request->Record.SetPath(path);
-        TAutoPtr<NBus::TBusMessage> reply;
-        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
-    }
-
-    TString TClient::StartTrace(const TString &path) {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
-        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::START);
-        if (path)
-            request->Record.SetPath(path);
-        TAutoPtr<NBus::TBusMessage> reply;
-        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
-        if (reply.Get()->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS) {
-            const NKikimrClient::TMessageBusTraceStatus &response = static_cast<NMsgBusProxy::TBusMessageBusTraceStatus *>(reply.Get())->Record;
-            return response.GetPath();
-        } else {
-            ythrow yexception() << "MessageBus trace not enabled on the server (see mbus/--trace-path option)";
-        }
-    }
-
-    void TClient::StopTrace() {
-        TAutoPtr<NMsgBusProxy::TBusMessageBusTraceRequest> request(new NMsgBusProxy::TBusMessageBusTraceRequest());
-        request->Record.SetCommand(NKikimrClient::TMessageBusTraceRequest::STOP);
-        TAutoPtr<NBus::TBusMessage> reply;
-        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
-    }
 
     NBus::EMessageStatus TClient::WaitCompletion(ui64 txId, ui64 schemeshard, ui64 pathId,
                                         TAutoPtr<NBus::TBusMessage>& reply,

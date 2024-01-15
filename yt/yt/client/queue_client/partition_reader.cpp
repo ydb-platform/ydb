@@ -208,7 +208,7 @@ private:
         TWallTimer timer;
 
         std::vector<int> partitionIndexesToFetch{PartitionIndex_};
-        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(Client_, partitionIndexesToFetch))
+        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(partitionIndexesToFetch))
             .ValueOrThrow();
 
         YT_VERIFY(partitions.size() <= 1);
@@ -230,12 +230,12 @@ private:
 
         ConsumerClient_ = CreateBigRTConsumerClient(Client_, ConsumerPath_);
 
-        QueuePath_ = WaitFor(ConsumerClient_->FetchTargetQueue(Client_))
+        QueuePath_ = WaitFor(ConsumerClient_->FetchTargetQueue())
             .ValueOrThrow().Path;
 
         Logger.AddTag("Queue: %v", QueuePath_);
 
-        auto partitionStatistics = WaitFor(ConsumerClient_->FetchPartitionStatistics(Client_, QueuePath_, PartitionIndex_))
+        auto partitionStatistics = WaitFor(ConsumerClient_->FetchPartitionStatistics(QueuePath_, PartitionIndex_))
             .ValueOrThrow();
 
         RecomputeApproximateDataWeightPerRow(partitionStatistics.FlushedDataWeight, partitionStatistics.FlushedRowCount);
@@ -430,7 +430,7 @@ private:
         TWallTimer timer;
 
         std::vector<int> partitionIndexesToFetch{PartitionIndex_};
-        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(Client_, partitionIndexesToFetch))
+        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(partitionIndexesToFetch))
             .ValueOrThrow();
 
         YT_VERIFY(partitions.size() <= 1);
@@ -455,10 +455,12 @@ private:
             THROW_ERROR_EXCEPTION("Queue cluster must be specified");
         }
 
-        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_.GetPath())->GetSubConsumerClient({
-            .Cluster = *queueCluster,
-            .Path = QueuePath_.GetPath(),
-        });
+        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_.GetPath())->GetSubConsumerClient(
+            Client_,
+            {
+                .Cluster = *queueCluster,
+                .Path = QueuePath_.GetPath()
+            });
 
         Opened_ = true;
 

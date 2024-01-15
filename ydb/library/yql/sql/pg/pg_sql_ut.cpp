@@ -462,7 +462,7 @@ SELECT COUNT(*) FROM public.t;");
         settings.ClusterMapping["pg_catalog"] = NYql::PgProviderName;
 
         auto res = SqlToYqlWithMode(
-            R"(select set_config("search_path", "pg_catalog");)",
+            R"(select set_config("search_path", "pg_catalog", false);)",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
@@ -505,7 +505,7 @@ from pg_catalog.pg_type)",
         UNIT_ASSERT(res.Root);
         
         res = SqlToYqlWithMode(
-            R"(select set_config("search_path", "public");)",
+            R"(select set_config("search_path", "public", false);)",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
@@ -516,7 +516,7 @@ from pg_catalog.pg_type)",
         UNIT_ASSERT(res.Root);
 
         res = SqlToYqlWithMode(
-            R"(select set_config("search_path", "yql");)",
+            R"(select set_config("search_path", "yql", false);)",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},

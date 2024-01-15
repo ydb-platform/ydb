@@ -1,8 +1,8 @@
 #include "guc_settings.h"
 
-void TGUCSettings::RollBack() {
-    SessionSettings_ = RollbackSettings_;
-    Settings_ = SessionSettings_;
+void TGUCSettings::Setup(const std::unordered_map<std::string, std::string>& runtimeSettings) {
+    RollbackSettings_ = runtimeSettings;
+    RollBack();
 }
 
 std::optional<std::string> TGUCSettings::Get(const std::string& key) const {
@@ -13,13 +13,17 @@ std::optional<std::string> TGUCSettings::Get(const std::string& key) const {
     return it->second;
 }
 
-void TGUCSettings::Set(const std::string& key, const std::string& val, bool local) {
+void TGUCSettings::Set(const std::string& key, const std::string& val, bool isLocal) {
     Settings_[key] = val;
-    if (!local) {
+    if (!isLocal) {
         SessionSettings_[key] = val;
     }
 }
 
 void TGUCSettings::Commit() {
     RollbackSettings_ = SessionSettings_;
+}
+
+void TGUCSettings::RollBack() {
+    Settings_ = SessionSettings_ = RollbackSettings_;
 }

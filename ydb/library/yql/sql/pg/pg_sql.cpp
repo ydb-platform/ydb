@@ -634,47 +634,45 @@ public:
 
     TAstNode* ParseSetConfig(const FuncCall* value) {
         auto length = ListLength(value->args);
-        if (length != 2 && length != 3) {
-            AddError(TStringBuilder() << "Excepted 2 or 3 arguments, but got: " << length);
+        if (length != 3) {
+            AddError(TStringBuilder() << "Expected 3 arguments, but got: " << length);
             return;
         }
         auto loc = value->location;
         VariableSetStmt config;
         auto arg0 = ListNodeNth(value->args, 0);
         auto arg1 = ListNodeNth(value->args, 1);
-        if (length == 3) {
-            auto arg2 = ListNodeNth(value->args, 2);
-            if (NodeTag(arg2) != T_TypeCast) {
-                AddError(TStringBuilder() << "Excepted type cast node as is_local arg, but got node with tag");
-                return;
-            }
-            auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
-            if (NodeTag(isLocalCast) != T_A_Const) {
-                AddError(TStringBuilder() << "Excepted a_const in cast, but got something wrong: " << NodeTag(isLocalCast));
-                return nullptr;
-            }
-            auto isLocalConst = CAST_NODE(A_Const, isLocalCast);
-            if (NodeTag(isLocalConst->val) != T_String) {
-                AddError(TStringBuilder() << "Excepted string in const, but got something wrong: " << NodeTag(isLocalCast));
-                return nullptr;
-            }
-            auto rawVal = TString(StrVal(isLocalConst->val));
-            if (rawVal != "t" && rawVal != "f") {
-                AddError(TStringBuilder() << "Excepted t/f, but got " << rawVal);
-                return;
-            }
-            config.is_local = rawVal == "t";
+        auto arg2 = ListNodeNth(value->args, 2);
+        if (NodeTag(arg2) != T_TypeCast) {
+            AddError(TStringBuilder() << "Expected type cast node as is_local arg, but got node with tag");
+            return;
         }
+        auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
+        if (NodeTag(isLocalCast) != T_A_Const) {
+            AddError(TStringBuilder() << "Expected a_const in cast, but got something wrong: " << NodeTag(isLocalCast));
+            return nullptr;
+        }
+        auto isLocalConst = CAST_NODE(A_Const, isLocalCast);
+        if (NodeTag(isLocalConst->val) != T_String) {
+            AddError(TStringBuilder() << "Expected string in const, but got something wrong: " << NodeTag(isLocalCast));
+            return nullptr;
+        }
+        auto rawVal = TString(StrVal(isLocalConst->val));
+        if (rawVal != "t" && rawVal != "f") {
+            AddError(TStringBuilder() << "Expected t/f, but got " << rawVal);
+            return;
+        }
+        config.is_local = rawVal == "t";
 
         if (NodeTag(arg0) != T_ColumnRef || NodeTag(arg1) != T_ColumnRef) {
-            AddError(TStringBuilder() << "Excepted column name ref arg, but got something other: " << NodeTag(arg0));
+            AddError(TStringBuilder() << "Expected column name ref arg, but got something other: " << NodeTag(arg0));
             return nullptr;
         }
 
         auto name = ListNodeNth(CAST_NODE(ColumnRef, arg0)->fields, 0);
         auto val = ListNodeNth(CAST_NODE(ColumnRef, arg1)->fields, 0);
         if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
-            AddError(TStringBuilder() << "Excepted string const as name arg, but got something other: " << NodeTag(name));
+            AddError(TStringBuilder() << "Expected string const as name arg, but got something other: " << NodeTag(name));
             return;
         }
         config.name = (char*)StrVal(name);
@@ -1025,8 +1023,8 @@ public:
                 res.emplace_back(CreatePgStarResultItem());
                 i++;
             }
-
-            if (!inner && ListLength(x->targetList) == 1 && !sort && windowItems.empty() && !having && !groupBy && !whereFilter && !x->distinctClause) {
+            bool isSelectWithOnlySetConfig = !inner && !sort && windowItems.empty() && !having && !groupBy && !whereFilter && !x->distinctClause  && ListLength(x->targetList) == 1;
+            if (isSelectWithOnlySetConfig) {
                 auto node = ListNodeNth(x->targetList, 0);
                 if (NodeTag(node) != T_ResTarget) {
                     NodeNotImplemented(x, node);
@@ -2521,7 +2519,7 @@ public:
         if (schemaname == "public") {
             return "";
         }
-        if (schemaname == "") {
+        if (schemaname == "" && Settings.GUCSettings) {
             auto search_path = Settings.GUCSettings->Get("search_path");
             if (!search_path || *search_path == "public") {
                 return Settings.DefaultCluster;

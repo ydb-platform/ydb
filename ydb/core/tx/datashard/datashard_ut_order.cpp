@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/library/actors/util/memory_tracker.h>
 #include <util/system/valgrind.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -2477,6 +2478,23 @@ Y_UNIT_TEST(TestCopyTableNoDeadlock) {
     }
 }
 
+void VerifyNoActiveTransactions() {
+    using namespace NActors::NMemory::NPrivate;
+    const auto& instance = TMemoryTracker::Instance();
+    instance->Initialize();
+    std::vector<TMetric> metrics;
+    TMemoryTracker::Instance()->GatherMetrics(metrics);
+
+    for (size_t i : xrange(metrics.size())) {
+        if (instance->GetName(i) == TString(MemoryLabelActiveTransactionBody)) {
+            UNIT_ASSERT_VALUES_EQUAL(metrics[i].GetCount(), 0);
+            return;
+        }
+    }
+
+    UNIT_ASSERT_C(false, "Datashard/TActiveTransaction/TxBody metric not found");
+}
+
 Y_UNIT_TEST(TestPlannedCancelSplit) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
@@ -2665,6 +2683,8 @@ Y_UNIT_TEST(TestPlannedCancelSplit) {
     TDuration elapsed = TInstant::Now() - splitStart;
     UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
         "Split needed " << elapsed.ToString() << " to complete, which is too long");
+
+    VerifyNoActiveTransactions();
 }
 
 Y_UNIT_TEST(TestPlannedTimeoutSplit) {

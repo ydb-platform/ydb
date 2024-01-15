@@ -34,10 +34,6 @@ struct TTestEnvironment {
     const ui64 TabletId = MakeTabletID(0, 0, 1);
     const TTabletTypes::EType TabletType = TTabletTypes::KeyValue;
     NWilson::TFakeWilsonUploader* WilsonUploader = nullptr;
-    ui32 NextHostConfigId = 1;
-
-    using TNodeRecord = std::tuple<TString, i32, ui32>;
-    using TPDiskDefinition = std::tuple<TString, NKikimrBlobStorage::EPDiskType, bool, bool, ui64>;
 
     TTestEnvironment(ui32 nodeCount): NodeCount(nodeCount) {
     }
@@ -48,7 +44,7 @@ struct TTestEnvironment {
 
         Edge = Runtime->AllocateEdgeActor();
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(TabletId, TabletType, TErasureType::Erasure4Plus2Block),
+            CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreateKeyValueFlat);
         SetupFakeWilson();
 
@@ -60,7 +56,7 @@ struct TTestEnvironment {
     void InitializeRuntime() {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
-        SetupTabletServices(*Runtime, &app, false);
+        SetupTabletServices(*Runtime, &app);
     }
 
     void SetupRuntime() {

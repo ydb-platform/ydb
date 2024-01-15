@@ -189,10 +189,29 @@ struct TEvReadFormatResult : public TEventLocal<TEvReadFormatResult, TEvBlobStor
 };
 
 struct TEvDeviceError : public TEventLocal<TEvDeviceError, TEvBlobStorage::EvDeviceError> {
-    TString Info;
+    enum class EErrorType : ui8 {
+        OTHER = 0,
+        READ,
+        WRITE,
+        SLOWDOWN,
+    };
 
-    TEvDeviceError(const TString& info)
+    static EErrorType ErrorTypeFromCompletionType(TCompletionAction::EOperationType complType) {
+        if (complType == TCompletionAction::EOperationType::READ) {
+            return EErrorType::READ;
+        } else if (complType == TCompletionAction::EOperationType::WRITE) {
+            return EErrorType::WRITE;
+        } else {
+            return EErrorType::OTHER;
+        }
+    }
+
+    TString Info;
+    EErrorType ErrorType;
+
+    TEvDeviceError(const TString& info, EErrorType errorType = EErrorType::OTHER)
         : Info(info)
+        , ErrorType(errorType)
     {}
 };
 

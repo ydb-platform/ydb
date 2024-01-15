@@ -906,6 +906,89 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         SmallDisk(40);
     }
 
+    bool TestDiskSlowdown(TActorTestContext& testCtx, const ui64 blobSize, const ui32 blobsNum) {
+        TVDiskMock mock(&testCtx);
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                    NKikimrProto::OK);
+    
+        const auto evControlRes = testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
+                    NKikimrProto::OK);
+        NPDisk::TPDisk* pdisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
+
+        auto checkSlowdown = [&] (NKikimrProto::EReplyStatus status, TString errorReason = "") {
+            switch (status) {
+            case NKikimrProto::OK:
+                break;
+            case NKikimrProto::CORRUPTED:
+                UNIT_ASSERT(*pdisk->Mon.PDiskBriefState == TPDiskMon::TPDisk::Error);
+                UNIT_ASSERT(*pdisk->Mon.PDiskState == NKikimrBlobStorage::TPDiskState::PermanentBadDevice);
+                UNIT_ASSERT(*pdisk->Mon.PDiskDetailedState == TPDiskMon::TPDisk::ErrorPermanentBadDevice);
+                Cerr << "Device slowdown detected" << Endl;
+                return true;
+            default:
+                UNIT_FAIL("Unexpected status# " << NKikimrProto::EReplyStatus_Name(status) <<
+                        ", errorReason# " << errorReason);
+                break;
+            }
+            return false;
+        };
+
+        const TVDiskID vDiskID(0, 1, 0, 0, 0);
+
+        const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid));
+        if (checkSlowdown(evInitRes->Status, evInitRes->ErrorReason)) {
+            return true;
+        }
+        auto pdiskParams = evInitRes->PDiskParams;
+
+        const auto evReserveRes = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(pdiskParams->Owner, pdiskParams->OwnerRound, 1));
+        if (checkSlowdown(evReserveRes->Status, evReserveRes->ErrorReason)) {
+            return true;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(evReserveRes->ChunkIds.size(), 1);
+        const ui32 chunk = evReserveRes->ChunkIds.front();
+
+        for (ui32 i = 0; i < blobsNum; ++i) {
+            TString chunkWriteData = PrepareData(blobSize);
+            auto res = testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                    new NPDisk::TEvChunkWrite(pdiskParams->Owner, pdiskParams->OwnerRound,
+                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(chunkWriteData), nullptr, false, 0));
+            if (checkSlowdown(res->Status, res->ErrorReason)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    Y_UNIT_TEST(AACriticalOverestimation) {
+        TActorTestContext testCtx(TActorTestContext::TSettings{
+            .IsBad = false,
+            .DiskSize = 80_GB,
+            .DiskMode = NPDisk::NSectorMap::EDiskMode::DM_HDD,
+            .ChunkSize = 128_MB,
+            .DeviceCriticalOverestimationRatio = 1,
+            .DeviceCriticalOverestimationTimeMs = 100,
+        });
+        UNIT_ASSERT(TestDiskSlowdown(testCtx, 128_MB, 100));
+    }
+
+    Y_UNIT_TEST(AANoResponseRecievedInLongTime) {
+        TActorTestContext testCtx(TActorTestContext::TSettings{
+            .IsBad = false,
+            .DiskSize = 80_GB,
+            .DiskMode = NPDisk::NSectorMap::EDiskMode::DM_HDD,
+            .ChunkSize = 128_MB,
+            .MaxNoResponseDeviceTimeMs = 20,
+        });
+        UNIT_ASSERT(TestDiskSlowdown(testCtx, 128_MB, 100));
+    }
+
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
         TActorTestContext testCtx({
             .IsBad=false,

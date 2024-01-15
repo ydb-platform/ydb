@@ -22,6 +22,8 @@ message TPDiskState {
         Reserved14 = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        PermanentBadDevice = 17;
+        TransientBadDevice = 18;
 
         Missing = 252;
         Timeout = 253;

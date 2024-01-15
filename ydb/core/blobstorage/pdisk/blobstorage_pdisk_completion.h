@@ -10,6 +10,12 @@
 namespace NKikimr::NPDisk {
 
 struct TCompletionAction {
+    enum class EOperationType : ui8 {
+        OTHER = 0,
+        READ,
+        WRITE,
+    };
+
     ui64 OperationIdx;
     NHPTimer::STime SubmitTime;
     TCompletionAction *FlushAction = nullptr;
@@ -17,12 +23,17 @@ struct TCompletionAction {
     NWilson::TTraceId TraceId;
     EIoResult Result = EIoResult::Unknown;
     TString ErrorReason;
+    EOperationType OperationType;
 
     mutable NLWTrace::TOrbit Orbit;
 protected:
     TVector<ui64> BadOffsets;
 
 public:
+    TCompletionAction(EOperationType operationType = EOperationType::OTHER)
+        : OperationType(operationType)
+    {}
+
     void SetResult(const EIoResult result) {
         Result = result;
         if (FlushAction) {
@@ -44,6 +55,7 @@ public:
     virtual bool CanHandleResult() const {
         return Result == EIoResult::Ok;
     }
+
     virtual void Exec(TActorSystem *actorSystem) = 0;
     virtual void Release(TActorSystem *) = 0;
     virtual ~TCompletionAction() {}

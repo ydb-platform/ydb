@@ -82,7 +82,8 @@ public:
             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
             ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId,
             NWilson::TSpan&& span)
-        : Recipient(recipient)
+        : TCompletionAction(EOperationType::WRITE)
+        , Recipient(recipient)
         , Event(event)
         , Mon(mon)
         , PDiskId(pdiskId)
@@ -137,7 +138,8 @@ class TCompletionLogWrite : public TCompletionAction {
 public:
     TCompletionLogWrite(TPDisk *pDisk, TVector<TLogWrite*>&& logWriteQueue, TVector<TLogWrite*>&& commits,
             TVector<ui32>&& commitedLogChunks)
-        : PDisk(pDisk)
+        : TCompletionAction(EOperationType::WRITE)
+        , PDisk(pDisk)
         , LogWriteQueue(std::move(logWriteQueue))
         , Commits(std::move(commits))
         , CommitedLogChunks(std::move(commitedLogChunks))
@@ -173,7 +175,7 @@ class TCompletionChunkRead : public TCompletionAction {
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
             ui64 chunkNonce, NWilson::TSpan&& span)
-        : TCompletionAction()
+        : TCompletionAction(EOperationType::READ)
         , PDisk(pDisk)
         , Read(read)
         , CommonBuffer(read->Offset, read->Size)

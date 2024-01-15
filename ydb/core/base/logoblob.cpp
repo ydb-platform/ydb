@@ -4,21 +4,23 @@
 namespace NKikimr {
 
 TString TLogoBlobID::ToString() const {
-    TStringStream ss;
-    Out(ss);
-    return ss.Str();
+    TString str;
+    str.reserve(64);
+    TStringOutput outStr(str);
+    Out(outStr);
+    return str;
 }
 
 void TLogoBlobID::Out(IOutputStream &o) const {
-    o << "["
-        << TabletID() << ":"
-        << Generation() << ":"
-        << Step() << ":"
-        << Channel() << ":"
-        << Cookie() << ":"
-        << BlobSize() << ":"
+    o << '['
+        << TabletID() << ':'
+        << Generation() << ':'
+        << Step() << ':'
+        << Channel() << ':'
+        << Cookie() << ':'
+        << BlobSize() << ':'
         << PartId()
-        << "]" ;
+        << ']' ;
 }
 
 void TLogoBlobID::Out(IOutputStream &o, const TVector<TLogoBlobID> &vec) {

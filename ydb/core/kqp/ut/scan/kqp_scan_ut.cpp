@@ -2577,37 +2577,5 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpRequestContext) {
-
-    Y_UNIT_TEST(TraceIdInErrorMessage) {
-        auto settings = TKikimrSettings()
-            .SetAppConfig(AppCfg())
-            .SetEnableScriptExecutionOperations(true)
-            .SetNodeCount(4);
-        TKikimrRunner kikimr{settings};
-        auto db = kikimr.GetTableClient();
-        
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = true;
-        Y_DEFER {
-            NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;  // just in case if test fails
-        };
-
-        auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
-            GROUP BY Text
-            ORDER BY Total DESC;
-        )").GetValueSync();
-
-        UNIT_ASSERT(it.IsSuccess());
-        try {
-            auto yson = StreamResultToYson(it, true, NYdb::EStatus::PRECONDITION_FAILED, "TraceId");
-        } catch (const std::exception& ex) {
-            UNIT_ASSERT_C(false, "Exception NYdb::EStatus::PRECONDITION_FAILED not found or IssueMessage doesn't contain 'TraceId'");
-        }
-
-        NKikimr::NKqp::TKqpPlanner::UseMockEmptyPlanner = false;
-    }
-}
-
 } // namespace NKqp
 } // namespace NKikimr

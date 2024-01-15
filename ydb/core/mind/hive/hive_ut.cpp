@@ -2785,6 +2785,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(200);
         });
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2855,11 +2856,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TAutoPtr<TEvHive::TEvCreateTablet> updateTablet(new TEvHive::TEvCreateTablet(testerTablet, 100500 + (tablet - tabletBase), tabletType, channels));
             SendCreateTestTablet(runtime, hiveTablet, testerTablet, updateTablet, 0, true);
         }
-        runtime.SendToPipe(hiveTablet, sender, new NHive::TEvPrivate::TEvStartStorageBalancer({
-            .NumReassigns = 100,
-            .MaxInFlight = 1,
-            .StoragePool = "def1",
-        }));
 
         {
             TDispatchOptions options;

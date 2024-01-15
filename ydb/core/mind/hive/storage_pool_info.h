@@ -11,6 +11,14 @@ using namespace NKikimrBlobStorage;
 class THive;
 
 struct TStoragePoolInfo {
+    struct TStats {
+        double MinUsage;
+        TStorageGroupId MinUsageGroupId;
+        double MaxUsage;
+        TStorageGroupId MaxUsageGroupId;
+        double Scatter = 0;
+    };
+
     THiveSharedSettings* Settings;
 
     NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy GetBalanceStrategy() const {
@@ -75,6 +83,7 @@ struct TStoragePoolInfo {
     TVector<TTabletId> PullWaitingTablets();
     template <NKikimrConfig::THiveConfig::EHiveStorageSelectStrategy Strategy>
     size_t SelectGroup(const TVector<double>& groupCandidateUsages);
+    TStats GetStats() const;
 
 private:
     size_t RoundRobinPos = 0;

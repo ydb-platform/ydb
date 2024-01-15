@@ -5949,7 +5949,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
-            tableInserter.AddRow().Add(2).AddNull().Add(jsonBin);
+            tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         {

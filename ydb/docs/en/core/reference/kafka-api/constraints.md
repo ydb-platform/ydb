@@ -2,7 +2,6 @@
 
 YDB supports [Apache Kafka protocol](https://kafka.apache.org/protocol.html) version 3.4.0 with the following constraints:
 
-
 1. Only authenticated connections are allowed.
 
 2. Only `SASL/PLAIN` authentication method is supported.

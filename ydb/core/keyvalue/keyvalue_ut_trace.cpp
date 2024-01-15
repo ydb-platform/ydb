@@ -1,28 +1,12 @@
-#include "keyvalue.h"
-#include "keyvalue_flat_impl.h"
-#include <ydb/core/base/tablet.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
-#include <ydb/core/mind/bscontroller/bsc.h>
-#include <ydb/core/mind/bscontroller/indir.h>
-#include <ydb/core/mind/bscontroller/types.h>
-#include <ydb/core/mind/bscontroller/ut_helpers.h>
-#include <ydb/core/mind/bscontroller/vdisk_status_tracker.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+#include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/keyvalue/protos/events.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
-#include <util/datetime/cputimer.h>
-#include <util/random/random.h>
-
-#include <google/protobuf/text_format.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
 using namespace NKikimr;

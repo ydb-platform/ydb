@@ -5946,10 +5946,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
         Y_ABORT_UNLESS(maybeJsonDoc.Defined());
         const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
-        TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-        tableInserter.AddRow().Add(1).Add(jsonString).Add(jsonString);
-        tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
-        testHelper.BulkUpsert(testTable, tableInserter);
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
+            tableInserter.AddRow().Add(2).AddNull().Add(jsonBin);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(3).Add(jsonBin).AddNull();
+            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::SCHEME_ERROR);
+        }
     }
 }
 

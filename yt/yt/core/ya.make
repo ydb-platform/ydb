@@ -94,7 +94,7 @@ SRCS(
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
-    logging/log_manager.cpp
+    GLOBAL logging/log_manager.cpp
     logging/logger_owner.cpp
     logging/serializable_logger.cpp
     logging/stream_output.cpp

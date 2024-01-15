@@ -2,7 +2,7 @@
 
 <div class = "speakers-section">
     <div class = "speaker-card">
-        <img class = "speaker-photo" src = "../_assets/team_photos/bondar.png"/>
+        <img class = "speaker-photo" src ="../_assets/team_photos/bondar.png"/>
         <p class = "speaker-name"> {{ team.bondar.name }}</p>
         <p class = "speaker-position"> {{ team.bondar.position }}</p>
     </div>
@@ -17,3 +17,5 @@
         <p class = "speaker-position"> {{ team.cherednik.position }}</p>
     </div>
 </div>
+
+![Bondar](../_assets/team_photos/bondar.png)

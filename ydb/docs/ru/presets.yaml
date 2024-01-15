@@ -5,7 +5,7 @@ default:
   team:
     babich:
       name: Михаил Бабич
-      position: старший разработчик программного обеспечения
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/mikhail-babich-807700270/
     bondar:
       name: Олег Бондарь
@@ -13,35 +13,35 @@ default:
       profile: https://www.linkedin.com/in/olegbondar2000/
     cherednik:
       name: Даниил Чередник
-      position: старший разработчик программного обеспечения  
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/daniil-c-1110165b/
     dmitriev:
       name: Алексей Дмитриев 
-      position: технический и продуктовый менеджер в YDB
+      position: Технический менеджер
       profile: https://www.linkedin.com/in/алексей-дмитриев-7914b535/ 
     gorshenin:
       name: Александр Горшенин
-      position: разработчик Java SDK для распределенной базы данных YDB
+      position: Ведущий разработчик
       profile: https://www.linkedin.com/in/agorshenin268/   
     gorbunov:
       name: Максим Горбунов
-      position: руководитель группы эксплуатации YDB
+      position: Руководитель группы эксплуатации
       profile: https://www.linkedin.com/in/maksim-gorbunov-20283a55/
     gridnev:
       name: Виталий Гриднев
-      position: ведущий разработчик YDB
+      position: Ведущий разработчик
       profile: https://www.linkedin.com/in/gridnevvvit/
     fomichev: 
       name: Андрей Фомичев
-      position: руководитель YDB
+      position: Руководитель YDB
       profile: https://www.linkedin.com/in/andrey-fomichev/  
     stankevichus:
       name: Алексей Станкевичус 
-      position: руководитель групп разработки распределенного хранилища и распределенной платформы YDB  
+      position: Руководитель групп разработки распределенного хранилища YDB  
       profile: https://github.com/the-ancient-1
     sokolov:
       name: Иван Соколов 
-      position: руководитель службы видеохостинга (Внешний Дзен) 
+      position: Руководитель службы видеохостинга (Внешний Дзен) 
       profile:
     surin:
       name: Михаил Сурин

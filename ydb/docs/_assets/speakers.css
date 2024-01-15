@@ -17,6 +17,12 @@
     width: auto;
 }
 
+.speaker-name {
+    color: black;
+    text-align: center;
+}
+
 .speaker-position {
     color: gray;
+    text-align: center;
 }

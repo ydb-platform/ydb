@@ -1,3 +1,0 @@
-[![Bondar]( ../../_assets/team_photos/bondar.png "{{ team.bondar.name }}" =100x100 )]( {{ team.bondar.profile }} ) {{ team.bondar.name }} {{ team.bondar.position }} <br>
-[![Babich]( ../../_assets/team_photos/babich.png "{{ team.babich.name }}" =100x100 )]( {{ team.babich.profile }} ) {{ team.babich.name }} {{ team.babich.position }} <br>
-[![Cherednik]( ../../_assets/team_photos/cherednik.png "{{ team.cherednik.name }}" =100x100 )]( {{ team.cherednik.profile }} ) {{ team.cherednik.name }} {{ team.cherednik.position }} <br>

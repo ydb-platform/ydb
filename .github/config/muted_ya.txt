@@ -34,8 +34,6 @@ ydb/tests/functional/clickbench test.py.test_run_determentistic[column]
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud*
-ydb/tests/functional/sqs/cloud test_yandex_cloud_queue_counters.py.TestYmqQueueCounters.test_purge_queue_counters
 ydb/tests/functional/tenants test_dynamic_tenants.py.*
 ydb/tests/functional/tenants test_storage_config.py.TestStorageConfig.*
 ydb/tests/functional/tenants test_tenants.py.*

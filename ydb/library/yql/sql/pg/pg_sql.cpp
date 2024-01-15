@@ -2096,8 +2096,10 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only public and pg_catalogue, but got :" << rawStr);
                 return nullptr;
             }
-            Settings.GUCSettings->Set(name, rawStr, value->is_local);
-            return;
+            if (Settings.GUCSettings) {
+                Settings.GUCSettings->Set(name, rawStr, value->is_local);
+            }
+            return Statements.back();
         }
 
         if (name == "useblocks" || name == "emitaggapply") {
@@ -2515,7 +2517,7 @@ public:
         return true;
     }
 
-    TStringBuf ResolveCluster(const TStringBuf schemaname) {
+    TString ResolveCluster(const TStringBuf schemaname) {
         if (schemaname == "public") {
             return "";
         }
@@ -2524,9 +2526,9 @@ public:
             if (!search_path || *search_path == "public") {
                 return Settings.DefaultCluster;
             }
-            return TStringBuf(*search_path);
+            return TString(*search_path);
         }
-        return schemaname;
+        return TString(schemaname);
     }
 
     TAstNode* BuildClusterSinkOrSourceExpression(

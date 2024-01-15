@@ -459,6 +459,7 @@ SELECT COUNT(*) FROM public.t;");
 
     Y_UNIT_TEST(SetConfig_SearchPath) {
         TTranslationSettings settings;
+        settings.GUCSettings = std::make_shared<TGUCSettings>();
         settings.ClusterMapping["pg_catalog"] = NYql::PgProviderName;
 
         auto res = SqlToYqlWithMode(
@@ -466,10 +467,11 @@ SELECT COUNT(*) FROM public.t;");
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
-            EDebugOutput::None,
+            EDebugOutput::ToCerr,
             false,
             settings);
-        UNIT_ASSERT(res.IsOk());
+        Cerr << res.Issues.ToString();
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
         UNIT_ASSERT(res.Root);
         
         res = SqlToYqlWithMode(

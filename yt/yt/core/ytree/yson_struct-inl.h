@@ -175,7 +175,7 @@ template <class TStruct>
 template <class TBase, class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(const TString& key, TValue(TBase::*field))
 {
-    static_assert(std::is_base_of<TBase, TStruct>::value);
+    static_assert(std::derived_from<TStruct, TBase>);
     auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field));
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
@@ -251,7 +251,7 @@ template <class TStruct>
 template<class TBase>
 TYsonStructRegistrar<TStruct>::operator TYsonStructRegistrar<TBase>()
 {
-    static_assert(std::is_base_of<TBase, TStruct>::value);
+    static_assert(std::derived_from<TStruct, TBase>);
     return TYsonStructRegistrar<TBase>(Meta_);
 }
 
@@ -416,7 +416,7 @@ public: \
 public: \
     TStruct() \
     { \
-        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStruct, TStruct>, "Class must inherit from TYsonStruct"); \
+        static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
         YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
     } \
     YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
@@ -432,7 +432,7 @@ public: \
     TStruct() \
         : ::NYT::NYTree::TYsonStructFinalClassHolder(std::type_index(typeid(TStruct))) \
     { \
-        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
+        static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStructLite>, "Class must inherit from TYsonStructLite"); \
         YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
     } \
     YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
@@ -441,14 +441,14 @@ public: \
 TStruct::TStruct() \
     : ::NYT::NYTree::TYsonStructFinalClassHolder(std::type_index(typeid(TStruct))) \
 { \
-    static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
+    static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStructLite>, "Class must inherit from TYsonStructLite"); \
     YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
 }
 
 #define DEFINE_YSON_STRUCT(TStruct) \
 TStruct::TStruct() \
 { \
-    static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStruct, TStruct>, "Class must inherit from TYsonStruct"); \
+    static_assert(std::derived_from<TStruct, ::NYT::NYTree::TYsonStruct>, "Class must inherit from TYsonStruct"); \
     YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
 }
 

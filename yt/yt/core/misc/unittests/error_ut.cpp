@@ -36,7 +36,7 @@ public:
 
     // Simulate overload from TAdlException::operator <<
     template <class TLikeThis, class TArg>
-        requires std::is_base_of_v<TAdlException, std::decay_t<TLikeThis>>
+        requires std::derived_from<std::decay_t<TLikeThis>, TAdlException>
     friend TLikeThis&& operator << (TLikeThis&& ex, const TArg& /*other*/)
     {
         ++OverloadCallCount;

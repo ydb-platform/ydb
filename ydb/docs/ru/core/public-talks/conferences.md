@@ -16,6 +16,8 @@
 
 {% include [HighLoad](./_includes/conferences/2022/HighLoad.md) %}
 
+{% include [YaTalks](./_includes/conferences/2022/YaTalks.md) %}
+
 {% include [Hydra](./_includes/conferences/2022/Hydra.md) %}
 
 <hr>

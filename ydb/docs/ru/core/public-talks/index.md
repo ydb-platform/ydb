@@ -27,11 +27,11 @@
 **FOSSASIA Summit:**
 * [YDB — an open-source Distributed SQL Database (EN)](./conferences.md#2023-conf-fos-ydb)     
 
-### [Вебинары и открытые лекции](./webinars.md/#2023-webinar)
-* [Вебинар о релизе YDB v23.1](./webinars.md/#2023-webinar-ydb-23-1)
-* [Используем YDB: Возможности встроенного веб-интерфейса и CLI](./webinars.md/#2023-webinar-ydb-interface)
-* [Развертывание YDB в Kubernetes](./webinars.md/#2023-webinar-ydb-kubernetes)
-* [Анализ потоковых данных с помощью Yandex Query - интерактивного сервиса виртуализации данных в YDB](./webinars.md/#2023-webinar-ydb-data-streams)
+### [Вебинары и открытые лекции](./webinars.md#2023-webinar)
+* [Вебинар о релизе YDB v23.1](./webinars.md#2023-webinar-ydb-23-1)
+* [Используем YDB: Возможности встроенного веб-интерфейса и CLI](./webinars.md#2023-webinar-ydb-interface)
+* [Развертывание YDB в Kubernetes](./webinars.md#2023-webinar-ydb-kubernetes)
+* [Анализ потоковых данных с помощью Yandex Query - интерактивного сервиса виртуализации данных в YDB](./webinars.md#2023-webinar-ydb-data-streams)
 
 ### [Публикации в СМИ](./mass-media.md#2023-smi)
 * [Открытые системы (электронный журнал). СУБД. Как открытый исходный код меняет современные СУБД](./mass-media.md#2023-smi-ops)
@@ -71,7 +71,7 @@
 * [Мультиарендный подход Яндекса к построению инфраструктуры работы с данными](./conferences.md#2021-conf-yasub-multirendn)
 
 **DevOpsConf:**
-* [Распределенная трассировка с помощью Jaeger и {{ ydb-name }}. Опыт Auto.ru и Yandex Cloud.](./conferences.md#2021-conf-devops-jaeger)
+* [Распределенная трассировка с помощью Jaeger и {{ ydb-name }}. Опыт Auto.ru и Yandex Cloud](./conferences.md#2021-conf-devops-jaeger)
 
 ### [Вебинары и открытые лекции](./webinars.md#2021-webinar)
 * [Практический пример использования serverless: интеграция сервисов Yandex Cloud с голосовыми технологиями компании Voximplant](./conferences.md#2021-webinar-voximplant)
@@ -115,7 +115,6 @@
 * [{{ ydb-name }}: распределенные запросы в облаках](./conferences.md#2019-conf-backendconf)
 
 ### [Вебинары и открытые лекции](./webinars.md#2019-webinar):
-* [Новости {{ ydb-name }} — обзор новых возможностей](./webinars.md#2019-webinar-ydb-news)
 * [Опыт использования {{ ydb-name }} на примере продуктов Яндекса](./webinars.md#2019-webinar-ydb-exp)
 
 ### Подкасты

@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
                 tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i)).AddNull();
             }
 
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         Sleep(TDuration::Seconds(1));
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             for (size_t i = 0; i < inserted_rows; i++) {
                 tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i)).AddNull();
             }
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         Sleep(TDuration::Seconds(1));
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
                     .Add("test_res_" + std::to_string(i + t * tables_in_store))
                     .AddNull();
             }
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         Sleep(TDuration::Seconds(20));

@@ -69,7 +69,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             condition->Prepare(params.Txc->DB.GetRowScheme(localTableId), 0);
         }
 
-        userDb.emplace(*self, params.Txc->DB, params.ReadVersion);
+        userDb.emplace(*self, params.Txc->DB, params.ReadVersion, params.WriteVersion);
         groupProvider.emplace(*self, params.Txc->DB);
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }

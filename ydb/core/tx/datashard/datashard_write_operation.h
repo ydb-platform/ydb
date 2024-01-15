@@ -2,7 +2,7 @@
 
 #include "datashard_impl.h"
 #include "datashard_locks.h"
-#include "datashard__engine_host.h"
+#include "datashard_user_db.h"
 #include "operation.h"
 
 #include <ydb/core/tx/tx_processing.h>
@@ -18,7 +18,7 @@ class TValidatedWriteTx: TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
 
     ~TValidatedWriteTx();
 
@@ -74,66 +74,29 @@ public:
         return TxInfo().DynKeysCount != 0;
     }
 
-    // TODO: It's an expensive operation (Precharge() inside). We need avoid it.
-    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const {
-        return EngineBay.CalcSizes(needsTotalKeysSize);
-    }
-
-    ui64 GetMemoryAllocated() const {
-        return EngineBay.GetEngine() ? EngineBay.GetEngine()->GetMemoryAllocated() : 0;
-    }
-
-    NMiniKQL::IEngineFlat* GetEngine() {
-        return EngineBay.GetEngine();
-    }
-    NMiniKQL::TEngineHost* GetEngineHost() {
-        return EngineBay.GetEngineHost();
-    }
-    void DestroyEngine() {
-        EngineBay.DestroyEngine();
-    }
-    const NMiniKQL::TEngineHostCounters& GetCounters() {
-        return EngineBay.GetCounters();
-    }
-    void ResetCounters() {
-        EngineBay.ResetCounters();
+    IDataShardUserDb* GetUserDb() {
+        return &UserDb;
     }
 
     bool CanCancel();
     bool CheckCancelled();
 
     void SetWriteVersion(TRowVersion writeVersion) {
-        EngineBay.SetWriteVersion(writeVersion);
+        UserDb.SetWriteVersion(writeVersion);
     }
     void SetReadVersion(TRowVersion readVersion) {
-        EngineBay.SetReadVersion(readVersion);
-    }
-    void SetVolatileTxId(ui64 txId) {
-        EngineBay.SetVolatileTxId(txId);
+        UserDb.SetReadVersion(readVersion);
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-        EngineBay.CommitChanges(tableId, lockId, writeVersion);
+    void SetVolatileTxId(ui64 txId) {
+        UserDb.SetVolatileTxId(txId);
     }
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
-        return EngineBay.GetCollectedChanges();
+        return UserDb.GetCollectedChanges();
     }
     void ResetCollectedChanges() {
-        EngineBay.ResetCollectedChanges();
-    }
-
-    TVector<ui64> GetVolatileCommitTxIds() const {
-        return EngineBay.GetVolatileCommitTxIds();
-    }
-    const absl::flat_hash_set<ui64>& GetVolatileDependencies() const {
-        return EngineBay.GetVolatileDependencies();
-    }
-    std::optional<ui64> GetVolatileChangeGroup() const {
-        return EngineBay.GetVolatileChangeGroup();
-    }
-    bool GetVolatileCommitOrdered() const {
-        return EngineBay.GetVolatileCommitOrdered();
+        UserDb.ResetCollectedChanges();
     }
 
     bool IsProposed() const {
@@ -168,12 +131,12 @@ public:
     }
 
     const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const {
-        return EngineBay.TxInfo();
+        return UserDb.GetTxInfo();
     }
 
 private:
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
-    TEngineBay EngineBay;
+    TDataShardUserDb UserDb;
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 

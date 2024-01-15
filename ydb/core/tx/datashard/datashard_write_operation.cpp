@@ -17,9 +17,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
+TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
     : Ev(ev)
-    , EngineBay(self, txc, ctx, stepTxId.ToPair())
+    , UserDb(*self, txc.DB, readVersion, writeVersion)
     , StepTxId(stepTxId)
     , ReceivedAt(receivedAt)
     , TxSize(0)
@@ -30,10 +30,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
     if (LockTxId())
-        EngineBay.SetLockTxId(LockTxId(), LockNodeId());
+        UserDb.SetLockTxId(LockTxId(), LockNodeId());
 
     if (Immediate())
-        EngineBay.SetIsImmediateTx();
+        UserDb.SetIsImmediateTx();
 
     auto& typeRegistry = *AppData()->TypeRegistry;
 
@@ -46,8 +46,9 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     SetTxKeys(RecordOperation().GetColumnIds(), typeRegistry, self->TabletID(), ctx);
 
-    KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay);
-    EngineBay.MarkTxLoaded();
+    // TODO Locks
+    //KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), UserDb);
+    UserDb.MarkTxLoaded();
 }
 
 TValidatedWriteTx::~TValidatedWriteTx() {
@@ -186,39 +187,48 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << TableInfo->Path << ", shard: " << tabletId << ", "
                                                                 << "write point " << DebugPrintPoint(TableInfo->KeyColumnTypes, keyCells, typeRegistry));
         TTableRange tableRange(keyCells);
-        EngineBay.AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), false);
+        
+        // TODO Locks
+        Y_UNUSED(columnTags);
+        //UserDb.AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), false);
     }
 }
 
 ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 {
+    // TODO Locks
+    Y_UNUSED(allowErrors);
+    return 0;
+    /*
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-    EResult result = EngineBay.Validate();
+    EResult result = UserDb.Validate();
     if (allowErrors) {
         if (result != EResult::Ok) {
-            ErrStr = EngineBay.GetEngine()->GetErrors();
+            ErrStr = UserDb.GetEngine()->GetErrors();
             ErrCode = ConvertErrCode(result);
             return 0;
         }
     } else {
-        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
+        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", UserDb.GetEngine()->GetErrors().data());
     }
     return KeysCount();
+    */
 }
 
 bool TValidatedWriteTx::ReValidateKeys()
 {
+    // TODO Locks
+    /*
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-
-    auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+    auto [result, error] = UserDb.GetKqpComputeCtx().ValidateKeys(UserDb.GetTxInfo());
     if (result != EResult::Ok) {
         ErrStr = std::move(error);
         ErrCode = ConvertErrCode(result);
         return false;
     }
-
+    */
     return true;
 }
 
@@ -231,7 +241,6 @@ bool TValidatedWriteTx::CheckCancelled() {
 }
 
 void TValidatedWriteTx::ReleaseTxData() {
-    EngineBay.DestroyEngine();
     IsReleased = true;
 
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
@@ -322,7 +331,8 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self, TTransac
 {
     if (!WriteTx) {
         Y_ABORT_UNLESS(Ev);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, ctx, GetStepOrder(), GetReceivedAt(), Ev);
+        auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, ctx, GetStepOrder(), GetReceivedAt(), readVersion, writeVersion, Ev);
     }
     return WriteTx;
 }
@@ -384,7 +394,7 @@ void TWriteOperation::DbStoreArtifactFlags(ui64 tabletId, TTransactionContext& t
 ui64 TWriteOperation::GetMemoryConsumption() const {
     ui64 res = 0;
     if (WriteTx) {
-        res += WriteTx->GetTxSize() + WriteTx->GetMemoryAllocated();
+        res += WriteTx->GetTxSize();
     }
     if (Ev) {
         res += sizeof(NEvents::TDataEvents::TEvWrite);

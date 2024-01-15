@@ -63,7 +63,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         self->SysLocksTable().HasWriteLocks(fullTableId) ||
         self->GetVolatileTxManager().GetTxMap());
 
-    TDataShardUserDb userDb(*self, txc.DB, readVersion);
+    TDataShardUserDb userDb(*self, txc.DB, readVersion, writeVersion);
     TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {

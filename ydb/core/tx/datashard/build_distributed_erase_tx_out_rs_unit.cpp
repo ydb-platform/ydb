@@ -103,8 +103,8 @@ public:
         condition->Prepare(txc.DB.GetRowScheme(tableInfo.LocalTid), 0);
 
         const auto tags = MakeTags(condition->Tags(), eraseTx->GetIndexColumnIds());
-        auto readVersion = DataShard.GetReadWriteVersions(tx).ReadVersion;
-        TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
+        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
+        TDataShardUserDb userDb(DataShard, txc.DB, readVersion, writeVersion);
         bool pageFault = false;
 
         TDynBitMap confirmedRows;

@@ -527,6 +527,12 @@ public:
         }
     }
 
+    void UpdateRow(const TTableId& tableId, NTable::TRawVals key, TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        Y_UNUSED(tableId);
+        Y_UNUSED(key);
+        Y_UNUSED(ops);
+    }
+
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);

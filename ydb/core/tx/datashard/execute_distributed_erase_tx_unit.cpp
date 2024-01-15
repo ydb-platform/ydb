@@ -45,7 +45,7 @@ public:
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
 
         if (eraseTx->HasDependents()) {
-            TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
+            TDataShardUserDb userDb(DataShard, txc.DB, readVersion, writeVersion);
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 

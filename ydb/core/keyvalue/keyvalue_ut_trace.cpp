@@ -27,16 +27,6 @@
 using namespace NActors;
 using namespace NKikimr;
 
-struct TInitialEventsFilter : private TNonCopyable {
-    TTestActorRuntime::TEventFilter Prepare() {
-        return [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            Y_UNUSED(runtime);
-            Y_UNUSED(event);
-            return false;
-        };
-    }
-};
-
 struct TTestEnvironment {
     THolder<TTestBasicRuntime> Runtime;
     const ui32 NodeCount;
@@ -70,12 +60,7 @@ struct TTestEnvironment {
     void InitializeRuntime() {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
-        SetupTabletServices(*Runtime, &app, false, NFake::TStorage {
-            .UseDisk = true,
-            .SectorSize = 4096,
-            .ChunkSize = (ui64)128 << 20, // 128 MiB
-            .DiskSize = (ui64)32 << 30, // 1 TiB
-        });
+        SetupTabletServices(*Runtime, &app, false);
     }
 
     void SetupRuntime() {
@@ -94,7 +79,7 @@ struct TTestEnvironment {
     }
 
     template<class TRequest>
-    auto MakeKVRequest(THolder<TRequest> request) {
+    auto DoKVRequest(THolder<TRequest> request) {
         Runtime->SendToPipe(TabletId, Edge, request.Release(), 0, NTabletPipe::TClientConfig(), TActorId(),
                 0, NWilson::TTraceId::NewTraceId(15, 4095));
         TAutoPtr<IEventHandle> handle;
@@ -105,10 +90,6 @@ struct TTestEnvironment {
 
         return std::move(record);
     }
-
-    void Finalize() {
-        Runtime.Reset();
-    }
 };
 
 THolder<TEvKeyValue::TEvExecuteTransaction> CreateWrite(TString key, TString value) {
@@ -116,47 +97,78 @@ THolder<TEvKeyValue::TEvExecuteTransaction> CreateWrite(TString key, TString val
     auto write = request->Record.add_commands()->mutable_write();
     write->set_key(std::move(key));
     write->set_value(std::move(value));
-    write->set_priority(NKikimrKeyValue::Priorities_Priority_PRIORITY_UNSPECIFIED);
-    write->set_tactic(NKikimrKeyValue::ExecuteTransactionRequest_Command_Write_Tactic_TACTIC_UNSPECIFIED);
     return request;
 }
 
-Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {
+THolder<TEvKeyValue::TEvRead> CreateRead(TString key) {
+    auto request = MakeHolder<TEvKeyValue::TEvRead>();
+    auto& record = request->Record;
+    record.set_key(std::move(key));
+    record.set_offset(0);
+    record.set_size(0);
+    record.set_limit_bytes(0);
+    return request;
+}
 
-Y_UNIT_TEST(WriteSmall) {
+void TestOneWrite(TString value, TString expectedTrace) {
     TTestEnvironment env(8);
     env.Prepare();
 
-    auto request = CreateWrite("key", "value");
-    auto response = env.MakeKVRequest(std::move(request));
+    env.DoKVRequest(CreateWrite("key", std::move(value)));
 
     UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
     UNIT_ASSERT_EQUAL(env.WilsonUploader->Traces.size(), 1);
     auto& trace = env.WilsonUploader->Traces.begin()->second;
 
+    UNIT_ASSERT_EQUAL(trace.ToString(), expectedTrace);
+}
+
+void TestOneRead(TString value, TString expectedTrace) {
+    TTestEnvironment env(8);
+    env.Prepare();
+
+    env.DoKVRequest(CreateWrite("key", value));
+    env.WilsonUploader->Clear();
+
+    auto response = env.DoKVRequest(CreateRead("key"));
+    UNIT_ASSERT_EQUAL(response.value(), value);
+
+    UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
+    UNIT_ASSERT_EQUAL(env.WilsonUploader->Traces.size(), 1);
+    auto& trace = env.WilsonUploader->Traces.begin()->second;
+
+    UNIT_ASSERT_EQUAL(trace.ToString(), expectedTrace);
+}
+
+Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {
+    const TString SmallValue = "value";
+    const TString HugeValue = TString(1 << 20, 'v');
+
+Y_UNIT_TEST(WriteSmall) {
     TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight "
         "-> [(VDisk.Log.Put)])])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute) , (Tablet.WriteLog -> "
         "[(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> [(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
-    UNIT_ASSERT_EQUAL(trace.ToString(), canon);
+    TestOneWrite(SmallValue, std::move(canon));
 }
 
 Y_UNIT_TEST(WriteHuge) {
-    TTestEnvironment env(8);
-    env.Prepare();
-
-    auto request = CreateWrite("key", TString(1 << 20, 'v'));
-    auto response = env.MakeKVRequest(std::move(request));
-
-    UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
-    UNIT_ASSERT_EQUAL(env.WilsonUploader->Traces.size(), 1);
-    auto& trace = env.WilsonUploader->Traces.begin()->second;
-
     TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight "
         "-> [(VDisk.HugeBlobKeeper.Write -> [(VDisk.Log.PutHuge)])])])]) , (Tablet.Transaction -> "
         "[(Tablet.Transaction.Execute) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> "
         "[(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
-    UNIT_ASSERT_EQUAL(trace.ToString(), canon);
+    TestOneWrite(HugeValue, std::move(canon));
+}
 
+Y_UNIT_TEST(ReadSmall) {
+    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get -> [(Backpressure.InFlight -> "
+        "[(VDisk.LevelIndexExtremeQueryViaBatcherMergeData)])])])])";
+    TestOneRead(SmallValue, std::move(canon));
+}
+
+Y_UNIT_TEST(ReadHuge) {
+    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get -> [(Backpressure.InFlight -> "
+        "[(VDisk.LevelIndexExtremeQueryViaBatcherMergeData -> [(VDisk.Query.ReadBatcher)])])])])])";
+    TestOneRead(HugeValue, std::move(canon));
 }
 
 }

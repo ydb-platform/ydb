@@ -50,8 +50,7 @@ struct TPartitionInfo {
         : Actor(info.Actor)
         , KeyRange(info.KeyRange)
         , InitDone(info.InitDone)
-        , ReserveBytesRequests(info.ReserveBytesRequests)
-        , WriteBytesRequests(info.WriteBytesRequests)
+        , GetOwnershipRequests(info.GetOwnershipRequests)
         , PersistedWriteId(info.PersistedWriteId)
     {
         Baseline.Populate(info.Baseline);
@@ -64,13 +63,33 @@ struct TPartitionInfo {
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
     struct TCommandParams {
+        TCommandParams(ui64 cookie,
+                       const NKikimrClient::TPersQueuePartitionRequest& request,
+                       const TActorId& sender) :
+            Cookie(cookie),
+            Request(request),
+            Sender(sender)
+        {
+        }
+        TCommandParams(const TCommandParams& rhs) :
+            Cookie(rhs.Cookie),
+            Request(rhs.Request),
+            Sender(rhs.Sender)
+        {
+        }
+        TCommandParams(TCommandParams&& rhs) noexcept :
+            Cookie(rhs.Cookie),
+            Request(std::move(rhs.Request)),
+            Sender(std::move(rhs.Sender))
+        {
+        }
+
         ui64 Cookie;
         NKikimrClient::TPersQueuePartitionRequest Request;
         TActorId Sender;
     };
 
-    TDeque<TCommandParams> ReserveBytesRequests;
-    TDeque<TCommandParams> WriteBytesRequests;
+    TDeque<TCommandParams> GetOwnershipRequests;
     bool PersistedWriteId = false;
 };
 
@@ -684,7 +703,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     }
 
     // in order to answer only after all parts are ready to work
-    Y_ABORT_UNLESS(ConfigInited && PartitionsInited == Partitions.size());
+    Y_ABORT_UNLESS(ConfigInited && AllPartitionsInited());
 
     ApplyNewConfig(NewConfig, ctx);
     ClearNewConfig();
@@ -780,7 +799,7 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
 
     Y_ABORT_UNLESS(resp.WriteResultSize() >= 1);
     Y_ABORT_UNLESS(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
-    if (ConfigInited && PartitionsInited == Partitions.size()) //all partitions are working well - can apply new config
+    if (ConfigInited && AllPartitionsInited()) //all partitions are working well - can apply new config
         ApplyNewConfigAndReply(ctx);
     else
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
@@ -1302,16 +1321,32 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
         << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
 }
 
+bool TPersQueue::AllPartitionsInited() const
+{
+    return PartitionsInited == (Partitions.size() + ShadowPartitions.size());
+}
+
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvInitComplete)");
+
     const auto partitionId = ev->Get()->Partition;
+    DBGTRACE_LOG("partitionId=" << partitionId);
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
     partition.InitDone = true;
+
+    for (auto& params : partition.GetOwnershipRequests) {
+        const TActorId& actorId = partition.Actor;
+        TActorId pipeClient = ActorIdFromProto(params.Request.GetPipeClient());
+
+        HandleGetOwnershipRequest(params.Cookie, actorId, params.Request, ctx, pipeClient, params.Sender);
+    }
+
     ++PartitionsInited;
     Y_ABORT_UNLESS(ConfigInited);//partitions are inited only after config
 
-    auto allInitialized = PartitionsInited == (Partitions.size() + ShadowPartitions.size());
+    auto allInitialized = AllPartitionsInited();
     if (!InitCompleted && allInitialized) {
         OnInitComplete(ctx);
     }
@@ -1875,6 +1910,8 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, co
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
+    DBGTRACE("TPersQueue::HandleWriteRequest");
+
     Y_ABORT_UNLESS(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
@@ -2084,6 +2121,8 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId&)
 {
+    DBGTRACE("TPersQueue::HandleReserveBytesRequest");
+
     Y_ABORT_UNLESS(req.HasCmdReserveBytes());
 
     auto it = PipesInfo.find(pipeClient);
@@ -2121,6 +2160,8 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId& sender)
 {
+    DBGTRACE("TPersQueue::HandleGetOwnershipRequest");
+
     Y_ABORT_UNLESS(req.HasCmdGetOwnership());
 
     const TString& owner = req.GetCmdGetOwnership().GetOwner();
@@ -2142,6 +2183,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    DBGTRACE_LOG("partActor=" << partActor);
     ctx.Send(partActor, event.Release());
 }
 
@@ -2438,6 +2480,94 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
     ctx.Send(partActor, new TEvPQ::TEvSplitMessageGroup(responseCookie, std::move(deregistrations), std::move(registrations)));
 }
 
+void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 responseCookie,
+                                                             const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                             const TActorId& sender,
+                                                             const TActorContext& ctx)
+{
+    DBGTRACE("TPersQueue::HandleGetOwnershipRequestForShadowPartition");
+
+    Y_ABORT_UNLESS(req.HasWriteId());
+
+    ui64 writeId = req.GetWriteId();
+    ui32 partitionId = req.GetPartition();
+    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+
+    if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
+        ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
+
+        if (ShadowPartitions.contains(shadowPartitionId)) {
+            TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+
+            if (partition.InitDone) {
+                const TActorId& actorId = partition.Actor;
+                TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+
+                HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
+            } else {
+                partition.GetOwnershipRequests.emplace_back(responseCookie, req, sender);
+            }
+        } else {
+            Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+        }
+    } else {
+        GetOwnershipRequests.push_back({responseCookie, req, sender});
+
+        TryPersistWriteId(ctx);
+    }
+}
+
+void TPersQueue::HandleReserveBytesRequestForShadowPartition(const ui64 responseCookie,
+                                                             const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                             const TActorId& sender,
+                                                             const TActorContext& ctx)
+{
+    DBGTRACE("TPersQueue::HandleReserveBytesRequestForShadowPartition");
+
+    Y_ABORT_UNLESS(req.HasWriteId());
+
+    ui64 writeId = req.GetWriteId();
+    ui32 partitionId = req.GetPartition();
+    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+
+    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
+
+    ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+    DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
+    Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+    const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+    Y_ABORT_UNLESS(partition.InitDone);
+    const TActorId& actorId = partition.Actor;
+    TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+
+    HandleReserveBytesRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
+}
+
+void TPersQueue::HandleWriteRequestForShadowPartition(const ui64 responseCookie,
+                                                      const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                      const TActorContext& ctx)
+{
+    DBGTRACE("TPersQueue::HandleWriteRequestForShadowPartition");
+
+    Y_ABORT_UNLESS(req.HasWriteId());
+
+    ui64 writeId = req.GetWriteId();
+    ui32 partitionId = req.GetPartition();
+    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+
+    Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
+
+    ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+    DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
+    Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+    const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+    Y_ABORT_UNLESS(partition.InitDone);
+    const TActorId& actorId = partition.Actor;
+
+    HandleWriteRequest(responseCookie, actorId, req, ctx);
+}
+
 void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
                                        const NKikimrClient::TPersQueuePartitionRequest& req,
                                        const TActorId& sender,
@@ -2445,47 +2575,14 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
 {
     DBGTRACE("TPersQueue::HandleShadowPartition");
 
-    Y_ABORT_UNLESS(req.HasWriteId());
-
-    ui64 writeId = req.GetWriteId();
-    ui32 partitionId = req.GetPartition();
-
-    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
-    DBGTRACE_LOG("req.CmdWriteSize=" << req.CmdWriteSize());
-    DBGTRACE_LOG("req.HasCmdReserveBytes=" << req.HasCmdReserveBytes());
-
-    if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
-        ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
-        Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
-        const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
-        Y_ABORT_UNLESS(partition.InitDone);
-        const TActorId& actorId = partition.Actor;
-
-        if (req.CmdWriteSize()) {
-            HandleWriteRequest(responseCookie, actorId, req, ctx);
-        } else if (req.HasCmdReserveBytes()) {
-            TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
-            HandleReserveBytesRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
-        } else if (req.HasCmdGetOwnership()) {
-            TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
-            HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
-        } else {
-            Y_ABORT("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
-        }
+    if (req.HasCmdGetOwnership()) {
+        HandleGetOwnershipRequestForShadowPartition(responseCookie, req, sender, ctx);
+    } else if (req.HasCmdReserveBytes()) {
+        HandleReserveBytesRequestForShadowPartition(responseCookie, req, sender, ctx);
+    } else if (req.CmdWriteSize()) {
+        HandleWriteRequestForShadowPartition(responseCookie, req, ctx);
     } else {
-        Y_ABORT_UNLESS(req.HasCmdGetOwnership());
-        GetOwnershipRequests.push_back({responseCookie, req, sender});
-
-        if (!PendingPersistWriteId) {
-            ui32 shadowPartitionId = NextShadowPartitionId++;
-            DBGTRACE_LOG("new shadowPartitionId=" << shadowPartitionId);
-
-            CreateShadowPartition(shadowPartitionId, writeId, partitionId, ctx);
-            ShadowPartitions.at(shadowPartitionId).PersistedWriteId = false;
-
-            BeginPersistWriteId(ctx);
-        }
+        Y_ABORT("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
     }
 }
 
@@ -3168,8 +3265,19 @@ void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
     for (auto& request : GetOwnershipRequests) {
         ui64 writeId = request.Request.GetWriteId();
         ui32 partitionId = request.Request.GetPartition();
-
         DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
+        ui32 shadowPartitionId = NextShadowPartitionId++;
+        DBGTRACE_LOG("new shadowPartitionId=" << shadowPartitionId);
+
+        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
+
+        ShadowPartitions.emplace(shadowPartitionId,
+                                 TPartitionInfo(TActorId(),
+                                                {},
+                                                *Counters));
+
+        TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+        partition.PersistedWriteId = false;
     }
 
     HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
@@ -3210,7 +3318,6 @@ void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const T
     }
 
     ForwardGetOwnershipToShadowPartitions(ctx);
-    HandleGetOwnershipRequestParams.clear();
 
     PendingPersistWriteId = false;
     TryPersistWriteId(ctx);
@@ -3225,43 +3332,23 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
     for (auto& params : HandleGetOwnershipRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
         ui32 partitionId = params.Request.GetPartition();
-
         DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
-
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
         DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
         TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
-        Y_ABORT_UNLESS(partition.Actor);
-        TActorId pipeClient = ActorIdFromProto(params.Request.GetPipeClient());
-
-        HandleGetOwnershipRequest(params.Cookie,
-                                  partition.Actor,
-                                  params.Request,
-                                  ctx,
-                                  pipeClient,
-                                  params.Sender);
+        partition.Actor = ctx.Register(CreatePartitionActor(shadowPartitionId,
+                                                            TopicConverter,
+                                                            Config,
+                                                            true,
+                                                            ctx));
+        partition.GetOwnershipRequests.emplace_back(params.Cookie, params.Request, params.Sender);
+        partition.PersistedWriteId = true;
     }
-}
 
-void TPersQueue::CreateShadowPartition(ui32 shadowPartitionId,
-                                       ui64 writeId,
-                                       ui32 originalPartitionId,
-                                       const TActorContext& ctx)
-{
-    TxWrites[writeId].Partitions[originalPartitionId] = shadowPartitionId;
-
-    TActorId actorId = ctx.Register(CreatePartitionActor(shadowPartitionId,
-                                                         TopicConverter,
-                                                         Config,
-                                                         true,
-                                                         ctx));
-    ShadowPartitions.emplace(shadowPartitionId,
-                             TPartitionInfo(actorId,
-                                            {}, // GetPartitionKeyRange(Config, GetPartition(originalPartitionId))
-                                            *Counters));
+    HandleGetOwnershipRequestParams.clear();
 }
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
@@ -4059,7 +4146,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
 {
     EnsurePartitionsAreNotDeleted(config);
 
-    Y_ABORT_UNLESS(ConfigInited && PartitionsInited == Partitions.size());
+    Y_ABORT_UNLESS(ConfigInited && AllPartitionsInited());
 
     if (!config.PartitionsSize()) {
         for (const auto partitionId : config.GetPartitionIds()) {

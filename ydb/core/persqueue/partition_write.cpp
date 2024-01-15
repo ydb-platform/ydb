@@ -192,6 +192,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 }
 
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvChangeOwner)");
     PQ_LOG_T("TPartition::HandleOnWrite TEvChangeOwner.");
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
@@ -804,6 +805,7 @@ std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool
 
 
 void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
+    DBGTRACE("TPartition::ProcessChangeOwnerRequests");
     PQ_LOG_T("TPartition::ProcessChangeOwnerRequests.");
 
     while (!WaitToChangeOwner.empty()) {

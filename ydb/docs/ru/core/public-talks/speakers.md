@@ -1,7 +1,19 @@
 # Спикеры команды {{ ydb-short-name }}
 
-<div style="display: flex; flex-direction: row; gap: 5%; flex-wrap: wrap; align-items: flex-start;">
-
-{% include [Speakers](./_includes/speakers.md) %}
-
+<div class = "speakers-section">
+    <div class = "speaker-card">
+        <img class = "speaker-photo" src = "../_assets/team_photos/bondar.png"/>
+        <p class = "speaker-name"> {{ team.bondar.name }}</p>
+        <p class = "speaker-position"> {{ team.bondar.position }}</p>
+    </div>
+    <div class = "speaker-card">
+        <img class = "speaker-photo" src = "../_assets/team_photos/babich.png"/>
+        <p class = "speaker-name"> {{ team.babich.name }}</p>
+        <p class = "speaker-position"> {{ team.babich.position }}</p>
+    </div>
+    <div class = "speaker-card">
+        <img class = "speaker-photo" src = "../_assets/team_photos/cherednik.png"/>
+        <p class = "speaker-name"> {{ team.cherednik.name }}</p>
+        <p class = "speaker-position"> {{ team.cherednik.position }}</p>
+    </div>
 </div>

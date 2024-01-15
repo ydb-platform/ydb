@@ -1,0 +1,22 @@
+.speakers-section {
+    display: flex;
+    flex-direction: row;
+    gap: 5%;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.speaker-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.speaker-photo {
+    display: block;
+    height: 100px;
+    width: auto;
+}
+
+.speaker-position {
+    color: gray;
+}

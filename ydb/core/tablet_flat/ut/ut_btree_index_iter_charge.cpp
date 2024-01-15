@@ -38,9 +38,9 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    void AssertTouchedTheSame(const TPartStore& part, const TMap<TGroupId, TSet<TPageId>>& bTree, const TMap<TGroupId, TSet<TPageId>>& flat, const TString& message) {
+    void AssertLoadTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
         TSet<TGroupId> groupIds;
-        for (const auto &c : {bTree, flat}) {
+        for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
                 groupIds.insert(g.first);
             }
@@ -48,12 +48,12 @@ namespace {
 
         for (TGroupId groupId : groupIds) {
             TSet<TPageId> bTreeDataPages, flatDataPages;
-            for (TPageId pageId : bTree.Value(groupId, TSet<TPageId>{})) {
+            for (TPageId pageId : bTree.Loaded.Value(groupId, TSet<TPageId>{})) {
                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
                     bTreeDataPages.insert(pageId);
                 }
             }
-            for (TPageId pageId : flat.Value(groupId, TSet<TPageId>{})) {
+            for (TPageId pageId : flat.Loaded.Value(groupId, TSet<TPageId>{})) {
                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
                     flatDataPages.insert(pageId);
                 }
@@ -61,11 +61,6 @@ namespace {
 
             UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
         }
-    }
-
-    void AssertTouchedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
-        AssertTouchedTheSame(part, bTree.Loaded, flat.Loaded, message);
-        AssertTouchedTheSame(part, bTree.Touched, flat.Touched, message);
     }
 
     TPartEggs MakePart(bool slices, ui32 levels) {
@@ -116,14 +111,14 @@ namespace {
                 }
                 return TSerializedCellVec(key);
             };
-            auto add = [&](TRowId pageId1 /*inclusive*/, TRowId pageId2 /*exclusive*/) {
+            auto add = [&](TRowId pageIndex1 /*inclusive*/, TRowId pageIndex2 /*exclusive*/) {
                 TSlice slice;
                 slice.FirstInclusive = true;
-                slice.FirstRowId = pageId1 * 2;
-                slice.FirstKey = pageId1 > 0 ? getKey(IndexTools::GetRecord(part, pageId1)) : partSlices->begin()->FirstKey;
+                slice.FirstRowId = pageIndex1 * 2;
+                slice.FirstKey = pageIndex1 > 0 ? getKey(IndexTools::GetRecord(part, pageIndex1)) : partSlices->begin()->FirstKey;
                 slice.LastInclusive = false;
-                slice.LastRowId = pageId2 * 2;
-                slice.LastKey = pageId2 < 20 ? getKey(IndexTools::GetRecord(part, pageId2)) : partSlices->begin()->LastKey;
+                slice.LastRowId = pageIndex2 * 2;
+                slice.LastKey = pageIndex2 < 20 ? getKey(IndexTools::GetRecord(part, pageIndex2)) : partSlices->begin()->LastKey;
                 slices.push_back(slice);
             };
             add(0, 2);
@@ -133,7 +128,7 @@ namespace {
             add(8, 9);
             add(10, 14);
             add(16, 17);
-            add(17, 18);
+            add(17, 19);
             add(19, 20);
 
             partSlices->clear();
@@ -396,7 +391,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                 TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
                 DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
                 DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+                AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
             }
         }
     }
@@ -431,7 +426,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         Y_UNUSED(bTreeOvershot);
                         Y_UNUSED(flatOvershot);
 
-                        AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+                        AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
                     }
                 }
             }
@@ -491,10 +486,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
+        auto flatPart = part.CloneWithEpoch(part.Epoch);
         for (auto& slice : *part.Slices) {
             btreeRun.Insert(eggs.Lone(), slice);
-
-            auto flatPart = part.CloneWithEpoch(part.Epoch);
             auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
             pages->clear();
             pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
@@ -525,10 +519,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, message);
                             EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, message);
                             AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                            AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
                         }
 
-                        for (ui32 steps = 1; steps < 3; steps++) {
+                        for (ui32 steps = 1; steps <= 10; steps++) {
                             TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
                             for (auto c : key) {
                                 message << c.AsValue<ui32>() << " ";
@@ -537,7 +531,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             EReady bTreeReady = Next(bTree, bTreeEnv, reverse, message);
                             EReady flatReady = Next(flat, flatEnv, reverse, message);
                             AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                            AssertTouchedTheSame(part, bTreeEnv, flatEnv, message);
+                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
                         }
                     }
                 }

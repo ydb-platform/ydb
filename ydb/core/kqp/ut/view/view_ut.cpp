@@ -12,8 +12,12 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void SetEnableViewsFeatureFlag(TKikimrRunner& kikimr) {
+void EnableViewsFeatureFlag(TKikimrRunner& kikimr) {
     kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
+}
+
+void DisableViewsFeatureFlag(TKikimrRunner& kikimr) {
+    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(false);
 }
 
 NKikimrSchemeOp::TViewDescription GetViewDescription(TTestActorRuntime& runtime, const TString& path) {
@@ -53,7 +57,7 @@ TString ReadWholeFile(const TString& path) {
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
     Cerr << "Executing the following DDL script:\n" << script;
 
-    const auto result = session.ExecuteSchemeQuery(script, {}).ExtractValueSync();
+    const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
@@ -62,8 +66,7 @@ TDataQueryResult ExecuteDataModificationQuery(TSession& session, const TString& 
 
     const auto result = session.ExecuteDataQuery(
             script,
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-            {}
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
         ).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -92,7 +95,7 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
 
     Y_UNIT_TEST(CheckCreatedView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
@@ -111,9 +114,27 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
         UNIT_ASSERT_EQUAL(viewDescription.GetQueryText(), queryInView);
     }
 
+    Y_UNIT_TEST(CreateViewDisabledFeatureFlag) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+            )",
+            path
+        );
+        
+        DisableViewsFeatureFlag(kikimr);
+        const auto creationResult = session.ExecuteSchemeQuery(creationQuery).ExtractValueSync();
+        UNIT_ASSERT(!creationResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Views are disabled");
+    }
+
     Y_UNIT_TEST(InvalidQuery) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         constexpr const char* path = "/Root/TheView";
@@ -131,14 +152,14 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
             queryInView
         );
 
-        const auto creationResult = session.ExecuteSchemeQuery(creationQuery, {}).ExtractValueSync();
+        const auto creationResult = session.ExecuteSchemeQuery(creationQuery).ExtractValueSync();
         UNIT_ASSERT(!creationResult.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
     }
 
     Y_UNIT_TEST(ListCreatedView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         // .sys directory is always present in the `/Root`, that's why we need a subfolder
@@ -167,7 +188,7 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
 
     Y_UNIT_TEST(CreateSameViewTwice) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         constexpr const char* path = "/Root/TheView";
@@ -189,7 +210,7 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
 
     Y_UNIT_TEST(DropView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
@@ -213,9 +234,34 @@ Y_UNIT_TEST_SUITE(TKQPViewTest) {
         ExpectUnknownEntry(runtime, path);
     }
 
+    Y_UNIT_TEST(DropViewDisabledFeatureFlag) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+            )",
+            path
+        );
+        EnableViewsFeatureFlag(kikimr);
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const TString dropQuery = std::format(R"(
+                DROP VIEW `{}`;
+            )",
+            path
+        );
+        DisableViewsFeatureFlag(kikimr);
+        const auto dropResult = session.ExecuteSchemeQuery(dropQuery).ExtractValueSync();
+        UNIT_ASSERT(!dropResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Views are disabled");
+    }
+
     Y_UNIT_TEST(DropSameViewTwice) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         constexpr const char* path = "/Root/TheView";
@@ -247,7 +293,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
 
     Y_UNIT_TEST(OneTable) {
         TKikimrRunner kikimr;
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         constexpr const char* viewName = "/Root/TheView";
@@ -281,9 +327,37 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         CompareResults(etalonResults, selectFromViewResults);
     }
 
+    Y_UNIT_TEST(DisabledFeatureFlag) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        constexpr const char* path = "/Root/TheView";
+
+        const TString creationQuery = std::format(R"(
+                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+            )",
+            path
+        );
+        EnableViewsFeatureFlag(kikimr);
+        ExecuteDataDefinitionQuery(session, creationQuery);
+
+        const TString selectQuery = std::format(R"(
+                SELECT * FROM `{}`;
+            )",
+            path
+        );
+        DisableViewsFeatureFlag(kikimr);
+        const auto selectResult = session.ExecuteDataQuery(
+                selectQuery,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
+            ).ExtractValueSync();
+        UNIT_ASSERT(!selectResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(selectResult.GetIssues().ToString(), "Error: Views are disabled");
+    }
+
     Y_UNIT_TEST(ReadTestCasesFromFiles) {
         TKikimrRunner kikimr;
-        SetEnableViewsFeatureFlag(kikimr);
+        EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         InitializeTablesAndSecondaryViews(session);

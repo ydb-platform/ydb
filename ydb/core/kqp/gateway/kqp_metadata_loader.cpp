@@ -278,24 +278,27 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     return result;
 }
 
-TTableMetadataResult GetViewMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
-                                           const TString& cluster,
-                                           const TString& viewName) {
-    const auto& description = schemeEntry.ViewInfo->Description;
+TTableMetadataResult GetViewMetadataResult(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const TString& cluster,
+    const TString& viewName
+) {
+  const auto& description = schemeEntry.ViewInfo->Description;
 
-    TTableMetadataResult builtResult;
-    builtResult.SetSuccess();
+  TTableMetadataResult builtResult;
+  builtResult.SetSuccess();
 
-    builtResult.Metadata = new NYql::TKikimrTableMetadata(cluster, viewName);
-    auto metadata = builtResult.Metadata;
-    metadata->DoesExist = true;
-    metadata->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(), description.GetPathId().GetLocalId());
-    metadata->SchemaVersion = description.GetVersion();
-    metadata->Kind = NYql::EKikimrTableKind::View;
-    metadata->Attributes = schemeEntry.Attributes;
-    metadata->ViewPersistedData = {description.GetQueryText()};
+  builtResult.Metadata = new NYql::TKikimrTableMetadata(cluster, viewName);
+  auto metadata = builtResult.Metadata;
+  metadata->DoesExist = true;
+  metadata->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(),
+                                         description.GetPathId().GetLocalId());
+  metadata->SchemaVersion = description.GetVersion();
+  metadata->Kind = NYql::EKikimrTableKind::View;
+  metadata->Attributes = schemeEntry.Attributes;
+  metadata->ViewPersistedData = {description.GetQueryText()};
 
-    return builtResult;
+  return builtResult;
 }
 
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,

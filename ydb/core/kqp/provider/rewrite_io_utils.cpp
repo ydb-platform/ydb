@@ -1,5 +1,6 @@
 #include "rewrite_io_utils.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -24,7 +25,7 @@ NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const TStrin
     return settings;
 }
 
-TExprNode::TPtr CompileQuery(
+TExprNode::TPtr CompileViewQuery(
     const TString& query,
     TExprContext& ctx,
     const TString& cluster
@@ -43,12 +44,6 @@ TExprNode::TPtr CompileQuery(
     }
 
     return queryGraph;
-}
-
-bool ContainsNullNode(const TExprNode::TPtr& root) {
-    return static_cast<bool>(FindNode(root, [](const TExprNode::TPtr& node) {
-        return !node;
-    }));
 }
 
 void AddChild(const TExprNode::TPtr& parent, const TExprNode::TPtr& newChild) {
@@ -137,22 +132,22 @@ TExprNode::TPtr RewriteReadFromView(
     const TString& query,
     const TString& cluster
 ) {
-    const auto readNode = node->ChildPtr(0);
-    const auto worldBeforeThisRead = readNode->ChildPtr(0);
+    const TCoRead readNode(node->ChildPtr(0));
+    const auto worldBeforeThisRead = readNode.World().Ptr();
 
-    TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode);
+    TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileQuery(query, ctx, cluster);
-        if (!queryGraph || ContainsNullNode(queryGraph)) {
-            ctx.AddError(TIssue(readNode->Pos(ctx),
-                         "The query stored in the view contains errors and cannot be compiled."));
+        queryGraph = CompileViewQuery(query, ctx, cluster);
+        if (!queryGraph) {
+            ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
+                         "The query stored in the view cannot be compiled."));
             return nullptr;
         }
         YQL_CLOG(TRACE, ProviderKqp) << "Expression graph of the query stored in the view:\n"
                                      << NCommon::ExprToPrettyString(ctx, *queryGraph);
 
         InsertExecutionOrderDependencies(queryGraph, worldBeforeThisRead);
-        SaveQueryGraph(readNode, ctx, queryGraph);
+        SaveQueryGraph(readNode.Ptr(), ctx, queryGraph);
     }
 
     if (node->IsCallable(RightName)) {

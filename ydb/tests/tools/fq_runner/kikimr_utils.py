@@ -247,7 +247,7 @@ class ConnectorExtension(ExtensionPoint):
 
     def __init__(self, host, port, use_ssl):
         ConnectorExtension.__init__.__annotations__ = {
-            'host' : str,
+            'host': str,
             'port': int,
             'use_ssl': bool,
             'return': None
@@ -295,7 +295,9 @@ class MDBExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.compute_plane.qs_config['mdb_transform_host'] = False
+        kikimr.compute_plane.qs_config['generic']['mdb_gateway'] = self.endpoint
 
+        kikimr.compute_plane.fq_config['common']['mdb_transform_host'] = False
         kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint     # v2
         kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint   # v1
 

@@ -50,9 +50,9 @@ class TestJoin:
         assert result_set.columns[0].name == "data_pg"
         assert result_set.columns[1].name == "data_ch"
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int32_value == 10
-        assert result_set.rows[0].items[1].int32_value == 10
-        assert result_set.rows[1].items[0].int32_value == 20
-        assert result_set.rows[1].items[1].int32_value == 20
-        assert result_set.rows[2].items[0].int32_value == 30
-        assert result_set.rows[2].items[1].int32_value == 30
+        assert result_set.rows[0].items[0].bytes_value == b'pg10'
+        assert result_set.rows[0].items[1].bytes_value == b'ch10'
+        assert result_set.rows[1].items[0].bytes_value == b'pg20'
+        assert result_set.rows[1].items[1].bytes_value == b'ch20'
+        assert result_set.rows[2].items[0].bytes_value == b'pg30'
+        assert result_set.rows[2].items[1].bytes_value == b'ch30'

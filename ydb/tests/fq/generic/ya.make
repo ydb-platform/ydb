@@ -5,8 +5,6 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-SIZE(LARGE)
-
 TAG(
     ya:external
     ya:force_sandbox
@@ -24,6 +22,16 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
+# Including of docker_compose/recipe.inc automatically converts these tests into LARGE,
+# which makes it impossible to run them during precommit checks on Github CI.
+# Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
+
+IF (OPENSOURCE)
+    SIZE(MEDIUM)
+    SET(TEST_TAGS_VALUE)
+    SET(TEST_REQUIREMENTS_VALUE)
+ENDIF()
+
 PEERDIR(
     ydb/tests/fq/generic/utils
 
@@ -35,10 +43,6 @@ PEERDIR(
     ydb/public/api/protos
 
     contrib/python/pytest
-)
-
-DEPENDS(
-    contrib/python/moto/bin
 )
 
 TEST_SRCS(

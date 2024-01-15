@@ -1,5 +1,8 @@
 from contextlib import contextmanager
 import abc
+import time
+from datetime import datetime
+import sys
 
 import pg8000.dbapi
 
@@ -16,17 +19,33 @@ class Client:
 
     @contextmanager
     def get_cursor(self, dbname: str):
-        conn = pg8000.dbapi.Connection(
-            user=self.settings.username,
-            password=self.settings.password,
-            host=self.settings.host_external,
-            port=self.settings.port_external,
-            database=dbname,
-        )
-        conn.autocommit = True
+        start = datetime.now()
+        attempt = 0
 
-        cur = conn.cursor()
-        yield conn, cur
+        while (datetime.now() - start).total_seconds() < 10:
+            attempt += 1
+            try:
+                sys.stdout.write(
+                    f"Trying to connect PostgreSQL: {self.settings.host_external}:{self.settings.port_external}\n"
+                )
+                conn = pg8000.dbapi.Connection(
+                    user=self.settings.username,
+                    password=self.settings.password,
+                    host=self.settings.host_external,
+                    port=self.settings.port_external,
+                    database=dbname,
+                    timeout=1,
+                )
+                conn.autocommit = True
+
+                cur = conn.cursor()
+                yield conn, cur
+            except Exception as e:
+                sys.stderr.write(f"attempt #{attempt} failed: {e} {e.args}\n")
+                time.sleep(3)
+                continue
+
+        raise Exception(f"Failed to connect PostgreSQL in {attempt} attempt(s)")
 
 
 class Type(abc.ABC):

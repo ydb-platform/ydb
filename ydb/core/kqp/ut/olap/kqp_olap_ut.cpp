@@ -5370,7 +5370,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
 
         const TString sql = R"(
-            UPSERT INTO `/Root/TestDst`
+            REPLACE INTO `/Root/TestDst`
             SELECT * FROM `/Root/TestSrc`
         )";
         auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();

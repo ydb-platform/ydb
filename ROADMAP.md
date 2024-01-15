@@ -121,12 +121,16 @@ We use the following symbols as abbreviations:
 
 ## Embedded UI
 1.  **Support for all schema entities**
-    * ㉓ **YDB Topics** (add support for viewing metadata of YDB topics, its data, lag, etc)
-    * ㉓ **CDC Streams**
-    * ㉓ **Secondary Indexes**
-    * ㉓ **Read Replicas**
+    * ✅ ㉓ **YDB Topics** (add support for viewing metadata of YDB topics, its data, lag, etc)
+    * ✅ ㉓ **CDC Streams**
+    * ✅ ㉓ **Secondary Indexes**
+    * ✅ ㉓ **Read Replicas**
     * ✅ ㉓ **Column-oriented Tables**
-1.  ㉓ **Basic charts for database monitoring**
+1. 🔥 ㉔ **Basic charts for database monitoring**
+
+Detailed roadmap could be found at [YDB Embedded UI repo](https://github.com/ydb-platform/ydb-embedded-ui/blob/main/ROADMAP.md).
+
+
 
 ## Command Line Utility
 1. 🚧 ㉓ Use a **single `ydb yql`** instead of `ydb table query` or `ydb scripting`

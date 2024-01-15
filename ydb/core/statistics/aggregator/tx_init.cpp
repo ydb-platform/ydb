@@ -1,5 +1,8 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxInit : public TTxBase {
@@ -82,6 +85,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete");
 
         Self->SignalTabletActive(ctx);
+
+        Self->EnableStatistics = AppData(ctx)->FeatureFlags.GetEnableStatistics();
+        Self->SubscribeForConfigChanges(ctx);
+
         Self->Become(&TThis::StateWork);
     }
 };

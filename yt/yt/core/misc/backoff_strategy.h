@@ -1,6 +1,6 @@
 #pragma once
 
-#include "backoff_strategy_api.h"
+#include "public.h"
 
 namespace NYT {
 

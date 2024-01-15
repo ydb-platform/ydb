@@ -44,6 +44,11 @@ class TExtensionSet;
 
 } // namespace NProto
 
+struct TExponentialBackoffOptions;
+struct TConstantBackoffOptions;
+
+class TBackoffStrategy;
+
 struct TGuid;
 
 template <class T>

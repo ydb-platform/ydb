@@ -409,6 +409,7 @@ private:
             action->set_permission(permissionName);
             requestForPermissions << " " << permissionName;
         }
+        request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
         BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceBulkAuthorization(" << requestForPermissions << ")");
         record.ResponsesLeft++;
         Send(AccessServiceValidatorV2, request.Release());

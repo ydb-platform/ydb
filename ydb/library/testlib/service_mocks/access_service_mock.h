@@ -229,6 +229,7 @@ public:
             TString token = request->has_iam_token() ? request->iam_token() : request->api_key();
             if (request->has_actions()) {
                 const auto& actions = request->actions();
+                bool wasFoundFirstAccessDenied = false;
                 for (const auto& action : actions.items()) {
                     if (UnavailableUserPermissions.count(token + '-' + action.permission()) > 0) {
                         return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
@@ -251,7 +252,14 @@ public:
                             response->mutable_subject()->mutable_service_account()->set_id(token);
                             response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServicePermissions[token + '-' + action.permission()]);
                         } else {
-                            SetAccessDenied(response->mutable_results(), action);
+                            if (request->result_filter() == yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED) {
+                                SetAccessDenied(response->mutable_results(), action);
+                            } else {
+                                if (!wasFoundFirstAccessDenied) {
+                                    SetAccessDenied(response->mutable_results(), action);
+                                    wasFoundFirstAccessDenied = true;
+                                }
+                            }
                         }
                     } else {
                         SetAccessDenied(response->mutable_results(), action);

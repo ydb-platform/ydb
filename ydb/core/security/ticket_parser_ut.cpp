@@ -1441,6 +1441,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
 
+        accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                           userToken,
+                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                           {"something.read", "something.connect", "something.list", "something.update"})), 0);
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(result->Error.empty());
+        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(result->Token->IsExist("something.connect-bbbb4554@as"));
+        UNIT_ASSERT(!result->Token->IsExist("something.list-bbbb4554@as"));
+        UNIT_ASSERT(!result->Token->IsExist("something.update-bbbb4554@as"));
+
         // Authorization ApiKey successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            "ApiKey ApiKey-value-valid",

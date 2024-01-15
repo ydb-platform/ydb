@@ -13,6 +13,17 @@ SELECT var_pop('inf'::numeric), var_samp('inf'::numeric);
 SELECT stddev_pop('inf'::numeric), stddev_samp('inf'::numeric);
 SELECT var_pop('nan'::numeric), var_samp('nan'::numeric);
 SELECT stddev_pop('nan'::numeric), stddev_samp('nan'::numeric);
+-- verify correct results for null and NaN inputs
+select sum(null::int4) from generate_series(1,3);
+select sum(null::int8) from generate_series(1,3);
+select sum(null::numeric) from generate_series(1,3);
+select sum(null::float8) from generate_series(1,3);
+select avg(null::int4) from generate_series(1,3);
+select avg(null::int8) from generate_series(1,3);
+select avg(null::numeric) from generate_series(1,3);
+select avg(null::float8) from generate_series(1,3);
+select sum('NaN'::numeric) from generate_series(1,3);
+select avg('NaN'::numeric) from generate_series(1,3);
 SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
 FROM (VALUES ('1'), ('infinity')) v(x);
 SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)

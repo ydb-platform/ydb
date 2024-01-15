@@ -654,12 +654,7 @@ COPY bitwise_test FROM STDIN NULL 'null';
 7	7	7	3	4	B1100
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "1"
-
-    	1	1	1	1	1	B0101
-	^
+Metacommand \. is not supported
 <sql-statement>
 SELECT
   BIT_AND(i2) AS "1",
@@ -769,12 +764,7 @@ FALSE	TRUE	null	null
 null	TRUE	FALSE	null
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "TRUE"
-
-    	TRUE	null	FALSE	null
-	^
+Metacommand \. is not supported
 <sql-statement>
 SELECT
   BOOL_AND(b1)     AS "f",
@@ -1354,4 +1344,4 @@ drop table p_t1;
 --
 create temp table t1(f1 int, f2 bigint);
 </sql-statement>
-(TFileError) (File exists) util/system/file.cpp:857: can't open "/tmp/tmpbbmu_5di/t1" with mode CreateNew (0x00000003)
+(TFileError) (File exists) util/system/file.cpp:918: can't open "/tmp/tmpjl487dvf/t1" with mode CreateNew (0x00000003)

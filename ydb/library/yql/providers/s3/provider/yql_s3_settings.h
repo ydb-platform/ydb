@@ -25,6 +25,7 @@ struct TS3Settings {
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
     NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
     NCommon::TConfSetting<bool, false> UseRuntimeListing;
+    NCommon::TConfSetting<ui64, false> FileQueueBatchSizeLimit;
 };
 
 struct TS3ClusterSettings {

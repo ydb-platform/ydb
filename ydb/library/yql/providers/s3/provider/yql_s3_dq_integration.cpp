@@ -74,23 +74,6 @@ public:
     }
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
-        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
-        if (useRuntimeListing) {
-            partitions.reserve(maxPartitions);
-            ui64 startIdx = 0;
-            for (size_t i = 0; i < maxPartitions; ++i) {
-                NS3::TRange range;
-                range.SetStartPathIndex(startIdx);
-                TFileTreeBuilder builder;
-                builder.Save(&range);
-
-                partitions.emplace_back();
-                TStringOutput out(partitions.back());
-                range.Save(&out);
-            }
-            return 0;
-        }
-
         std::vector<std::vector<TPath>> parts;
         std::optional<ui64> mbLimitHint;
         if (const TMaybeNode<TDqSource> source = &node) {
@@ -115,6 +98,25 @@ public:
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
+        }
+
+        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+        if (useRuntimeListing) {
+            size_t partitionCount = maxPartitions;
+            partitions.reserve(partitionCount);
+            ui64 startIdx = 0;
+            for (size_t i = 0; i < partitionCount; ++i) {
+                NS3::TRange range;
+                range.SetStartPathIndex(startIdx);
+                TFileTreeBuilder builder;
+                builder.AddPath("", 1, false);
+                builder.Save(&range);
+
+                partitions.emplace_back();
+                TStringOutput out(partitions.back());
+                range.Save(&out);
+            }
+            return 0;
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {
@@ -401,10 +403,13 @@ public:
             if (extraColumnsType->GetSize()) {
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
-            
+
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
-            
+
+            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(4'000'000);
+            srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
+
             if (useRuntimeListing) {
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
@@ -416,9 +421,9 @@ public:
                         paths);
                     paths.insert(paths.end(), pathsChunk.begin(), pathsChunk.end());
                 }
-                
+
                 NDq::TS3ReadActorFactoryConfig readActorConfig;
-                
+
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -430,14 +435,14 @@ public:
                         fileSizeLimit = readActorConfig.BlockFileSizeLimit;
                     }
                 }
-                
+
                 auto maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
 
                 TString pathPattern = "*";
                 auto pathPatternVariant = NS3Lister::ES3PatternVariant::FilePattern;
                 auto hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
-                                          return a.IsDirectory;
-                                      }) != paths.end();
+                                        return a.IsDirectory;
+                                    }) != paths.end();
 
                 if (hasDirectories) {
                     auto pathPatternValue = srcDesc.GetSettings().find("pathpattern");
@@ -464,6 +469,7 @@ public:
                     fileSizeLimit,
                     useRuntimeListing,
                     maxTasksPerStage,
+                    fileQueueBatchSizeLimit,
                     State_->Gateway,
                     connect.Url,
                     GetAuthInfo(State_->CredentialsFactory, connect.Token),

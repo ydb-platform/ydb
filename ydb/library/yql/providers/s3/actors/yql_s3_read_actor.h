@@ -20,6 +20,7 @@ NActors::IActor* CreateS3FileQueueActor(
         ui64 fileSizeLimit,
         bool useRuntimeListing,
         TMaybe<size_t> consumersCount,
+        ui64 fileQueueBatchSizeLimit,
         IHTTPGateway::TPtr gateway,
         TString url,
         TS3Credentials::TAuthInfo authInfo,

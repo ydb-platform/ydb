@@ -1,12 +1,10 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 
 #include "yql_s3_settings.h"
 
@@ -15,12 +13,6 @@ namespace NKikimr::NMiniKQL {
 }
 
 namespace NYql {
-
-struct TS3FileQueueParams {
-    IHTTPGateway::TPtr Gateway;
-    TString Url;
-    TS3Credentials::TAuthInfo AuthInfo;
-};
 
 struct TS3State : public TThrRefBase
 {
@@ -37,8 +29,8 @@ struct TS3State : public TThrRefBase
     TS3Configuration::TPtr Configuration = MakeIntrusive<TS3Configuration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-
-    TS3FileQueueParams FileQueueParams;
+    IHTTPGateway::TPtr Gateway;
+    TKikimrConfiguration::TPtr KikimrConfig;
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool allowLocalFiles = false);

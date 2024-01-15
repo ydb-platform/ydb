@@ -566,7 +566,10 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForEmptyState);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+                hFunc(TEvents::TEvPoison, Handle);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -588,7 +591,10 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForErrorState);
-                cFunc(TEvents::TSystem::Poison, PassAway);
+                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
+                hFunc(TEvents::TEvPoison, Handle);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     break;
@@ -787,7 +793,8 @@ public:
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         ui64 fileSizeLimit,
         std::optional<ui64> rowsLimitHint,
-        bool useRuntimeListing)
+        bool useRuntimeListing,
+        TActorId fileQueueActor)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -801,6 +808,7 @@ public:
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
+        , FileQueueActor(fileQueueActor)
         , AddPathIndex(addPathIndex)
         , SizeLimit(sizeLimit)
         , Counters(counters)
@@ -824,10 +832,7 @@ public:
 
     void Bootstrap() {
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex);
-        if (UseRuntimeListing) {
-            TString fileQueueActor = Paths.front().Path;
-            FileQueueActor.Parse(fileQueueActor.c_str(), fileQueueActor.size());
-        } else {
+        if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
                 TxId,
                 std::move(Paths),
@@ -2391,7 +2396,8 @@ public:
         ui64 fileSizeLimit,
         std::optional<ui64> rowsLimitHint,
         IMemoryQuotaManager::TPtr memoryQuotaManager,
-        bool useRuntimeListing
+        bool useRuntimeListing,
+        TActorId fileQueueActor
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -2409,6 +2415,7 @@ public:
         , ReadSpec(readSpec)
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
+        , FileQueueActor(fileQueueActor)
         , FileSizeLimit(fileSizeLimit)
         , MemoryQuotaManager(memoryQuotaManager)
         , UseRuntimeListing(useRuntimeListing) {
@@ -2458,10 +2465,7 @@ public:
             TaskDownloadPaused,
             TaskChunkDownloadCount,
             DecodedChunkSizeHist);
-        if (UseRuntimeListing) {
-            TString fileQueueActor = Paths.front().Path;
-            FileQueueActor.Parse(fileQueueActor.c_str(), fileQueueActor.size());
-        } else {
+        if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
                 TxId,
                 std::move(Paths),
@@ -3179,6 +3183,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (params.GetRowsLimitHint() != 0) {
         rowsLimitHint = params.GetRowsLimitHint();
     }
+    
+    TActorId fileQueueActor;
+    if (auto it = settings.find("fileQueueActor"); it != settings.cend()) {
+        fileQueueActor.Parse(it->second.c_str(), it->second.size());
+    }
 
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
@@ -3284,7 +3293,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SUPPORTED_FLAGS
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager, params.GetUseRuntimeListing());
+                                                  cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager, params.GetUseRuntimeListing(), fileQueueActor);
 
         return {actor, actor};
     } else {
@@ -3294,7 +3303,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
-                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, params.GetUseRuntimeListing());
+                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, params.GetUseRuntimeListing(), fileQueueActor);
         return {actor, actor};
     }
 }

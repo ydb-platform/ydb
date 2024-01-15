@@ -92,7 +92,7 @@ public:
               State_->Configuration->MinDesiredDirectoriesOfFilesPerQuery,
               State_->Configuration->MaxInflightListsPerQuery,
               State_->Configuration->AllowLocalFiles)) {
-        State_->FileQueueParams.Gateway = gateway;
+        State_->Gateway = gateway;
     }
 
     void Rewind() final {
@@ -746,9 +746,6 @@ private:
             }
             GenColumnsByNode_[read.Raw()] = config;
         }
-
-        State_->FileQueueParams.Url = url;
-        State_->FileQueueParams.AuthInfo = authInfo;
 
         for (const auto& path : paths) {
             // each path in CONCAT() can generate multiple list requests for explicit partitioning

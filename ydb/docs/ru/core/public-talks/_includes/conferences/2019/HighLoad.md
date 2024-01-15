@@ -3,6 +3,8 @@
 
 @[YouTube](https://youtu.be/8AR1u5OZIm8)
 
+Доклад будет интересен тем, кто хочет глубже погрузиться в механизм транзакций {{ ydb-short-name }}.
+
 [Тезисы и презентация](https://www.highload.ru/moscow/2019/abstracts/5324)
 
 ### {{ ydb-name }} — как мы обеспечиваем отказоустойчивость {#2019-conf-hl-faul-tol}

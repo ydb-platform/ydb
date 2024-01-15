@@ -1,4 +1,8 @@
 ### {{ ydb-name }}: распределенные запросы в облаках {#2019-conf-backendconf}
-[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал о том, как {{ ydb-short-name }} выполняет YQL запросы.
+[ {{ team.puchin.name }} ]( {{ team.puchin.profile }} ) ( {{ team.puchin.position }} ) рассказал про применяемую модель транзакций и уровни изоляции, особенности SQL-диалекта Yandex Query Language (YQL), параметризацию и подготовку запросов, многошаговые транзакции и механизм оптимистичных блокировок. Также в докладе затронуты общие вопросы эффективного выполнения запросов в распределенных базах данных и рассмотрены основные факторы, влияющие на производительность запросов, и стандартные практики при работе с YDB.
 
-@[YoTube](https://youtu.be/V95bBGB-89Y?t=15514)
+@[YouTube](https://youtu.be/V95bBGB-89Y?t=15514)
+
+Доклад будет интересен тем, кто хочет лучше узнать о работе модели транзакций в {{ ydb-short-name }}.
+
+![Презентация](https://github.com/ydb-platform/ydb-presentations/blob/main/2019/ru/backend_conf/presentation.pdf)

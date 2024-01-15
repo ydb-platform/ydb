@@ -439,6 +439,22 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         newRow.Column(2, std::move(nRows));
     }
 
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    TStringBuf color;
+    switch(offset.size() % 3) {
+        case 0: 
+            color = colors.Red();
+            break;
+        case 1:
+            color = colors.Green();
+            break;
+        case 2:
+            color = colors.Blue();
+            break;
+        default:
+            color = colors.Default();
+            break;
+    }
 
     if (node.contains("Operators")) {
         for (const auto& op : node.at("Operators").GetArraySafe()) {
@@ -458,26 +474,25 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
             TStringBuilder operation;
             if (info.empty()) {
-                operation << offset << " -> " << op.GetMapSafe().at("Name").GetString();
+                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString();
             } else {
-                operation << offset << " -> " << op.GetMapSafe().at("Name").GetString()
+                operation << offset << color << " -> " << colors.Default() << op.GetMapSafe().at("Name").GetString()
                      << " (" << JoinStrings(info, ", ") << ")";
             }
 
-            auto& row = table.AddRow();
-            row.Column(0, std::move(operation));
+            newRow.Column(0, std::move(operation));
             if (AnalyzeMode) {
-                row.Column(3, std::move(eCost));
-                row.Column(4, std::move(eRows));
+                newRow.Column(3, std::move(eCost));
+                newRow.Column(4, std::move(eRows));
             }
             else {
-                row.Column(1, std::move(eCost));
-                row.Column(2, std::move(eRows));
+                newRow.Column(1, std::move(eCost));
+                newRow.Column(2, std::move(eRows));
             }
         }
     } else {
         TStringBuilder operation;
-        operation << offset << " -> " << node.at("Node Type").GetString();
+        operation << offset << color << " -> " << colors.Default() << node.at("Node Type").GetString();
         newRow.Column(0, std::move(operation));
     }
 
@@ -614,6 +629,8 @@ NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonV
 
     TVector<NJson::TJsonValue> planInputs;
 
+    auto opName = op.GetMapSafe().at("Name").GetStringSafe();
+
     for (auto opInput : op.GetMapSafe().at("Inputs").GetArraySafe()) {
         if (opInput.GetMapSafe().contains("ExternalPlanNodeId")) {
             auto inputPlanKey = opInput.GetMapSafe().at("ExternalPlanNodeId").GetIntegerSafe();
@@ -622,6 +639,10 @@ NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonV
         } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
             auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
             planInputs.push_back( ReconstructQueryPlanRec(plan, inputPlanId, planIndex, precomputes, nodeCounter));
+        }
+        // temp hack
+        if (opName == "Filter") {
+            break;
         }
     }
 
@@ -642,7 +663,7 @@ NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonV
         }
     }
 
-    result["Node Type"] = op.GetMapSafe().at("Name").GetStringSafe();
+    result["Node Type"] = opName;
     NJson::TJsonValue newOps;
     newOps.AppendValue(op);
     result["Operators"] = newOps;

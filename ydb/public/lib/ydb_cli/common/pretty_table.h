@@ -75,6 +75,7 @@ public:
 
     private:
         size_t ColumnWidth(size_t columnIndex) const;
+        size_t TotalAnsiEscapeCodeLen(TStringBuf text) const;
         size_t ExtraBytes(TStringBuf data) const;
         bool PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t lineNumber) const;
         bool HasFreeText() const;

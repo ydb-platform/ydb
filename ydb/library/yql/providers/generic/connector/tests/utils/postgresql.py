@@ -2,6 +2,7 @@ from contextlib import contextmanager
 import abc
 import time
 from datetime import datetime
+from typing import Tuple, Generator
 import sys
 
 import pg8000.dbapi
@@ -19,6 +20,12 @@ class Client:
 
     @contextmanager
     def get_cursor(self, dbname: str):
+        conn, cursor = self._make_cursor(dbname=dbname)
+        yield conn, cursor
+        cursor.close()
+        conn.close()
+
+    def _make_cursor(self, dbname: str) -> Tuple[pg8000.dbapi.Connection, pg8000.dbapi.Cursor]:
         start = datetime.now()
         attempt = 0
 
@@ -39,7 +46,7 @@ class Client:
                 conn.autocommit = True
 
                 cur = conn.cursor()
-                yield conn, cur
+                return conn, cur
             except Exception as e:
                 sys.stderr.write(f"attempt #{attempt} failed: {e} {e.args}\n")
                 time.sleep(3)

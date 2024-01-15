@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/library/uuid/uuid.h>
+#include <ydb/library/binary_json/write.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -5377,7 +5378,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
@@ -5406,7 +5407,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(3).Add("test_res_3").Add(123).Add<uint64_t>(200);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=3", "[[3;[123];[200u];[\"test_res_3\"]]]");
@@ -5493,7 +5494,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
@@ -5523,7 +5524,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(3).Add("test_res_3").Add(123).Add<uint64_t>(200);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[3;[123];[200u];[\"test_res_3\"]]]");
@@ -5579,7 +5580,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter, {}, Ydb::StatusIds::GENERIC_ERROR);
+            testHelper.BulkUpsert(testTable, tableInserter, Ydb::StatusIds::GENERIC_ERROR);
         }
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schemaWithNull));
@@ -5610,7 +5611,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
         {
@@ -5701,7 +5702,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
             tableInserter.AddRow().Add(2).Add("test_res_2").Add(123);
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
         {
@@ -5925,8 +5926,32 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
-}
 
+    Y_UNIT_TEST(JsonImport) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("json").SetType(NScheme::NTypeIds::Json).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("json_doc").SetType(NScheme::NTypeIds::JsonDocument).SetNullable(true),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        std::string jsonString = R"({"col1": "val1", "obj": {"obj_col2_int": 16}})";
+        auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
+        Y_ABORT_UNLESS(maybeJsonDoc.Defined());
+        const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
+        TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+        tableInserter.AddRow().Add(1).Add(jsonString).Add(jsonString);
+        tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
+        testHelper.BulkUpsert(testTable, tableInserter);
+    }
+}
 
 } // namespace NKqp
 } // namespace NKikimr

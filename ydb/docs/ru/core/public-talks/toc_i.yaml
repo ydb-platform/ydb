@@ -9,3 +9,4 @@ items:
   href: mass-media.md
 - name: Спикеры
   href: speakers.md
+  hide: true

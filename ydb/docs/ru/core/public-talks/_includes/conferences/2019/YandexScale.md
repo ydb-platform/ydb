@@ -1,5 +1,5 @@
 ### {{ ydb-name }} — эффективная альтернатива традиционным noSQL-решениям {#2019-conf-yascale-ydb-nosql-alt}
-[ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал как и зачем была создана {{ ydb-name }}, чем она отличается от других БД и для каких задач она лучше всего подходит.
+[ {{ team.fomichev.name }} ]( {{ team.fomichev.profile }} ) ( {{ team.fomichev.position }} ) рассказал, как и зачем была создана {{ ydb-name }}, чем она отличается от других БД и для каких задач она лучше всего подходит.
 
 @[YouTube](https://youtu.be/MlSdUq5RIN8)
 

@@ -5,4 +5,4 @@
 
 Доклад будет интересен всем тем, кто работает с распределенными базами данными и сконцентрирован на вопросе создания высокопроизводительных приложений, использующих такие БД.
 
-[Презентация](https://squidex.jugru.team/api/assets/srm/f7f512a2-ac95-49ae-a72f-aa3eef9c4957/aleksandr-gorshenin.pdf).
+[Презентация](https://squidex.jugru.team/api/assets/srm/f7f512a2-ac95-49ae-a72f-aa3eef9c4957/aleksandr-gorshenin.pdf)

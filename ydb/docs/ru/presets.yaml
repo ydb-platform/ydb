@@ -49,11 +49,11 @@ default:
       profile:
     sidorina:
       name: Юлия Сидорина
-      position: разработчик YDB
+      position: Разработчик YDB
       profile: https://www.linkedin.com/in/yuliya-sidorina-a17ab6220/
     smirnov:
       name: Александр Смирнов
-      position: технический эксперт
+      position: Технический эксперт
       profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/
     novozhilova:
       name: Софья Новожилова 
@@ -61,7 +61,7 @@ default:
       profile:
     nizametdinov:
       name: Ильназ Низаметдинов
-      position: руководитель группы функциональности ядра YDB
+      position: Руководитель группы
       profile: https://www.linkedin.com/in/nilnaz
     myasnikov:
       name: Алексей Мясников
@@ -69,39 +69,39 @@ default:
       profile: https://github.com/asmyasnikov
     kita:
       name: Максим Кита
-      position: разработчик баз данных
+      position: Разработчик
       profile:     
     kulin:
       name: Тимофей Кулин
-      position: разработчик YDB
+      position: Разработчик
       profile: https://github.com/rekby
     kriukov:
       name: Александр Крюков
-      position: разработчик YDB
+      position: Разработчик
       profile: https://www.linkedin.com/in/kruall/
     kuznetcov:
       name: Владислав Кузнецов
-      position: старший разработчик программного обеспечения
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/vlad-kuznetcov-a8a012276/
     kovalenko:
       name: Антон Коваленко
-      position: технический менеджер YDB
+      position: Технический менеджер
       profile: https://www.linkedin.com/in/kovalad/
     ivanov:
       name: Евгений Иванов
-      position: старший разработчик программного обеспечения
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/eivanov89/  
     prudaev:
       name: Александр Прудаев
-      position: старший разработчик в группе проклейки аналитических продуктов
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/alexander-prudaev-44ba4383/
     puchin:
       name: Сергей Пучин
-      position: руководитель группы распределенных запросов
+      position: Руководитель группы
       profile: https://www.linkedin.com/in/sergei-puchin-9486b621/
     rykov:
       name: Андрей Рыков
-      position: старший разработчик YDB
+      position: Старший разработчик
       profile: https://www.linkedin.com/in/andrei-rykov-5936b4222/
     tarasov:
       name: Егор Тарасов
@@ -109,15 +109,15 @@ default:
       profile: https://www.linkedin.com/in/jorres-tarasov/
     zivaykin:
       name: Александр Зевайкин
-      position: технический лидер, кандидат технических наук, доцент.
+      position: Технический лидер
       profile:   
     zverev:
       name: Евгений Зверев
-      position: разработчик YDB-платформы в Yandex
+      position: Разработчик
       profile:     
     zinal:
       name: Максим Зиналь
       profile: https://www.linkedin.com/in/maxzinal
-      position: архитектор YDB        
+      position: Архитектор YDB       
         
       

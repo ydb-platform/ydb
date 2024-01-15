@@ -8,7 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/library/actors/wilson/wilson_uploader.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -18,9 +18,9 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 using namespace NDataShardReadTableTest;
+using namespace NWilson;
 
 Y_UNIT_TEST_SUITE(TDataShardTrace) {
-
     void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
@@ -108,154 +108,6 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
     }
 
-    class FakeWilsonUploader : public TActorBootstrapped<FakeWilsonUploader> {
-        public:
-        class Span {
-        public:
-            Span(TString name, TString parentSpanId, ui64 startTime) : Name(name), ParentSpanId(parentSpanId), StartTime(startTime) {}
-
-            std::optional<std::reference_wrapper<Span>> FindOne(TString targetName) {
-                for (const auto childRef : Children) {
-                    if (childRef.get().Name == targetName) {
-                        return childRef;
-                    }
-                }
-
-                return {};
-            }
-
-            std::vector<std::reference_wrapper<Span>> FindAll(TString targetName) {
-                std::vector<std::reference_wrapper<Span>> res;
-
-                for (const auto childRef : Children) {
-                    if (childRef.get().Name == targetName) {
-                        res.emplace_back(childRef);
-                    }
-                }
-
-                return res;
-            }
-
-            std::optional<std::reference_wrapper<Span>> BFSFindOne(TString targetName) {
-                std::queue<std::reference_wrapper<Span>> bfsQueue;
-                bfsQueue.push(std::ref(*this));
-
-                while (!bfsQueue.empty()) {
-                    Span &currentSpan = bfsQueue.front().get();
-                    bfsQueue.pop();
-
-                    if (currentSpan.Name == targetName) {
-                        return currentSpan;
-                    }
-
-                    for (const auto childRef : currentSpan.Children) {
-                        bfsQueue.push(childRef);
-                    }
-                }
-
-                return {};
-            }
-
-            static bool CompareByStartTime(const std::reference_wrapper<Span>& span1, const std::reference_wrapper<Span>& span2) {
-                return span1.get().StartTime < span2.get().StartTime;
-            }
-
-            TString Name;
-            TString ParentSpanId;
-            ui64 StartTime;
-            std::set<std::reference_wrapper<Span>, decltype(&CompareByStartTime)> Children{&CompareByStartTime};
-        };
-
-        class Trace {
-        public:
-            std::string ToString() const {
-                std::string result;
-
-                for (const auto& spanPair : Spans) {
-                    const Span& span = spanPair.second;
-                    if (span.ParentSpanId.empty()) {
-                        result += ToStringHelper(span);
-                    }
-                }
-
-                return result;
-            }
-        private:
-            std::string ToStringHelper(const Span& span) const {
-                std::string result = "(" + span.Name;
-
-                if (!span.Children.empty()) {
-                    result += " -> [";
-                    auto it = span.Children.begin();
-                    while (it != span.Children.end()) {
-                        const Span& childSpan = it->get();
-                        result += ToStringHelper(childSpan);
-                        ++it;
-
-                        if (it != span.Children.end()) {
-                            result += " , ";
-                        }
-                    }
-                    result += "]";
-                }
-
-                result += ")";
-
-                return result;
-            }
-        public:
-            std::unordered_map<TString, Span> Spans;
-
-            Span Root{"Root", "", 0};
-        };
-
-    public:
-        void Bootstrap() {
-            Become(&TThis::StateFunc);
-        }
-
-        void Handle(NWilson::TEvWilson::TPtr ev) {
-            auto& span = ev->Get()->Span;
-            const TString &traceId = span.trace_id();
-            const TString &spanId = span.span_id();
-            const TString &parentSpanId = span.parent_span_id();
-            const TString &spanName = span.name();
-            ui64 startTime = span.start_time_unix_nano();
-
-            Trace &trace = Traces[traceId];
-
-            trace.Spans.try_emplace(spanId, spanName, parentSpanId, startTime);
-        }
-
-        void BuildTraceTrees() {
-            for (auto& tracePair : Traces) {
-                Trace& trace = tracePair.second;
-
-                for (auto& spanPair : trace.Spans) {
-                    Span& span = spanPair.second;
-
-                    const TString& parentSpanId = span.ParentSpanId;
-
-                    // Check if the span has a parent
-                    if (!parentSpanId.empty()) {
-                        auto parentSpanIt = trace.Spans.find(parentSpanId);
-                        UNIT_ASSERT(parentSpanIt != trace.Spans.end());
-                        parentSpanIt->second.Children.insert(std::ref(span));
-                    } else {
-                        trace.Root.Children.insert(std::ref(span));
-                    }
-                }
-            }
-        }
-
-        STRICT_STFUNC(StateFunc,
-            hFunc(NWilson::TEvWilson, Handle);
-        );
-
-    public:
-        std::unordered_map<TString, Trace> Traces;
-    };
-
     void SplitTable(TTestActorRuntime &runtime, Tests::TServer::TPtr server, ui64 splitKey) {
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
         auto senderSplit = runtime.AllocateEdgeActor();
@@ -283,21 +135,21 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         return {runtime, server, sender};
     }
 
-    void CheckTxHasWriteLog(std::reference_wrapper<FakeWilsonUploader::Span> txSpan) {
+    void CheckTxHasWriteLog(std::reference_wrapper<TFakeWilsonUploader::Span> txSpan) {
         auto writeLogSpan = txSpan.get().FindOne("Tablet.WriteLog");
         UNIT_ASSERT(writeLogSpan);
         auto writeLogEntrySpan = writeLogSpan->get().FindOne("Tablet.WriteLog.LogEntry");
         UNIT_ASSERT(writeLogEntrySpan);
     }
 
-    void CheckTxHasDatashardUnits(std::reference_wrapper<FakeWilsonUploader::Span> txSpan, ui8 count) {
+    void CheckTxHasDatashardUnits(std::reference_wrapper<TFakeWilsonUploader::Span> txSpan, ui8 count) {
         auto executeSpan = txSpan.get().FindOne("Tablet.Transaction.Execute");
         UNIT_ASSERT(executeSpan);
         auto unitSpans = executeSpan->get().FindAll("Datashard.Unit");
         UNIT_ASSERT_EQUAL(count, unitSpans.size());
     }
 
-    void CheckExecuteHasDatashardUnits(std::reference_wrapper<FakeWilsonUploader::Span> executeSpan, ui8 count) {
+    void CheckExecuteHasDatashardUnits(std::reference_wrapper<TFakeWilsonUploader::Span> executeSpan, ui8 count) {
         auto unitSpans = executeSpan.get().FindAll("Datashard.Unit");
         UNIT_ASSERT_EQUAL(count, unitSpans.size());
     }
@@ -307,7 +159,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
-        FakeWilsonUploader *uploader = new FakeWilsonUploader();
+        TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
@@ -323,11 +175,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             std::move(traceId)
         );
 
-        uploader->BuildTraceTrees();
-
+        UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
 
-        FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
+        TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         auto deSpan = trace.Root.BFSFindOne("DataExecuter");
         UNIT_ASSERT(deSpan);
@@ -367,7 +218,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
     
-        FakeWilsonUploader *uploader = new FakeWilsonUploader();
+        TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
@@ -414,11 +265,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             std::move(traceId)
         );
 
-        uploader->BuildTraceTrees();
-
+        UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
 
-        FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
+        TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
         std::string canon;
         if (server->GetSettings().AppConfig->GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
@@ -491,7 +341,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
-        FakeWilsonUploader* uploader = new FakeWilsonUploader();
+        TFakeWilsonUploader* uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
         runtime.SimulateSleep(TDuration::Seconds(10));
@@ -522,11 +372,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             std::move(traceId)
         );
 
-        uploader->BuildTraceTrees();
-
+        UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
 
-        FakeWilsonUploader::Trace& trace = uploader->Traces.begin()->second;
+        TFakeWilsonUploader::Trace& trace = uploader->Traces.begin()->second;
 
         auto readActorSpan = trace.Root.BFSFindOne("ReadActor");
         UNIT_ASSERT(readActorSpan);
@@ -551,7 +400,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}});
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        FakeWilsonUploader *uploader = new FakeWilsonUploader();
+        TFakeWilsonUploader *uploader = new TFakeWilsonUploader();
         TActorId uploaderId = runtime.Register(uploader, 0);
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0); 
         runtime.SimulateSleep(TDuration::Seconds(10));
@@ -561,11 +410,10 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         ui64 txId = 100;
         Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED, std::move(traceId));
 
-        uploader->BuildTraceTrees();
-
+        UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_EQUAL(1, uploader->Traces.size());
 
-        FakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
+        TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
         
         auto wtSpan = trace.Root.BFSFindOne("Datashard.WriteTransaction");
         UNIT_ASSERT(wtSpan);

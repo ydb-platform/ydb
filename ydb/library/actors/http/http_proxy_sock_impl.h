@@ -192,8 +192,11 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
 
     void Flush() {}
 
-    int ProcessSslError(const int error, bool& read, bool& write) {
-        switch(error) {
+    int ProcessSslResult(const int res, bool& read, bool& write) {
+        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
+        switch(err) {
+        case SSL_ERROR_NONE:
+            return res;
         case SSL_ERROR_WANT_READ:
             read = true;
             return -EAGAIN;
@@ -206,41 +209,29 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     }
 
     ssize_t Send(const void* data, size_t size, bool& read, bool& write) {
-        ssize_t res = SSL_write(Ssl.Get(), data, size);
-        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        return res < 0
-            ? ProcessSslError(err, read, write)
-            : res;
+        ERR_clear_error();
+        return ProcessSslResult(SSL_write(Ssl.Get(), data, size), read, write);
     }
 
     ssize_t Recv(void* data, size_t size, bool& read, bool& write) {
-        ssize_t res = SSL_read(Ssl.Get(), data, size);
-        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        return res < 0
-            ? ProcessSslError(err, read, write)
-            : res;
+        ERR_clear_error();
+        return ProcessSslResult(SSL_read(Ssl.Get(), data, size), read, write);
     }
 
     int OnConnect(bool& read, bool& write) {
         if (!Ssl) {
             InitClientSsl();
         }
-        int res = SSL_connect(Ssl.Get());
-        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        return res <= 0
-            ? ProcessSslError(err, read, write)
-            : 1;
+        ERR_clear_error();
+        return ProcessSslResult(SSL_connect(Ssl.Get()), read, write);
     }
 
     int OnAccept(std::shared_ptr<TPrivateEndpointInfo> endpoint, bool& read, bool& write) {
         if (!Ssl) {
             InitServerSsl(endpoint->SecureContext.Get());
         }
-        int res = SSL_accept(Ssl.Get());
-        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        return res <= 0
-            ? ProcessSslError(err, read, write)
-            : 1;
+        ERR_clear_error();
+        return ProcessSslResult(SSL_accept(Ssl.Get()), read, write);
     }
 };
 

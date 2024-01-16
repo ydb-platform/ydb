@@ -148,4 +148,12 @@ bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTabl
     return true;
 }
 
+std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {
+    std::unordered_set<TPathId> result;
+    for (const auto& [pathId, _] : Tables) {
+        result.emplace(pathId);
+    }
+    return result;
+}
+
 }

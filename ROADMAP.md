@@ -23,7 +23,7 @@ We use the following symbols as abbreviations:
 1. ㉔ Support for **temporary tables**
 1. ㉔ Support for **VIEW** SQL clause
 1. ㉔ **Data Spilling** in case there is issufient amount of RAM
-1. ㉔ **TPC-H, TPC-H for 100TB** dataset
+1. ㉔ **TPC-H, TPC-DS for 100TB** dataset
 1. ✅ ㉓ Support for **Snapshot Readonly** transactions mode
 1. 🚧 ㉓ **Better resource management** for KQP Resource Manager (share information about nodes resources, avoid OOMs)
 1. ✅ ㉓ Switch to **New Engine** for OLTP queries
@@ -120,13 +120,7 @@ We use the following symbols as abbreviations:
 1. ✅ ㉓ **Run the first version**
 
 ## Embedded UI
-1.  **Support for all schema entities**
-    * ㉓ **YDB Topics** (add support for viewing metadata of YDB topics, its data, lag, etc)
-    * ㉓ **CDC Streams**
-    * ㉓ **Secondary Indexes**
-    * ㉓ **Read Replicas**
-    * ✅ ㉓ **Column-oriented Tables**
-1.  ㉓ **Basic charts for database monitoring**
+Detailed roadmap could be found at [YDB Embedded UI repo](https://github.com/ydb-platform/ydb-embedded-ui/blob/main/ROADMAP.md).
 
 ## Command Line Utility
 1. 🚧 ㉓ Use a **single `ydb yql`** instead of `ydb table query` or `ydb scripting`

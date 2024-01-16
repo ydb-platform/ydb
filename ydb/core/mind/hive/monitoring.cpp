@@ -294,7 +294,7 @@ public:
             out << "<td>" << Sprintf("%.9f", x.Weight) << "</td>";
             out << "<td>" << GetResourceValuesText(x) << "</td>";
             out << "<td>" << x.GetTabletAllowedMetricIds() << "</td>";
-            out << "<td><a href='../tablets?SsId=" << tabletId << "'><span class='glyphicon glyphicon-tasks' title='State Storage'/></a></td>";
+            out << "<td><a href='../tablets?SsId=" << tabletId.first << "'><span class='glyphicon glyphicon-tasks' title='State Storage'/></a></td>";
             out << "</tr>";
         }
         out << "</tbody></table>";

@@ -527,6 +527,49 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_OldPartitionExists
     AssertTable(server, "Y_Source_7", 2, 157);
 }
 
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_Active_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "", 0);
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_InactiveConfig_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, {}, {1});
+    AddPartition(config, 1, {}, {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "", 0);
+
+    UNIT_ASSERT(r->Error);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_InactiveActor_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "", 0);
+
+    UNIT_ASSERT(r->Error);
+}
+
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
     NPersQueue::TTestServer server = CreateServer();
 

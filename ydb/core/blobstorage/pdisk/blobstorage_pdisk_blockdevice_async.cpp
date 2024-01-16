@@ -961,6 +961,15 @@ protected:
         }
     }
 
+    void FreeCompletionAction(TCompletionAction *action) {
+        if (action->FlushAction) {
+            action->FlushAction->ErrorReason = "Failed to submit request in BlockDevice";
+            action->FlushAction->Release(ActorSystem);
+        }
+        action->ErrorReason = "Failed to submit request in BlockDevice";
+        action->Release(ActorSystem);
+    }
+
     void Submit(IAsyncIoOperation *op) {
         if (QuitCounter.IsBlocked()) {
             FreeOperation(op);
@@ -1001,7 +1010,7 @@ protected:
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
         if (data && size) {
@@ -1018,7 +1027,7 @@ protected:
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
         if (data && size) {
@@ -1046,11 +1055,11 @@ protected:
     void NoopAsync(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
 
@@ -1061,11 +1070,11 @@ protected:
     void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction);
             return;
         }
 
@@ -1494,7 +1503,7 @@ IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
         TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk) {
     IBlockDevice *device = CreateRealBlockDevice(path, 0, mon, 0, 0, 4, flags, 8, sectorMap, pdisk,
-            100, 60'000, 60'000);
+            100'000, 60'000, 60'000);
     device->Initialize(actorSystem, {});
     return device;
 }

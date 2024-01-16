@@ -981,7 +981,7 @@ public:
         }
     
         PDisk->ErrorStr = ev->Get()->Info;
-        InitError(TStringBuilder() << "io error");
+        InitError("io error");
     }
 
     void Handle(TEvBlobStorage::TEvRestartPDisk::TPtr &ev) {

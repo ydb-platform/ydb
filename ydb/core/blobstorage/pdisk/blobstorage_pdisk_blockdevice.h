@@ -67,7 +67,7 @@ class TPDisk;
 IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
         ui32 maxQueuedCompletionActions, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk = nullptr,
-        float critOveretimationRatio = 100, float critOveretimationTimeMs = 60'000,
+        float critOveretimationRatio = 100'000, float critOveretimationTimeMs = 60'000,
         float maxNoResponseTimeMs = 60'000);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
         TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr);

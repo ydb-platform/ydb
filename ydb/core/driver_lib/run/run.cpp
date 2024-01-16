@@ -116,6 +116,7 @@
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_object_storage.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -559,6 +560,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["topic"] = &hasTopic;
         TServiceCfg hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
+        TServiceCfg hasObjectStorage = true;
+        names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
@@ -715,6 +718,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasClickhouseInternal) {
             server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters,
                 AppData->InFlightLimiterRegistry, grpcRequestProxies[0], hasClickhouseInternal.IsRlAllowed()));
+        }
+
+        if (hasObjectStorage) {
+            server.AddService(new NGRpcService::TGRpcYdbObjectStorageService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasObjectStorage.IsRlAllowed()));
         }
 
         if (hasScripting) {

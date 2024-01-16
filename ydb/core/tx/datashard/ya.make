@@ -65,6 +65,7 @@ SRCS(
     datashard__read_columns.cpp
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
+    datashard__s3_listing.cpp
     datashard__kqp_scan.cpp
     datashard__snapshot_txs.cpp
     datashard__stats.cpp

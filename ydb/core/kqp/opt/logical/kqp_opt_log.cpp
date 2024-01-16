@@ -11,7 +11,6 @@
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-//#include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -119,7 +118,14 @@ protected:
             if (!input) {
                 return node;
             }
-            output = NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), false);
+            output = NHopping::RewriteAsHoppingWindow(
+                node,
+                ctx,
+                input.Cast(),
+                false,
+                TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
+                true,
+                false);
         }        
         else {
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());

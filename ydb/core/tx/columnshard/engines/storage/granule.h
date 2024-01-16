@@ -207,7 +207,9 @@ public:
         auto result = std::make_shared<NOlap::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
             auto field = schema->GetFieldByColumnId(i.first);
-            AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
+            if (!field) {
+                continue;
+            }
             NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
             result->AddStat(columnInfo);

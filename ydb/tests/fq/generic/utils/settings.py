@@ -31,25 +31,18 @@ class Settings:
 
     @dataclass
     class ClickHouse:
-        cluster_name: str
         dbname: str
         username: str
         password: str
-        host: str
-        http_port: int
-        native_port: int
         protocol: str
 
     clickhouse: ClickHouse
 
     @dataclass
     class PostgreSQL:
-        cluster_name: str
         dbname: str
         username: str
         password: Optional[str]
-        host: str
-        port: int
 
     postgresql: PostgreSQL
 
@@ -71,20 +64,13 @@ class Settings:
                 hmac_secret_file=environ['TOKEN_ACCESSOR_HMAC_SECRET_FILE'],
             ),
             clickhouse=cls.ClickHouse(
-                cluster_name='clickhouse_integration_test',
                 dbname='db',
-                host='localhost',
-                http_port=endpoint_determiner.get_port('clickhouse', 8123),
-                native_port=endpoint_determiner.get_port('clickhouse', 9000),
                 username='user',
                 password='password',
                 protocol='native',
             ),
             postgresql=cls.PostgreSQL(
-                cluster_name='postgresql_integration_test',
                 dbname='db',
-                host='localhost',
-                port=endpoint_determiner.get_port('postgresql', 6432),
                 username='user',
                 password='password',
             ),

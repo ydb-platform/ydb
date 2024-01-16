@@ -22,7 +22,7 @@ async def clickhouse_handler(request):
             {
                 'hosts': [
                     {
-                        'name': 'ydb_tests_fq_generic_clickhouse',
+                        'name': 'clickhouse',
                         'cluster_id': cluster_id,
                         'health': 'ALIVE',
                         'type': 'CLICKHOUSE'
@@ -41,7 +41,7 @@ async def postgresql_handler(request):
             {
                 'hosts': [
                     {
-                        'name': 'ydb_tests_fq_generic_postgresql',
+                        'name': 'postgresql',
                         'services': [
                             {
                                 'health': 'ALIVE',

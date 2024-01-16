@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("disable_pipe", "Disable pipe").NoArgument();
     opts.AddLongOption("log_level", "Log Level");
     opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
-    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
+    opts.AddLongOption("disable-spilling", "Disable disk spilling").NoArgument();
 
     ui32 threads = THREAD_PER_NODE;
     TString host;
@@ -406,23 +406,25 @@ int main(int argc, char** argv) {
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;
-        lwmOptions.UseSpilling = res.Has("enable-spilling");
+        bool enableSpilling = !res.Has("disable-spilling");
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         auto workerManagerActorId = actorSystem->Register(resman);
         actorSystem->RegisterLocalService(MakeWorkerManagerActorID(nodeId), workerManagerActorId);
 
-        auto spillingActor = actorSystem->Register(
-            NDq::CreateDqLocalFileSpillingService(
-                NDq::TFileSpillingServiceConfig{
-                    .Root = "./spilling",
-                    .CleanupOnShutdown = true
-                },
-                MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
-            )
-        );
+        if (enableSpilling) {
+            auto spillingActor = actorSystem->Register(
+                NDq::CreateDqLocalFileSpillingService(
+                    NDq::TFileSpillingServiceConfig{
+                        .Root = "./spilling",
+                        .CleanupOnShutdown = true
+                    },
+                    MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
+                )
+            );
 
-        actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+            actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+        }
 
         auto endFuture = ShouldContinue.GetFuture();
 

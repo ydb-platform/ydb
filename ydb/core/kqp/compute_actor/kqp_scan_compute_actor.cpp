@@ -223,7 +223,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), std::move(wakeup)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

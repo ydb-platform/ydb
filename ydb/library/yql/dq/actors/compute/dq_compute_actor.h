@@ -22,7 +22,7 @@ struct TEvDqCompute {
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
-        TEvResumeExecution(EResumeSource source) 
+        TEvResumeExecution(EResumeSource source)
             : Source(source)
         { }
 
@@ -242,7 +242,6 @@ struct TComputeRuntimeSettings {
     ui32 ExtraMemoryAllocationPool = 0;
 
     bool FailOnUndelivery = true;
-    bool UseSpilling = false;
 
     std::function<void(bool success, const TIssues& issues)> TerminateHandler;
     TMaybe<NDqProto::TRlPath> RlPath;

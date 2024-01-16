@@ -73,7 +73,6 @@ public:
                 });
         lwmOptions.Counters = NDqs::TWorkerManagerCounters(lwmGroup);
         lwmOptions.DropTaskCountersOnFinish = false;
-        lwmOptions.UseSpilling = withSpilling;
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         ServiceNode->AddLocalService(

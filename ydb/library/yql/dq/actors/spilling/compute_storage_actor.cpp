@@ -31,7 +31,6 @@ namespace {
 #define LOG_T(s) \
     LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
 
-
 class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStorageActor>,
                                public IDqComputeStorageActor
 {
@@ -57,19 +56,24 @@ public:
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
         FailOnError();
 
-        // TODO: timeout
-        // TODO: limit inflight events
+        auto promise = NThreading::NewPromise<IDqComputeStorageActor::TKey>();
 
         ui64 size = blob.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(blobId, std::move(blob)));
+        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
-        WritingBlobs_.emplace(blobId, size);
+        WritingBlobs_.emplace(NextBlobId, std::make_pair(size, promise));
         WritingBlobsSize_ += size;
+
+        ++NextBlobId;
+
+        return promise.GetFuture();
     }
 
-    bool Get(ui64 blobId) override {
+    std::optional<NThreading::TFuture<TRope>> Get(ui64 blobId) override {
         FailOnError();
+
+        if (!SavedBlobs_.contains(blobId)) return std::nullopt;
 
         auto loadedIt = LoadedBlobs_.find(blobId);
         if (loadedIt != LoadedBlobs_.end()) {
@@ -128,12 +132,17 @@ private:
             return;
         }
 
-        ui64 size = it->second;
+        auto& blob = it->second;
+        // complete future and wake up waiting compute node
+        blob.second.SetValue(msg.BlobId);
+        ui64 size = blob.first;
         WritingBlobsSize_ -= size;
         WritingBlobs_.erase(it);
 
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
+
+        SavedBlobs_.insert(msg.BlobId);
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
@@ -147,10 +156,6 @@ private:
 
         LoadedBlobs_[msg.BlobId].Swap(msg.Blob);
         YQL_ENSURE(LoadedBlobs_[msg.BlobId].size() != 0);
-
-        if (LoadedBlobs_.size() == 1) {
-            WakeUp_();
-        }
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
@@ -164,7 +169,8 @@ private:
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
-    TMap<ui64, ui64> WritingBlobs_; // blobId -> blobSize
+    TMap<IDqComputeStorageActor::TKey, std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>> WritingBlobs_;
+    TSet<ui64> SavedBlobs_;
     ui64 WritingBlobsSize_ = 0;
 
     ui32 StoredBlobsCount_ = 0;
@@ -174,6 +180,9 @@ private:
     TMap<ui64, TBuffer> LoadedBlobs_;
 
     TMaybe<TString> Error_;
+
+    IDqComputeStorageActor::TKey NextBlobId = 0;
+
 };
 
 } // anonymous namespace

@@ -17,7 +17,8 @@ void TExponentialBackoffOptionsSerializer::Register(TRegistrar registrar)
         .Default(TThat::DefaultMaxBackoff);
 
     registrar.ExternalClassParameter("backoff_multiplier", &TThat::BackoffMultiplier)
-        .Default(TThat::DefaultBackoffMultiplier);
+        .Default(TThat::DefaultBackoffMultiplier)
+        .GreaterThanOrEqual(1.0);
 
     registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
         .Default(TThat::DefaultBackoffJitter);

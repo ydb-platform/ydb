@@ -13,26 +13,6 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
-{
-    return {
-        .Period = period,
-        .Jitter = DefaultJitter
-    };
-}
-
-void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
-{
-    registrar.ExternalClassParameter("period", &TThat::Period)
-        .Default();
-    registrar.ExternalClassParameter("splay", &TThat::Splay)
-        .Default(TDuration::Zero());
-    registrar.ExternalClassParameter("jitter", &TThat::Jitter)
-        .Default(TThat::DefaultJitter);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////

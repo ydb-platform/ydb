@@ -15,16 +15,6 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TRetryingPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
-{
-    registrar.ExternalClassParameter("periodic_options", &TThat::PeriodicOptions)
-        .Default();
-    registrar.ExternalClassParameter("backoff_options", &TThat::BackoffOptions)
-        .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -124,27 +114,39 @@ bool TRetryingInvocationTimePolicy::IsInBackoffMode() const
 TRetryingPeriodicExecutor::TRetryingPeriodicExecutor(
     IInvokerPtr invoker,
     TPeriodicCallback callback,
-    TExponentialBackoffOptions backoffOptions,
-    std::optional<TDuration> period)
+    TRetryingPeriodicExecutorOptions options)
+    : TBase(
+        std::move(invoker),
+        std::move(callback),
+        options)
+{ }
+
+TRetryingPeriodicExecutor::TRetryingPeriodicExecutor(
+    IInvokerPtr invoker,
+    TPeriodicCallback callback,
+    NConcurrency::TPeriodicExecutorOptions periodicOptions,
+    TExponentialBackoffOptions backoffOptions)
     : TRetryingPeriodicExecutor(
         std::move(invoker),
         std::move(callback),
-        backoffOptions,
-        {.Period = period})
+        TRetryingPeriodicExecutorOptions{
+            periodicOptions,
+            backoffOptions,
+        })
 { }
 
 TRetryingPeriodicExecutor::TRetryingPeriodicExecutor(
     IInvokerPtr invoker,
     TPeriodicCallback callback,
     TExponentialBackoffOptions backoffOptions,
-    NConcurrency::TPeriodicExecutorOptions periodicOptions)
-    : TBase(
+    std::optional<TDuration> period)
+    : TRetryingPeriodicExecutor(
         std::move(invoker),
         std::move(callback),
-        {
-            periodicOptions,
-            backoffOptions,
-        })
+        NConcurrency::TPeriodicExecutorOptions{
+            .Period = period,
+        },
+        backoffOptions)
 { }
 
 TDuration TRetryingPeriodicExecutor::GetBackoffTimeEstimate() const

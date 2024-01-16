@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "periodic_executor_base.h"
 #include "public.h"
 
@@ -8,34 +9,7 @@
 
 #include <yt/yt/core/misc/backoff_strategy.h>
 
-#include <yt/yt/core/ytree/yson_struct.h>
-
 namespace NYT::NConcurrency {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TPeriodicExecutorOptions
-{
-    static constexpr double DefaultJitter = 0.2;
-
-    //! Interval between usual consequent invocations.
-    //! If nullopt then no invocations will be happening.
-    std::optional<TDuration> Period;
-    TDuration Splay;
-    double Jitter = 0.0;
-
-    //! Sets #Period and Applies set#DefaultJitter.
-    static TPeriodicExecutorOptions WithJitter(TDuration period);
-};
-
-class TPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TPeriodicExecutorOptions>
-{
-public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TPeriodicExecutorOptions, TPeriodicExecutorOptionsSerializer);
-
-    static void Register(TRegistrar registrar);
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -112,5 +86,3 @@ DEFINE_REFCOUNTED_TYPE(TPeriodicExecutor)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TPeriodicExecutorOptions, NYT::NConcurrency::TPeriodicExecutorOptionsSerializer);

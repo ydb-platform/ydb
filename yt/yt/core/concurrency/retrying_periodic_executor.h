@@ -1,6 +1,7 @@
 #pragma once
 
 #include "periodic_executor.h"
+#include "public.h"
 
 #include <yt/yt/core/actions/callback.h>
 #include <yt/yt/core/actions/future.h>
@@ -8,23 +9,6 @@
 #include <yt/yt/core/misc/backoff_strategy_config.h>
 
 namespace NYT::NConcurrency {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TRetryingPeriodicExecutorOptions
-{
-    TPeriodicExecutorOptions PeriodicOptions;
-    TExponentialBackoffOptions BackoffOptions;
-};
-
-class TRetryingPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TRetryingPeriodicExecutorOptions>
-{
-public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TRetryingPeriodicExecutorOptions, TRetryingPeriodicExecutorOptionsSerializer);
-
-    static void Register(TRegistrar registrar);
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -88,8 +72,13 @@ public:
     TRetryingPeriodicExecutor(
         IInvokerPtr invoker,
         TPeriodicCallback callback,
-        TExponentialBackoffOptions backoffOptions,
-        NConcurrency::TPeriodicExecutorOptions periodicOptions);
+        TRetryingPeriodicExecutorOptions options);
+
+    TRetryingPeriodicExecutor(
+        IInvokerPtr invoker,
+        TPeriodicCallback callback,
+        NConcurrency::TPeriodicExecutorOptions periodicOptions,
+        TExponentialBackoffOptions backoffOptions);
 
     TRetryingPeriodicExecutor(
         IInvokerPtr invoker,
@@ -108,5 +97,3 @@ DEFINE_REFCOUNTED_TYPE(TRetryingPeriodicExecutor);
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TRetryingPeriodicExecutorOptions, NYT::NConcurrency::TRetryingPeriodicExecutorOptionsSerializer);

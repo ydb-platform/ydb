@@ -248,7 +248,7 @@ private:
         }
 
         number = 0;
-        for (const auto& column : Settings.GetKeyColumns()) {
+        for (const auto& column : Settings.GetColumns()) {
             Columns.emplace_back(
                 column.GetName(),
                 column.GetId(),
@@ -274,6 +274,7 @@ private:
         builder.Reserve(PendingRows.size());
         std::vector<std::pair<TString, NScheme::TTypeInfo>> tmp;
         for (const auto& column : Columns) {
+            CA_LOG_D("Cols > " << column.Name << " - " << TypeName(column.PType));
             tmp.emplace_back(column.Name, column.PType);
         }
 
@@ -281,6 +282,7 @@ private:
         builder.Start(tmp, 0, 0, err);
 
         for (const auto& row : PendingRows) {
+            CA_LOG_D("ROWS > " << row.size() << " " << KeyColumns.size() << " " << Columns.size());
             builder.AddRow(
                 TConstArrayRef<TCell>{row.begin(), row.begin() + KeyColumns.size()},
                 TConstArrayRef<TCell>{row.begin() + KeyColumns.size(), row.end()});

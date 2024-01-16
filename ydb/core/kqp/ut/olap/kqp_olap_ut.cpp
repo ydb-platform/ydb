@@ -5381,8 +5381,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
         TString output = StreamResultToYson(it);
-        Cout << output << Endl;
-        CompareYson(output, R"([[1u;#;#];[2u;#;#];[3u;#;#]])");
+        CompareYson(output, R"([[1u;["test1"];[10]];[2u;["test2"];[11]];[3u;["test3"];[12]]])");
     }
 }
 

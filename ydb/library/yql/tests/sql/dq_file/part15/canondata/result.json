@@ -1860,7 +1860,13 @@
             "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_pg-pg_types_orderby--Plan_/plan.txt"
         }
     ],
-    "test.test[pg-pg_types_orderby--Results]": [],
+    "test.test[pg-pg_types_orderby--Results]": [
+        {
+            "checksum": "1cd28382e5bb763d1a10fbef380b19f4",
+            "size": 918,
+            "uri": "https://{canondata_backend}/1925842/b9dbc79de0fb09dbc2b3e197272eb35de7410096/resource.tar.gz#test.test_pg-pg_types_orderby--Results_/results.txt"
+        }
+    ],
     "test.test[pg-select_having-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

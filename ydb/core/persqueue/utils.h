@@ -37,7 +37,6 @@ public:
     };
 
     TPartitionGraph();
-    //TPartitionGraph(TPartitionGraph&&) = default;
     TPartitionGraph(std::unordered_map<ui32, Node>&& partitions);
 
     const Node* GetPartition(ui32 id) const;

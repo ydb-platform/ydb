@@ -218,7 +218,7 @@ void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32
         new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
     );
 
-    Sleep(TDuration::Seconds(1)); // TODO
+    Sleep(TDuration::Seconds(1));
 
     const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping

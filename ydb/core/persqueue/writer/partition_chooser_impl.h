@@ -98,11 +98,6 @@ TBoundaryChooser<THasher>::TBoundaryChooser(const NKikimrSchemeOp::TPersQueueGro
 template<class THasher>
 const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THasher>::GetPartition(const TString& sourceId) const {
     const auto keyHash = Hasher(sourceId);
-    Cerr << ">>>>> Hash=" << keyHash;
-    for(auto& p : Partitions) {
-        Cerr << "  id=" << p.PartitionId << " bound='" << p.ToBound << "'"; 
-    }
-    Cerr << Endl << Flush;
     auto result = std::upper_bound(Partitions.begin(), Partitions.end(), keyHash, 
                     [](const TString& value, const TPartitionInfo& partition) { return !partition.ToBound || value < partition.ToBound; });
     Y_ABORT_UNLESS(result != Partitions.end(), "Partition not found. Maybe wrong partitions bounds. Topic '%s'", TopicName.c_str());

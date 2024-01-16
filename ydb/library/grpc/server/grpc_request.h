@@ -471,14 +471,13 @@ private:
             return false;
         }
 
-        Ref();  // To prevent destroy during this call in case of execution Finish
+        TIntrusivePtr guard(this); // To prevent destroy during this call in case of execution Finish
         size_t left = StreamAdaptor_->ProcessNext();
         logCb(left);
         if (NextReplyCb_) {
             NextReplyCb_(left);
         }
         // Now it is safe to destroy even if Finish was called
-        UnRef();
         return true;
     }
 

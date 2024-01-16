@@ -51,7 +51,7 @@ namespace NActors {
                     ui8 Level;
                 } X;
 
-                ui64 Data;
+                ui64 Data = 0;
             } Raw;
 
             TComponentSettings(TAtomicBase data) {

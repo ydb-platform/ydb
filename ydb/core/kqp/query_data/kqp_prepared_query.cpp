@@ -1,5 +1,6 @@
 #include "kqp_prepared_query.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -104,6 +105,49 @@ TIntrusiveConstPtr<TTableConstInfoMap> TKqpPhyTxHolder::GetTableConstInfoById() 
 
 bool TKqpPhyTxHolder::IsLiteralTx() const {
     return LiteralTx;
+}
+
+std::optional<std::pair<std::pair<TString, TString>, bool>>
+TKqpPhyTxHolder::GetSchemeOpTempTablePath() const {
+    if (GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+        return std::nullopt;
+    }
+    auto& schemeOperation = GetSchemeOperation();
+    switch (schemeOperation.GetOperationCase()) {
+        case NKqpProto::TKqpSchemeOperation::kCreateTable: {
+            const auto& modifyScheme = schemeOperation.GetCreateTable();
+            const NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+            switch (modifyScheme.GetOperationType()) {
+                case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                    tableDesc = &modifyScheme.GetCreateTable();
+                    break;
+                }
+                case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
+                    tableDesc = &modifyScheme.GetCreateIndexedTable().GetTableDescription();
+                    break;
+                }
+                default:
+                    return std::nullopt;
+            }
+            if (tableDesc->HasTemporary()) {
+                if (tableDesc->GetTemporary()) {
+                    return {{{modifyScheme.GetWorkingDir(), tableDesc->GetName()},
+                            true}};
+                }
+            }
+            break;
+        }
+        case NKqpProto::TKqpSchemeOperation::kDropTable: {
+            auto modifyScheme = schemeOperation.GetDropTable();
+            auto* dropTable = modifyScheme.MutableDrop();
+
+            return {{{modifyScheme.GetWorkingDir(), dropTable->GetName()},
+                    false}};
+        }
+        default:
+            return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(const size_t stageIdx) const {
@@ -224,6 +268,35 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
             }
         }
     }
+}
+
+bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState) const {
+    auto tempTables = THashSet<TString>();
+    for (const auto& [path, info] : tempTablesState->TempTables) {
+        tempTables.insert(path.second + *tempTablesState->SessionId);
+    }
+    for (const auto& table: QueryTables) {
+        if (tempTables.contains(table)) {
+            return true;
+        }
+    }
+
+    for (const auto& tx: Transactions) {
+        auto optPath = tx->GetSchemeOpTempTablePath();
+        if (!optPath) {
+            continue;
+        } else {
+            const auto& [path, isCreate] = *optPath;
+            if (isCreate) {
+                return true;
+            } else {
+                if (tempTables.contains(JoinPath({path.first, path.second}))) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 const TKqpPhyTxHolder::TConstPtr& TPreparedQueryHolder::GetPhyTx(ui32 txId) const {

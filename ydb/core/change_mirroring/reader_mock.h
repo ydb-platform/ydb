@@ -23,35 +23,14 @@ public:
         }
     }
 
-    void NeedPollResult(AIReader::Tag, const AIReader::TEvReader::TEvNeedPollResult& result) override {
-        if (OnNeedPollResult) {
-            OnNeedPollResult(*this, result);
-        }
-    }
-
-    void PollResult(AIReader::Tag) override {
+    void PollResult(AIReader::Tag, const AIReader::TEvReader::TEvPollResult& result) override {
         if (OnPollResult) {
-            OnPollResult(*this);
-        }
-    }
-
-    void RemainingResult(AIReader::Tag, const AIReader::TEvReader::TEvRemainingResult& result) override {
-        if (OnRemainingResult) {
-            OnRemainingResult(*this, result);
-        }
-    }
-
-    void ReadNextResult(AIReader::Tag, const AIReader::TEvReader::TEvReadNextResult& result) override {
-        if (OnReadNextResult) {
-            OnReadNextResult(*this, result);
+            OnPollResult(*this, result);
         }
     }
 
     std::function<void(TReaderClientMock&)> OnBootstrap;
-    std::function<void(TReaderClientMock&, const AIReader::TEvReader::TEvNeedPollResult&)> OnNeedPollResult;
-    std::function<void(TReaderClientMock&)> OnPollResult;
-    std::function<void(TReaderClientMock&, const AIReader::TEvReader::TEvRemainingResult&)> OnRemainingResult;
-    std::function<void(TReaderClientMock&, const AIReader::TEvReader::TEvReadNextResult&)> OnReadNextResult;
+    std::function<void(TReaderClientMock&, const AIReader::TEvReader::TEvPollResult&)> OnPollResult;
 };
 
 class TReaderServerMock
@@ -71,35 +50,14 @@ public:
         }
     }
 
-    void NeedPoll(AIReader::Tag) override {
-        if (OnNeedPoll) {
-            OnNeedPoll(*this);
-        }
-    }
-
-    void Poll(AIReader::Tag) override {
+    void Poll(AIReader::Tag, const AIReader::TEvReader::TEvPoll::TPtr& result) override {
         if (OnPoll) {
-            OnPoll(*this);
-        }
-    }
-
-    void Remaining(AIReader::Tag) override {
-        if (OnRemaining) {
-            OnRemaining(*this);
-        }
-    }
-
-    void ReadNext(AIReader::Tag) override {
-        if (OnReadNext) {
-            OnReadNext(*this);
+            OnPoll(*this, result);
         }
     }
 
     std::function<void(TReaderServerMock&)> OnBootstrap;
-    std::function<void(TReaderServerMock&)> OnNeedPoll;
-    std::function<void(TReaderServerMock&)> OnPoll;
-    std::function<void(TReaderServerMock&)> OnRemaining;
-    std::function<void(TReaderServerMock&)> OnReadNext;
+    std::function<void(TReaderServerMock&, const AIReader::TEvReader::TEvPoll::TPtr&)> OnPoll;
 };
 
 } // namespace NKikimr::NChangeMirroring

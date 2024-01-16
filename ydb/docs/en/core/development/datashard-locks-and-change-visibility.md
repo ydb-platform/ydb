@@ -39,7 +39,6 @@ When KQP needs to make uncommitted changes in a YQL transaction, it uses DataSha
 
 There are some limitations to such uncommitted write transactions:
 
-* LockedWrites feature must be enabled (currently enabled by default)
 * Transaction must run in an immediate transaction mode (i.e. uncommitted writes cannot be distributed)
 * Transaction must have a valid `LockNodeId` specified, DataShard subscribes to lock status using this node and automatically rolls back uncommitted changes when the lock expires (e.g. when transaction aborts unexpectedly, node is restarted and transaction state is lost, etc.)
 * Transaction must have a valid MVCC snapshot specified, which is used as the conflict detection baseline (and reads when needed), and expected to be used across all reads and writes in the same YQL transaction.

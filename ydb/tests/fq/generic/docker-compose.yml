@@ -2,6 +2,7 @@ version: '3.4'
 services:
   postgresql:
     image: "postgres:15-bullseye@sha256:3411b9f2e5239cd7867f34fcf22fe964230f7d447a71d63c283e3593d3f84085"
+    # to be able to run tests by different users on the same machine we set prefix to ${USER}
     container_name: ${USER}_ydb_tests_fq_generic_postgresql
     environment:
       POSTGRES_DB: db

@@ -159,18 +159,14 @@ class TDqsS3RecaptureTransformer : public TSyncTransformerBase {
 public:
     TDqsS3RecaptureTransformer(TS3State::TPtr state)
         : State_(state)
-    {
-        std::cout << "TDqsS3RecaptureTransformer()" << std::endl;
-    }
+    {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
 
-        std::cout << "------------TDqsS3RecaptureTransformer()::DoTransform" << std::endl;
         YQL_CLOG(INFO, ProviderDq) << "TDqsS3RecaptureTransformer::DoTransform";
 
         output = input;
         if (ctx.Step.IsDone(TExprStep::Recapture)) {
-             std::cout << "return ok" << std::endl;
             return TStatus::Ok;
         }
 

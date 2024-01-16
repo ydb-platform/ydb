@@ -16,7 +16,6 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.ForgetAfterFail
 ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
-ydb/library/yql/providers/generic/connector/tests test.py.test_select_positive_postgresql*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
 ydb/library/yql/tests/sql/dq_file/part16 test.py.test[expr-as_dict_list_key-default.txt-Analyze]
 ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-default.txt-Analyze]

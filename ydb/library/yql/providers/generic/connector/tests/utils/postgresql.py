@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import abc
 import time
 from datetime import datetime
-from typing import Tuple, Generator
+from typing import Tuple
 import sys
 
 import pg8000.dbapi

@@ -49,7 +49,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> 'Settings':
-        docker_compose_file = yatest.common.source_path('ydb/library/yql/providers/generic/connector/tests/docker-compose.yml')
+        docker_compose_file = yatest.common.source_path(
+            'ydb/library/yql/providers/generic/connector/tests/docker-compose.yml'
+        )
         endpoint_determiner = EndpointDeterminer(docker_compose_file)
 
         return cls(
@@ -62,7 +64,7 @@ class Settings:
             clickhouse=cls.ClickHouse(
                 cluster_name='clickhouse_integration_test',
                 host_external='localhost',
-                host_internal='connector-integration-tests-clickhouse',
+                host_internal='clickhouse',
                 http_port_external=endpoint_determiner.get_port('clickhouse', 8123),
                 native_port_external=endpoint_determiner.get_port('clickhouse', 9000),
                 http_port_internal=8123,
@@ -74,7 +76,7 @@ class Settings:
             postgresql=cls.PostgreSQL(
                 cluster_name='postgresql_integration_test',
                 host_external='localhost',
-                host_internal='connector-integration-tests-postgresql',
+                host_internal='postgresql',
                 port_external=endpoint_determiner.get_port('postgresql', 5432),
                 port_internal=5432,
                 dbname='db',

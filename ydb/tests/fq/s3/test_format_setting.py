@@ -756,11 +756,11 @@ Pear;15;33'''
         assert len(result_set.rows) == 6
 
     @yq_all
-    @pytest.mark.parametrize("filename, type_format", [
-        ("date_null/as_default/test.csv", "csv_with_names"),
-        ("date_null/parse_error/test.csv", "csv_with_names")
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/test.csv"),
+        ("date_null/parse_error/test.csv")
     ])
-    def test_date_null(self, kikimr, s3, client, filename, type_format):
+    def test_date_null(self, kikimr, s3, client, filename):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
         client.create_storage_connection("hcpp", "fbucket")
 
@@ -773,6 +773,60 @@ Pear;15;33'''
                 csv_delimiter=",",
                 SCHEMA=(
                 `put` Date
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/test.csv"),
+        ("date_null/parse_error/test.csv")
+    ])
+    def test_date_null_with_not_null_type(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date NOT NULL
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/multi_null.csv"),
+        ("date_null/parse_error/multi_null.csv")
+    ])
+    def test_date_null_multi(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`, `a`, `t`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` Date,
+                `a` Date,
+                `t` Date
                 ))
             LIMIT 10;
             '''.format(name="/" + filename)

@@ -1,6 +1,8 @@
 #include "dq_opt_hopping.h"
 
 #include <ydb/library/yql/core/yql_aggregate_expander.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
@@ -14,7 +16,6 @@
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 
-
 #include <util/generic/bitmap.h>
 
 namespace NYql::NDq::NHopping {
@@ -22,11 +23,6 @@ namespace NYql::NDq::NHopping {
 using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
-
-namespace {
-
-
-}
 
 struct THoppingTraits {
     TString Column;

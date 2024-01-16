@@ -664,20 +664,19 @@ public:
         }
         config.is_local = rawVal == "t";
 
-        if (NodeTag(arg0) != T_ColumnRef || NodeTag(arg1) != T_ColumnRef) {
-            AddError(TStringBuilder() << "Expected column name ref arg, but got something other: " << NodeTag(arg0));
+        if (NodeTag(arg0) != T_A_Const || NodeTag(arg1) != T_A_Const) {
+            AddError(TStringBuilder() << "Expected const with string, but got something other: " << NodeTag(arg0));
             return nullptr;
         }
 
-        auto name = ListNodeNth(CAST_NODE(ColumnRef, arg0)->fields, 0);
-        auto val = ListNodeNth(CAST_NODE(ColumnRef, arg1)->fields, 0);
+        auto name = CAST_NODE(A_Const, arg0)->val;
+        auto val = CAST_NODE(A_Const, arg1)->val;
         if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
             AddError(TStringBuilder() << "Expected string const as name arg, but got something other: " << NodeTag(name));
             return;
         }
         config.name = (char*)StrVal(name);
-        A_Const constVal{.type = T_A_Const, .val = *(Value*)val, .location = loc};
-        config.args = list_make1((void*)(&constVal));
+        config.args = list_make1((void*)(&val));
         return ParseVariableSetStmt(&config, true);
     }
 
@@ -2083,11 +2082,11 @@ public:
                 return nullptr;
             }
             auto val = ListNodeNth(value->args, 0);
-            if (NodeTag(val) != T_A_Const || NodeTag(CAST_NODE(A_Const, val)->val) != T_String) {
+            if (NodeTag(val) != T_String) {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
-            TString rawStr = TString(StrVal(CAST_NODE(A_Const, val)->val));
+            TString rawStr = TString(StrVal(val));
             if (name != "search_path") {
                 AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
                 return nullptr;

@@ -546,7 +546,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&runOptions.BindingsFile);
     opts.AddLongOption("metrics-pusher-config", "Metrics Pusher Config")
         .StoreResult(&mestricsPusherConfig);
-    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
+    opts.AddLongOption("disable-spilling", "Disable disk spilling").NoArgument();
     opts.AddLongOption("failure-inject", "Activate failure injection")
         .Optional()
         .RequiredArgument("INJECTION_NAME=FAIL_COUNT or INJECTION_NAME=SKIP_COUNT/FAIL_COUNT")
@@ -664,6 +664,12 @@ int RunMain(int argc, const char* argv[])
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("AnalyzeQuery");
         setting->SetValue("1");
+    }
+
+    if (res.Has("disable-spilling")) {
+        auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
+        setting->SetName("SpillingEngine");
+        setting->SetValue("disable");
     }
 
     TString defYtServer = gatewaysConfig.HasYt() ? NYql::TConfigClusters::GetDefaultYtServer(gatewaysConfig.GetYt()) : TString();
@@ -814,11 +820,11 @@ int RunMain(int argc, const char* argv[])
             size_t requestTimeout = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasRequestTimeoutSeconds() ? gatewaysConfig.GetHttpGateway().GetRequestTimeoutSeconds() : 100;
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
-            const bool enableSpilling = res.Has("enable-spilling");
-            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories,
-                enableSpilling, CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
-                metricsRegistry,
-                metricsPusherFactory);
+
+            bool enableSpilling = !res.Has("disable-spilling");
+            dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
+                CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
+                metricsRegistry, metricsPusherFactory);
         }
 
         dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

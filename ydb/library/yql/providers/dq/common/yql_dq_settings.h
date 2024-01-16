@@ -55,7 +55,7 @@ struct TDqSettings {
         static constexpr bool EnableChannelStats = false;
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
-        static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
+        static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::File;
         static constexpr ui32 MaxDPccpDPTableSize = 10000U;
 
     };
@@ -203,6 +203,10 @@ struct TDqSettings {
         } else {
             return fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
         }
+    }
+
+    bool IsSpillingEnabled() const {
+        return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
     }
 };
 

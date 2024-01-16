@@ -456,7 +456,7 @@ private:
         auto toPop = ev->Get()->Size;
         ui64 channelId = ev->Get()->ChannelId;
 
-        TSpillingStorageInfo::TPtr spillingStorageInfo = GetSpillingStorage(channelId, actorSystem);
+        TSpillingStorageInfo::TPtr spillingStorageInfo = GetSpillingStorage(channelId);
 
         Invoker->Invoke([spillingStorageInfo, cookie, selfId, channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
@@ -572,8 +572,10 @@ private:
         auto cookie = ev->Cookie;
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
+        auto& outputs = ev->Get()->Task.GetOutputs();
         auto startTime = TInstant::Now();
         ExecCtx = ev->Get()->ExecCtx;
+        auto* actorSystem = TActivationContext::ActorSystem();
 
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
@@ -585,6 +587,14 @@ private:
                 }
             }
         }
+
+        for (auto outputId = 0; outputId < outputs.size(); outputId++) {
+            auto& channels = outputs[outputId].GetChannels();
+            for (auto& channel : channels) {
+                CreateSpillingStorage(channel.GetId(), actorSystem, channel.GetEnableSpilling());
+            }
+        }
+
         ParentId = ev->Sender;
 
         try {
@@ -603,7 +613,6 @@ private:
             return;
         }
 
-        auto* actorSystem = TActivationContext::ActorSystem();
         Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
@@ -705,20 +714,26 @@ private:
         });
     }
 
-    TSpillingStorageInfo::TPtr GetSpillingStorage(ui64 channelId, TActorSystem* actorSystem) {
+    TSpillingStorageInfo::TPtr GetSpillingStorage(ui64 channelId) {
+        TSpillingStorageInfo::TPtr spillingStorage = nullptr;
+        auto spillingIt = SpillingStoragesInfos.find(channelId);
+        if (spillingIt != SpillingStoragesInfos.end()) {
+            spillingStorage = spillingIt->second;
+        }
+        return spillingStorage;
+    }
+
+    void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, actorSystem, true /*isConcurrent*/);
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem, true /*isConcurrent*/);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);
-            if (spillingIt == SpillingStoragesInfos.end()) {
-                TSpillingStorageInfo* info = new TSpillingStorageInfo(channelStorage, channelId);
-                spillingIt = SpillingStoragesInfos.emplace(channelId, info).first;
-            }
-            spillingStorageInfo = spillingIt->second;
-        }
+            YQL_ENSURE(spillingIt == SpillingStoragesInfos.end());
 
-        return spillingStorageInfo;
+            TSpillingStorageInfo* info = new TSpillingStorageInfo(channelStorage, channelId);
+            spillingIt = SpillingStoragesInfos.emplace(channelId, info).first;
+        }
     }
 
     NActors::TActorId ParentId;

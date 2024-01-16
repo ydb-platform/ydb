@@ -1183,6 +1183,12 @@ def main():
             default="ver-01gswscgce37hdbqyssjm3nd7x",
             help=''
         )
+        parser.add_argument(
+            '--no-copy-optimization',
+            default=False,
+            action='store_true',
+            help='copy kikimr binaries to each destination host from this machine (as opposed to copying to the first one and then every other host copying from the first one)'
+        )
 
         modes = parser.add_subparsers()
         add_start_mode(modes)

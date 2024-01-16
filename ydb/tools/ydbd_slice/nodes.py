@@ -117,7 +117,7 @@ class Nodes(object):
         self._check_async_execution(running_jobs)
 
     # copy local_path to remote_path for every node in nodes
-    def copy(self, local_path, remote_path, directory=False, compressed_path=None):
+    def copy(self, local_path, remote_path, directory=False, compressed_path=None, no_copy_optimization=False):
         if directory:
             local_path += '/'
             remote_path += '/'
@@ -129,7 +129,14 @@ class Nodes(object):
             original_remote_path = remote_path
             remote_path += '.zstd'
         hub = self._nodes[0]
-        self._copy_on_node(local_path, hub, remote_path)
-        self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
+
+        if no_copy_optimization:
+            self._logger.critical('Copying to every node')
+            for dst in self._nodes:
+                self._copy_on_node(local_path, dst, remote_path)
+        else:
+            self._copy_on_node(local_path, hub, remote_path)
+            self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
+        
         if compressed_path is not None:
             self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))

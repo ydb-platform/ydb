@@ -2,13 +2,41 @@
 
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.8.0 {#2-8-0}
+
+Released on January 12, 2024. To update to version **2.8.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* Added configuration management commands for the cluster `ydb admin config` and `ydb admin volatile-config`.
+
+* Added the `generic` type of requests in the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, with arbitrarily-sized results and with support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
+
+* Added support for loading postgres-types by command [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md). Only for row tables.
+
+* Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export_import/s3_import.md) command. Currently only available on Linux and Mac OS.
+
+* Added support for outputting the result of executing commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) in [parquet](https://parquet.apache.org/docs/) format.
+
+* In the `ydb table query explain` command, the [--collect-diagnostics](reference/ydb-cli/table-query-execute.md#options) option has been added to collect query diagnostics and save it to a file.
+
+* In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, specifying the type of queries used.
+
+* Added column of median benchmark execution time in the statistics table in the command [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
+
+**Bug fixes:**
+
+* Fixed an error displaying tables in `pretty` format with [Unicode](https://en.wikipedia.org/wiki/Unicode) characters.
+
+* Fixed an error substituting the wrong primary key in the command [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert).
+
 ## Version 2.7.0 {#2-7-0}
 
 Released on October 23, 2023. To update to version **2.7.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **Features:**
 
-* Added the `ydb tools pg-convert` command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
+* Added the [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert) command, which prepares a dump obtained by the [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) utility for loading into the YDB postgres-compatible layer.
 
 * Added the `ydb workload query` load testing command, which loads the database with [script execution queries](reference/ydb-cli/yql.md) in multiple threads.
 
@@ -20,13 +48,13 @@ Released on October 23, 2023. To update to version **2.7.0**, select the [Downlo
 
 * Added validation for [special commands](reference/ydb-cli/interactive-cli.md#spec-commands) and their [parameters](reference/ydb-cli/interactive-cli.md#internal-vars).
 
-* Added table reading in the scenario with transactions in the command `ydb workload transfer topic-to-table run`.
+* Added table reading in the scenario with transactions in the command [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
 
-* Added the `--commit-messages` option to the command `ydb workload transfer topic-to-table run`, specifying the number of messages in a single transaction.
+* Added the `--commit-messages` option to the command [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), specifying the number of messages in a single transaction.
 
-* Added the options `--only-table-in-tx` and `--only-topic-in-tx` in the command `ydb workload transfer topic-to-table run`, specifying restrictions on the types of queries in a single transaction.
+* Added the options `--only-table-in-tx` and `--only-topic-in-tx` in the command [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run), specifying restrictions on the types of queries in a single transaction.
 
-* Added new columns `Select time` and `Upsert time` in the statistics table in the command `ydb workload transfer topic-to-table run`.
+* Added new columns `Select time` and `Upsert time` in the statistics table in the command [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md#run).
 
 **Bug fixes:**
 
@@ -40,7 +68,7 @@ Released on September 7, 2023. To update to version **2.6.0**, select the [Downl
 
 * Added `--path` option to [ydb workload tpch run](reference/ydb-cli/workload-tpch.md#run), which contains the path to the directory with tables created by the [ydb workload tpch init](reference/ydb-cli/workload-tpch.md#init) command.
 
-* Added `ydb workload transfer topic-to-table` command, which loads the database with read requests from topics and write requests to the table.
+* Added [ydb workload transfer topic-to-table run](reference/ydb-cli/workload-transfer.md) command, which loads the database with read requests from topics and write requests to the table.
 
 * Added the option `--consumer-prefix` in the commands [ydb workload topic init](reference/ydb-cli/workload-topic.md#init), [ydb workload topic run read|full](reference/ydb-cli/workload-topic.md#run-read), specifying prefixes of consumer names.
 

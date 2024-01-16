@@ -670,6 +670,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
     }
 
+    Y_UNIT_TEST(CreateObjectIfNotExists) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE OBJECT IF NOT EXISTS secretId (TYPE SECRET) WITH (Key1=Value1, K2=V2);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObjectIfNotExists"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}, {TString("SECRET"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
+    }
+
     Y_UNIT_TEST(CreateObjectWithFeaturesStrings) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE OBJECT secretId (TYPE SECRET) WITH (Key1=\"Value1\", K2='V2', K3=V3, K4='', K5=`aaa`, K6='a\\'aa');");
         UNIT_ASSERT(res.Root);
@@ -834,6 +851,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
     }
 
+    Y_UNIT_TEST(DropObjectIfExists) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; DROP OBJECT IF EXISTS secretId (TYPE SECRET);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObjectIfExists"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}, {TString("SECRET"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
+    }
+
     Y_UNIT_TEST(PrimaryKeyParseCorrect) {
         NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));");
         UNIT_ASSERT(res.Root);
@@ -947,6 +981,23 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             if (word == "Write!") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
                                            line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('"a" (DataType 'Int32) '('columnConstrains '('('not_null))) '()))) '('primarykey '('"a"))))))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+
+    Y_UNIT_TEST(CreateTableWithIfNotExists) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE IF NOT EXISTS t (a int32, primary key(a));");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))) '('primarykey '('"a")))))__"));
             }
         };
 
@@ -3435,8 +3486,18 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(DropTableWithIfExists) {
         NYql::TAstParseResult res = SqlToYql("DROP TABLE IF EXISTS plato.foo;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: IF EXISTS in DROP TABLE is not supported.\n");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop_if_exists"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(TooManyErrors) {
@@ -5468,6 +5529,30 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceIfNotExists) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE IF NOT EXISTS MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObjectIfNotExists"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
         ExpectFailWithError(R"(
                 USE plato;
@@ -5672,6 +5757,26 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
+
+    Y_UNIT_TEST(DropExternalDataSourceIfExists) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                DROP EXTERNAL DATA SOURCE IF EXISTS MyDataSource;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "MyDataSource");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObjectIfExists"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalTable) {
@@ -5754,6 +5859,31 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateExternalTableIfNotExists) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            CREATE EXTERNAL TABLE IF NOT EXISTS mytable (
+                a int
+            ) WITH (
+                DATA_SOURCE="/Root/mydatasource",
+                LOCATION="/folder1/*"
+            );
+        )");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('data_source_path (String '"/Root/mydatasource")) '('location (String '"/folder1/*")))) '('tableType 'externalTable)))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, "create_if_not_exists");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalTableWithBadArguments) {
         ExpectFailWithError(R"(
                 USE plato;
@@ -5828,6 +5958,26 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyExternalTable");
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'tablescheme"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropExternalTableIfExists) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                DROP EXTERNAL TABLE IF EXISTS MyExternalTable;
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("tablescheme"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop_if_exists"));
             }
         };
 

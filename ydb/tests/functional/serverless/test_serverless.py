@@ -47,7 +47,8 @@ CLUSTER_CONFIG = dict(
         'GRPC_SERVER': LogLevels.DEBUG
     },
     enforce_user_token_requirement=True,
-    default_user_sid="user@builtin"
+    default_user_sid='user@builtin',
+    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes']
 )
 
 

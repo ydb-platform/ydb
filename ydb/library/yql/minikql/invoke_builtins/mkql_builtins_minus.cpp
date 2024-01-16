@@ -48,5 +48,9 @@ void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus");
 }
 
+void RegisterMinus(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Minus"] = std::make_unique<TUnaryNumericKernelFamily<TMinus>>();
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

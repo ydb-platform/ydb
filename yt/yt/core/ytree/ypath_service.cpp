@@ -437,12 +437,12 @@ private:
             }));
     }
 
-   void ListAttribute(const TYPath& /*path*/, TReqList* /*request*/, TRspList* /*response*/, const TCtxListPtr& context) override
-   {
+    void ListAttribute(const TYPath& /*path*/, TReqList* /*request*/, TRspList* /*response*/, const TCtxListPtr& context) override
+    {
         // Execute fallback.
         auto node = BuildNodeFromProducer();
         ExecuteVerb(node, context->GetUnderlyingContext());
-   }
+    }
 
     void ExistsRecursive(const TYPath& path, TReqExists* /*request*/, TRspExists* /*response*/, const TCtxExistsPtr& context) override
     {

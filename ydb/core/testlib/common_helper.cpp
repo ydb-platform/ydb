@@ -5,6 +5,7 @@
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
@@ -136,20 +137,18 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
     UNIT_ASSERT(resultReady);
 }
 
-void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {
+void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
     NYdb::NTable::TTableClient tClient(Server.GetDriver(),
         NYdb::NTable::TClientSettings().UseQueryCache(false).AuthToken("root@builtin"));
-    auto expectation = expectSuccess;
 
     std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
-    TString requestInt = request;
-    tClient.CreateSession().Subscribe([rrPtr, requestInt, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
+    tClient.CreateSession().Subscribe([rrPtr, request, expectation](NThreading::TFuture<NYdb::NTable::TCreateSessionResult> f) {
         auto session = f.GetValueSync().GetSession();
-        session.ExecuteSchemeQuery(requestInt).Subscribe([rrPtr, expectation, requestInt](NYdb::TAsyncStatus f)
+        session.ExecuteSchemeQuery(request).Subscribe([rrPtr, expectation, request](NYdb::TAsyncStatus f)
             {
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
-                Cerr << "REQUEST=" << requestInt << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
+                Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
                 UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
                 *rrPtr = true;
             });
@@ -162,6 +161,39 @@ void THelper::StartSchemaRequest(const TString& request, const bool expectSucces
         }
         UNIT_ASSERT(*rrPtr);
         Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
+    }
+}
+
+void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
+    NYdb::NQuery::TQueryClient qClient(Server.GetDriver(),
+        NYdb::NQuery::TClientSettings().AuthToken("root@builtin"));
+
+    std::shared_ptr<bool> rrPtr = std::make_shared<bool>(false);
+    auto future = qClient.ExecuteQuery(request, NYdb::NQuery::TTxControl::NoTx());
+    future.Subscribe([rrPtr, expectation, request](NYdb::NQuery::TAsyncExecuteQueryResult f)
+        {
+            TStringStream ss;
+            f.GetValueSync().GetIssues().PrintTo(ss, false);
+            Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
+            *rrPtr = true;
+        });
+    Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
+    if (waiting) {
+        const TInstant start = TInstant::Now();
+        while (!*rrPtr && start + TDuration::Seconds(20) > TInstant::Now()) {
+            Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(*rrPtr);
+        UNIT_ASSERT_C(expectation == future.GetValueSync().IsSuccess(), future.GetValueSync().GetIssues().ToString());
+        Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
+    }
+}
+
+void THelper::StartSchemaRequest(const TString& request, const bool expectSuccess, const bool waiting) const {
+    if (UseQueryService) {
+        StartSchemaRequestQueryServiceImpl(request, expectSuccess, waiting);
+    } else {
+        StartSchemaRequestTableServiceImpl(request, expectSuccess, waiting);
     }
 }
 

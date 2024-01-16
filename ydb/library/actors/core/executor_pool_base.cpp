@@ -69,6 +69,9 @@ namespace NActors {
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
         , ThreadsAffinity(affinity)
+#ifdef RING_ACTIVATION_QUEUE
+        , Activations(threads == 1)
+#endif
     {}
 
     TExecutorPoolBase::~TExecutorPoolBase() {
@@ -112,7 +115,11 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
+#ifdef RING_ACTIVATION_QUEUE
+        ScheduleActivationEx(activation, 0);
+#else
         ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+#endif
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
@@ -132,7 +139,11 @@ namespace NActors {
             TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
         }
         if (activation) {
-            ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+#ifdef RING_ACTIVATION_QUEUE
+        ScheduleActivationEx(activation, 0);
+#else
+        ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
+#endif
         }
     }
 

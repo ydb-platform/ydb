@@ -170,6 +170,7 @@ struct TKikimrEvents : TEvents {
         ES_DB_METADATA_CACHE,
         ES_TABLE_CREATOR,
         ES_PQ_PARTITION_CHOOSER,
+        ES_GRAPH,
     };
 };
 

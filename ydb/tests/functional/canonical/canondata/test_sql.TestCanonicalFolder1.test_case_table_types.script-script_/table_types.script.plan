@@ -57,10 +57,16 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Name": "Limit",
                                                         "Limit": "1001"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
                                                         ],
@@ -98,6 +104,11 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
@@ -157,10 +168,16 @@
                                 "PlanNodeId": 1,
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Upsert",
                                         "Table": "base_table_types_script_script/TableTypes"
                                     },
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }

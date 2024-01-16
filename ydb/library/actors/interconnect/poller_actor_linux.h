@@ -80,24 +80,24 @@ namespace NActors {
                 static constexpr ui32 fullWrite = WriteExpected | WriteHit;
                 bool read = (updated & fullRead) == fullRead;
                 bool write = (updated & fullWrite) == fullWrite;
+                if (checkQueues) {
+                    const bool queryRead = updated & ReadExpected && !read;
+                    const bool queryWrite = updated & WriteExpected && !write;
+                    if (queryRead || queryWrite) {
+                        pollfd fd;
+                        fd.fd = record->Socket->GetDescriptor();
+                        fd.events = (queryRead ? POLLIN | POLLRDHUP : 0) | (queryWrite ? POLLOUT : 0);
+                        if (poll(&fd, 1, 0) != -1) {
+                            read |= queryRead && fd.revents & (POLLIN | POLLHUP | POLLRDHUP | POLLERR);
+                            write |= queryWrite && fd.revents & (POLLOUT | POLLERR);
+                        }
+                    }
+                }
                 updated &= ~((read ? fullRead : 0) | (write ? fullWrite : 0));
                 if (record->Flags.compare_exchange_weak(flags, updated, std::memory_order_acq_rel)) {
                     if (suppressNotify) {
                         return read || write;
                     } else {
-                        if (checkQueues) {
-                            pollfd fd;
-                            fd.fd = record->Socket->GetDescriptor();
-                            const bool queryRead = updated & ReadExpected && !read;
-                            const bool queryWrite = updated & WriteExpected && !write;
-                            if (queryRead || queryWrite) {
-                                fd.events = (queryRead ? POLLIN : 0) | (queryWrite ? POLLOUT : 0);
-                                if (poll(&fd, 1, 0) != -1) {
-                                    read = queryRead && fd.revents & (POLLIN | POLLHUP | POLLRDHUP | POLLERR);
-                                    write = queryWrite && fd.revents & (POLLOUT | POLLERR);
-                                }
-                            }
-                        }
                         Notify(record, read, write);
                         return false;
                     }

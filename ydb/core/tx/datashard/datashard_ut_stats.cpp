@@ -79,9 +79,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
-        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ui64 shard1 = shards.at(0);
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
 
@@ -93,6 +92,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 704u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetIndexSize(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetImmediateTxCompleted(), 1u);
         }
 
         CompactTable(runtime, shard1, tableId1, false);
@@ -110,6 +110,16 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetChannel(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetDataSize(), 65u);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), 54u);
+        }
+
+        Write(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        {
+            Cerr << "... waiting for stats after write" << Endl;
+            auto stats = WaitTableStats(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 4u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetImmediateTxCompleted(), 2u);
         }
     }
 

@@ -152,6 +152,7 @@ public:
 
     TString GetCORS(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) override;
+    TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString type, TString response) override;
     TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
 
@@ -484,6 +485,22 @@ TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString con
         res << "Content-Type: " << contentType << "\r\n";
     }
     res << GetCORS(request);
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
+}
+
+TString TViewer::GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) {
+    TStringBuilder res;
+    res << "HTTP/1.1 200 Ok\r\n"
+        << "Content-Type: " << contentType << "\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
+    if (response) {
+        res << "Content-Length: " << response.size() << "\r\n";
+    }
     res << "\r\n";
     if (response) {
         res << response;

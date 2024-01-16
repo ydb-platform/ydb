@@ -705,6 +705,7 @@ public:
             }
         }
 
+        bool hasCombiningQueries = (1 < setItems.size());
 
         TAstNode* sort = nullptr;
         if (ListLength(value->sortClause) > 0) {
@@ -716,7 +717,7 @@ public:
                     return nullptr;
                 }
 
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), setItems.size() == 1, true);
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), !hasCombiningQueries, true);
                 if (!sort) {
                     return nullptr;
                 }
@@ -728,7 +729,7 @@ public:
         }
 
         TVector<TAstNode*> setItemNodes;
-        for (size_t id = 0; id < setItems.size(); id++) {
+        for (size_t id = 0; id < setItems.size(); ++id) {
             const auto& x = setItems[id];
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
@@ -1051,11 +1052,11 @@ public:
                 setItemOptions.push_back(QL(QA("distinct_on"), distinctOn));
             }
 
-            if (setItems.size() == 1 && sort) {
+            if (!hasCombiningQueries && sort) {
                 setItemOptions.push_back(QL(QA("sort"), sort));
             }
 
-            if (unknownsAllowed) {
+            if (unknownsAllowed || hasCombiningQueries) {
                 setItemOptions.push_back(QL(QA("unknowns_allowed")));
             }
 
@@ -1106,7 +1107,7 @@ public:
         selectOptions.push_back(QL(QA("set_items"), QVL(setItemNodes.data(), setItemNodes.size())));
         selectOptions.push_back(QL(QA("set_ops"), QVL(setOpsNodes.data(), setOpsNodes.size())));
 
-        if (setItems.size() > 1 && sort) {
+        if (hasCombiningQueries && sort) {
             selectOptions.push_back(QL(QA("sort"), sort));
         }
 

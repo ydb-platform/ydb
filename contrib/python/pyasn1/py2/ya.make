@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(0.5.0)
+VERSION(0.5.1)
 
 LICENSE(BSD-3-Clause)
 

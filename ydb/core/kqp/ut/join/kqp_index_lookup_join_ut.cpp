@@ -90,6 +90,7 @@ Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);

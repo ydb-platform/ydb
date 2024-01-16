@@ -268,6 +268,12 @@ struct TExpectedTableStats {
     TMaybe<ui64> ExpectedDeletes;
 };
 
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
+
+void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
+
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 

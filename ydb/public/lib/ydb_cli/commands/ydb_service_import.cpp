@@ -1,5 +1,7 @@
 #include "ydb_service_import.h"
 
+#include "ydb_common.h"
+
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -15,6 +17,10 @@
 #elif defined(_unix_)
 #include <unistd.h>
 #endif
+
+namespace NYdb::NDump {
+    extern const char SCHEME_FILE_NAME[];
+}
 
 namespace NYdb::NConsoleClient {
 
@@ -120,15 +126,47 @@ int TCommandImportFromS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
 
-    for (const auto& item : Items) {
-        settings.AppendItem({item.Source, item.Destination});
-    }
-
     if (Description) {
         settings.Description(Description);
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+#if defined(_win32_)
+    for (const auto& item : Items) {
+        settings.AppendItem({item.Source, item.Destination});
+    }
+#else
+    InitAwsAPI();
+    try {
+        auto s3Client = CreateS3ClientWrapper(settings);
+        for (auto item : Items) {
+            std::optional<TString> token;
+            if (!item.Source.empty() && item.Source.back() != '/') {
+                item.Source += "/";
+            }
+            if (!item.Destination.empty() && item.Destination.back() == '.') {
+                item.Destination.pop_back();
+            }
+            if (item.Destination.empty() || item.Destination.back() != '/') {
+                item.Destination += "/";
+            }
+            do {
+                auto listResult = s3Client->ListObjectKeys(item.Source, token);
+                token = listResult.NextToken;
+                for (TStringBuf key : listResult.Keys) {
+                    if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
+                        TString destination = item.Destination + key.substr(item.Source.Size());
+                        settings.AppendItem({TString(key), std::move(destination)});
+                    }
+                }
+            } while (token);
+        }
+    } catch (...) {
+        ShutdownAwsAPI();
+        throw;
+    }
+    ShutdownAwsAPI();
+#endif
 
     TImportClient client(CreateDriver(config));
     TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();

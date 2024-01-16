@@ -281,12 +281,10 @@ struct Info {
 
 // Info for namespaces.
 struct NamespaceInfo : public Info {
-  NamespaceInfo() : Info(InfoType::IT_namespace) {}
-  NamespaceInfo(SymbolID USR) : Info(InfoType::IT_namespace, USR) {}
-  NamespaceInfo(SymbolID USR, StringRef Name)
-      : Info(InfoType::IT_namespace, USR, Name) {}
-  NamespaceInfo(SymbolID USR, StringRef Name, StringRef Path)
-      : Info(InfoType::IT_namespace, USR, Name, Path) {}
+  NamespaceInfo();
+  NamespaceInfo(SymbolID USR);
+  NamespaceInfo(SymbolID USR, StringRef Name);
+  NamespaceInfo(SymbolID USR, StringRef Name, StringRef Path);
 
   void merge(NamespaceInfo &&I);
 
@@ -337,12 +335,10 @@ struct FunctionInfo : public SymbolInfo {
 // friend classes
 // Info for types.
 struct RecordInfo : public SymbolInfo {
-  RecordInfo() : SymbolInfo(InfoType::IT_record) {}
-  RecordInfo(SymbolID USR) : SymbolInfo(InfoType::IT_record, USR) {}
-  RecordInfo(SymbolID USR, StringRef Name)
-      : SymbolInfo(InfoType::IT_record, USR, Name) {}
-  RecordInfo(SymbolID USR, StringRef Name, StringRef Path)
-      : SymbolInfo(InfoType::IT_record, USR, Name, Path) {}
+  RecordInfo();
+  RecordInfo(SymbolID USR);
+  RecordInfo(SymbolID USR, StringRef Name);
+  RecordInfo(SymbolID USR, StringRef Name, StringRef Path);
 
   void merge(RecordInfo &&I);
 
@@ -371,11 +367,9 @@ struct RecordInfo : public SymbolInfo {
 };
 
 struct BaseRecordInfo : public RecordInfo {
-  BaseRecordInfo() : RecordInfo() {}
+  BaseRecordInfo();
   BaseRecordInfo(SymbolID USR, StringRef Name, StringRef Path, bool IsVirtual,
-                 AccessSpecifier Access, bool IsParent)
-      : RecordInfo(USR, Name, Path), IsVirtual(IsVirtual), Access(Access),
-        IsParent(IsParent) {}
+                 AccessSpecifier Access, bool IsParent);
 
   // Indicates if base corresponds to a virtual inheritance
   bool IsVirtual = false;

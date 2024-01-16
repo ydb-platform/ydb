@@ -16,46 +16,46 @@ select ListAggregate(Nothing(ParseType("List<Int32>?")), $factory);
 
 $factory = AGGREGATION_FACTORY("sum");
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     DictCreate(ParseType("String"), ParseType("List<Int32>"))
-    , $factory);
+    , $factory)));
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     AsDict(
         AsTuple("foo", AsList(1, 3)), 
         AsTuple("bar", AsList(2))
-    ), $factory);
+    ), $factory)));
 
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     Just(AsDict(
         AsTuple("foo", AsList(1, 3)), 
         AsTuple("bar", AsList(2))
-    )), $factory);
+    )), $factory)));
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     Nothing(ParseType("Dict<String, List<Int32>>?"))
-    , $factory);
+    , $factory)));
 
 $factory = AGGREGATION_FACTORY("count");
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     DictCreate(ParseType("String"), ParseType("List<Int32>"))
-    , $factory);
+    , $factory)));
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     AsDict(
         AsTuple("foo", AsList(1, 3)), 
         AsTuple("bar", AsList(2))
-    ), $factory);
+    ), $factory)));
 
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     Just(AsDict(
         AsTuple("foo", AsList(1, 3)), 
         AsTuple("bar", AsList(2))
-    )), $factory);
+    )), $factory)));
 
-select DictAggregate(
+select ListSort(DictItems(DictAggregate(
     Nothing(ParseType("Dict<String, List<Int32>>?"))
-    , $factory);
+    , $factory)));

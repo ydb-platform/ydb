@@ -4,7 +4,7 @@ option java_package = "tech.ytsaurus.rpcproxy";
 option java_outer_classname = "ApiProtos";
 option java_multiple_files = true;
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/api/rpc_proxy";
+option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
@@ -1930,6 +1930,7 @@ message TReqDestroyChunkLocations
 {
     required string node_address = 1;
     repeated NYT.NProto.TGuid location_uuids = 2;
+    optional bool recover_unlinked_disks = 3 [default = false];
 }
 
 message TRspDestroyChunkLocations

@@ -358,7 +358,8 @@ class Request:
             # Using `content=...` implies automatically populated `Host` and content
             # headers, of either `Content-Length: ...` or `Transfer-Encoding: chunked`.
             #
-            # Using `stream=...` will not automatically include *any* auto-populated headers.
+            # Using `stream=...` will not automatically include *any*
+            # auto-populated headers.
             #
             # As an end-user you don't really need `stream=...`. It's only
             # useful when:
@@ -852,7 +853,7 @@ class Response:
                     yield chunk
             text_content = decoder.flush()
             for chunk in chunker.decode(text_content):
-                yield chunk
+                yield chunk  # pragma: no cover
             for chunk in chunker.flush():
                 yield chunk
 
@@ -956,7 +957,7 @@ class Response:
                     yield chunk
             text_content = decoder.flush()
             for chunk in chunker.decode(text_content):
-                yield chunk
+                yield chunk  # pragma: no cover
             for chunk in chunker.flush():
                 yield chunk
 

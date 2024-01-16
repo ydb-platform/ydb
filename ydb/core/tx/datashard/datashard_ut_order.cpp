@@ -1526,6 +1526,7 @@ Y_UNIT_TEST(TestMvccReadDoesntBlockWrites) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
@@ -1863,9 +1864,12 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, StreamLookup) {
 
 Y_UNIT_TEST(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TPortManager pm;
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetEnableMvccSnapshotReads(false);
     serverSettings.SetDomainName("Root")
+        .SetAppConfig(app)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3507,6 +3511,7 @@ Y_UNIT_TEST(MvccTestSnapshotRead) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -4053,7 +4058,7 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     }
 }
 
-Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
+Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, EvWrite) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4067,6 +4072,9 @@ Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+    auto rows = EvWrite ? TEvWriteRows{{{1, 1}}, {{2, 2}}, {{3, 3}}, {{5, 5}}} : TEvWriteRows{};
+    auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
 
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
     ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));

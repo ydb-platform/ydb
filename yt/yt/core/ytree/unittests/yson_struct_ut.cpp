@@ -1662,7 +1662,6 @@ public:
     }
 };
 
-
 TEST(TYsonStructTest, TestOptionalNoInit)
 {
     TTestOptionalNoInit x;

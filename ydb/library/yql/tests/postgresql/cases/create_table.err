@@ -434,23 +434,13 @@ DEALLOCATE select1;
 -- (temporarily hide query, to avoid the long CREATE TABLE stmt)
 \set ECHO none
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "\"
-
-    	\set ECHO none
-	^
+Metacommand \set ECHO none is not supported
 <sql-statement>
 SELECT 'CREATE TABLE extra_wide_table(firstc text, '|| array_to_string(array_agg('c'||i||' bool'),',')||', lastc text);'
 FROM generate_series(1, 1100) g(i)
 \gexec
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "\"
-
-    	\gexec
-	^
+Metacommand \gexec is not supported
 <sql-statement>
 \set ECHO all
 </sql-statement>
@@ -978,12 +968,7 @@ CREATE TABLE fail () INHERITS (partitioned2);
 -- Partition key in describe output
 \d partitioned
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d partitioned
-	^
+Metacommand \d partitioned is not supported
 <sql-statement>
 \d+ partitioned2
 </sql-statement>
@@ -2274,12 +2259,7 @@ insert into parted_notnull_inh_test (b) values (null);
 -- note that while b's default is overriden, a's default is preserved
 \d parted_notnull_inh_test1
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d parted_notnull_inh_test1
-	^
+Metacommand \d parted_notnull_inh_test1 is not supported
 <sql-statement>
 drop table parted_notnull_inh_test;
 </sql-statement>
@@ -2399,32 +2379,17 @@ drop table test_part_coll_posix;
 -- Partition bound in describe output
 \d+ part_b
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_b
-	^
+Metacommand \d+ part_b is not supported
 <sql-statement>
 -- Both partition bound and partition key in describe output
 \d+ part_c
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_c
-	^
+Metacommand \d+ part_c is not supported
 <sql-statement>
 -- a level-2 partition's constraint will include the parent's expressions
 \d+ part_c_1_10
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ part_c_1_10
-	^
+Metacommand \d+ part_c_1_10 is not supported
 <sql-statement>
 -- Show partition count in the parent's describe output
 -- Tempted to include \d+ output listing partitions with bound info but
@@ -2432,12 +2397,7 @@ drop table test_part_coll_posix;
 -- returned.
 \d parted
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:5:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d parted
-	^
+Metacommand \d parted is not supported
 <sql-statement>
 \d hash_parted
 </sql-statement>

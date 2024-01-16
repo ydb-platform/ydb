@@ -1,7 +1,6 @@
 #pragma once
 
 #include "flat_part_iface.h"
-#include "flat_page_index.h"
 #include "flat_table_part.h"
 #include "flat_part_index_iter_iface.h"
 
@@ -116,7 +115,7 @@ public:
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
-        , State(Reserve(Meta.LevelsCount + 1))
+        , State(Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
         State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);
@@ -181,7 +180,7 @@ public:
     EReady Next() override {
         Y_ABORT_UNLESS(!IsExhausted());
 
-        if (Meta.LevelsCount == 0) {
+        if (Meta.LevelCount == 0) {
             return Exhaust();
         }
 
@@ -195,7 +194,7 @@ public:
             PushNextState(*State.back().Pos + 1);
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -212,7 +211,7 @@ public:
     EReady Prev() override {
         Y_ABORT_UNLESS(!IsExhausted());
 
-        if (Meta.LevelsCount == 0) {
+        if (Meta.LevelCount == 0) {
             return Exhaust();
         }
 
@@ -226,7 +225,7 @@ public:
             PushNextState(*State.back().Pos - 1);
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
             if (!TryLoad(State[level])) {
                 // exiting with an intermediate state
                 Y_DEBUG_ABORT_UNLESS(!IsLeaf() && !IsExhausted());
@@ -247,7 +246,7 @@ public:
     }
 
     TRowId GetEndRowId() const override {
-        return Meta.Count;
+        return Meta.RowCount;
     }
 
     TPageId GetPageId() const override {
@@ -287,7 +286,7 @@ private:
             State[0].Pos = { };
         }
 
-        for (size_t level : xrange(State.size() - 1, Meta.LevelsCount)) {
+        for (ui32 level : xrange<ui32>(State.size() - 1, Meta.LevelCount)) {
             auto &state = State[level];
             Y_DEBUG_ABORT_UNLESS(seek.BelongsTo(state));
             if (!TryLoad(state)) {
@@ -317,7 +316,7 @@ private:
     bool IsLeaf() const noexcept {
         // Note: it is possible to have 0 levels in B-Tree
         // so we may have exhausted state with leaf (data) node
-        return State.size() == Meta.LevelsCount + 1 && !IsExhausted();
+        return State.size() == Meta.LevelCount + 1 && !IsExhausted();
     }
 
     EReady Exhaust() {
@@ -335,8 +334,8 @@ private:
 
         auto child = current.Node->GetChild(pos);
 
-        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).Count : current.BeginRowId;
-        TRowId endRowId = child.Count;
+        TRowId beginRowId = pos ? current.Node->GetChild(pos - 1).RowCount : current.BeginRowId;
+        TRowId endRowId = child.RowCount;
         
         TCellsIterable beginKey = pos ? current.Node->GetKeyCellsIterable(pos - 1, GroupInfo.ColsKeyIdx) : current.BeginKey;
         TCellsIterable endKey = pos < current.Node->GetKeysCount() ? current.Node->GetKeyCellsIterable(pos, GroupInfo.ColsKeyIdx) : current.EndKey;

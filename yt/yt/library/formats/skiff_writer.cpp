@@ -1011,7 +1011,7 @@ private:
             SkiffWriter_->Flush();
             TryFlushBuffer(false);
         }
-        Flush();
+        YT_UNUSED_FUTURE(Flush());
     }
 
     TFuture<void> Flush() override

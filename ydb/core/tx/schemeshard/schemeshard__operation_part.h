@@ -31,6 +31,7 @@
     action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
     action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
     action(TEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
 \
     action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
     action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \

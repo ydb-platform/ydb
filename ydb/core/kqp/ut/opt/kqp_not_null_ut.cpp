@@ -1653,6 +1653,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    // TODO: fix TxPlanSerializer with PG keys
     Y_UNIT_TEST(SecondaryIndexWithNotNullDataColumnPg) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

@@ -1,6 +1,6 @@
 #pragma once
 #include "context.h"
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {

@@ -19,8 +19,8 @@ private:
     const TString TransactionId;
     const NACLib::TUserToken SystemUserToken;
     const std::optional<NACLib::TUserToken> UserToken;
-    std::deque<NRequest::TDialogYQLRequest::TRequest> Requests;
 protected:
+    std::deque<NRequest::TDialogYQLRequest::TRequest> Requests;
     NInternal::TTableRecords Objects;
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const = 0;
     virtual TString GetModifyType() const = 0;
@@ -58,7 +58,7 @@ protected:
         }
     }
 
-    void Handle(NRequest::TEvRequestFailed::TPtr& ev) {
+    virtual void Handle(NRequest::TEvRequestFailed::TPtr& ev) {
         auto g = TBase::PassAwayGuard();
         Controller->OnModificationProblem("cannot execute yql request for " + GetModifyType() +
             " objects: " + ev->Get()->GetErrorMessage());
@@ -152,6 +152,7 @@ template <class TObject>
 class TInsertObjectsActor: public TModifyObjectsActor<TObject> {
 private:
     using TBase = TModifyObjectsActor<TObject>;
+    bool ExistingOk = false;
 protected:
     virtual Ydb::Table::ExecuteDataQueryRequest BuildModifyQuery() const override {
         return TBase::Objects.BuildInsertQuery(TObject::GetBehaviour()->GetStorageTablePath());
@@ -159,8 +160,23 @@ protected:
     virtual TString GetModifyType() const override {
         return "insert";
     }
+
+    void Handle(NRequest::TEvRequestFailed::TPtr& ev) override {
+        if (ev->Get()->GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED && ExistingOk) {
+            NRequest::TDialogYQLRequest::TResponse resp;
+            this->Send(this->SelfId(), new NRequest::TEvRequestResult<NRequest::TDialogYQLRequest>(std::move(resp)));
+            this->Requests.clear(); // Remove history request
+            return;
+        }
+        TBase::Handle(ev);
+    }
 public:
-    using TBase::TBase;
+    TInsertObjectsActor(NInternal::TTableRecords&& objects, const NACLib::TUserToken& systemUserToken, IModificationObjectsController::TPtr controller, const TString& sessionId,
+        const TString& transactionId, const std::optional<NACLib::TUserToken>& userToken, bool existingOk)
+        : TBase(std::move(objects), systemUserToken, std::move(controller), sessionId, transactionId, userToken)
+        , ExistingOk(existingOk)
+    {
+    }
 };
 
 }

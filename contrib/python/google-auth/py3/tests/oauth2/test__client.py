@@ -29,8 +29,8 @@ from google.auth import transport
 from google.oauth2 import _client
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
     PRIVATE_KEY_BYTES = fh.read()

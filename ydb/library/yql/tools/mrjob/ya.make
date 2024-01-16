@@ -20,6 +20,8 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/sql/pg
     ydb/library/yql/providers/yt/job
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm
     ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/minikql/comp_nodes/llvm

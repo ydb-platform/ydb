@@ -161,7 +161,7 @@ class TTestActorSystem {
         }
 
         void StateFunc(TAutoPtr<IEventHandle>& ev) {
-            Y_ABORT_UNLESS(HandlePtr, "event is not being captured by this actor Tag# %s", Tag.data());
+            Y_ABORT_UNLESS(HandlePtr, "event %s is not being captured by this actor Tag# %s", ev->GetTypeName().data(), Tag.data());
             Y_ABORT_UNLESS(!*HandlePtr);
             HandlePtr->reset(ev.Release());
         }
@@ -264,7 +264,7 @@ public:
         info.ActorSystem = std::make_unique<TActorSystem>(setup, &AppData, LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, 0, info.ActorSystem.get(), pool,
-            info.MailboxTable.get(), nullptr, "TestExecutor");
+            info.MailboxTable.get(), "TestExecutor");
     }
 
     void StartNode(ui32 nodeId) {

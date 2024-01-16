@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: httpcore
-Version: 0.18.0
+Version: 1.0.2
 Summary: A minimal low-level HTTP client.
 Project-URL: Documentation, https://www.encode.io/httpcore
 Project-URL: Homepage, https://www.encode.io/httpcore/
@@ -21,16 +21,19 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.8
-Requires-Dist: anyio<5.0,>=3.0
 Requires-Dist: certifi
 Requires-Dist: h11<0.15,>=0.13
-Requires-Dist: sniffio==1.*
+Provides-Extra: asyncio
+Requires-Dist: anyio<5.0,>=4.0; extra == 'asyncio'
 Provides-Extra: http2
 Requires-Dist: h2<5,>=3; extra == 'http2'
 Provides-Extra: socks
 Requires-Dist: socksio==1.*; extra == 'socks'
+Provides-Extra: trio
+Requires-Dist: trio<0.23.0,>=0.22.0; extra == 'trio'
 Description-Content-Type: text/markdown
 
 # HTTP Core
@@ -70,16 +73,10 @@ For HTTP/1.1 only support, install with:
 $ pip install httpcore
 ```
 
-For HTTP/1.1 and HTTP/2 support, install with:
+There are also a number of optional extras available...
 
 ```shell
-$ pip install httpcore[http2]
-```
-
-For SOCKS proxy support, install with:
-
-```shell
-$ pip install httpcore[socks]
+$ pip install httpcore['asyncio,trio,http2,socks']
 ```
 
 # Sending requests
@@ -124,11 +121,58 @@ The motivation for `httpcore` is:
 * To provide a reusable low-level client library, that other packages can then build on top of.
 * To provide a *really clear interface split* between the networking code and client logic,
   so that each is easier to understand and reason about in isolation.
+
+## Dependencies
+
+The `httpcore` package has the following dependencies...
+
+* `h11`
+* `certifi`
+
+And the following optional extras...
+
+* `anyio` - Required by `pip install httpcore['asyncio']`.
+* `trio` - Required by `pip install httpcore['trio']`.
+* `h2` - Required by `pip install httpcore['http2']`.
+* `socksio` - Required by `pip install httpcore['socks']`.
+
+## Versioning
+
+We use [SEMVER for our versioning policy](https://semver.org/).
+
+For changes between package versions please see our [project changelog](CHANGELOG.md).
+
+We recommend pinning your requirements either the most current major version, or a more specific version range:
+
+```python
+pip install 'httpcore==1.*'
+```
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## 1.0.2 (November 10th, 2023) 
+
+- Fix `float("inf")` timeouts in `Event.wait` function. (#846)
+
+## 1.0.1 (November 3rd, 2023)
+
+- Fix pool timeout to account for the total time spent retrying. (#823)
+- Raise a neater RuntimeError when the correct async deps are not installed. (#826)
+- Add support for synchronous TLS-in-TLS streams. (#840)
+
+## 1.0.0 (October 6th, 2023)
+
+From version 1.0 our async support is now optional, as the package has minimal dependencies by default.
+
+For async support use either `pip install 'httpcore[asyncio]'` or `pip install 'httpcore[trio]'`.
+
+The project versioning policy is now explicitly governed by SEMVER. See https://semver.org/.
+
+- Async support becomes fully optional. (#809)
+- Add support for Python 3.12. (#807)
 
 ## 0.18.0 (September 8th, 2023)
 

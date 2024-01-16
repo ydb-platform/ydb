@@ -16,6 +16,10 @@ namespace NKqp {
         return Kikimr;
     }
 
+    TTestActorRuntime& TTestHelper::GetRuntime() {
+        return *Kikimr.GetTestServer().GetRuntime();
+    }
+
     NYdb::NTable::TSession& TTestHelper::GetSession() {
         return Session;
     }
@@ -24,11 +28,6 @@ namespace NKqp {
         std::cerr << (table.BuildQuery()) << std::endl;
         auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    void TTestHelper::InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit /*= {}*/, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
-        Y_UNUSED(onBeforeCommit);
-        BulkUpsert(table, updates, opStatus);
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {

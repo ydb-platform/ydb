@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 4
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 2
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -54,9 +64,15 @@
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
                                                                         "GroupBy": "item.UserID",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
                                                                         "Name": "Aggregate"
                                                                     },
                                                                     {
+                                                                        "Inputs": [],
                                                                         "Name": "TableFullScan",
                                                                         "ReadColumns": [
                                                                             "UserID"

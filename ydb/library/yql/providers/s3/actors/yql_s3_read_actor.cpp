@@ -1158,7 +1158,7 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return conv;
     }
 
-if (originalType->id() == arrow::Type::DATE32) {
+    if (originalType->id() == arrow::Type::DATE32) {
         // TODO: support more than 1 optional level
         bool isOptional = false;
         auto unpackedYqlType = UnpackOptional(yqlType, isOptional);
@@ -1541,6 +1541,20 @@ public:
 
     void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
         std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters) {
+
+        for (int i = 0; i < dataSchema->num_fields(); ++i) {
+            switch (dataSchema->field(i)->type()->id()) {
+            case arrow::Type::LIST:
+                throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
+                    << dataSchema->field(i)->name() << " and can't be parsed");
+            case arrow::Type::STRUCT:
+                throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
+                    << dataSchema->field(i)->name() << " and can't be parsed");
+            default:
+                ;
+            }
+        }
+
         columnConverters.reserve(outputSchema->num_fields());
         for (int i = 0; i < outputSchema->num_fields(); ++i) {
             const auto& targetField = outputSchema->field(i);
@@ -1556,9 +1570,7 @@ public:
             }
             columnIndices.push_back(srcFieldIndex);
             auto rowSpecColumnIt = ReadSpec->RowSpec.find(targetField->name());
-            if (rowSpecColumnIt == ReadSpec->RowSpec.end()) {
-                throw parquet::ParquetException(TStringBuilder() << "Column " << targetField->name() << " not found in row spec");
-            }
+            YQL_ENSURE(rowSpecColumnIt != ReadSpec->RowSpec.end(), "Column " << targetField->name() << " not found in row spec");
             columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second));
         }
     }

@@ -54,6 +54,7 @@ public:
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
         AddHandler(1, &TCoFilterNullMembers::Match, HNDL(FilterNullMemebers<TCoFilterNullMembers>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(FilterNullMemebers<TCoSkipNullMembers>));
@@ -75,8 +76,6 @@ public:
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
-
-        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 #undef HNDL
     }
 
@@ -139,13 +138,20 @@ protected:
                     effectiveColumns.insert(column.Name);
                 }
 
+                if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                    for (size_t i = 0; i < rowSpec->SortedBy.size(); ++i) {
+                        const bool inserted = effectiveColumns.insert(rowSpec->SortedBy[i]).second;
+                        keepColumns = keepColumns || inserted;
+                    }
+                }
+
                 if (!path.Ranges().Maybe<TCoVoid>()) {
                     // add columns which are implicitly used by path.Ranges(), but not included in path.Columns();
                     const auto ranges = TYtRangesInfo(path.Ranges());
                     const size_t usedKeyPrefix = ranges.GetUsedKeyPrefixLength();
                     YQL_ENSURE(usedKeyPrefix <= rowSpec->SortedBy.size());
                     for (size_t i = 0; i < usedKeyPrefix; ++i) {
-                        bool inserted = effectiveColumns.insert(rowSpec->SortedBy[i]).second;
+                        const bool inserted = effectiveColumns.insert(rowSpec->SortedBy[i]).second;
                         keepColumns = keepColumns || inserted;
                     }
                 }

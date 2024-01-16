@@ -158,7 +158,7 @@ def main():
         "-p",
         compile_command_path,
         "--warnings-as-errors",
-        "*",
+        "*,-clang-diagnostic-#pragma-messages",
         "--config-file",
         result_config_file,
         "--header-filter",

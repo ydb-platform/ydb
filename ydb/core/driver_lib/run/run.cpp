@@ -1375,16 +1375,13 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableBasicServices) {
-        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
+        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig, ModuleFactories));
     }
     if (serviceMask.EnableIcbService) {
         sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));
     }
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
-    }
-    if (serviceMask.EnableNodeIdentifier) {
-        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig));
     }
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
@@ -1615,6 +1612,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableDatabaseMetadataCache) {
         sil->AddServiceInitializer(new TDatabaseMetadataCacheInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGraphService) {
+        sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
     return sil;

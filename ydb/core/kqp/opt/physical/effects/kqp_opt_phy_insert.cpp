@@ -136,6 +136,7 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
         .Table(insert.Table())
         .Input(insertRows.Cast())
         .Columns(insert.Columns())
+        .ReturningColumns(insert.ReturningColumns())
         .Done();
 }
 

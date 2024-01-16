@@ -17,6 +17,7 @@ class TViewManager: public NMetadata::NModifications::IOperationsManager {
                                    TInternalModificationContext& context) const override;
 
     NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
+                                                              const ui32 nodeId,
                                                               const NMetadata::IClassBehaviour::TPtr& manager,
                                                               const TExternalModificationContext& context) const override;
 

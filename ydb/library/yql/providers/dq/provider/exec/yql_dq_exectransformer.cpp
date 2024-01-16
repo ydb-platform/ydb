@@ -1176,9 +1176,6 @@ private:
         GetResultType(&type, &columns, pull.Ref(), pull.Input().Ref());
 
         auto optimizedInput = pull.Input().Ptr();
-        THashMap<TString, TString> secureParams;
-        NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams);
-
         optimizedInput = ctx.ShallowCopy(*optimizedInput);
         optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
         optimizedInput->CopyConstraints(pull.Input().Ref());
@@ -1201,6 +1198,9 @@ private:
         }
         FlushCounter("FreezeUsedFiles");
         // copy-paste }
+
+        THashMap<TString, TString> secureParams;
+        NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams);
 
         auto settings = std::make_shared<TDqSettings>(*State->Settings);
 

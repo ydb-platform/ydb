@@ -17,34 +17,34 @@ def log_print(*args, **kwargs):
 class YaMuteCheck:
     def __init__(self):
         self.regexps = set()
+        self.regexps = []
 
-    def add_unittest(self, fn):
+    def load(self, fn):
         with open(fn, "r") as fp:
             for line in fp:
                 line = line.strip()
-                path, rest = line.split("/", maxsplit=1)
-                path = path.replace("-", "/")
-                rest = rest.replace("::", ".")
-                self.populate(f"{path}/{rest}")
+                try:
+                    testsuite, testcase = line.split(" ", maxsplit=1)
+                except ValueError:
+                    log_print(f"SKIP INVALID MUTE CONFIG LINE: {line!r}")
+                    continue
+                self.populate(testsuite, testcase)
 
-    def add_functest(self, fn):
-        with open(fn, "r") as fp:
-            for line in fp:
-                line = line.strip()
-                line = line.replace("::", ".")
-                self.populate(line)
+    def populate(self, testsuite, testcase):
+        check = []
 
-    def populate(self, line):
-        pattern = pattern_to_re(line)
+        for p in (pattern_to_re(testsuite), pattern_to_re(testcase)):
+            try:
+                check.append(re.compile(p))
+            except re.error:
+                log_print(f"Unable to compile regex {p!r}")
+                return
 
-        try:
-            self.regexps.add(re.compile(pattern))
-        except re.error:
-            log_print(f"Unable to compile regex {pattern!r}")
+        self.regexps.append(tuple(check))
 
-    def __call__(self, suitename, testname):
-        for r in self.regexps:
-            if r.match(f"{suitename}/{testname}"):
+    def __call__(self, suite_name, test_name):
+        for ps, pt in self.regexps:
+            if ps.match(suite_name) and pt.match(test_name):
                 return True
         return False
 
@@ -176,8 +176,7 @@ def main():
     parser.add_argument(
         "-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place"
     )
-    parser.add_argument("--mu", help="unittest mute config")
-    parser.add_argument("--mf", help="functional test mute config")
+    parser.add_argument("-m", help="muted test list")
     parser.add_argument("--log-url-prefix", default="./", help="url prefix for logs")
     parser.add_argument("--log-out-dir", help="symlink logs to specific directory")
     parser.add_argument(
@@ -194,11 +193,8 @@ def main():
 
     mute_check = YaMuteCheck()
 
-    if args.mu:
-        mute_check.add_unittest(args.mu)
-
-    if args.mf:
-        mute_check.add_functest(args.mf)
+    if args.m:
+        mute_check.load(args.m)
 
     transform(
         args.in_file,

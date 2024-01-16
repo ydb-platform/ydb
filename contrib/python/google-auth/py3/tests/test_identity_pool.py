@@ -45,8 +45,8 @@ SERVICE_ACCOUNT_IMPERSONATION_URL = (
 
 QUOTA_PROJECT_ID = "QUOTA_PROJECT_ID"
 SCOPES = ["scope1", "scope2"]
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "data")
 SUBJECT_TOKEN_TEXT_FILE = os.path.join(DATA_DIR, "external_subject_token.txt")
 SUBJECT_TOKEN_JSON_FILE = os.path.join(DATA_DIR, "external_subject_token.json")
 SUBJECT_TOKEN_FIELD_NAME = "access_token"
@@ -320,7 +320,7 @@ class TestCredentials(object):
                 "Content-Type": "application/json",
                 "authorization": "Bearer {}".format(token_response["access_token"]),
                 "x-goog-api-client": metrics_header_value,
-                "x-identity-trust-boundary": "0",
+                "x-allowed-locations": "0x0",
             }
             impersonation_request_data = {
                 "delegates": None,

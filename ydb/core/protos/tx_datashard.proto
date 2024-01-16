@@ -806,6 +806,8 @@ message TEvPeriodicTableStats {
     optional uint64 TableOwnerId = 12;
 
     optional bool IsDstSplit = 13;
+
+    repeated TEvPeriodicTableStats Tables = 14;
 }
 
 message TSerializedRowColumnsScheme {

@@ -618,7 +618,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
         && supportedStreamJoinKinds.contains(join.JoinType().Value());
 
-    bool needPrecomputeLeft = kqpCtx.IsDataQuery()
+    bool needPrecomputeLeft = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
         && !join.LeftInput().Maybe<TCoParameter>()
         && !IsParameterToListOfStructsRepack(join.LeftInput())
         && !useStreamIndexLookupJoin;

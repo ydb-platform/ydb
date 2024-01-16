@@ -1564,7 +1564,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
+        const ui64 ownerId = 0;
         const ui64 tableId = 1;
+        const ui64 schemaVersion = 1;
         const std::vector<std::pair<TString, TTypeInfo>> schema = {
                                                                     {"key", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"field", TTypeInfo(NTypeIds::Utf8) }
@@ -1583,7 +1585,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -1612,7 +1614,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
+        const ui64 ownerId = 0;
         const ui64 tableId = 1;
+        const ui64 schemaVersion = 1;
         const std::vector<std::pair<TString, TTypeInfo>> schema = {
                                                                     {"key", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"field", TTypeInfo(NTypeIds::Utf8) }
@@ -1631,7 +1635,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -1657,7 +1661,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
+        const ui64 ownerId = 0;
         const ui64 tableId = 1;
+        const ui64 schemaVersion = 1;
         const std::vector<std::pair<TString, TTypeInfo>> schema = {
                                                                     {"key", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"field", TTypeInfo(NTypeIds::Utf8) }
@@ -1676,7 +1682,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
@@ -2175,54 +2181,75 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
-            ui32 resultLimit = 1024 * 1024;
-            runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
-            auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
-            auto batchStats = scan->ArrowBatch;
-            UNIT_ASSERT(batchStats);
-            // Cerr << batchStats->ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 5);
-
             ui64 sumCompactedBytes = 0;
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
-            for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
-                auto paths = batchStats->GetColumnByName("PathId");
-                auto kinds = batchStats->GetColumnByName("Kind");
-                auto rows = batchStats->GetColumnByName("Rows");
-                auto bytes = batchStats->GetColumnByName("Bytes");
-                auto rawBytes = batchStats->GetColumnByName("RawBytes");
+            std::optional<ui32> keyColumnId;
+            while (true) {
+                ui32 resultLimit = 1024 * 1024;
+                runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
+                auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
+                auto batchStats = scan->ArrowBatch;
+                if (scan->Finished) {
+                    AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
+                    break;
+                }
+                UNIT_ASSERT(batchStats);
+//                Cerr << batchStats->ToString() << Endl;
 
-                ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
-                ui32 kind = static_cast<arrow::UInt32Array&>(*kinds).Value(i);
-                ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
-                ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
-                ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
+                for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
+                    auto paths = batchStats->GetColumnByName("PathId");
+                    auto kinds = batchStats->GetColumnByName("Kind");
+                    auto rows = batchStats->GetColumnByName("Rows");
+                    auto bytes = batchStats->GetColumnByName("BlobRangeSize");
+                    auto rawBytes = batchStats->GetColumnByName("RawBytes");
+                    auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
+                    auto activities = batchStats->GetColumnByName("Activity");
+                    AFL_VERIFY(activities);
 
-                Cerr << "[" << __LINE__ << "] " << table.Pk[0].second.GetTypeId() << " "
-                    << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
-
-                if (pathId == tableId) {
-                    if (kind == (ui32)NOlap::NPortion::EProduced::COMPACTED || kind == (ui32)NOlap::NPortion::EProduced::SPLIT_COMPACTED) {
-                        sumCompactedBytes += numBytes;
-                        sumCompactedRows += numRows;
-                        //UNIT_ASSERT(numRawBytes > numBytes);
+                    ui64 pathId = static_cast<arrow::UInt64Array&>(*paths).Value(i);
+                    auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
+                    const TString kindStr(kind.data(), kind.size());
+                    ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
+                    ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
+                    ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
+                    ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
+                    bool activity = static_cast<arrow::BooleanArray&>(*activities).Value(i);
+                    if (!activity) {
+                        continue;
                     }
-                    if (kind == (ui32)NOlap::NPortion::EProduced::INSERTED) {
-                        sumInsertedBytes += numBytes;
-                        sumInsertedRows += numRows;
-                        //UNIT_ASSERT(numRawBytes > numBytes);
+                    if (!keyColumnId) {
+                        keyColumnId = internalColumnId;
                     }
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
-                    UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
-                    UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
+                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].second.GetTypeId() << " "
+                        << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+
+                    if (pathId == tableId) {
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
+                            sumCompactedBytes += numBytes;
+                            if (*keyColumnId == internalColumnId) {
+                                sumCompactedRows += numRows;
+                            }
+                            //UNIT_ASSERT(numRawBytes > numBytes);
+                        }
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
+                            sumInsertedBytes += numBytes;
+                            if (*keyColumnId == internalColumnId) {
+                                sumInsertedRows += numRows;
+                            }
+                            //UNIT_ASSERT(numRawBytes > numBytes);
+                        }
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
+                        UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
+                        UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
+                    }
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-            UNIT_ASSERT(sumCompactedRows == fullNumRows);
+            AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows);
             UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
             UNIT_ASSERT(sumInsertedRows == 0);
             UNIT_ASSERT(sumInsertedBytes == 0);

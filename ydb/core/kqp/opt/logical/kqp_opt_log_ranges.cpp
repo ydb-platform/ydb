@@ -144,7 +144,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
     TMaybeNode<TCoAtom> indexName;
 
     //TODO: remove this branch KIKIMR-15255, KIKIMR-15321
-    if (!readMatch && kqpCtx.IsDataQuery()) {
+    if (!readMatch && (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())) {
         if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(flatmap.Input())) {
             auto read = readRangesMatch->Read.Cast<TKqlReadTableRangesBase>();
             if (TCoVoid::Match(read.Ranges().Raw())) {
@@ -239,6 +239,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         }
 
         TMaybeNode<TExprBase> readInput;
+        // TODO: Use single implementation for all kinds of queries.
         if (useDataOrGenericQueryLookup) {
             auto lookupKeys = BuildEquiRangeLookup(keyRange, tableDesc, read.Pos(), ctx);
 

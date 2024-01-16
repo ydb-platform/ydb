@@ -192,6 +192,14 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             Y_ABORT_UNLESS(tenantSA == subdomain->GetTenantStatisticsAggregatorID());
         }
 
+        if (record.HasTenantGraphShard()) {
+            TTabletId tenantGS = TTabletId(record.GetTenantGraphShard());
+            if (!subdomain->GetTenantGraphShardID()) {
+                addPrivateShard(tenantGS, ETabletType::GraphShard);
+            }
+            Y_ABORT_UNLESS(tenantGS == subdomain->GetTenantGraphShardID());
+        }
+
         if (record.HasUpdateTenantRootACL()) {
             // KIKIMR-10699: transfer tenants root ACL from GSS to the TSS
             // here TSS sees the ACL from GSS

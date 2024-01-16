@@ -110,6 +110,8 @@ DECLARE_REFCOUNTED_TYPE(ITypeErasedRowset)
 DECLARE_REFCOUNTED_STRUCT(IPersistentQueueRowset)
 DECLARE_REFCOUNTED_STRUCT(TSkynetSharePartsLocations)
 
+DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
+
 struct TConnectionOptions;
 
 using TClientOptions = NAuth::TAuthenticationOptions;

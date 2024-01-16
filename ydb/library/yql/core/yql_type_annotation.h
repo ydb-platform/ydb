@@ -269,6 +269,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
+    THashSet<TString> OptimizerFlags;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

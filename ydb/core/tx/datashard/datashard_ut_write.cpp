@@ -29,6 +29,26 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return {runtime, server, sender};
     }
 
+    Y_UNIT_TEST_TWIN(Upsert, EvWrite) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions();
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        auto rows = EvWrite ? TEvWriteRows{{{0, 1}}, {{2, 3}}, {{4, 5}}} : TEvWriteRows{};
+        auto evWriteObservers = ReplaceEvProposeTransactionWithEvWrite(runtime, rows);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
+
+        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+
+        UNIT_ASSERT_VALUES_EQUAL(table1state, "key = 0, value = 1\n"
+                                              "key = 2, value = 3\n"
+                                              "key = 4, value = 5\n");
+    }
+
     Y_UNIT_TEST(WriteImmediateOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 
@@ -37,7 +57,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -55,7 +75,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
@@ -75,15 +95,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, 1, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
-        runtime.SendToPipe(shards[0], sender, evWrite.release(), 0, GetPipeConfigWithRetries());
-        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        const auto& record = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 
-        const auto& record = ev->Get()->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(record.GetIssues().size(), 1);
-        UNIT_ASSERT(record.GetIssues(0).message().Contains("Operation [0:100] writes key of 1049601 bytes which exceeds limit 1049600 bytes"));
+        UNIT_ASSERT(record.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
     }
 
     Y_UNIT_TEST(WriteOnShard) {
@@ -94,7 +111,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, shards[0], tableId, opts.Columns_, rowCount, sender, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 

@@ -64,6 +64,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
         DataSinkNames.insert(TPgDropObject::CallableName());
+        DataSinkNames.insert(TKiReturningList::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -659,7 +660,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
 
         default:
             YQL_ENSURE(false, "Unexpected type slot " << slot);
-    }   
+    }
 }
 
 template<class OutputIterator>

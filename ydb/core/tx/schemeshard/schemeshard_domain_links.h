@@ -42,6 +42,7 @@ public:
         TTabletId TenantHive = InvalidTabletId;
         TTabletId TenantSysViewProcessor = InvalidTabletId;
         TTabletId TenantStatisticsAggregator = InvalidTabletId;
+        TTabletId TenantGraphShard = InvalidTabletId;
         TString TenantRootACL;
 
         TLink() = default;

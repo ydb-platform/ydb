@@ -40,29 +40,29 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexColumns_Write(db, index, portion, row);
+    NColumnShard::Schema::IndexColumns_Write(db, portion, row);
 }
 
-void TDbWrapper::EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
-    NColumnShard::Schema::IndexColumns_Erase(db, index, portion, row);
+    NColumnShard::Schema::IndexColumns_Erase(db, portion, row);
 }
 
-bool TDbWrapper::LoadColumns(ui32 index, const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback);
+    return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, callback);
 }
 
-void TDbWrapper::WriteCounter(ui32 index, ui32 counterId, ui64 value) {
+void TDbWrapper::WriteCounter(ui32 counterId, ui64 value) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexCounters_Write(db, index, counterId, value);
+    return NColumnShard::Schema::IndexCounters_Write(db, counterId, value);
 }
 
-bool TDbWrapper::LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
+bool TDbWrapper::LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexCounters_Load(db, index, callback);
+    return NColumnShard::Schema::IndexCounters_Load(db, callback);
 }
 
 }

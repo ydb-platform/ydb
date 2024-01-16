@@ -133,14 +133,25 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     jsonInfo["a"]["c"] = "asds";
     jsonInfo["b"] = "asd";
 
+    size_t index = 1ULL;
+    const auto magic = WithSomeNulls_ ? 3ULL : 0ULL;
     for (size_t i = 0; i < rowCount; ++i) {
         std::string uid("uid_" + std::to_string(tsBegin + i));
         std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
         Y_ABORT_UNLESS(b1.Append(tsBegin + i * tsStepUs).ok());
         Y_ABORT_UNLESS(b2.Append(std::to_string(pathIdBegin + i)).ok());
         Y_ABORT_UNLESS(b3.Append(uid).ok());
-        Y_ABORT_UNLESS(b4.Append(i % 5).ok());
-        Y_ABORT_UNLESS(b5.Append(message).ok());
+
+        if (magic && !(++index % magic))
+            Y_ABORT_UNLESS(b4.AppendNull().ok());
+        else
+            Y_ABORT_UNLESS(b4.Append(i % 5).ok());
+
+        if (magic && !(++index % magic))
+            Y_ABORT_UNLESS(b5.AppendNull().ok());
+        else
+            Y_ABORT_UNLESS(b5.Append(message).ok());
+
         jsonInfo["a"]["b"] = i;
         auto jsonStringBase = jsonInfo.GetStringRobust();
         Y_ABORT_UNLESS(b6.Append(jsonStringBase.data(), jsonStringBase.size()).ok());

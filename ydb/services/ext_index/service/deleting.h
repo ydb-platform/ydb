@@ -13,7 +13,7 @@ class IDeletingExternalController {
 public:
     using TPtr = std::shared_ptr<IDeletingExternalController>;
     virtual ~IDeletingExternalController() = default;
-    virtual void OnDeletingFailed(const TString& errorMessage, const TString& requestId) = 0;
+    virtual void OnDeletingFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& requestId) = 0;
     virtual void OnDeletingSuccess(const TString& requestId) = 0;
 };
 
@@ -33,10 +33,10 @@ private:
 protected:
     virtual void OnModificationFinished(const TString& modificationId) override;
 
-    virtual void OnModificationFailed(const TString& errorMessage, const TString& modificationId) override;
+    virtual void OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& modificationId) override;
 
-    virtual void OnRequestFailed(const TString& errorMessage) override {
-        ExternalController->OnDeletingFailed(errorMessage, RequestId);
+    virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+        ExternalController->OnDeletingFailed(status, errorMessage, RequestId);
         SelfContainer = nullptr;
     }
 

@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 18
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,11 +32,27 @@
                                         "Node Type": "TopSort-FullJoin (JoinDict)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 16
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": "row.name"
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 16
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    }
+                                                ],
                                                 "Name": "FullJoin (JoinDict)"
                                             }
                                         ],
@@ -58,6 +79,14 @@
                                                                         "Node Type": "FullJoin (JoinDict)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 8
+                                                                                    },
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 4
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "FullJoin (JoinDict)"
                                                                             }
                                                                         ],
@@ -84,6 +113,7 @@
                                                                                                         "Node Type": "TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "n",
@@ -128,6 +158,7 @@
                                                                                                         "Node Type": "TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "n",
@@ -180,6 +211,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "n",

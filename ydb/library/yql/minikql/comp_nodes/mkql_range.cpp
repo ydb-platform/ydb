@@ -63,8 +63,8 @@ TRangeTypeInfo ExtractTypes(TType* rangeType) {
         auto type = rangeBoundaryTupleType->GetElementType(i);
         if (i % 2 == 1) {
             auto baseType = RemoveAllOptionals(type);
-            MKQL_ENSURE(type->IsOptional() && baseType->IsData(),
-                "Expecting (multiple) optional of Data at odd positions of range boundary tuple");
+            MKQL_ENSURE(type->IsOptional() && (baseType->IsData() || baseType->IsPg()),
+                "Expecting (multiple) optional of Data or Pg at odd positions of range boundary tuple");
         } else {
             MKQL_ENSURE(type->IsData() && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<i32>::Id,
                 "Expected i32 at even positions of range boundary tuple");
@@ -184,9 +184,8 @@ bool CanConvertToPointRange(const TExpandedRange& range, const TRangeTypeInfo& t
 
     // check for suitable type
     TType* baseType = RemoveAllOptionals(static_cast<TTupleType*>(typeInfo.BoundaryType)->GetElementType(lastCompIdx));
-    auto slot = static_cast<TDataType*>(baseType)->GetDataSlot();
-    Y_ENSURE(slot);
-    if (!(GetDataTypeInfo(*slot).Features & (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType))) {
+    auto slot = baseType->IsData() ? static_cast<TDataType*>(baseType)->GetDataSlot() : TMaybe<EDataSlot>{};
+    if (!slot || !(GetDataTypeInfo(*slot).Features & (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType))) {
         return false;
     }
 

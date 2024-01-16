@@ -55,6 +55,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicMessageMeta)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
     FEATURE_FLAG_SETTER(EnableTablePgTypes)
+    FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
 
     #undef FEATURE_FLAG_SETTER
 };

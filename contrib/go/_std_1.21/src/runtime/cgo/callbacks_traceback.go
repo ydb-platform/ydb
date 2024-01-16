@@ -6,8 +6,7 @@
 
 package cgo
 
-import _ "unsafe"
-// for go:linkname
+import _ "unsafe" // for go:linkname
 
 // Calls the traceback function passed to SetCgoTraceback.
 

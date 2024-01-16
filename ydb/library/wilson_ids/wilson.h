@@ -36,6 +36,12 @@ namespace NKikimr {
                 ProposeTransaction = 9,
 
                 ComputeActor = 9,
+
+                ReadActor = 9,
+                    ReadActorShardsResolve = 10,
+
+                LookupActor = 9,
+                    LookupActorShardsResolve = 10,
         };
     };
 

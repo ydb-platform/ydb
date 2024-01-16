@@ -258,6 +258,16 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
                 break;
             }
+            case ETabletType::GraphShard: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Send configure request to graph shard: " << tabletID <<
+                    " opId: " << OperationId <<
+                    " schemeshard: " << ssId);
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvSubDomain::TEvConfigure(processing);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
             default:
                 Y_FAIL_S("Unexpected type, we don't create tablets with type " << ETabletType::TypeToStr(type));
             }
@@ -270,7 +280,7 @@ public:
 
 class TPropose: public TSubOperationState {
 private:
-    TOperationId OperationId;
+    const TOperationId OperationId;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -346,8 +356,12 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-
+        if (txState->NeedSyncHive) {
+            context.SS->ChangeTxState(db, OperationId, TTxState::SyncHive);
+        } else {
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        }
+        
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "NSubDomainState::TPropose HandleReply TEvOperationPlan"
                      << ", operationId " << OperationId

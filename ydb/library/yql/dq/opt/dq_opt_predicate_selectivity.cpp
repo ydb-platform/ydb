@@ -96,7 +96,7 @@ double NYql::NDq::ComputePredicateSelectivity(const TExprBase& input, const std:
                     }
                 } else {
                     if (stats->Nrows > 1) {
-                        result = stats->Nrows / 10;
+                        result = 0.1;
                     }
                     else {
                         result = 1.0;

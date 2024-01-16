@@ -7,6 +7,10 @@
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
 
+namespace NYdb::NImport {
+    struct TImportFromS3Settings;
+}
+
 namespace NYdb::NConsoleClient {
 
 class TCommandWithAwsCredentials {
@@ -59,5 +63,21 @@ private:
     TMaybe<NConfig::TConfig> Config;
     TMaybe<TString> AwsProfile;
 };
+
+struct TListS3Result {
+    std::vector<TString> Keys;
+    std::optional<TString> NextToken;
+};
+
+class IS3ClientWrapper {
+public:
+    virtual TListS3Result ListObjectKeys(const TString& prefix, const std::optional<TString>& token) = 0;
+    virtual ~IS3ClientWrapper() = default;
+};
+
+std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings);
+
+void InitAwsAPI();
+void ShutdownAwsAPI();
 
 }

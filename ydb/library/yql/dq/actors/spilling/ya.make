@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     channel_storage_actor.cpp
     channel_storage.cpp
+    compute_storage_actor.cpp
     spilling_counters.cpp
     spilling_file.cpp
     spilling.cpp

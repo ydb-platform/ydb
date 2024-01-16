@@ -1,0 +1,29 @@
+#pragma once
+
+#include "ydb/library/yql/dq/common/dq_common.h"
+
+#include <ydb/library/actors/core/actor.h>
+
+namespace NYql::NDq {
+
+class IDqComputeStorageActor
+{
+public:
+    using TPtr = TIntrusivePtr<IDqComputeStorageActor>;
+    using TKey = ui64;
+
+    virtual ~IDqComputeStorageActor() = default;
+
+    virtual NActors::IActor* GetActor() = 0;
+
+    virtual bool IsEmpty() = 0;
+    virtual bool IsFull() = 0;
+
+    virtual NThreading::TFuture<TKey> Put(TRope&& blob) = 0;
+
+    virtual std::optional<NThreading::TFuture<TRope>> Get(TKey key) = 0;
+};
+
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId);
+
+} // namespace NYql::NDq

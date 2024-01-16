@@ -1,5 +1,5 @@
 items:
-  - name: Constraints
-    href: constraints.md
   - name: Usage examples
     href: examples.md
+  - name: Constraints
+    href: constraints.md

@@ -429,7 +429,7 @@ private:
     void InitPlanStep();
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
 
-    void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info);
+    void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info, const TActorContext& ctx);
     void InitTxWrites();
     void SaveTxWrites(NKikimrPQ::TTabletTxWrites& info);
 
@@ -467,6 +467,9 @@ private:
     bool PendingPersistWriteId = false;
 
     TPartitionInfo& GetPartitionInfo(ui32 partitionId);
+    void AddShadowPartition(ui32 shadowPartitionId);
+    void CreateShadowPartitionActor(ui32 shadowPartitionId, const TActorContext& ctx);
+    void SubscribeWriteId(ui64 writeId, const TActorContext& ctx);
 
     bool AllPartitionsInited() const;
 

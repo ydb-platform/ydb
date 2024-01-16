@@ -818,8 +818,8 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
     }
 
     ReadTxInfo(resp.GetReadResult(2), ctx);
-    ReadTxWrites(resp.GetReadResult(3), ctx);
     ReadConfig(resp.GetReadResult(0), resp.GetReadRangeResult(0), ctx);
+    ReadTxWrites(resp.GetReadResult(3), ctx);
     ReadState(resp.GetReadResult(1), ctx);
 }
 
@@ -889,7 +889,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
         NKikimrPQ::TTabletTxWrites info;
         Y_ABORT_UNLESS(info.ParseFromString(read.GetValue()));
 
-        InitTxWrites(info);
+        InitTxWrites(info, ctx);
 
         break;
     }
@@ -905,7 +905,29 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
     }
 }
 
-void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxWrites& info)
+void TPersQueue::AddShadowPartition(ui32 shadowPartitionId)
+{
+    ShadowPartitions.emplace(shadowPartitionId,
+                             TPartitionInfo(TActorId(),
+                                            {},
+                                            *Counters));
+}
+
+void TPersQueue::CreateShadowPartitionActor(ui32 shadowPartitionId,
+                                            const TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+
+    TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+    partition.Actor = ctx.Register(CreatePartitionActor(shadowPartitionId,
+                                                        TopicConverter,
+                                                        Config,
+                                                        true,
+                                                        ctx));
+}
+
+void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxWrites& info,
+                              const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(info.WriteIdsSize() == info.PartitionIdsSize());
     Y_ABORT_UNLESS(info.WriteIdsSize() == info.ShadowPartitionIdsSize());
@@ -913,9 +935,17 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxWrites& info)
     TxWrites.clear();
 
     for (size_t i = 0; i != info.WriteIdsSize(); ++i) {
-        TxWrites[info.GetWriteIds(i)].Partitions[info.GetPartitionIds(i)] = info.GetShadowPartitionIds(i);
+        ui64 writeId = info.GetWriteIds(i);
+        ui32 partitionId = info.GetPartitionIds(i);
+        ui32 shadowPartitionId = info.GetShadowPartitionIds(i);
 
-        NextShadowPartitionId = Max(NextShadowPartitionId, info.GetShadowPartitionIds(i) + 1);
+        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
+
+        AddShadowPartition(shadowPartitionId);
+        CreateShadowPartitionActor(shadowPartitionId, ctx);
+        SubscribeWriteId(writeId, ctx);
+
+        NextShadowPartitionId = Max(NextShadowPartitionId, shadowPartitionId + 1);
     }
 }
 
@@ -3269,10 +3299,7 @@ void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
 
         TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
 
-        ShadowPartitions.emplace(shadowPartitionId,
-                                 TPartitionInfo(TActorId(),
-                                                {},
-                                                *Counters));
+        AddShadowPartition(shadowPartitionId);
     }
 
     HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
@@ -3318,6 +3345,13 @@ void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const T
     TryPersistWriteId(ctx);
 }
 
+void TPersQueue::SubscribeWriteId(ui64 writeId,
+                                  const TActorContext& ctx)
+{
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
+             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
+}
+
 void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
 {
     DBGTRACE("TPersQueue::ForwardGetOwnershipToShadowPartitions");
@@ -3334,17 +3368,13 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
         DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
+        CreateShadowPartitionActor(shadowPartitionId, ctx);
+
         TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
-        partition.Actor = ctx.Register(CreatePartitionActor(shadowPartitionId,
-                                                            TopicConverter,
-                                                            Config,
-                                                            true,
-                                                            ctx));
         partition.GetOwnershipRequests.emplace_back(params.Cookie, params.Request, params.Sender);
 
         if (txWrite.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
-            ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
-                     new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
+            SubscribeWriteId(writeId, ctx);
         }
     }
 

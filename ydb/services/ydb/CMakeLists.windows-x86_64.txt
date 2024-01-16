@@ -45,5 +45,4 @@ target_sources(ydb-services-ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx.cpp
 )

@@ -66,7 +66,6 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_scripting_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_table_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_stats_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_long_tx_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_logstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp

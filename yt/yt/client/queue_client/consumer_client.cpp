@@ -106,7 +106,6 @@ public:
         , OffsetColumnId_(ConsumerNameTable_->GetId(OffsetColumnName_))
         , MetaColumnId_(ConsumerNameTable_->FindId(YTConsumerMetaColumnName))
         , SubConsumerColumnFilter_{PartitionIndexColumnId_, OffsetColumnId_}
-        , RowBuffer_(New<TRowBuffer>())
         , DecrementOffset_(decrementOffset)
     {
         if (RowPrefix_.GetCount() == 0) {
@@ -223,14 +222,14 @@ public:
             rowBuilder.AddValue(MakeUnversionedUint64Value(newOffset, OffsetColumnId_));
         }
 
-        std::optional<TYsonString> metaYsonString;
+        TYsonString metaYsonString;
         if (MetaColumnId_) {
             auto metaValue = MakeUnversionedNullValue(*MetaColumnId_);
             if (QueueRef_ && QueueClusterClient_) {
                 auto meta = GetConsumerMeta(partitionIndex, newOffset);
                 if (meta) {
                     metaYsonString = ConvertToYsonString(*meta);
-                    metaValue = MakeUnversionedAnyValue(metaYsonString->AsStringBuf(), *MetaColumnId_);
+                    metaValue = MakeUnversionedAnyValue(metaYsonString.AsStringBuf(), *MetaColumnId_);
                 }
             } else {
                 YT_LOG_DEBUG("Consumer meta was not calculated due to unknown queue path or cluster client");
@@ -369,7 +368,9 @@ public:
                     }
                 }
 
-                THROW_ERROR_EXCEPTION("Queue %v has no tablet with index %v", queuePath, partitionIndex);
+                THROW_ERROR_EXCEPTION("Queue %v has no tablet with index %v",
+                    queuePath,
+                    partitionIndex);
             }));
     }
 
@@ -392,8 +393,7 @@ private:
     const std::optional<int> MetaColumnId_;
     //! A column filter consisting of PartitionIndexColumnName_ and OffsetColumnName_.
     const TColumnFilter SubConsumerColumnFilter_;
-
-    TRowBufferPtr RowBuffer_;
+    const TRowBufferPtr RowBuffer_ = New<TRowBuffer>();
 
     // COMPAT(achulkov2): Remove this once we drop support for legacy BigRT consumers.
     //! Controls whether the offset is decremented before being written to the offset table.
@@ -628,8 +628,8 @@ class TYTConsumerClient
     : public IConsumerClient
 {
 public:
-    explicit TYTConsumerClient(const IClientPtr& consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
-        : ConsumerClusterClient_(consumerClusterClient)
+    TYTConsumerClient(IClientPtr consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
+        : ConsumerClusterClient_(std::move(consumerClusterClient))
         , ConsumerPath_(std::move(consumerPath))
         , ConsumerTableSchema_(std::move(consumerTableSchema))
     { }
@@ -666,7 +666,7 @@ public:
 private:
     const IClientPtr ConsumerClusterClient_;
     const TYPath ConsumerPath_;
-    TTableSchemaPtr ConsumerTableSchema_;
+    const TTableSchemaPtr ConsumerTableSchema_;
 
     static const TNameTablePtr ConsumerNameTable_;
     static const int QueueClusterColumnId_;

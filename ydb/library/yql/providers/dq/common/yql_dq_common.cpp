@@ -154,42 +154,4 @@ namespace NDq {
 const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName, S3ProviderName, PgProviderName};
 const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName, S3ProviderName};
 
-
-class TDqsS3RecaptureTransformer : public TSyncTransformerBase {
-public:
-    TDqsS3RecaptureTransformer(TS3State::TPtr state)
-        : State_(state)
-    {}
-
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-
-        YQL_CLOG(INFO, ProviderDq) << "TDqsS3RecaptureTransformer::DoTransform";
-
-        output = input;
-        if (ctx.Step.IsDone(TExprStep::Recapture)) {
-            return TStatus::Ok;
-        }
-
-        IGraphTransformer::TStatus status = NDq::DqWrapRead(input, output, ctx, *State_->Types, NYql::TDqSettings());
-        if (input != output) {
-            YQL_CLOG(INFO, ProviderDq) << "DqsRecapture";
-            // TODO: Add before/after recapture transformers
-            State_->Types->DqCaptured = true;
-            // TODO: drop this after implementing DQS ConstraintTransformer
-            State_->Types->ExpectedConstraints.clear();
-        }
-        return status;
-    }
-
-    void Rewind() final {
-    }
-
-private:
-    TS3State::TPtr State_;
-};
-
-THolder<IGraphTransformer> CreateDqsS3RecaptureTransformer(TS3State::TPtr state) {
-    return THolder(new TDqsS3RecaptureTransformer(state));
-}
-
 } // namespace NYql

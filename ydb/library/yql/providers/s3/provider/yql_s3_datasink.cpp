@@ -40,7 +40,6 @@ public:
         , LogicalOptProposalTransformer_(CreateS3LogicalOptProposalTransformer(State_))
         , PhysicalOptProposalTransformer_(CreateS3PhysicalOptProposalTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
-        , RecaptureTransformer(CreateDqsS3RecaptureTransformer(state))
     {}
 private:
     TStringBuf GetName() const override {
@@ -66,10 +65,6 @@ private:
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptProposalTransformer_;
-    }
-
-    IGraphTransformer& GetRecaptureOptProposalTransformer() override {
-        return *RecaptureTransformer;
     }
 
     bool CanExecute(const TExprNode& node) override {
@@ -142,7 +137,6 @@ private:
     const THolder<IGraphTransformer> LogicalOptProposalTransformer_;
     const THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
     const THolder<IDqIntegration> DqIntegration_;
-    const THolder<IGraphTransformer> RecaptureTransformer;
 };
 
 }

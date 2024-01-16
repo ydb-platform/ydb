@@ -21,10 +21,4 @@ bool NeedFallback(NYql::NDqProto::StatusIds::StatusCode statusCode);
 bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev);
 } // namespace NCommon
 
-
-
-
-THolder<IGraphTransformer> CreateDqsS3RecaptureTransformer(TS3State::TPtr state);
-
-
 } // namespace NYql

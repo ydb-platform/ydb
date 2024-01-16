@@ -665,14 +665,14 @@ public:
         config.is_local = rawVal == "t";
 
         if (NodeTag(arg0) != T_A_Const || NodeTag(arg1) != T_A_Const) {
-            AddError(TStringBuilder() << "Expected const with string, but got something other: " << NodeTag(arg0));
+            AddError(TStringBuilder() << "Expected const with string, but got something else: " << NodeTag(arg0));
             return nullptr;
         }
 
         auto name = CAST_NODE(A_Const, arg0)->val;
         auto val = CAST_NODE(A_Const, arg1)->val;
         if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
-            AddError(TStringBuilder() << "Expected string const as name arg, but got something other: " << NodeTag(name));
+            AddError(TStringBuilder() << "Expected string const as name arg, but got something else: " << NodeTag(name));
             return;
         }
         config.name = (char*)StrVal(name);
@@ -1022,8 +1022,8 @@ public:
                 res.emplace_back(CreatePgStarResultItem());
                 i++;
             }
-            bool isSelectWithOnlySetConfig = !inner && !sort && windowItems.empty() && !having && !groupBy && !whereFilter && !x->distinctClause  && ListLength(x->targetList) == 1;
-            if (isSelectWithOnlySetConfig) {
+            bool maybeSelectWithJustSetConfig = !inner && !sort && windowItems.empty() && !having && !groupBy && !whereFilter && !x->distinctClause  && ListLength(x->targetList) == 1;
+            if (maybeSelectWithJustSetConfig) {
                 auto node = ListNodeNth(x->targetList, 0);
                 if (NodeTag(node) != T_ResTarget) {
                     NodeNotImplemented(x, node);

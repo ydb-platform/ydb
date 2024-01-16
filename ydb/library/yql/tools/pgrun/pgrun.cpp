@@ -1027,8 +1027,6 @@ int Main(int argc, char* argv[])
     for (const auto& raw_stmt : TStatementIterator{Cin.ReadAll()}) {
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
-        google::protobuf::Arena arena;
-        settings.Arena = &arena;
 
         Cerr << "<sql-statement>\n" << stmt << "\n</sql-statement>\n";
 
@@ -1045,6 +1043,9 @@ int Main(int argc, char* argv[])
                 continue;
             }
         }
+
+        google::protobuf::Arena arena;
+        settings.Arena = &arena;
 
         auto program = factory.Create("-stdin-", stmt);
 

@@ -193,6 +193,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     void Flush() {}
 
     ssize_t Send(const void* data, size_t size, bool& read, bool& write) {
+        ERR_clear_error();
         ssize_t res = SSL_write(Ssl.Get(), data, size);
         if (res < 0) {
             res = SSL_get_error(Ssl.Get(), res);
@@ -211,6 +212,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
     }
 
     ssize_t Recv(void* data, size_t size, bool& read, bool& write) {
+        ERR_clear_error();
         ssize_t res = SSL_read(Ssl.Get(), data, size);
         if (res < 0) {
             res = SSL_get_error(Ssl.Get(), res);
@@ -232,6 +234,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         if (!Ssl) {
             InitClientSsl();
         }
+        ERR_clear_error();
         int res = SSL_connect(Ssl.Get());
         if (res <= 0) {
             res = SSL_get_error(Ssl.Get(), res);
@@ -253,6 +256,7 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         if (!Ssl) {
             InitServerSsl(endpoint->SecureContext.Get());
         }
+        ERR_clear_error();
         int res = SSL_accept(Ssl.Get());
         if (res <= 0) {
             res = SSL_get_error(Ssl.Get(), res);

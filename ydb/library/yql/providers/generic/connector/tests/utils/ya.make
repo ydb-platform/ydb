@@ -7,6 +7,7 @@ PY_SRCS(
     comparator.py
     database.py
     dqrun.py
+    docker_compose.py
     generate.py
     kqprun.py
     log.py

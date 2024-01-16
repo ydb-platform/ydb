@@ -267,7 +267,7 @@ private:
                 }
                 return res;
             }
-        };    
+        };
     };
 
     struct TOperator {
@@ -345,7 +345,7 @@ private:
                     else {
                         TArgContext c = std::get<TArgContext>(input);
                         writer.BeginObject();
-                      
+
                         auto input = LambdaInputs.find(c);
                         if (input != LambdaInputs.end()){
                             if (std::holds_alternative<ui32>(input->second)) {
@@ -814,10 +814,13 @@ private:
         }
 
         // Common settings that can be overwritten by provider
-        op.Properties["Name"] = "Read from external data source";
         op.Properties["SourceType"] = dataSourceCategory;
         if (auto cluster = TryGetCluster(dataSource)) {
-            op.Properties["ExternalDataSource"] = RemovePathPrefix(std::move(*cluster));
+            TString dataSource = RemovePathPrefix(std::move(*cluster));
+            op.Properties["ExternalDataSource"] = dataSource;
+            op.Properties["Name"] = TStringBuilder() << "Read " << dataSource;
+        } else {
+            op.Properties["Name"] = "Read from external data source";
         }
 
         if (dqIntegration) {
@@ -842,10 +845,13 @@ private:
         }
 
         // Common settings that can be overwritten by provider
-        op.Properties["Name"] = "Write to external data source";
         op.Properties["SinkType"] = dataSinkCategory;
         if (auto cluster = TryGetCluster(dataSink)) {
-            op.Properties["ExternalDataSource"] = RemovePathPrefix(std::move(*cluster));
+            TString dataSource = RemovePathPrefix(std::move(*cluster));
+            op.Properties["ExternalDataSource"] = dataSource;
+            op.Properties["Name"] = TStringBuilder() << "Write " << dataSource;
+        } else {
+            op.Properties["Name"] = "Write to external data source";
         }
 
         if (dqIntegration) {
@@ -1036,7 +1042,7 @@ private:
                 inputIds.insert(inputIds.end(), flatMapLambdaInputs.begin(), flatMapLambdaInputs.end());
 
             }
-            else { 
+            else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
                         auto ids = Visit(child, planNode);
@@ -1278,7 +1284,7 @@ private:
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         Visit(flatMap, planNode);
-        
+
         return operatorId;
     }
 
@@ -1333,7 +1339,7 @@ private:
         AddOptimizerEstimates(op, join);
 
         Visit(flatMap, planNode);
- 
+
         return operatorId;
     }
 
@@ -2101,7 +2107,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 }
 
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
-                
+
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
                 if ((*stat)->HasDurationUs()) {

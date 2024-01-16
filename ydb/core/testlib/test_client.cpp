@@ -24,7 +24,6 @@
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
@@ -385,7 +384,6 @@ namespace Tests {
         GRpcServer->AddService(discoveryService);
         GRpcServer->AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NQuoter::TRateLimiterGRpcService(system, counters, grpcRequestProxies[0]));
-        GRpcServer->AddService(new NGRpcService::TGRpcYdbLongTxService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcDataStreamsService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcMonitoringService(system, counters, grpcRequestProxies[0], true));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbQueryService(system, counters, grpcRequestProxies[0], true));
@@ -903,12 +901,6 @@ namespace Tests {
             IActor* compileService = CreateMiniKQLCompileService(100000);
             TActorId compileServiceId = Runtime->Register(compileService, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(MakeMiniKQLCompileServiceID(), compileServiceId, nodeIdx);
-        }
-
-        {
-            IActor* longTxService = NLongTxService::CreateLongTxService();
-            TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx);
-            Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);
         }
 
         {

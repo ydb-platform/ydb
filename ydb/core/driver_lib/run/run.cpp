@@ -111,7 +111,6 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
@@ -565,8 +564,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        TServiceCfg hasLongTx = false;
-        names["long_tx"] = &hasLongTx;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
         TServiceCfg hasImport = services.empty();
@@ -724,11 +721,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasScripting.IsRlAllowed()));
-        }
-
-        if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasLongTx.IsRlAllowed()));
         }
 
         if (hasSchemeService) {
@@ -1574,10 +1566,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableAuditWriter) {
         sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableLongTxService) {
-        sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
     }
 
     if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) {

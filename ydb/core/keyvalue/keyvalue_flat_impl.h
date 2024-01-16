@@ -7,6 +7,7 @@
 #include "keyvalue_simple_db.h"
 #include "keyvalue_simple_db_flat.h"
 #include "keyvalue_state.h"
+#include "ydb/core/keyvalue/keyvalue_tracing_handler.h"
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -283,6 +284,7 @@ protected:
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
+    TKeyValueTracingHandler TracingHandler;
 
     void OnDetach(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
@@ -320,22 +322,27 @@ protected:
     // gRPC
 
     void Handle(TEvKeyValue::TEvRead::TPtr &ev) {
+        TracingHandler.Handle<TEvKeyValue::TEvRead>(ev);
         State.OnEvReadRequest(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvReadRange::TPtr &ev) {
+        TracingHandler.Handle<TEvKeyValue::TEvReadRange>(ev);
         State.OnEvReadRangeRequest(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvExecuteTransaction::TPtr &ev) {
+        TracingHandler.Handle<TEvKeyValue::TEvExecuteTransaction>(ev);
         State.OnEvExecuteTransaction(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev) {
+        TracingHandler.Handle<TEvKeyValue::TEvGetStorageChannelStatus>(ev);
         State.OnEvGetStorageChannelStatus(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvAcquireLock::TPtr &ev) {
+        TracingHandler.Handle<TEvKeyValue::TEvAcquireLock>(ev);
         State.OnEvAcquireLock(ev, TActivationContext::AsActorContext(), Info());
     }
 
@@ -486,6 +493,7 @@ public:
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , TracingHandler(AppData()->Icb)
     {
         TAutoPtr<TTabletCountersBase> counters(
         new TProtobufTabletCounters<

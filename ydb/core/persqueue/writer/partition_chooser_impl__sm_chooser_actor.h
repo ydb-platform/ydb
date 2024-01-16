@@ -34,7 +34,7 @@ public:
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition)
         : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
-        , Graph(config.GetPQTabletConfig()) {
+        , Graph(MakePartitionGraph(config)) {
 
     }
 

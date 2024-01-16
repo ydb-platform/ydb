@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         p5->AddParentPartitionIds(4);
 
         TPartitionGraph graph;
-        graph.Rebuild(config);
+        graph = std::move(MakePartitionGraph(config));
 
         const auto n0 = graph.GetPartition(0);
         const auto n1 = graph.GetPartition(1);

@@ -147,8 +147,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
 
-    TPartitionGraph graph;
-    graph.Rebuild(TabletConfig);
+    TPartitionGraph graph = MakePartitionGraph(TabletConfig);
 
     for (const auto& p : TabletConfig.GetPartitions()) {
         auto node = graph.GetPartition(p.GetPartitionId());

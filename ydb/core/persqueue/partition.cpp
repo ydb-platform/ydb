@@ -1796,7 +1796,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
 {
     Config = config;
     PartitionConfig = GetPartitionConfig(Config, Partition);
-    PartitionGraph.Rebuild(Config);
+    PartitionGraph = MakePartitionGraph(Config);
     TopicConverter = topicConverter;
     NewPartition = false;
 

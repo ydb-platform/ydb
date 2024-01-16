@@ -72,6 +72,7 @@ SRCS(
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
+    rpc_s3_listing.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp

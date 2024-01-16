@@ -40,6 +40,7 @@ SRCS(
     flat_ut.cpp
     locks_ut.cpp
     query_stats_ut.cpp
+    s3_listing_ut.cpp
 )
 
 END()

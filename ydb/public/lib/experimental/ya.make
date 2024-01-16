@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     ydb_clickhouse_internal.cpp
     ydb_logstore.cpp
+    ydb_s3_internal.cpp
 )
 
 PEERDIR(

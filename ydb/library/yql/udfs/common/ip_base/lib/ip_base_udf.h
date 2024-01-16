@@ -96,7 +96,7 @@ namespace {
 
         static TRawIp6 MaskFromPrefix(ui8 prefix) {
             ui128 x = ui128(-1) << int(128 - prefix);
-            if (prefix == 0) x = ui128(-1);
+            if (prefix == 0) x = 0;
             return FromIpAddress({x, TIpv6Address::Ipv6});
         }
 
@@ -188,7 +188,7 @@ namespace {
             memcpy(&subnet4, str.Data(), sizeof subnet4);
             range = subnet4.ToIpRange();
         } else if (str.Size() == sizeof(TRawIp6Subnet)) {
-            TRawIp4Subnet subnet6;
+            TRawIp6Subnet subnet6;
             memcpy(&subnet6, str.Data(), sizeof subnet6);
             range = subnet6.ToIpRange();
         } else {
@@ -247,7 +247,7 @@ namespace {
     SIMPLE_UDF(TSubnetToString, char*(TAutoMapString)) {
         TStringBuilder result;
         auto range = DeserializeSubnet(args[0].AsStringRef());
-        result << (*range.Begin()).ToString();
+        result << (*range.Begin()).ToString(false);
         result << '/';
         result << ToString(GetAddressRangePrefix(range));
         return valueBuilder->NewString(result);

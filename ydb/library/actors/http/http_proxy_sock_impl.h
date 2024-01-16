@@ -192,13 +192,8 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
 
     void Flush() {}
 
-    ssize_t Send(const void* data, size_t size, bool& read, bool& write) {
-        ssize_t res = SSL_write(Ssl.Get(), data, size);
-        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        if (res >= 0) {
-            return res;
-        }
-        switch(err) {
+    int ProcessSslError(const int error, bool& read, bool& write) {
+        switch(error) {
         case SSL_ERROR_WANT_READ:
             read = true;
             return -EAGAIN;
@@ -210,22 +205,20 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         }
     }
 
+    ssize_t Send(const void* data, size_t size, bool& read, bool& write) {
+        ssize_t res = SSL_write(Ssl.Get(), data, size);
+        int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
+        return res < 0
+            ? ProcessSslError(err, read, write)
+            : res;
+    }
+
     ssize_t Recv(void* data, size_t size, bool& read, bool& write) {
         ssize_t res = SSL_read(Ssl.Get(), data, size);
         int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        if (res >= 0) {
-            return res;
-        }
-        switch(err) {
-        case SSL_ERROR_WANT_READ:
-            read = true;
-            return -EAGAIN;
-        case SSL_ERROR_WANT_WRITE:
-            write = true;
-            return -EAGAIN;
-        default:
-            return -EIO;
-        }
+        return res < 0
+            ? ProcessSslError(err, read, write)
+            : res;
     }
 
     int OnConnect(bool& read, bool& write) {
@@ -234,19 +227,9 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         }
         int res = SSL_connect(Ssl.Get());
         int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        if (res == 1) {
-            return 1;
-        }
-        switch(err) {
-        case SSL_ERROR_WANT_READ:
-            read = true;
-            return -EAGAIN;
-        case SSL_ERROR_WANT_WRITE:
-            write = true;
-            return -EAGAIN;
-        default:
-            return -EIO;
-        }
+        return res <= 0
+            ? ProcessSslError(err, read, write)
+            : 1;
     }
 
     int OnAccept(std::shared_ptr<TPrivateEndpointInfo> endpoint, bool& read, bool& write) {
@@ -255,19 +238,9 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         }
         int res = SSL_accept(Ssl.Get());
         int err = SSL_get_error(Ssl.Get(), res); // SSL_get_error() must be used after each SSL_* operation
-        if (res == 1) {
-            return 1;
-        }
-        switch(err) {
-        case SSL_ERROR_WANT_READ:
-            read = true;
-            return -EAGAIN;
-        case SSL_ERROR_WANT_WRITE:
-            write = true;
-            return -EAGAIN;
-        default:
-            return -EIO;
-        }
+        return res <= 0
+            ? ProcessSslError(err, read, write)
+            : 1;
     }
 };
 

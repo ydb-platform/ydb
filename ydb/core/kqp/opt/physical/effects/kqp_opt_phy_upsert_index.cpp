@@ -505,7 +505,7 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
         YQL_ENSURE(condenseResult);
     }
 
-    auto helper = CreateUpsertUniqBuildHelper(table, &inputColumns, usedIndexes, pos, ctx);
+    auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx);
     if (helper->GetChecksNum() == 0) {
         return condenseResult;
     }

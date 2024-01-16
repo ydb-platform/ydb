@@ -19,7 +19,7 @@ services:
       - 19000:9000
       - 18123:8123
   fq-connector-go:
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.0.6-rc.8@sha256:74ebae0530d916c1842a7fddfbddc6c018763a0401f2f627a44e8829692fe41f
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.1.1@sha256:47e24df143aee31a83d4a4cd0acc20b4cab8c03a9c63e81a6e99cb017a31f916
     ports:
       - 50051:50051
     network_mode: host

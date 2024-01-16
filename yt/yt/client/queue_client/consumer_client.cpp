@@ -67,22 +67,13 @@ static const TTableSchemaPtr BigRTConsumerTableSchema = New<TTableSchema>(std::v
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TConsumerMeta
-    : public NYTree::TYsonStructLite
+void TConsumerMeta::Register(TRegistrar registrar)
 {
-    std::optional<i64> CumulativeDataWeight;
-    std::optional<ui64> OffsetTimestamp;
-
-    REGISTER_YSON_STRUCT_LITE(TConsumerMeta);
-
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("cumulative_data_weight", &TThis::CumulativeDataWeight)
-            .Optional();
-        registrar.Parameter("offset_timestamp", &TThis::OffsetTimestamp)
-            .Optional();
-    }
-};
+    registrar.Parameter("cumulative_data_weight", &TThis::CumulativeDataWeight)
+        .Default();
+    registrar.Parameter("offset_timestamp", &TThis::OffsetTimestamp)
+        .Default();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -268,14 +259,26 @@ public:
             return MakeFuture(std::vector<TPartitionInfo>{});
         }
 
-        auto selectQuery = Format(
-            "[%v], [%v] from [%v] where ([%v] between 0 and %v) and (%v)",
+        TStringBuilder queryBuilder;
+        queryBuilder.AppendFormat("[%v], [%v]",
             PartitionIndexColumnName_,
-            OffsetColumnName_,
+            OffsetColumnName_);
+
+        bool hasMetaColumn = ConsumerTableSchema_->FindColumn(YTConsumerMetaColumnName);
+        if (hasMetaColumn) {
+            queryBuilder.AppendFormat(", [%v]", YTConsumerMetaColumnName);
+        }
+
+        queryBuilder.AppendFormat(
+            " from [%v] where ([%v] between 0 and %v) and (%v)",
+
             ConsumerPath_,
             PartitionIndexColumnName_,
             expectedPartitionCount - 1,
             RowPrefixCondition_);
+
+        auto selectQuery = queryBuilder.Flush();
+
         return BIND(
             &TGenericConsumerClient::DoCollectPartitions,
             MakeStrong(this),
@@ -417,6 +420,7 @@ private:
         auto partitionIndexRowsetColumnId =
             selectRowsResult.Rowset->GetNameTable()->FindId(PartitionIndexColumnName_);
         auto offsetRowsetColumnId = selectRowsResult.Rowset->GetNameTable()->FindId(OffsetColumnName_);
+        auto metaColumnId = selectRowsResult.Rowset->GetNameTable()->FindId(YTConsumerMetaColumnName);
 
         if (!partitionIndexRowsetColumnId || !offsetRowsetColumnId) {
             THROW_ERROR_EXCEPTION(
@@ -424,10 +428,12 @@ private:
                 PartitionIndexColumnName_,
                 OffsetColumnName_);
         }
+        int expectedColumnsCount = 2 + (metaColumnId ? 1 : 0);
 
         std::vector<ui64> partitionIndices;
+
         for (auto row : selectRowsResult.Rowset->GetRows()) {
-            YT_VERIFY(row.GetCount() == 2);
+            YT_VERIFY(static_cast<int>(row.GetCount()) == expectedColumnsCount);
 
             const auto& partitionIndexValue = row[*partitionIndexRowsetColumnId];
             if (partitionIndexValue.Type == EValueType::Null) {
@@ -453,10 +459,20 @@ private:
             }
 
             // NB: in BigRT offsets encode the last read row, while we operate with the first unread row.
-            result.emplace_back(TPartitionInfo{
+            auto partitionInfo = TPartitionInfo{
                 .PartitionIndex = FromUnversionedValue<i64>(partitionIndexValue),
                 .NextRowIndex = offset,
-            });
+            };
+
+            if (metaColumnId) {
+                const auto& metaValue = row[*metaColumnId];
+                YT_VERIFY(metaValue.Type == EValueType::Any || metaValue.Type == EValueType::Null);
+                if (metaValue.Type == EValueType::Any) {
+                    partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                }
+            }
+
+            result.push_back(std::move(partitionInfo));
         }
 
         if (!withLastConsumeTime) {

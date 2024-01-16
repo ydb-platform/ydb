@@ -869,10 +869,19 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
             }
         }
         return res;
-    } else if (TKqpOlapFilterBinaryOp::Match(node)) {
-        if (!EnsureArgsCount(*node, 3, ctx)) {
+    } else if (TKqpOlapFilterUnaryOp::Match(node)) {
+        const auto op = node->Child(TKqpOlapFilterUnaryOp::idx_Operator);
+        if (!EnsureAtom(*op, ctx)) {
             return false;
         }
+        if (!op->IsAtom({"minus", "abs", "not", "size", "exists", "empty"})) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Unexpected OLAP unary operation: " << op->Content()
+            ));
+            return false;
+        }
+        return ValidateOlapFilterConditions(node->Child(TKqpOlapFilterUnaryOp::idx_Arg), itemType, ctx);
+    } else if (TKqpOlapFilterBinaryOp::Match(node)) {
         const auto op = node->Child(TKqpOlapFilterBinaryOp::idx_Operator);
         if (!EnsureAtom(*op, ctx)) {
             return false;

@@ -84,9 +84,9 @@ Y_UNIT_TEST_SUITE(KqpGenericPlanTest) {
         NJson::TJsonValue plan;
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
-        const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Filter-Source");
-        const auto& sourceOp = stagePlan["Operators"].GetArraySafe()[1];
+        const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Source");
+        const auto& sourceOp = stagePlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "pg_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Database"].GetStringSafe(), GetPgDatabase());
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Protocol"].GetStringSafe(), "Native");
@@ -163,9 +163,9 @@ Y_UNIT_TEST_SUITE(KqpGenericPlanTest) {
         NJson::TJsonValue plan;
         UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
 
-        const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
-        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Filter-Source");
-        const auto& sourceOp = stagePlan["Operators"].GetArraySafe()[1];
+        const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Source");
+        const auto& sourceOp = stagePlan["Operators"].GetArraySafe()[0];
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), "ch_data_source");
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Database"].GetStringSafe(), GetChDatabase());
         UNIT_ASSERT_VALUES_EQUAL(sourceOp["Protocol"].GetStringSafe(), "Native");

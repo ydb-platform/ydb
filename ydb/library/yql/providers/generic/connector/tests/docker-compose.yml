@@ -21,7 +21,7 @@ services:
       - 9000
       - 8123
   fq-connector-go:
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.1.1-rc.2@sha256:e5c2d86bce9cb43420eed0ed534afe760fb90ad41229dbbf34af28023b219af3
     container_name: ${USER}_connector-integration-tests-fq-connector-go
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.1.1@sha256:47e24df143aee31a83d4a4cd0acc20b4cab8c03a9c63e81a6e99cb017a31f916
     ports:
       - 50051

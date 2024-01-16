@@ -32,7 +32,7 @@
             - "YDB_USE_IN_MEMORY_PDISKS=true"
             - "POSTGRES_USER=${YDB_PG_USER:-root}"
             - "POSTGRES_PASSWORD=${YDB_PG_PASSWORD:-1234}"
-            - "YDB_FEATURE_FLAGS=enable_temp_tables"
+            - "YDB_FEATURE_FLAGS=enable_temp_tables,enable_table_pg_types"
             - "YDB_TABLE_ENABLE_PREPARED_DDL=true"
     ```
 

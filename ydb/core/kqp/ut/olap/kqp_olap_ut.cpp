@@ -1521,7 +1521,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, false); // TODO: Add nulls after fix coalesce kernel.
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();

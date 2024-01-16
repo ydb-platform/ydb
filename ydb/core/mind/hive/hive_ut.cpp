@@ -2831,27 +2831,24 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // If assured space is not set, usage is always set to 1
-        auto groupMetricsExchange = MakeHolder<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
-        for (const auto& [group, tablets] : groupToTablets) {
-            NKikimrBlobStorage::TGroupMetrics* metrics = groupMetricsExchange->Record.AddGroupMetrics();
+        auto updateDiskStatus = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
-            metrics->SetGroupId(group);
-            metrics->MutableGroupParameters()->SetGroupID(group);
-            metrics->MutableGroupParameters()->SetStoragePoolName("def1");
-            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(300'000'000);
+        for (ui32 groupId = 0x80000000; groupId < 0x8000000a; ++groupId) {
+            NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = updateDiskStatus->Record.AddVDisksMetrics();
+
+            vdiskMetrics->MutableVDiskId()->SetGroupID(groupId);
+            vdiskMetrics->MutableVDiskId()->SetGroupGeneration(1);
+            vdiskMetrics->MutableVDiskId()->SetRing(0);
+            vdiskMetrics->MutableVDiskId()->SetDomain(0);
+            vdiskMetrics->MutableVDiskId()->SetVDisk(0);
+            vdiskMetrics->SetAvailableSize(30'000'000);
+
         }
 
-        runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerGroupMetricsExchange));
-            runtime.DispatchEvents(options);
-        }
+        runtime.SendToPipe(MakeBSControllerID(0), sender, updateDiskStatus.Release(), 0, GetPipeConfigWithRetries());
 
         TChannelsBindings channels = BINDED_CHANNELS;
-        for (auto& bind : channels) {
-            bind.SetSize(200'000'000);
-        }
+        channels[0].SetSize(500'000'000);
         for (auto tablet : {tabletA, tabletB}) {
             TAutoPtr<TEvHive::TEvCreateTablet> updateTablet(new TEvHive::TEvCreateTablet(testerTablet, 100500 + (tablet - tabletBase), tabletType, channels));
             SendCreateTestTablet(runtime, hiveTablet, testerTablet, updateTablet, 0, true);

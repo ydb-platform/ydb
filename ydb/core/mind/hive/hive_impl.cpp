@@ -2384,7 +2384,15 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
     });
     if (stats.Scatter > GetMinStorageScatterToBalance()) {
         BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
-        auto numReassigns = pool.Groups.at(stats.MaxUsageGroupId).Units.size(); // an upper-bound estimate on how many reassigns are needed
+        ui64 numReassigns = 1;
+        auto it = pool.Groups.find(stats.MaxUsageGroupId);
+        if (it != pool.Groups.end()) {
+            // We want a ballpark estimate of how many reassigns it would take to balance the pool
+            // Using the number of units in the most loaded group ensures we won't reassign the whole pool on a whim,
+            // while also giving the balancer some room to work.
+            // Note that the balancer is not actually required to do that many reassigns, but will never do more
+            numReassigns = it->second.Units.size();
+        }
         StartHiveStorageBalancer({
             .NumReassigns = numReassigns,
             .StoragePool = pool.Name
@@ -2814,6 +2822,7 @@ void THive::RequestPoolsInformation() {
         THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
         NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
         record.SetReturnAllMatchingGroups(true);
+        record.SetBlockUntilAllResourcesAreComplete(true);
         for (auto& request : requests) {
             record.MutableGroupParameters()->AddAllocated(std::move(request).Release());
         }

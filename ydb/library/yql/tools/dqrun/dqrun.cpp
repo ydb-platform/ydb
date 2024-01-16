@@ -546,7 +546,7 @@ int RunMain(int argc, const char* argv[])
         .StoreResult(&runOptions.BindingsFile);
     opts.AddLongOption("metrics-pusher-config", "Metrics Pusher Config")
         .StoreResult(&mestricsPusherConfig);
-    opts.AddLongOption("disable-spilling", "Disable disk spilling").NoArgument();
+    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
     opts.AddLongOption("failure-inject", "Activate failure injection")
         .Optional()
         .RequiredArgument("INJECTION_NAME=FAIL_COUNT or INJECTION_NAME=SKIP_COUNT/FAIL_COUNT")
@@ -666,10 +666,10 @@ int RunMain(int argc, const char* argv[])
         setting->SetValue("1");
     }
 
-    if (res.Has("disable-spilling")) {
+    if (res.Has("enable-spilling")) {
         auto* setting = gatewaysConfig.MutableDq()->AddDefaultSettings();
         setting->SetName("SpillingEngine");
-        setting->SetValue("disable");
+        setting->SetValue("file");
     }
 
     TString defYtServer = gatewaysConfig.HasYt() ? NYql::TConfigClusters::GetDefaultYtServer(gatewaysConfig.GetYt()) : TString();
@@ -821,7 +821,7 @@ int RunMain(int argc, const char* argv[])
             size_t maxRetries = gatewaysConfig.HasHttpGateway() && gatewaysConfig.GetHttpGateway().HasMaxRetries() ? gatewaysConfig.GetHttpGateway().GetMaxRetries() : 2;
 
 
-            bool enableSpilling = !res.Has("disable-spilling");
+            bool enableSpilling = res.Has("enable-spilling");
             dqGateway = CreateLocalDqGateway(funcRegistry.Get(), dqCompFactory, dqTaskTransformFactory, dqTaskPreprocessorFactories, enableSpilling,
                 CreateAsyncIoFactory(driver, httpGateway, genericClient, requestTimeout, maxRetries), threads,
                 metricsRegistry, metricsPusherFactory);

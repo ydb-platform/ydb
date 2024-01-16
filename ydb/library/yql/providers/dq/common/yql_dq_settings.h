@@ -55,7 +55,7 @@ struct TDqSettings {
         static constexpr bool EnableChannelStats = false;
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
-        static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::File;
+        static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 MaxDPccpDPTableSize = 10000U;
 
     };

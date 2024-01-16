@@ -177,7 +177,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("disable_pipe", "Disable pipe").NoArgument();
     opts.AddLongOption("log_level", "Log Level");
     opts.AddLongOption("ipv4", "Use ipv4").NoArgument();
-    opts.AddLongOption("disable-spilling", "Disable disk spilling").NoArgument();
+    opts.AddLongOption("enable-spilling", "Enable disk spilling").NoArgument();
 
     ui32 threads = THREAD_PER_NODE;
     TString host;
@@ -406,7 +406,7 @@ int main(int argc, char** argv) {
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;
-        bool enableSpilling = !res.Has("disable-spilling");
+        bool enableSpilling = res.Has("enable-spilling");
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         auto workerManagerActorId = actorSystem->Register(resman);

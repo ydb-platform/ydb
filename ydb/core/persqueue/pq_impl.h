@@ -12,6 +12,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 
@@ -197,6 +198,7 @@ private:
     struct TTxWriteInfo {
         THashMap<ui32, ui32> Partitions;
         TMaybe<ui64> TxId;
+        NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
     };
 
     THashMap<ui64, TTxWriteInfo> TxWrites;
@@ -467,6 +469,8 @@ private:
     TPartitionInfo& GetPartitionInfo(ui32 partitionId);
 
     bool AllPartitionsInited() const;
+
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
 };
 
 

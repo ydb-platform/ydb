@@ -51,7 +51,6 @@ struct TPartitionInfo {
         , KeyRange(info.KeyRange)
         , InitDone(info.InitDone)
         , GetOwnershipRequests(info.GetOwnershipRequests)
-        , PersistedWriteId(info.PersistedWriteId)
     {
         Baseline.Populate(info.Baseline);
     }
@@ -90,7 +89,6 @@ struct TPartitionInfo {
     };
 
     TDeque<TCommandParams> GetOwnershipRequests;
-    bool PersistedWriteId = false;
 };
 
 struct TChangeNotification {
@@ -3275,9 +3273,6 @@ void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
                                  TPartitionInfo(TActorId(),
                                                 {},
                                                 *Counters));
-
-        TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
-        partition.PersistedWriteId = false;
     }
 
     HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
@@ -3334,7 +3329,8 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
         ui32 partitionId = params.Request.GetPartition();
         DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
-        ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+        TTxWriteInfo& txWrite = TxWrites.at(writeId);
+        ui32 shadowPartitionId = txWrite.Partitions[partitionId];
         DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
@@ -3345,7 +3341,11 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
                                                             true,
                                                             ctx));
         partition.GetOwnershipRequests.emplace_back(params.Cookie, params.Request, params.Sender);
-        partition.PersistedWriteId = true;
+
+        if (txWrite.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
+            ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
+                     new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId, ctx.SelfID.NodeId()));
+        }
     }
 
     HandleGetOwnershipRequestParams.clear();
@@ -4323,6 +4323,19 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
+void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& /*ctx*/)
+{
+    DBGTRACE("TPersQueue::Handle(TEvLongTxService::TEvLockStatus)");
+
+    auto& record = ev->Get()->Record;
+    DBGTRACE_LOG("LockId=" << record.GetLockId() << ", LockNode=" << record.GetLockNode() << ", Status=" << (int)record.GetStatus());
+    ui64 writeId = record.GetLockId();
+    if (TxWrites.contains(writeId)) {
+        TTxWriteInfo& txWrite = TxWrites.at(writeId);
+        txWrite.LongTxSubscriptionStatus = record.GetStatus();
+    }
+}
+
 TString TPersQueue::LogPrefix() const {
     return TStringBuilder() << SelfId() << " ";
 }
@@ -4376,6 +4389,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
+        HFuncTraced(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
         default:
             return false;
     }

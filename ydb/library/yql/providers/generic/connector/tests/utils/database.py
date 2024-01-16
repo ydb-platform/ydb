@@ -1,6 +1,4 @@
 from dataclasses import dataclass
-from random import choice
-from string import ascii_lowercase, digits
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
 
@@ -9,56 +7,55 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 class Database:
     name: str
 
-    def __init__(self):
-        self.name = choice(ascii_lowercase)
-        self.name += ''.join(choice(ascii_lowercase + digits + '_') for i in range(8))
+    def __init__(self, name: str, kind: EDataSourceKind.ValueType):
+        self.kind = kind
 
-    @classmethod
-    def make_for_data_source_kind(cls, kind: EDataSourceKind.ValueType):
         match kind:
-            case EDataSourceKind.CLICKHOUSE:
-                return Database()
             case EDataSourceKind.POSTGRESQL:
-                return Database()
+                # PostgreSQL implicitly converts all identifiers to lowercase,
+                # so we'd better make it first on our own
+                self.name = name[:63].lower()
+            case EDataSourceKind.CLICKHOUSE:
+                self.name = name[:255]
             case _:
-                raise Exception(f'invalid data source: {kind}')
+                raise Exception(f'invalid data source: {self.kind}')
 
-    def exists(self, kind: EDataSourceKind.ValueType) -> str:
-        match kind:
+    def exists(self) -> str:
+        match self.kind:
             case EDataSourceKind.POSTGRESQL:
                 return f"SELECT 1 FROM pg_database WHERE datname = '{self.name}'"
             case _:
-                raise Exception(f'invalid data source: {kind}')
+                raise Exception(f'invalid data source: {self.kind}')
 
-    def create(self, kind: EDataSourceKind.ValueType) -> str:
-        match kind:
+    def create(self) -> str:
+        match self.kind:
             case EDataSourceKind.CLICKHOUSE:
-                return f'CREATE DATABASE IF NOT EXISTS {self.name} ENGINE = Memory'
+                return f"CREATE DATABASE IF NOT EXISTS {self.name} ENGINE = Memory"
             case EDataSourceKind.POSTGRESQL:
                 return f"CREATE DATABASE {self.name}"
             case _:
-                raise Exception(f'invalid data source: {kind}')
+                raise Exception(f'invalid data source: {self.kind}')
 
     def sql_table_name(self, table_name: str) -> str:
         return table_name
 
-    def missing_database_msg(self, kind: EDataSourceKind.ValueType) -> str:
-        match kind:
+    def missing_database_msg(self) -> str:
+        match self.kind:
             case EDataSourceKind.CLICKHOUSE:
                 return f"Database {self.name} doesn't exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
             case _:
-                raise Exception(f'invalid data source: {kind}')
+                raise Exception(f'invalid data source: {self.kind}')
 
-    def missing_table_msg(self, kind: EDataSourceKind.ValueType) -> str:
-        match kind:
+    def missing_table_msg(self) -> str:
+        match self.kind:
             case EDataSourceKind.CLICKHOUSE:
                 return 'table does not exist'
             case EDataSourceKind.POSTGRESQL:
                 return 'table does not exist'
             case _:
-                raise Exception(f'invalid data source: {kind}')
+                raise Exception(f'invalid data source: {self.kind}')
 
     def __str__(self) -> str:
         return f'database_{self.name}'

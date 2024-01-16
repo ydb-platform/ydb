@@ -18,7 +18,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Added support for outputting the result of executing commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) in [parquet](https://parquet.apache.org/docs/) format.
 
-* In the `ydb table query explain` command, the [--collect-diagnostics](reference/ydb-cli/table-query-execute.md#options) option has been added to collect query diagnostics and save it to a file.
+* In the `ydb table query explain` command, the [--collect-diagnostics](reference/ydb-cli/table-query-execute.md#options) option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 
 * In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, specifying the type of queries used.
 

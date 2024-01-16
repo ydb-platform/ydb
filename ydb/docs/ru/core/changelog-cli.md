@@ -18,7 +18,7 @@
 
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [parquet](https://parquet.apache.org/docs/).
 
-* В команде `ydb table query explain` добавлена опция [--collect-diagnostics](reference/ydb-cli/table-query-execute.md#options) для сбора диагностики запроса и сохранения её в файл.
+* В команде `ydb table query explain` добавлена опция [--collect-diagnostics](reference/ydb-cli/table-query-execute.md#options) для сбора диагностики запроса и сохранения её в файл. Команда использует экспериментальное API, совместимость не гарантируется.
 
 * В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
 

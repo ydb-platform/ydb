@@ -277,7 +277,8 @@
             "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"},
             "Children": [
                 {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

@@ -176,8 +176,6 @@ private:
         }
 
         if (Source == ESource::DataSink || Source == ESource::All) {
-            //for (const auto& [key, v] : Types.DataSinkMap)
-            //    std::cout << "key - " << key << std::endl;
             if (auto p = Types.DataSinkMap.FindPtr(Provider)) {
                 auto s = HandleProvider(p->Get(), input, output, ctx);
                 if (s.Level == TStatus::Error) return s;

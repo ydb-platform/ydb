@@ -114,9 +114,12 @@ protected:
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
-        if (input && hopSetting) {
-            output = RewriteAsHoppingWindow(node, ctx, input.Cast());
+        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");        
+        if (hopSetting) {
+            if (!input) {
+                return node;
+            }
+            output = NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), false);
         }        
         else {
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey());

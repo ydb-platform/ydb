@@ -157,8 +157,12 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
 
 TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(issueCode);
+    // Transformers_.push_back(TTransformStage(
+    //     CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+    //     "RecaptureDataProposals",
+    //     issueCode));
     Transformers_.push_back(TTransformStage(
-        CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        CreateRecaptureDataProposalsInspector(*TypeAnnotationContext_, TString{S3ProviderName}),
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(

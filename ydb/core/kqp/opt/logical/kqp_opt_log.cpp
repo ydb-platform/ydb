@@ -115,9 +115,6 @@ protected:
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
-        //std::cout << "RewriteAggregate " << std::endl;
-        //std::cout << "input" << bool(input) << aggregate.Input().Ref().Content()<< std::endl;
-        //std::cout << "input" << bool(hopSetting) << std::endl;
         if (input && hopSetting) {
             output = RewriteAsHoppingWindow(node, ctx, input.Cast());
         }        

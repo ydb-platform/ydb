@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 namespace NYql {
 
@@ -28,6 +29,7 @@ public:
         , CallableExecutionTransformer_(CreateS3SourceCallableExecutionTransformer(State_))
         , TypeAnnotationTransformer_(CreateS3DataSourceTypeAnnotationTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
+        , RecaptureTransformer(CreateDqsS3RecaptureTransformer(state))
     {}
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
@@ -99,6 +101,10 @@ public:
         return *CallableExecutionTransformer_;
     }
 
+    IGraphTransformer& GetRecaptureOptProposalTransformer() override {
+        return *RecaptureTransformer;
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         YQL_CLOG(INFO, ProviderS3) << "RewriteIO";
@@ -156,6 +162,7 @@ private:
     const THolder<IGraphTransformer> CallableExecutionTransformer_;
     const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     const THolder<IDqIntegration> DqIntegration_;
+    const THolder<IGraphTransformer> RecaptureTransformer;
 };
 
 }

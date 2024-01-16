@@ -1,6 +1,6 @@
 # Exporting data to the file system
 
-The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file_structure.md):
+The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file-structure.md):
 
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]

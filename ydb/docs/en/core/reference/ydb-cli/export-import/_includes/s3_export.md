@@ -1,6 +1,6 @@
 # Exporting data to S3-compatible storage
 
-The `export s3` command starts exporting data and information on the server side about data schema objects to S3-compatible storage, in the format described under [File structure](../file_structure.md):
+The `export s3` command starts exporting data and information on the server side about data schema objects to S3-compatible storage, in the format described under [File structure](../file-structure.md):
 
 ```bash
 {{ ydb-cli }} [connection options] export s3 [options]
@@ -14,7 +14,7 @@ The `export s3` command starts exporting data and information on the server side
 
 ### S3 connection parameters {#s3-conn}
 
-To run the command to export data to S3 storage, specify the [S3 connection parameters](../s3_conn.md). Since data is exported by the YDB server asynchronously, the specified endpoint must be available to establish a connection on the server side.
+To run the command to export data to S3 storage, specify the [S3 connection parameters](../auth-s3.md). Since data is exported by the YDB server asynchronously, the specified endpoint must be available to establish a connection on the server side.
 
 ### List of exported items {#items}
 

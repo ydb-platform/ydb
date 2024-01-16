@@ -1,6 +1,6 @@
 # Importing data from an S3 compatible storage
 
-The `import s3` command starts, on the server side, the process of importing data and schema object details from an S3-compatible storage, in the format described in the [File structure](../file_structure.md) section:
+The `import s3` command starts, on the server side, the process of importing data and schema object details from an S3-compatible storage, in the format described in the [File structure](../file-structure.md) section:
 
 ```bash
 {{ ydb-cli }} [connection options] import s3 [options]
@@ -8,9 +8,9 @@ The `import s3` command starts, on the server side, the process of importing dat
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-As opposed to the [`tools restore` command](../tools_restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) should already exist.
+As opposed to the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects in entirety, so none of the imported objects (directories or tables) should already exist.
 
-If you need to import some more data to your existing S3 tables (for example, using [S3cmd](https://s3tools.org/s3cmd)), you can copy the S3 contents to the file system and use the [`tools restore`](../tools_restore.md) command.
+If you need to import some more data to your existing S3 tables (for example, using [S3cmd](https://s3tools.org/s3cmd)), you can copy the S3 contents to the file system and use the [`tools restore`](../tools-restore.md) command.
 
 ## Command line parameters {#pars}
 
@@ -18,7 +18,7 @@ If you need to import some more data to your existing S3 tables (for example, us
 
 ### S3 connection parameters {#s3-conn}
 
-To run the command to import data from an S3 storage, specify the [S3 connection parameters](../s3_conn.md). As data is imported by the YDB server asynchronously, the specified endpoint must be available so that a connection can be established from the server side.
+To run the command to import data from an S3 storage, specify the [S3 connection parameters](../auth-s3.md). As data is imported by the YDB server asynchronously, the specified endpoint must be available so that a connection can be established from the server side.
 
 ### List of imported objects {#items}
 

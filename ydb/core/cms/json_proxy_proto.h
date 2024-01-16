@@ -76,6 +76,10 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TSchemeShardControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTCMallocControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTCMallocControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TSamplingControls")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingControls::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,

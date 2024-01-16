@@ -38,7 +38,7 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({
-            .InvocationCount = 1
+            .InvocationCount = 0,
         });
 }
 

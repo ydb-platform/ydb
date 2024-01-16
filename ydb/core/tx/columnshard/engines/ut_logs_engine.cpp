@@ -69,14 +69,14 @@ public:
         return true;
     }
 
-    void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
         auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
         auto rowProto = row.GetMeta().SerializeToProto();
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
 
-        auto& data = Indices[index].Columns[portion.GetPathId()];
+        auto& data = Indices[0].Columns[portion.GetPathId()];
         NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
@@ -104,8 +104,8 @@ public:
         }
     }
 
-    void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
-        auto& data = Indices[index].Columns[portion.GetPathId()];
+    void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto& data = Indices[0].Columns[portion.GetPathId()];
         auto it = data.find(portion.GetPortion());
         Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
@@ -119,8 +119,8 @@ public:
         portionLocal.Records.swap(filtered);
     }
 
-    bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
-        auto& columns = Indices[index].Columns;
+    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
+        auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal;
@@ -137,13 +137,13 @@ public:
         return true;
     }
 
-    void WriteCounter(ui32 index, ui32 counterId, ui64 value) override {
-        auto& counters = Indices[index].Counters;
+    void WriteCounter(ui32 counterId, ui64 value) override {
+        auto& counters = Indices[0].Counters;
         counters[counterId] = value;
     }
 
-    bool LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) override {
-        auto& counters = Indices[index].Counters;
+    bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override {
+        auto& counters = Indices[0].Counters;
         for (auto& [id, value] : counters) {
             callback(id, value);
         }

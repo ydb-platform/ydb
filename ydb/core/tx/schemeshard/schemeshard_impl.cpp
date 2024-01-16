@@ -7052,7 +7052,18 @@ void TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(aggregated.DataSize);
         ++count;
     }
-    // TODO: add column tables
+    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
+    for (const auto& pathId : columnTablesPathIds) {
+        const auto& tableInfo = ColumnTables.GetVerified(pathId);
+        const auto& aggregated = tableInfo->Stats.Aggregated;
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
+    }
 
     TString stats;
     stats.clear();

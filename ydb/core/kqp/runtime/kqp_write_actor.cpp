@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/tx.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -31,6 +33,7 @@ public:
         , TxId(args.TxId)
         , TableId(Settings.GetTable().GetOwnerId(), Settings.GetTable().GetTableId())
     {
+        YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         Y_UNUSED(Settings, Counters, LogPrefix, TxId, TableId);
         EgressStats.Level = args.StatsLevel;
 
@@ -82,10 +85,6 @@ private:
 
         AddToInputQueue(std::move(data));
         ProcessRows();
-
-        if (finished) {
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-        }
     }
 
     void AddToInputQueue(NMiniKQL::TUnboxedValueBatch&& data) {
@@ -160,10 +159,44 @@ private:
         ProcessRows();
     }
 
-    //NKikimrDataEvents::TEvWrite BuildWrites() {
-    //}
+    void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        //ProcessRows();
+        CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
+        CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
+        CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
+        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            // Until LockIds are supported by columnshards we have to commit each write using separate transaction. 
+            ui64 coordinator = 0;
+            if (ev->Get()->Record.DomainCoordinatorsSize()) {
+                auto domainCoordinators = TCoordinators(TVector<ui64>(
+                    ev->Get()->Record.GetDomainCoordinators().begin(),
+                    ev->Get()->Record.GetDomainCoordinators().end()));
+                coordinator = domainCoordinators.Select(ev->Get()->Record.GetTxId());
+            }
 
-    void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr&) {
+            YQL_ENSURE(coordinator != 0);
+
+            auto evTnx = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+            evTnx->Record.SetCoordinatorID(coordinator);
+
+            auto& transaction = *evTnx->Record.MutableTransaction();
+            auto& affectedSet = *transaction.MutableAffectedSet();
+
+            auto& item = *affectedSet.Add();
+            item.SetTabletId(ev->Get()->Record.GetOrigin());
+            item.SetFlags(TEvTxProxy::TEvProposeTransaction::AffectedWrite);
+
+            transaction.SetTxId(ev->Get()->Record.GetTxId());
+            transaction.SetMinStep(ev->Get()->Record.GetMinStep());
+            transaction.SetMaxStep(ev->Get()->Record.GetMaxStep());
+
+            Send(
+                MakePipePeNodeCacheID(false),
+                new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true));
+        }
+        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        }
     }
 
     void NotifyCAResume() {
@@ -232,8 +265,52 @@ private:
     }
 
     void ProcessRows() {
-        if (!Shards) {
+        if (!Shards || PendingRows.empty()) {
             return;
+        }
+
+        // TODO: move batching + limits
+        NArrow::TArrowBatchBuilder builder;
+        builder.Reserve(PendingRows.size());
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> tmp;
+        for (const auto& column : Columns) {
+            tmp.emplace_back(column.Name, column.PType);
+        }
+
+        TString err;
+        builder.Start(tmp, 0, 0, err);
+
+        for (const auto& row : PendingRows) {
+            builder.AddRow(
+                TConstArrayRef<TCell>{row.begin(), row.begin() + KeyColumns.size()},
+                TConstArrayRef<TCell>{row.begin() + KeyColumns.size(), row.end()});
+        }
+
+        auto serializedData = builder.Finish();
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
+            std::get<ui64>(TxId), NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
+            .AddDataToPayload(std::move(serializedData));
+
+        std::vector<ui32> columnIds;
+        for (const auto& column : Columns) {
+            columnIds.push_back(column.Id);
+        }
+
+        // TODO: schema
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, Settings.GetTable().GetTableId(), 1/*Settings.GetTable().GetSchemaVersion()*/, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+        Send(
+            MakePipePeNodeCacheID(false),
+            new TEvPipeCache::TEvForward(evWrite.release(), Shards->back().ShardId, true),
+            IEventHandle::FlagTrackDelivery);
+        
+        CA_LOG_D("Send processed rows.");
+
+        {
+            const auto guard = BindAllocator();
+            PendingRows.clear();
         }
     }
 

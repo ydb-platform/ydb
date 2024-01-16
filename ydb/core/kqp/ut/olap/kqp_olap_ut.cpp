@@ -5364,7 +5364,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto client = kikimr.GetQueryClient();
         auto prepareResult = client.ExecuteQuery(R"(
-            UPSERT INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
+            REPLACE INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
                 (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
@@ -5376,13 +5376,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
-        //auto it = client.StreamExecuteQuery(R"(
-        //    SELECT COUNT(*) FROM `/Root/TestDst`;
-        //)", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-        //TString output = StreamResultToYson(it);
-        //Cout << output << Endl;
-        //CompareYson(output, R"([[3u;]])");
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM `/Root/TestDst` ORDER BY Col1, Col2, Col3;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString output = StreamResultToYson(it);
+        Cout << output << Endl;
+        CompareYson(output, R"([[1u;#;#];[2u;#;#];[3u;#;#]])");
     }
 }
 

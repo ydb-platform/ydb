@@ -1244,11 +1244,37 @@ message TImmediateControlsConfig {
             DefaultValue: 8388608 }];
     }
 
+    message TTracingControls {
+        message TSamplingControls {
+            optional uint64 SamplingPPM = 1 [(ControlOptions) = {
+                Description: "TBW",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0,
+            }];
+            optional uint64 MaxRatePerMinute = 2 [(ControlOptions) = {
+                Description: "TBW",
+                MinValue: 0,
+                MaxValue: 180,
+                DefaultValue: 10,
+            }];
+            optional uint64 MaxBurst = 3 [(ControlOptions) = {
+                Description: "TBW",
+                MinValue: 0,
+                MaxValue: 180, 
+                DefaultValue: 15,
+            }];
+        }
+
+        optional TSamplingControls KeyValue = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
     optional TTCMallocControls TCMallocControls = 5;
+    optional TTracingControls TracingControls = 6;
 };
 
 message TMeteringConfig {

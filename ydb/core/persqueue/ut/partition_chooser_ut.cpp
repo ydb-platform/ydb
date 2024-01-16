@@ -303,9 +303,10 @@ using namespace NKikimrPQ;
 
 class TPQTabletMock: public TActor<TPQTabletMock> {
 public:
-    TPQTabletMock(ETopicPartitionStatus status)
+    TPQTabletMock(ETopicPartitionStatus status, std::optional<ui64> seqNo)
         : TActor(&TThis::StateMockWork)
-        , Status(status) {
+        , Status(status)
+        , SeqNo(seqNo) {
     }
 
 private:
@@ -322,6 +323,7 @@ private:
 
         auto* sn = response->Record.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult()->AddSourceIdInfo();
         sn->SetSeqNo(SeqNo.value_or(0));
+        sn->SetState(SeqNo ? NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED : NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION);
 
         ctx.Send(ev->Sender, response.Release());
     }
@@ -339,8 +341,8 @@ private:
 };
 
 
-TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui32 partitionId, ETopicPartitionStatus status) {
-    TPQTabletMock* mock = new TPQTabletMock(status);
+TPQTabletMock* CreatePQTabletMock(NPersQueue::TTestServer& server, ui32 partitionId, ETopicPartitionStatus status, std::optional<ui64> seqNo = std::nullopt) {
+    TPQTabletMock* mock = new TPQTabletMock(status, seqNo);
     auto actorId = server.GetRuntime()->Register(mock);
     NKikimr::NTabletPipe::NTest::TPipeMock::Register(partitionId + 1000, actorId);
     return mock;
@@ -381,12 +383,12 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_Bo
     CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
 
-    WriteToTable(server, "A_Source_1", 0);
+    WriteToTable(server, "A_Source_1", 0, 11);
     auto r = ChoosePartition(server, config, "A_Source_1");
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    AssertTable(server, "A_Source_1", 0, 0);
+    AssertTable(server, "A_Source_1", 0, 11);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryFalse_Test) {
@@ -401,61 +403,128 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_Bo
     CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
 
-    WriteToTable(server, "A_Source_2", 1);
+    WriteToTable(server, "A_Source_2", 1, 13);
     auto r = ChoosePartition(server, config, "A_Source_2");
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    AssertTable(server, "A_Source_2", 1, 0);
+    AssertTable(server, "A_Source_2", 1, 13);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_Test) {
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_0_Test) {
+    // Boundary partition is inactive. It is configuration error - required reload of configuration.
     NPersQueue::TTestServer server = CreateServer();
 
-    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_3", 1, 13);
+    auto r = ChoosePartition(server, config, "A_Source_3");
+
+    UNIT_ASSERT(r->Error);
+    AssertTable(server, "A_Source_3", 1, 13);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_1_Test) {
+    // Boundary partition is inactive. It is configuration error - required reload of configuration.
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active); // Active but not written
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Inactive);
+
+    WriteToTable(server, "A_Source_4", 1, 13);
+    auto r = ChoosePartition(server, config, "A_Source_4");
+
+    UNIT_ASSERT(r->Error);
+    AssertTable(server, "A_Source_4", 1, 13);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionNotExists_Test) {
+    // Old partition alredy deleted. Choose new partition by boundary and save SeqNo
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 1, {}, "F");
+    AddPartition(config, 2, "F", {});
     CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
     CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 3, ETopicPartitionStatus::Inactive);
-    CreatePQTabletMock(server, 4, ETopicPartitionStatus::Active);
 
-    {
-        auto r = ChoosePartition(server, SMEnabled, "A_Source");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    }   
-    {
-        auto r = ChoosePartition(server, SMEnabled, "Y_Source");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 2);
-    }
-    {
-        // Define partition for sourceId that is not in partition boundary
-        // We use this partition because it active
-        WriteToTable(server, "X_Source_w_0", 0);
-        auto r = ChoosePartition(server, SMEnabled, "X_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    }
-    {
-        // Redefine partition  for sourceId. Check that partition changed;
-        WriteToTable(server, "X_Source_w_0", 2);
-        auto r = ChoosePartition(server, SMEnabled, "X_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 2);
-    }
-    {
-        // Redefine partition for sourceId to inactive partition. Select new partition use partition boundary.
-        WriteToTable(server, "A_Source_w_0", 3);
-        auto r = ChoosePartition(server, SMEnabled, "A_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 4);
-    }
-    {
-        // Use prefered partition, but sourceId not in partition boundary
-        auto r = ChoosePartition(server, SMEnabled, "A_Source_1", 1);
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    }
+    WriteToTable(server, "A_Source_5", 0, 13);
+    auto r = ChoosePartition(server, config, "A_Source_5");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo, 13);
+    AssertTable(server, "A_Source_5", 1, 13);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_OldPartitionExists_Test) {
+    // Old partition exists. Receive SeqNo from the partition. Choose new partition by boundary and save SeqNo
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, {}, {1, 2});
+    AddPartition(config, 1, {}, "F");
+    AddPartition(config, 2, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive, 157);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_6", 0, 13);
+    auto r = ChoosePartition(server, config, "A_Source_6");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo, 157);
+    AssertTable(server, "A_Source_6", 1, 157);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_OldPartitionExists_NotWritten_Test) {
+    // Old partition exists but not written. Choose new partition by boundary and save SeqNo
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, {}, {1, 2});
+    AddPartition(config, 1, {}, "F");
+    AddPartition(config, 2, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_7", 0, 13);
+    auto r = ChoosePartition(server, config, "A_Source_7");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo, 13);
+    AssertTable(server, "A_Source_7", 1, 13);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_OldPartitionExists_NotBoundary_Test) {
+    // Old partition exists. Receive SeqNo from the partition. Choose new partition from children and save SeqNo
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F", { 2});
+    AddPartition(config, 1, "F", {});
+    AddPartition(config, 2, {}, "F");
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive, 157);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "Y_Source_7", 0, 13);
+    auto r = ChoosePartition(server, config, "Y_Source_7");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 2);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo, 157);
+    AssertTable(server, "Y_Source_7", 2, 157);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {

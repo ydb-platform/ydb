@@ -136,10 +136,11 @@ protected:
             return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
         }
 
-        TRACE("Selected from table PartitionId=" << TableHelper.PartitionId());
+        TRACE("Selected from table PartitionId=" << TableHelper.PartitionId() << " SeqNo=" << TableHelper.SeqNo());
         if (TableHelper.PartitionId()) {
             Partition = Chooser->GetPartition(TableHelper.PartitionId().value());
         }
+        SeqNo = TableHelper.SeqNo();
 
         OnSelected(ctx);
     }
@@ -159,14 +160,16 @@ protected:
         if (NeedTable(ctx)) {
             TThis::Become(&TThis::StateUpdate);
             DEBUG("Update the table");
-            TableHelper.SendUpdateRequest(Partition->PartitionId, ctx);
+            TableHelper.SendUpdateRequest(Partition->PartitionId, SeqNo, ctx);
         } else {
             ReplyResult(ctx);
+            StartIdle();
         }
     }
 
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record.GetRef();
+        DEBUG("HandleUpdate PartitionPersisted=" << PartitionPersisted << " Status=" << record.GetYdbStatus());
 
         if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
             if (!PartitionPersisted) {

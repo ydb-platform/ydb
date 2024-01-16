@@ -37,6 +37,10 @@ public:
         return PartitionId_;
     }
 
+    std::optional<ui64> SeqNo() const {
+        return SeqNo_;
+    }
+
     bool Initialize(const TActorContext& ctx, const TString& sourceId) {
         const auto& pqConfig = AppData(ctx)->PQConfig;
 
@@ -189,12 +193,12 @@ public:
         return true;
     }
 
-    void SendUpdateRequest(ui32 partitionId, const TActorContext& ctx) {
-        auto ev = MakeUpdateQueryRequest(partitionId, ctx);
+    void SendUpdateRequest(ui32 partitionId, std::optional<ui64> seqNo, const TActorContext& ctx) {
+        auto ev = MakeUpdateQueryRequest(partitionId, seqNo, ctx);
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(ui32 partitionId, const NActors::TActorContext& ctx) {
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeUpdateQueryRequest(ui32 partitionId, std::optional<ui64> seqNo, const NActors::TActorContext& ctx) {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -233,8 +237,7 @@ public:
                 .Uint64(TInstant::Now().MilliSeconds())
                 .Build()
             .AddParam("$SeqNo")
-                //.OptionalUint64(SeqNo_ ? TMaybe<ui64>(SeqNo_.value()) : TMaybe<ui64>())
-                .Uint64(SeqNo_ ? SeqNo_.value() : 0)
+                .Uint64(seqNo.value_or(0))
                 .Build()
             .AddParam("$Partition")
                 .Uint32(partitionId)

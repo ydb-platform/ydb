@@ -136,10 +136,13 @@ private:
             return TThis::ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
         }
 
+        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Configuration changed", ctx);
+        }
+
         TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
 
-        if (NKikimrPQ::ETopicPartitionStatus::Active == response.GetCmdGetOwnershipResult().GetStatus()
-            && response.GetCmdGetOwnershipResult().GetRegistered()) {
+        if (response.GetCmdGetOwnershipResult().GetRegistered()) {
             // Fast path: the partition ative and already written
             return TThis::ReplyResult(ctx);
         }
@@ -198,7 +201,7 @@ private:
             break;
         case NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION:
         case NKikimrPQ::TMessageGroupInfo::STATE_UNKNOWN:
-            TThis::SeqNo = 0; // TODO from table
+            TThis::SeqNo = TThis::TableHelper.SeqNo();
             break;
         }
 

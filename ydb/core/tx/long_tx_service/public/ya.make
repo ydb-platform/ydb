@@ -14,7 +14,6 @@ PEERDIR(
     ydb/core/protos
     ydb/core/util
     ydb/library/yql/public/issue
-    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

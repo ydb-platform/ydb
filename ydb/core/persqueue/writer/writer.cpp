@@ -20,8 +20,6 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-#include <ydb/library/dbgtrace/debug_trace.h>
-
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -190,7 +188,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void WriteAccepted(ui64 cookie) {
-        DBGTRACE("TPartitionWriter::WriteAccepted");
         Send(Client, new TEvPartitionWriter::TEvWriteAccepted(Opts.SessionId, Opts.TxId, cookie));
     }
 
@@ -342,8 +339,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::HandleMaxSeqNo");
-
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -468,16 +463,12 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Handle(TEvPartitionWriter::TEvWriteRequest::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::Handle(TEvPartitionWriter::TEvWriteRequest)");
-
         if (HoldPending(ev)) {
             ReserveBytes(ctx);
         }
     }
 
     void ReserveBytes(const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::ReserveBytes");
-
         if (IsQuotaInflight()) {
             return;
         }
@@ -507,8 +498,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 PendingQuotaAmount += CalcRuConsumption(it->second.ByteSize());
                 PendingQuota.emplace_back(it->first);
             }
-
-            DBGTRACE_LOG("ev.CmdReserveBytes.Size=" << cmd.GetSize());
 
             NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
@@ -602,8 +591,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie) {
-        DBGTRACE("TPartitionWriter::Write");
-
         if (PendingReserve.empty()) {
             ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #02");
             Disconnected(EErrorCode::InternalError);
@@ -625,8 +612,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie, NKikimrClient::TPersQueueRequest&& req) {
-        DBGTRACE("TPartitionWriter::Write");
-
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
         ev->Record = std::move(req);
 
@@ -648,8 +633,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-        DBGTRACE("TPartitionWriter::Handle(TEvPersQueue::TEvResponse)");
-
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -658,10 +641,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         const auto& response = record.GetPartitionResponse();
-        DBGTRACE_LOG("response.Cookie=" << response.GetCookie());
         if (!response.CmdWriteResultSize()) {
-            DBGTRACE_LOG("bytes reserved");
-
             if (PendingReserve.empty()) {
                 return WriteResult(EErrorCode::InternalError, "Unexpected ReserveBytes response", std::move(record));
             }
@@ -693,8 +673,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 Write(cookie);
             }
         } else {
-            DBGTRACE_LOG("bytes writed");
-
             if (PendingWrite.empty()) {
                 return WriteResult(EErrorCode::InternalError, "Unexpected Write response", std::move(record));
             }

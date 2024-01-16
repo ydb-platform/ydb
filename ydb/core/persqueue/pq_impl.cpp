@@ -25,8 +25,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
-#include <ydb/library/dbgtrace/debug_trace.h>
-
 namespace NKikimr::NPQ {
 
 static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -1196,7 +1194,6 @@ void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const
 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvKeyValue::TEvResponse)");
 
     auto& resp = ev->Get()->Record;
 
@@ -1356,10 +1353,7 @@ bool TPersQueue::AllPartitionsInited() const
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvInitComplete)");
-
     const auto partitionId = ev->Get()->Partition;
-    DBGTRACE_LOG("partitionId=" << partitionId);
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
     partition.InitDone = true;
@@ -1938,8 +1932,6 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, co
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleWriteRequest");
-
     Y_ABORT_UNLESS(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
@@ -2149,8 +2141,6 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId&)
 {
-    DBGTRACE("TPersQueue::HandleReserveBytesRequest");
-
     Y_ABORT_UNLESS(req.HasCmdReserveBytes());
 
     auto it = PipesInfo.find(pipeClient);
@@ -2188,8 +2178,6 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId& sender)
 {
-    DBGTRACE("TPersQueue::HandleGetOwnershipRequest");
-
     Y_ABORT_UNLESS(req.HasCmdGetOwnership());
 
     const TString& owner = req.GetCmdGetOwnership().GetOwner();
@@ -2211,7 +2199,6 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
             req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
-    DBGTRACE_LOG("partActor=" << partActor);
     ctx.Send(partActor, event.Release());
 }
 
@@ -2513,17 +2500,13 @@ void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 response
                                                              const TActorId& sender,
                                                              const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleGetOwnershipRequestForShadowPartition");
-
     Y_ABORT_UNLESS(req.HasWriteId());
 
     ui64 writeId = req.GetWriteId();
     ui32 partitionId = req.GetPartition();
-    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
 
     if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
 
         if (ShadowPartitions.contains(shadowPartitionId)) {
             TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
@@ -2551,18 +2534,14 @@ void TPersQueue::HandleReserveBytesRequestForShadowPartition(const ui64 response
                                                              const TActorId& sender,
                                                              const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleReserveBytesRequestForShadowPartition");
-
     Y_ABORT_UNLESS(req.HasWriteId());
 
     ui64 writeId = req.GetWriteId();
     ui32 partitionId = req.GetPartition();
-    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
 
     ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-    DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
     Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
     const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
     Y_ABORT_UNLESS(partition.InitDone);
@@ -2576,18 +2555,14 @@ void TPersQueue::HandleWriteRequestForShadowPartition(const ui64 responseCookie,
                                                       const NKikimrClient::TPersQueuePartitionRequest& req,
                                                       const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleWriteRequestForShadowPartition");
-
     Y_ABORT_UNLESS(req.HasWriteId());
 
     ui64 writeId = req.GetWriteId();
     ui32 partitionId = req.GetPartition();
-    DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
 
     Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
 
     ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
-    DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
     Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
     const TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
     Y_ABORT_UNLESS(partition.InitDone);
@@ -2601,8 +2576,6 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
                                        const TActorId& sender,
                                        const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleShadowPartition");
-
     if (req.HasCmdGetOwnership()) {
         HandleGetOwnershipRequestForShadowPartition(responseCookie, req, sender, ctx);
     } else if (req.HasCmdReserveBytes()) {
@@ -2616,8 +2589,6 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
 
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvRequest)");
-
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
@@ -3263,15 +3234,11 @@ bool TPersQueue::CanProcessDeleteTxs() const
 
 void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::TryPersistWriteId");
-
     if (PendingPersistWriteId) {
-        DBGTRACE_LOG("PendingPersistWriteId=" << (int)PendingPersistWriteId);
         return;
     }
 
     if (GetOwnershipRequests.empty()) {
-        DBGTRACE_LOG("empty GetOwnershipRequests");
         return;
     }
 
@@ -3280,22 +3247,15 @@ void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
 
 void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::BeginPersistWriteId");
-
     Y_ABORT_UNLESS(!PendingPersistWriteId);
     Y_ABORT_UNLESS(!GetOwnershipRequests.empty());
-
-    DBGTRACE_LOG("GetOwnershipRequests.size=" << GetOwnershipRequests.size());
-    DBGTRACE_LOG("HandleGetOwnershipRequestParams.size=" << HandleGetOwnershipRequestParams.size());
 
     Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
 
     for (auto& request : GetOwnershipRequests) {
         ui64 writeId = request.Request.GetWriteId();
         ui32 partitionId = request.Request.GetPartition();
-        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
         ui32 shadowPartitionId = NextShadowPartitionId++;
-        DBGTRACE_LOG("new shadowPartitionId=" << shadowPartitionId);
 
         TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
 
@@ -3317,8 +3277,6 @@ void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
 
 void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::EndPersistWriteId");
-
     Y_ABORT_UNLESS(PendingPersistWriteId);
 
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK);
@@ -3354,18 +3312,14 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
 
 void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ForwardGetOwnershipToShadowPartitions");
-
     Y_ABORT_UNLESS(!HandleGetOwnershipRequestParams.empty());
 
     for (auto& params : HandleGetOwnershipRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
         ui32 partitionId = params.Request.GetPartition();
-        DBGTRACE_LOG("writeId=" << writeId << ", partitionId=" << partitionId);
         Y_ABORT_UNLESS(TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId));
         TTxWriteInfo& txWrite = TxWrites.at(writeId);
         ui32 shadowPartitionId = txWrite.Partitions[partitionId];
-        DBGTRACE_LOG("shadowPartitionId=" << shadowPartitionId);
         Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
 
         CreateShadowPartitionActor(shadowPartitionId, ctx);
@@ -4355,10 +4309,7 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
 
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& /*ctx*/)
 {
-    DBGTRACE("TPersQueue::Handle(TEvLongTxService::TEvLockStatus)");
-
     auto& record = ev->Get()->Record;
-    DBGTRACE_LOG("LockId=" << record.GetLockId() << ", LockNode=" << record.GetLockNode() << ", Status=" << (int)record.GetStatus());
     ui64 writeId = record.GetLockId();
     if (TxWrites.contains(writeId)) {
         TTxWriteInfo& txWrite = TxWrites.at(writeId);

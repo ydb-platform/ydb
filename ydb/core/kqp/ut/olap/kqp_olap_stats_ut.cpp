@@ -191,9 +191,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
 
         auto describeStoreResult =
-                testHelper.GetSession()
-                    .DescribeTable("/Root/TableStoreTest/", settings)
-                    .GetValueSync();
+            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/", settings).GetValueSync();
         UNIT_ASSERT_C(describeStoreResult.IsSuccess(), describeStoreResult.GetIssues().ToString());
         const auto& storeDescription = describeStoreResult.GetTableDescription();
 

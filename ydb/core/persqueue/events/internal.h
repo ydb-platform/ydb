@@ -66,6 +66,18 @@ namespace NPQ {
         {}
     };
 
+    struct TDataKey {
+        TKey Key;
+        ui32 Size;
+        TInstant Timestamp;
+        ui64 CumulativeSize;
+    };
+
+    struct TSeqNoRange {
+        ui64 Min;
+        ui64 Max;
+    };
+
     struct TErrorInfo {
         NPersQueue::NErrorCode::EErrorCode ErrorCode;
         TString ErrorStr;
@@ -1022,10 +1034,9 @@ struct TEvPQ {
         };
 
         struct TSuccess {
-            TString SourceId;
-            ui64 MinSeqNo, MaxSeqNo;
-            NKikimrPQ::TPartitionKeyRange KeyRange;
-            NPQ::THead Head;
+            THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
+            std::deque<NPQ::TDataKey> BodyKeys;
+            std::deque<NPQ::TBatch> Head;
         };
 
         TEvGetWriteInfoResponse(ui32 cookie, TString message) :
@@ -1035,12 +1046,11 @@ struct TEvPQ {
         }
 
         TEvGetWriteInfoResponse(ui32 cookie,
-                                TString sourceId,
-                                ui64 minSeqNo, ui64 maxSeqNo,
-                                NKikimrPQ::TPartitionKeyRange keyRange,
-                                NPQ::THead head) :
+                                THashMap<TString, NPQ::TSeqNoRange> seqNo,
+                                std::deque<NPQ::TDataKey> bodyKeys,
+                                std::deque<NPQ::TBatch> head) :
             Cookie(cookie),
-            Result(TSuccess{std::move(sourceId), minSeqNo, maxSeqNo, std::move(keyRange), std::move(head)})
+            Result(TSuccess{std::move(seqNo), std::move(bodyKeys), std::move(head)})
         {
         }
 

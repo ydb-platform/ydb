@@ -324,7 +324,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvGetCheckpointsMetadataReques
 void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) {
     auto* event = ev->Get();
     const auto checkpointId = TCheckpointId(event->Checkpoint.GetGeneration(), event->Checkpoint.GetId());
-    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
+    LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << event->GraphId << "-" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
 
     const size_t stateSize = event->State.ByteSizeLong();
     if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) {
@@ -356,7 +356,7 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
             response->Record.SetTaskId(taskId);
 
             if (issues) {
-                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(context, "[" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString())
+                LOG_STREAMS_STORAGE_SERVICE_AS_WARN(context, "[" << graphId << "-" << checkpointId << "] Failed to save task state: task: " << taskId << ", issues: " << issues.ToString())
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
             } else {
                 response->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);

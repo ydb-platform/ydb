@@ -14,7 +14,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
         return true;
 
     // key1 <= FirstKey
-    bool seekToSliceFirstRow = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
+    bool chargeFromSliceFirstRow = TSlice::CompareSearchKeyFirstKey(key1, pos->Slice, keyDefaults) <= 0;
 
     while (pos != run.end()) {
         TRowId row1 = pos->Slice.BeginRowId();
@@ -23,7 +23,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
         const int cmp = TSlice::CompareLastKeySearchKey(pos->Slice, key2, keyDefaults);
 
         TArrayRef<const TCell> key1r;
-        if (!seekToSliceFirstRow) {
+        if (!chargeFromSliceFirstRow) {
             key1r = key1;
         }
         TArrayRef<const TCell> key2r;
@@ -48,7 +48,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
         }
 
         // Will consume this slice before encountering key2
-        seekToSliceFirstRow = true;
+        chargeFromSliceFirstRow = true;
         ++pos;
     }
 
@@ -66,7 +66,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
         return true;
 
     // LastKey <= key1
-    bool seekToSliceLastRow = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
+    bool chargeFromSliceLastRow = TSlice::CompareLastKeySearchKey(pos->Slice, key1, keyDefaults) <= 0;
 
     for (;;) {
         TRowId row1 = pos->Slice.EndRowId() - 1;
@@ -76,7 +76,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
         const int cmp = key2 ? TSlice::CompareSearchKeyFirstKey(key2, pos->Slice, keyDefaults) : -1;
 
         TArrayRef<const TCell> key1r;
-        if (!seekToSliceLastRow) {
+        if (!chargeFromSliceLastRow) {
             key1r = key1;
         }
         TArrayRef<const TCell> key2r;
@@ -106,7 +106,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
         }
 
         // Will consume this slice before encountering key2
-        seekToSliceLastRow = true;
+        chargeFromSliceLastRow = true;
         --pos;
     }
 

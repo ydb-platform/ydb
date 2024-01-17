@@ -325,7 +325,7 @@ namespace {
 }
 
 TWorkloadCommandInit::TWorkloadCommandInit(const TString& key)
-    : TWorkloadCommandBase("init", key, NYdbWorkload::TWorkloadParams::ECommandType::Init, "Create and initialize a tables for " + key + " workload")
+    : TWorkloadCommandBase("init", key, NYdbWorkload::TWorkloadParams::ECommandType::Init, "Create and initialize tables for workload")
 {}
 
 int TWorkloadCommandInit::Run(TConfig& config) {
@@ -338,14 +338,15 @@ int TWorkloadCommandInit::Run(TConfig& config) {
 
 void TWorkloadCommandInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    Params->ConfigureOpts(*config.Opts, CommandType);
+    Params->ConfigureOpts(*config.Opts, CommandType, Type);
 }
 
 
-TWorkloadCommandRun::TWorkloadCommandRun(const TString& name, const TString& key, int type)
-    : TWorkloadCommandBase(name, key, NYdbWorkload::TWorkloadParams::ECommandType::Run, "Run YDB " + key + " " + name + " workload")
-    , Type(type)
-{}
+TWorkloadCommandRun::TWorkloadCommandRun(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
+    : TWorkloadCommandBase(workload.CommandName, key, NYdbWorkload::TWorkloadParams::ECommandType::Run, workload.Description)
+{
+    Type = workload.Type;
+}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
@@ -356,7 +357,7 @@ int TWorkloadCommandRun::Run(TConfig& config) {
 
 
 TWorkloadCommandClean::TWorkloadCommandClean(const TString& key)
-    : TWorkloadCommandBase("clean", key, NYdbWorkload::TWorkloadParams::ECommandType::Clean, "Drop tables of " + key + " workload")
+    : TWorkloadCommandBase("clean", key, NYdbWorkload::TWorkloadParams::ECommandType::Clean, "Drop tables created in init phase")
 {}
 
 int TWorkloadCommandClean::Run(TConfig& config) {
@@ -368,19 +369,18 @@ int TWorkloadCommandClean::Run(TConfig& config) {
 
 TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, const TString& key, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description /*= TString()*/)
     : TWorkloadCommand(name, std::initializer_list<TString>(), description)
-    , Key(key)
     , CommandType(commandType)
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {}
 
 void TWorkloadCommandBase::Config(TConfig& config) {
     TWorkloadCommand::Config(config);
-    Params->ConfigureOpts(*config.Opts, CommandType);
+    Params->ConfigureOpts(*config.Opts, CommandType, Type);
 }
 
 
 TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
-    : TClientCommandTree(key, {}, "YDB " + key + " workload")
+    : TClientCommandTree(key, {}, "YDB " + NYdbWorkload::TWorkloadFactory::MakeHolder(key)->GetWorkloadName() + " workload")
 {
     AddCommand(std::make_unique<TWorkloadCommandInit>(key));
     auto supportedWorkloads = NYdbWorkload::TWorkloadFactory::MakeHolder(key)->CreateGenerator()->GetSupportedWorkloadTypes();
@@ -388,12 +388,13 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
     case 0:
         break;
     case 1:
-        AddCommand(std::make_unique<TWorkloadCommandRun>("run", key, 0));
+        supportedWorkloads.back().CommandName = "run";
+        AddCommand(std::make_unique<TWorkloadCommandRun>(key, supportedWorkloads.back()));
         break;
     default: {
-        auto run = std::make_unique<TClientCommandTree>("run", std::initializer_list<TString>(), "Run " + key + " workload");
-        for (size_t type = 0; type < supportedWorkloads.size(); ++type) {
-            run->AddCommand(std::make_unique<TWorkloadCommandRun>(supportedWorkloads[type].c_str(), key, type));
+        auto run = std::make_unique<TClientCommandTree>("run", std::initializer_list<TString>(), "Run YDB " + NYdbWorkload::TWorkloadFactory::MakeHolder(key)->GetWorkloadName() + " workload");
+        for (const auto& type: supportedWorkloads) {
+            run->AddCommand(std::make_unique<TWorkloadCommandRun>(key, type));
         }
         AddCommand(std::move(run));
         break;

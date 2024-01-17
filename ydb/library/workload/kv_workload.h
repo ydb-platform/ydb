@@ -28,8 +28,9 @@ enum KvWorkloadConstants : ui64 {
 
 class TKvWorkloadParams : public TWorkloadParams {
 public:
-    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType) override;
+    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TString GetWorkloadName() const override;
     ui64 MinPartitions = KvWorkloadConstants::MIN_PARTITIONS;
     const ui64 MaxPartitions = KvWorkloadConstants::MAX_PARTITIONS;
     ui64 PartitionSizeMb = KvWorkloadConstants::PARTITION_SIZE_MB;
@@ -82,14 +83,14 @@ public:
     TVector<std::string> GetCleanPaths() const override;
 
     TQueryInfoList GetWorkload(int type) override;
-    TVector<std::string> GetSupportedWorkloadTypes() const override;
+    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
     enum class EType {
-        UpsertRandom /* "upsert" */,
-        InsertRandom /* "insert" */,
-        SelectRandom /* "select" */,
-        ReadRowsRandom /* "read-rows" */,
-        Mixed /* "mixed" */
+        UpsertRandom,
+        InsertRandom,
+        SelectRandom,
+        ReadRowsRandom,
+        Mixed
     };
 
 private:

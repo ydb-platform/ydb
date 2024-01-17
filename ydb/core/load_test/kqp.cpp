@@ -255,8 +255,6 @@ public:
         Total = std::make_unique<MonitoringData>();
 
         if (cmd.Workload_case() == NKikimr::TEvLoadTestRequest_TKqpLoad::WorkloadCase::kStock) {
-            params.PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
-            params.DbPath = WorkingDir;
             WorkloadClass = "stock";
             auto params = std::make_shared<NYdbWorkload::TStockWorkloadParams>();
             params->PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
@@ -313,7 +311,6 @@ public:
                 << "Limit: " << params->Limit << " "
                 << "DbPath: " << params->DbPath << " "
                 << "MinPartitions: " << params->MinPartitions);
-            NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGen->GetParams());
         } else if (WorkloadClass == "kv") {
             NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGenParams.get());
             LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"

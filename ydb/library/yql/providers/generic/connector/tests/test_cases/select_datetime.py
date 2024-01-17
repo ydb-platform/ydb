@@ -160,9 +160,10 @@ class Factory:
         ]
 
         data_source_kind = EDataSourceKind.CLICKHOUSE
+        test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=self._name + '_ch_YQL',
+            name=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -170,7 +171,7 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
+            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -222,9 +223,10 @@ class Factory:
         ]
 
         data_source_kind = EDataSourceKind.POSTGRESQL
+        test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=self._name + '_pg_YQL',
+            name=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -232,7 +234,7 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
+            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -331,9 +333,10 @@ class Factory:
         ]
 
         data_source_kind = EDataSourceKind.CLICKHOUSE
+        test_case_name = self._name + '_string'
 
         return TestCase(
-            name=self._name + '_ch_string',
+            name=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -341,7 +344,7 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
+            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -389,9 +392,10 @@ class Factory:
         ]
 
         data_source_kind = EDataSourceKind.POSTGRESQL
+        test_case_name = self._name + '_string'
 
         return TestCase(
-            name=self._name + '_pg_string',
+            name=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,
@@ -399,7 +403,7 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database.make_for_data_source_kind(data_source_kind),
+            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 

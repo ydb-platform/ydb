@@ -17,7 +17,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(TEvKafka::TEvTopicModificationResponse::EStatus, const TString&)> sendResultCallback)
+            const std::function<void(EKafkaErrors, const TString&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -213,28 +213,11 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(const TEvKafka::TEvTopicModificationResponse::EStatus status, const TString& message)> SendResultCallback;
+    const std::function<void(const EKafkaErrors status, const TString& message)> SendResultCallback;
     NYql::TIssue Issue;
 
     void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
-        const auto& message = Issue.GetMessage();
-        switch (status) {
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::OK, message);
-                break;
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::BAD_REQUEST, message);
-                break;
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SCHEME_ERROR:
-                if (Issue.IssueCode == Ydb::PersQueue::ErrorCode::ACCESS_DENIED) {
-                    SendResultCallback(TEvKafka::TEvTopicModificationResponse:: EStatus::TOPIC_DOES_NOT_EXIST, message);
-                } else {
-                    SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::ERROR, message);
-                }
-                break;
-            default:
-                SendResultCallback(TEvKafka::TEvTopicModificationResponse::EStatus::ERROR, message);
-        }
+        SendResultCallback(ConvertErrorCode(status), Issue.GetMessage());
     }
 };
 
@@ -252,7 +235,7 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](const TEvKafka::TEvTopicModificationResponse::EStatus status, const TString& message) {
+            [this](const EKafkaErrors status, const TString& message) {
                 this->SendResult(status, message);
             })
         )
@@ -268,7 +251,7 @@ public:
 
     ~TCreatePartitionsActor() = default;
 
-    void SendResult(const TEvKafka::TEvTopicModificationResponse::EStatus status, const TString& message) {
+    void SendResult(const EKafkaErrors status, const TString& message) {
         THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
         response->TopicPath = TopicPath;
@@ -338,7 +321,7 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         if (topicName == "") {
             auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-            result->Status = TEvKafka::TEvTopicModificationResponse::EStatus::BAD_REQUEST;
+            result->Status = INVALID_REQUEST;
             result->Message = "Empty topic name";
             this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());
             continue;
@@ -378,40 +361,33 @@ void TKafkaCreatePartitionsActor::Reply(const TActorContext& ctx) {
     for (auto& requestTopic : Message->Topics) {
         auto topicName = requestTopic.Name.value();
 
-        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
-        responseTopic.Name = topicName;
-
-        if (TopicNamesToResponses.contains(topicName)) {
-            responseTopic.ErrorMessage = TopicNamesToResponses[topicName]->Message;
+        if (!TopicNamesToResponses.contains(topicName)) {
+            continue;
         }
 
-        auto setError= [&responseTopic, &responseStatus](EKafkaErrors status) { 
-            responseTopic.ErrorCode = status;
-            responseStatus = status;
-        };
+        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
+        responseTopic.Name = topicName;
+        responseTopic.ErrorMessage = TopicNamesToResponses[topicName]->Message;
 
-        if (DuplicateTopicNames.contains(topicName)) {
-            setError(DUPLICATE_RESOURCE);
-        } else {
-            switch (TopicNamesToResponses[topicName]->Status) {
-                case TEvKafka::TEvTopicModificationResponse::OK:
-                    responseTopic.ErrorCode = NONE_ERROR;
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::BAD_REQUEST:
-                case TEvKafka::TEvTopicModificationResponse::TOPIC_DOES_NOT_EXIST:
-                    setError(INVALID_REQUEST);
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::ERROR:
-                    setError(UNKNOWN_SERVER_ERROR);
-                    break;
-                case TEvKafka::TEvTopicModificationResponse::INVALID_CONFIG:
-                    setError(INVALID_CONFIG);
-                    break;
-                }
-        } 
+        EKafkaErrors status = TopicNamesToResponses[topicName]->Status;
+        responseTopic.ErrorCode = status;
+        if(status != NONE_ERROR) {
+            responseStatus = status;
+        }
+
         response->Results.push_back(responseTopic);
     }
 
+    for (auto& topicName : DuplicateTopicNames) {
+        TCreatePartitionsResponseData::TCreatePartitionsTopicResult responseTopic;
+        responseTopic.Name = topicName;
+        responseTopic.ErrorMessage = "Duplicate topic in request.";
+        responseTopic.ErrorCode = INVALID_REQUEST;
+
+        response->Results.push_back(responseTopic);
+
+        responseStatus = INVALID_REQUEST;
+    } 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, responseStatus));
 
     Die(ctx);

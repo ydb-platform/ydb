@@ -1,7 +1,17 @@
 {
+    "test.test[ListSampleN]": [
+        {
+            "uri": "file://test.test_ListSampleN_/results.txt"
+        }
+    ],
     "test.test[ListSample]": [
         {
             "uri": "file://test.test_ListSample_/results.txt"
+        }
+    ],
+    "test.test[ListShuffle]": [
+        {
+            "uri": "file://test.test_ListShuffle_/results.txt"
         }
     ]
 }

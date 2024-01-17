@@ -178,7 +178,6 @@ private:
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        Y_ABORT_UNLESS(ev->Get()->Request.Get());
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -189,15 +188,13 @@ private:
         SchemeEntry = resultSet[0];
 
         YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
-        // TODO: do we need to check usertoken here?
 
-        CA_LOG_D("Resolved TableId=" << TableId << " " << SchemeEntry->ToString());
+        CA_LOG_D("Resolved TableId=" << TableId << " ");
 
         ProcessRows();
     }
 
     void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        Y_ABORT_UNLESS(ev->Get());
         CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
         CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
@@ -232,8 +229,8 @@ private:
                 new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            // TODO: duplicate completed for duplicate writes
-            // Can loose data here
+            // TODO: fix it using some cookie in EvWrite.
+            // Can loose data here. Duplicate completed for duplicate writes.
             InflightBatches.at(ev->Get()->Record.GetOrigin()).pop_front();
         }
 
@@ -356,14 +353,14 @@ private:
         }
 
         auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(*SchemeEntry);
-        if (!shardsSplitter) {
-            // Shard splitter not implemented for table kind
-        }
+        YQL_ENSURE(shardsSplitter);
 
         const auto dataAccessor = GetDataAccessor(BatchBuilder->FlushBatch(true));
         auto initStatus = shardsSplitter->SplitData(*SchemeEntry, *dataAccessor);
         if (!initStatus.Ok()) {
-            //return ReplyError(initStatus.GetStatus(), initStatus.GetErrorMessage());
+            RuntimeError(
+                initStatus.GetErrorMessage(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
         const auto& splittedData = shardsSplitter->GetSplitData();

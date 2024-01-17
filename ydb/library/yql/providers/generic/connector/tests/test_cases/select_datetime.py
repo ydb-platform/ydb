@@ -9,7 +9,6 @@ from ydb.public.api.protos.ydb_value_pb2 import Type
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -171,7 +170,6 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -234,7 +232,6 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -344,7 +341,6 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -403,7 +399,6 @@ class Factory:
             select_where=None,
             data_source_kind=data_source_kind,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 

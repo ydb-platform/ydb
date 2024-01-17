@@ -9,7 +9,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Set
 from ydb.library.yql.providers.generic.connector.tests.utils.generate import generate_table_data
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -192,7 +191,6 @@ class Factory:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
-                    database=Database(test_case_name, data_source_kind),
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
@@ -252,7 +250,6 @@ class Factory:
                 select_what=SelectWhat.asterisk(schema.columns),
                 select_where=None,
                 schema=schema,
-                database=Database(test_case_name, data_source_kind),
                 pragmas=dict(),
             )
 

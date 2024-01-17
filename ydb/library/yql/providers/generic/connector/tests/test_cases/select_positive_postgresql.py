@@ -7,7 +7,6 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -248,7 +247,6 @@ class Factory:
             ],
             data_out_=None,
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database('primitive_types', EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -289,7 +287,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -340,7 +337,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -385,7 +381,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -445,7 +440,6 @@ class Factory:
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database(test_case_name, data_source_kind),
             ),
             TestCase(
                 name=test_case_name,
@@ -456,7 +450,6 @@ class Factory:
                 select_where=SelectWhere('col_int32 = col_int64'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database(test_case_name, data_source_kind),
             ),
         ]
 

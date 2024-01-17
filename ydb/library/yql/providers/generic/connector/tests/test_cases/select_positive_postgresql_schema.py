@@ -11,7 +11,6 @@ from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -70,7 +69,6 @@ class Factory:
             name=test_case_name,
             data_in=[[1, 2], [10, 20]],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             select_what=select_what,
             schema=schema,
             data_out_=[[1, 2], [10, 20]],

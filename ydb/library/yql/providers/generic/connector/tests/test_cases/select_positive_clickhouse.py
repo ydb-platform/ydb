@@ -7,7 +7,6 @@ from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 impo
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -203,7 +202,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database(test_case_name, EDataSourceKind.CLICKHOUSE),
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -242,7 +240,6 @@ class Factory:
             select_what=SelectWhat.asterisk(schema_nullable.columns),
             select_where=None,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database(test_case_name_nullable, EDataSourceKind.CLICKHOUSE),
             data_in=data_in_nullable,
             data_out_=data_out_nullable,
             pragmas=dict(),
@@ -299,7 +296,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database(test_case_name, EDataSourceKind.CLICKHOUSE),
             pragmas=dict(),
         )
 
@@ -347,7 +343,6 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
-            database=Database(test_case_name, EDataSourceKind.CLICKHOUSE),
             pragmas=dict(),
         )
 
@@ -401,7 +396,6 @@ class Factory:
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database(test_case_name, EDataSourceKind.CLICKHOUSE),
             )
         ]
 

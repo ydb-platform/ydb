@@ -12,7 +12,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Gen
 @dataclass
 class BaseTestCase:
     name: str
-    database: Database
     data_source_kind: EDataSourceKind.ValueType
     pragmas: Dict[str, str]
 
@@ -20,7 +19,14 @@ class BaseTestCase:
         '''
         Automatically assign suffix with data source kind to every test case.
         '''
-        self.name += f'_{data_source_kind_alias(self.data_source_kind)}'
+        self.name = f'{self.name}_crab_{data_source_kind_alias(self.data_source_kind)}'
+
+    @property
+    def database(self) -> Database:
+        '''
+        We want to create a distinct database on every test case
+        '''
+        return Database(self.name, self.data_source_kind)
 
     @property
     def _table_name(self) -> str:

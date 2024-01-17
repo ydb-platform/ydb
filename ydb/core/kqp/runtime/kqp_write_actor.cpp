@@ -98,7 +98,7 @@ private:
                     /* copy */ true);
                 // MemoryUsed += cells[index].Size();
             }
-            BatchBuilder.AddRow(
+            BatchBuilder->AddRow(
                 TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
                 TConstArrayRef<TCell>{cells.begin() + KeyColumns.size(), cells.end()});
         });
@@ -121,7 +121,7 @@ private:
     }
 
     void ResolveTable() {
-        CA_LOG_D("Resolve table");
+        CA_LOG_D("Resolve TableId=" << TableId);
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.TableId = TableId;
@@ -135,16 +135,15 @@ private:
     void HandleResolve(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Get()->Request.Get());
         if (ev->Get()->Request->ErrorCount > 0) {
-            return RuntimeError(TStringBuilder() << "Failed to get table: "
+            RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
+        CA_LOG_D("Resolved TableId=" << TableId);
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
-
-        // do we need to check usertoken here?
-        CA_LOG_D("Resolved table");
+        // TODO: do we need to check usertoken here?
 
         ProcessRows();
     }
@@ -261,9 +260,19 @@ private:
         for (const auto& column : Columns) {
             columns.emplace_back(column.Name, column.PType);
         }
+        std::set<std::string> notNullColumns;
+        for (const auto& column : Settings.GetColumns()) {
+            if (column.GetNotNull()) {
+                notNullColumns.insert(column.GetName());
+            }
+        }
+
+        BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>(arrow::Compression::UNCOMPRESSED, notNullColumns);
 
         TString err;
-        BatchBuilder.Start(columns, 0, 0, err); // TODO: check
+        if (!BatchBuilder->Start(columns, 0, 0, err)) {
+            RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+        }
     }
 
     void ProcessRows() {
@@ -297,7 +306,7 @@ private:
     }
 
     void SplitBatchByShards() {
-        if (!SchemeEntry || BatchBuilder.Bytes() == 0) {
+        if (!SchemeEntry || BatchBuilder->Bytes() == 0) {
             return;
         }
 
@@ -306,7 +315,7 @@ private:
             // Shard splitter not implemented for table kind
         }
 
-        const auto dataAccessor = GetDataAccessor(BatchBuilder.FlushBatch(true));
+        const auto dataAccessor = GetDataAccessor(BatchBuilder->FlushBatch(true));
         auto initStatus = shardsSplitter->SplitData(*SchemeEntry, *dataAccessor);
         if (!initStatus.Ok()) {
             //return ReplyError(initStatus.GetStatus(), initStatus.GetErrorMessage());
@@ -364,6 +373,7 @@ private:
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << " TxId=" << inflightBatch.TxId << " data size = " << inflightBatch.Data.size());
         Send(
             MakePipePeNodeCacheID(false),
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
@@ -410,9 +420,8 @@ private:
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
-    // TODO: move batching + limits
-    // TODO: notnull columns (like upload_rows_common_impl.h)
-    NArrow::TArrowBatchBuilder BatchBuilder;
+    // TODO: move batching + limits???
+    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
     struct TInflightBatch {
         TString Data;

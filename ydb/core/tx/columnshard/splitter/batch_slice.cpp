@@ -145,6 +145,8 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
         if (stats) {
             splitter.SetStats(*stats);
         }
+        std::vector<IPortionColumnChunk::TPtr> chunks;
+        for (auto&& i : splitter.Split(i, c.GetField(), Settings.GetMaxBlobSize())) {
             chunks.emplace_back(std::make_shared<TSplittedColumnChunk>(c.GetColumnId(), i, Schema));
         }
         c.SetChunks(chunks);

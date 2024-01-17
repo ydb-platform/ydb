@@ -32,6 +32,7 @@ enum EApiKey {
     CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER] 
     INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER] 
     SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER] 
+    CREATE_PARTITIONS = 37, // [ZK_BROKER, BROKER, CONTROLLER] 
 };
 
 extern const std::unordered_map<EApiKey, TString> EApiKeyNames;
@@ -6179,6 +6180,283 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TSaslAuthenticateResponseData& other) const = default;
+};
+
+
+class TCreatePartitionsRequestData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TCreatePartitionsRequestData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    
+    TCreatePartitionsRequestData();
+    ~TCreatePartitionsRequestData() = default;
+    
+    class TCreatePartitionsTopic : public TMessage {
+    public:
+        struct MessageMeta {
+            static constexpr TKafkaVersions PresentVersions = {0, 3};
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        
+        TCreatePartitionsTopic();
+        ~TCreatePartitionsTopic() = default;
+        
+        class TCreatePartitionsAssignment : public TMessage {
+        public:
+            struct MessageMeta {
+                static constexpr TKafkaVersions PresentVersions = {0, 3};
+                static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+            };
+            
+            TCreatePartitionsAssignment();
+            ~TCreatePartitionsAssignment() = default;
+            
+            struct BrokerIdsMeta {
+                using ItemType = TKafkaInt32;
+                using ItemTypeDesc = NPrivate::TKafkaIntDesc;
+                using Type = std::vector<TKafkaInt32>;
+                using TypeDesc = NPrivate::TKafkaArrayDesc;
+                
+                static constexpr const char* Name = "brokerIds";
+                static constexpr const char* About = "The assigned broker IDs.";
+                
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+            };
+            BrokerIdsMeta::Type BrokerIds;
+            
+            i32 Size(TKafkaVersion version) const override;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+            
+            bool operator==(const TCreatePartitionsAssignment& other) const = default;
+        };
+        
+        struct NameMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+            
+            static constexpr const char* Name = "name";
+            static constexpr const char* About = "The topic name.";
+            static const Type Default; // = {""};
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        NameMeta::Type Name;
+        
+        struct CountMeta {
+            using Type = TKafkaInt32;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
+            
+            static constexpr const char* Name = "count";
+            static constexpr const char* About = "The new partition count.";
+            static const Type Default; // = 0;
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        CountMeta::Type Count;
+        
+        struct AssignmentsMeta {
+            using ItemType = TCreatePartitionsAssignment;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
+            using Type = std::vector<TCreatePartitionsAssignment>;
+            using TypeDesc = NPrivate::TKafkaArrayDesc;
+            
+            static constexpr const char* Name = "assignments";
+            static constexpr const char* About = "The new partition assignments.";
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        AssignmentsMeta::Type Assignments;
+        
+        i32 Size(TKafkaVersion version) const override;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+        
+        bool operator==(const TCreatePartitionsTopic& other) const = default;
+    };
+    
+    struct TopicsMeta {
+        using ItemType = TCreatePartitionsTopic;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
+        using Type = std::vector<TCreatePartitionsTopic>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+        
+        static constexpr const char* Name = "topics";
+        static constexpr const char* About = "Each topic that we want to create new partitions inside.";
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    TopicsMeta::Type Topics;
+    
+    struct TimeoutMsMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+        
+        static constexpr const char* Name = "timeoutMs";
+        static constexpr const char* About = "The time in ms to wait for the partitions to be created.";
+        static const Type Default; // = 0;
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    TimeoutMsMeta::Type TimeoutMs;
+    
+    struct ValidateOnlyMeta {
+        using Type = TKafkaBool;
+        using TypeDesc = NPrivate::TKafkaBoolDesc;
+        
+        static constexpr const char* Name = "validateOnly";
+        static constexpr const char* About = "If true, then validate the request, but don't actually increase the number of partitions.";
+        static const Type Default; // = false;
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    ValidateOnlyMeta::Type ValidateOnly;
+    
+    i16 ApiKey() const override { return CREATE_PARTITIONS; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TCreatePartitionsRequestData& other) const = default;
+};
+
+
+class TCreatePartitionsResponseData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TCreatePartitionsResponseData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    
+    TCreatePartitionsResponseData();
+    ~TCreatePartitionsResponseData() = default;
+    
+    class TCreatePartitionsTopicResult : public TMessage {
+    public:
+        struct MessageMeta {
+            static constexpr TKafkaVersions PresentVersions = {0, 3};
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        
+        TCreatePartitionsTopicResult();
+        ~TCreatePartitionsTopicResult() = default;
+        
+        struct NameMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+            
+            static constexpr const char* Name = "name";
+            static constexpr const char* About = "The topic name.";
+            static const Type Default; // = {""};
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        NameMeta::Type Name;
+        
+        struct ErrorCodeMeta {
+            using Type = TKafkaInt16;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
+            
+            static constexpr const char* Name = "errorCode";
+            static constexpr const char* About = "The result error, or zero if there was no error.";
+            static const Type Default; // = 0;
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        ErrorCodeMeta::Type ErrorCode;
+        
+        struct ErrorMessageMeta {
+            using Type = TKafkaString;
+            using TypeDesc = NPrivate::TKafkaStringDesc;
+            
+            static constexpr const char* Name = "errorMessage";
+            static constexpr const char* About = "The result message, or null if there was no error.";
+            static const Type Default; // = std::nullopt;
+            
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+            static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+        };
+        ErrorMessageMeta::Type ErrorMessage;
+        
+        i32 Size(TKafkaVersion version) const override;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+        
+        bool operator==(const TCreatePartitionsTopicResult& other) const = default;
+    };
+    
+    struct ThrottleTimeMsMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+        
+        static constexpr const char* Name = "throttleTimeMs";
+        static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
+        static const Type Default; // = 0;
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
+    
+    struct ResultsMeta {
+        using ItemType = TCreatePartitionsTopicResult;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
+        using Type = std::vector<TCreatePartitionsTopicResult>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+        
+        static constexpr const char* Name = "results";
+        static constexpr const char* About = "The partition creation results for each topic.";
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    ResultsMeta::Type Results;
+    
+    i16 ApiKey() const override { return CREATE_PARTITIONS; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TCreatePartitionsResponseData& other) const = default;
 };
 
 } // namespace NKafka 

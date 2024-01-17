@@ -9,7 +9,6 @@ package poll
 import (
 	"syscall"
 	_ "unsafe" // for go:linkname
-
 )
 
 //go:linkname writev syscall.writev

@@ -415,6 +415,8 @@ private:
             defaultConstraintColumnsSet.emplace(keyColumnName);
         }
 
+        THashSet<TString> generateColumnsIfInsertColumnsSet;
+
         for(const auto& [name, info] : table->Metadata->Columns) {
             if (rowType->FindItem(name)) {
                 continue;
@@ -424,7 +426,15 @@ private:
                 continue;
             }
 
+            if (defaultConstraintColumnsSet.find(name) != defaultConstraintColumnsSet.end()) {
+                continue;
+            }
+
             if (info.IsDefaultKindDefined()) {
+                if (op == TYdbOperation::Upsert) {
+                    generateColumnsIfInsertColumnsSet.emplace(name);
+                }
+
                 defaultConstraintColumnsSet.emplace(name);
             }
         }
@@ -485,6 +495,11 @@ private:
                 defaultConstraintColumns.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
             }
 
+            TExprNode::TListType generateColumnsIfInsert;
+            for(auto& generatedColumn: generateColumnsIfInsertColumnsSet) {
+                generateColumnsIfInsert.push_back(ctx.NewAtom(node.Pos(), generatedColumn));
+            }
+
             node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
                 .Add(node.Settings())
                 .Add()
@@ -497,6 +512,12 @@ private:
                     .Name().Build("default_constraint_columns")
                     .Value<TCoAtomList>()
                         .Add(defaultConstraintColumns)
+                        .Build()
+                    .Build()
+                .Add()
+                    .Name().Build("generate_columns_if_insert")
+                    .Value<TCoAtomList>()
+                        .Add(generateColumnsIfInsert)
                         .Build()
                     .Build()
                 .Done()
@@ -1634,6 +1655,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         auto settings = NCommon::ParseCommitSettings(node, ctx);
 
         bool isFlushCommit = false;
+        bool isRollback = false;
         if (settings.Mode) {
             auto mode = settings.Mode.Cast().Value();
 
@@ -1644,6 +1666,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
 
             isFlushCommit = (mode == KikimrCommitModeFlush());
+            isRollback = (mode == KikimrCommitModeRollback());
         }
 
         if (!settings.EnsureEpochEmpty(ctx)) {
@@ -1661,8 +1684,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             default:
                 if (!isFlushCommit) {
+                    auto opName = isRollback ? "ROLLBACK" : "COMMIT";
                     ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                        << "COMMIT not supported inside Kikimr query"));
+                        << opName << " not supported inside YDB query"));
 
                     return TStatus::Error;
                 }

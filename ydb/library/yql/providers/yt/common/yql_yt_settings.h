@@ -162,6 +162,8 @@ struct TYtSettings {
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
+    NCommon::TConfSetting<NYT::TNode, true> StartedBy;
+    NCommon::TConfSetting<NYT::TNode, true> Description;
     NCommon::TConfSetting<bool, true> UseSkiff;
     NCommon::TConfSetting<ui32, true> TableContentCompressLevel;
     NCommon::TConfSetting<bool, true> DisableJobSplitting;

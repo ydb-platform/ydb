@@ -1650,11 +1650,18 @@ private:
         }
     }
 
-    bool HassDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
+    bool HasDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
         if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
             return true;
         }
-        for (const auto &tableOp : stage.GetTableOps()) {
+
+        for (const auto& input : stage.GetInputs()) {
+            if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                return true;
+            }
+        }
+
+        for (const auto& tableOp : stage.GetTableOps()) {
             if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                 return true;
             }
@@ -1691,7 +1698,7 @@ private:
                     }
                 }
 
-                if (stageInfo.Meta.IsOlap() && HassDmlOperationOnOlap(tx.Body->GetType(), stage)) {
+                if (stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage)) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,

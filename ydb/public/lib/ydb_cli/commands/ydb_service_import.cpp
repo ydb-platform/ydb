@@ -131,7 +131,11 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
-
+#if defined(_win32_)
+    for (const auto& item : Items) {
+        settings.AppendItem({item.Source, item.Destination});
+    }
+#else
     InitAwsAPI();
     try {
         auto s3Client = CreateS3ClientWrapper(settings);
@@ -162,6 +166,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
         throw;
     }
     ShutdownAwsAPI();
+#endif
 
     TImportClient client(CreateDriver(config));
     TImportFromS3Response response = client.ImportFromS3(std::move(settings)).GetValueSync();

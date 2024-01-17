@@ -574,7 +574,10 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
-        .SetUseRealThreads(false);
+        .SetUseRealThreads(false)
+        // Note: disable volatile transactions, since they don't persist lock
+        // state, and this test actually checks validated lock persistence.
+        .SetEnableDataShardVolatileTransactions(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();
@@ -586,7 +589,6 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
     //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
     InitRoot(server, sender);
-
 
     TAutoPtr<IEventHandle> handle;
     NTabletPipe::TClientConfig pipeConfig;

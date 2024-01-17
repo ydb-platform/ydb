@@ -76,6 +76,7 @@ protected:
     const NYql::TExprNode::TPtr False;
 private:
     const TChecks Checks;
+    const NYql::TExprNode::TPtr RowsToPass;
 };
 
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,

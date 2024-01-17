@@ -258,9 +258,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     };
 
     struct TRequest : public TSimpleRefCount<TRequest> {
-        TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+        TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
             : Label(pageCollection->Label())
             , PageCollection(std::move(pageCollection))
+            , TraceId(std::move(traceId))
         {
 
         }
@@ -275,6 +276,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ui64 PendingBlocks = 0;
         TBlocks ReadyBlocks;
         TDeque<ui32> PagesToRequest;
+        NWilson::TTraceId TraceId;
     };
 
     struct TExpectant {
@@ -587,7 +589,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
         }
 
-        auto waitingRequest = MakeIntrusive<TRequest>(std::move(msg->Fetch->PageCollection));
+        auto waitingRequest = MakeIntrusive<TRequest>(std::move(msg->Fetch->PageCollection), std::move(msg->Fetch->TraceId));
 
         waitingRequest->Source = ev->Sender;
         waitingRequest->Owner = msg->Owner;
@@ -674,7 +676,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 } else {
                     AddInFlyPages(pagesToRequest.size(), pagesToRequestBytes);
                     // fetch cookie -> requested size
-                    auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, waitingRequest->PageCollection, std::move(pagesToRequest));
+                    auto *fetch = new NPageCollection::TFetch(pagesToRequestBytes, waitingRequest->PageCollection, std::move(pagesToRequest), std::move(waitingRequest->TraceId));
                     NBlockIO::Start(this, waitingRequest->Owner, 0, waitingRequest->Priority, fetch);
                 }
             }
@@ -758,7 +760,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         AddInFlyPages(toLoad.size(), sizeToLoad);
                         // fetch cookie -> requested size;
                         // event cookie -> ptr to queue
-                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, wa.PageCollection, std::move(toLoad));
+                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, wa.PageCollection, std::move(toLoad), std::move(wa.TraceId));
                         NBlockIO::Start(this, wa.Owner, (ui64)&queue, wa.Priority, fetch);
                     }
                 }

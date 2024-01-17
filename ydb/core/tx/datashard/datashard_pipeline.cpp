@@ -1171,6 +1171,10 @@ bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui6
         return false;
     }
 
+    if (!op->IsExecutionPlanFinished()) {
+        GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+    }
+
     ForgetTx(txId);
     Self->CheckDelayedProposeQueue(ctx);
     MaybeActivateWaitingSchemeOps(ctx);
@@ -1196,6 +1200,11 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     }
 
     for (ui64 txId : outdatedTxs) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                 "Outdated Tx %" PRIu64 " is cleaned at tablet %" PRIu64 " and outdatedStep# %" PRIu64,
@@ -1211,6 +1220,11 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
     if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+        
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);
@@ -1563,14 +1577,14 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
                                            const TActorContext& ctx, NWilson::TSpan &&operationSpan)
 {
     const auto& rec = ev->Get()->Record;
-    TBasicOpInfo info(rec.GetTxId(), EOperationKind::DataTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
     auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
 
     auto badRequest = [&](const TString& error) {
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << error << "at tablet# " << Self->TabletID(), Self->TabletID());
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << error << " at tablet# " << Self->TabletID(), Self->TabletID());
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 

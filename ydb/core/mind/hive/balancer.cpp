@@ -165,6 +165,14 @@ protected:
         PassAway();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "Balancer(" << EBalancerTypeName(Settings.Type) << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     bool CanKickNextTablet() const {
         return KickInFlight < Settings.MaxInFlight
                && (Settings.MaxMovements == 0 || Movements < Settings.MaxMovements);

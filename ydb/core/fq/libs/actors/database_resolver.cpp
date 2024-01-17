@@ -138,6 +138,31 @@ private:
 
         LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got MDB API response: code=" << ev->Get()->Response->Status);
 
+        try {
+            HandleResponse(ev, requestIter, errorMessage, result);
+        } catch (...) {
+            const TString msg = TStringBuilder() << "error while response processing, params "
+                << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
+                << ", details: " << CurrentExceptionMessage();
+            LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+        }
+
+        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
+              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
+
+        if (HandledIds == Requests.size()) {
+            SendResolvedEndpointsAndDie(errorMessage);
+        }
+    }
+
+private:
+
+    void HandleResponse(
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
+        const TRequestMap::const_iterator& requestIter,
+        TString& errorMessage,
+        TMaybe<TDatabaseDescription>& result)
+    {
         if (ev->Get()->Error.empty() && (ev->Get()->Response && ev->Get()->Response->Status == "200")) {
             errorMessage = HandleSuccessfulResponse(ev, requestIter, result);
         } else {
@@ -152,26 +177,18 @@ private:
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
             if (errorMessage) {
                 LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                      << "; params: " << params.ToDebugString()
-                      << ", error: " << errorMessage);
+                    << "; params: " << params.ToDebugString()
+                    << ", error: " << errorMessage);
                 Cache.Put(key, errorMessage);
             } else {
                 LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                      << "; params: " << params.ToDebugString()
-                      << ", result: " << result->ToDebugString());
+                    << "; params: " << params.ToDebugString()
+                    << ", result: " << result->ToDebugString());
                 Cache.Put(key, result);
             }
         }
-
-        LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
-              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
-
-        if (HandledIds == Requests.size()) {
-            SendResolvedEndpointsAndDie(errorMessage);
-        }
     }
 
-private:
     TString HandleSuccessfulResponse(
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev,
         const TRequestMap::const_iterator& requestIter,
@@ -179,7 +196,7 @@ private:
     ) {
         if (requestIter == Requests.end()) {
             return "unknown request";
-        } 
+        }
 
         NJson::TJsonReaderConfig jsonConfig;
         NJson::TJsonValue databaseInfo;
@@ -224,12 +241,7 @@ private:
         const auto& status = ev->Get()->Response->Status;
 
         if (status == "403") {
-            const auto second = requestIter->second;
-            auto mdbTypeStr = NYql::DatabaseTypeLowercase(second.DatabaseType);
-
-            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " <<
-                                       "Please check that your service account has role "  << 
-                                       "`managed-" << mdbTypeStr << ".viewer`.";
+            return TStringBuilder() << "You have no permission to resolve database id into database endpoint. " + DetailedPermissionsError(requestIter->second);
         }
 
         auto errorMessage = ev->Get()->Error;
@@ -243,6 +255,17 @@ private:
         errorMessage += error;
 
         return errorMessage;
+    }
+
+
+    TString DetailedPermissionsError(const TResolveParams& params) const {
+ 
+        if (params.DatabaseType == EDatabaseType::ClickHouse || params.DatabaseType == EDatabaseType::PostgreSQL) {
+                auto mdbTypeStr = NYql::DatabaseTypeLowercase(params.DatabaseType);
+                return TStringBuilder() << "Please check that your service account has role "  << 
+                                       "`managed-" << mdbTypeStr << ".viewer`.";
+        }
+        return {};
     }
 
     const TActorId Sender;

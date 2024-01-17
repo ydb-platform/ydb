@@ -81,6 +81,8 @@ struct TTruncateJournalOptions
 
 struct IJournalClientBase
 {
+    virtual ~IJournalClientBase() = default;
+
     virtual IJournalReaderPtr CreateJournalReader(
         const NYPath::TYPath& path,
         const TJournalReaderOptions& options = {}) = 0;

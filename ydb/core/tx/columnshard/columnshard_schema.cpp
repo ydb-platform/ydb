@@ -2,8 +2,8 @@
 
 namespace NKikimr::NColumnShard {
 
-bool Schema::IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index, const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback) {
-    auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
+bool Schema::IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback) {
+    auto rowset = db.Table<IndexColumns>().Prefix(0).Select();
     if (!rowset.IsReady()) {
         return false;
     }

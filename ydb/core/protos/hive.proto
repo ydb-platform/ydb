@@ -246,6 +246,7 @@ message TEvReassignTablet {
     enum EHiveReassignReason {
         HIVE_REASSIGN_REASON_NO = 0;
         HIVE_REASSIGN_REASON_SPACE = 1;
+        HIVE_REASSIGN_REASON_BALANCE = 2; // internal to Hive
     }
 
     optional fixed64 TabletID = 1;

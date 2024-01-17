@@ -3,6 +3,8 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/docker-compose.yml)
+
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
@@ -28,9 +30,9 @@ INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
 # which makes it impossible to run them during precommit checks on Github CI. 
 # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-SIZE(MEDIUM)
 
 IF (OPENSOURCE)
+    SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
 ENDIF()
@@ -61,6 +63,7 @@ PEERDIR(
 DEPENDS(
     ydb/library/yql/tools/dqrun
     ydb/tests/tools/kqprun
+    library/recipes/docker_compose/bin
 )
 
 END()

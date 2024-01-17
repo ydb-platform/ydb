@@ -3225,14 +3225,32 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        bool isOptional1, isOptional2;
-        if (const TDataExprType *dataTypeOne, *dataTypeTwo;
-            !(EnsureDataOrOptionalOfData(input->Head(), isOptional1, dataTypeOne, ctx.Expr) && EnsureDataOrOptionalOfData(input->Tail(), isOptional2, dataTypeTwo, ctx.Expr)
-            && EnsureStringOrUtf8Type(input->Head().Pos(), *dataTypeOne, ctx.Expr) && EnsureStringOrUtf8Type(input->Tail().Pos(), *dataTypeTwo, ctx.Expr))) {
+        if (!EnsureComputable(input->Head(), ctx.Expr) || !EnsureComputable(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (isOptional1 || isOptional2)
+        bool hasOptionals = false;
+        for (auto& child : input->ChildrenList()) {
+            const TTypeAnnotationNode* type = child->GetTypeAnn();
+            if (type->GetKind() == ETypeAnnotationKind::Pg) {
+                type = FromPgImpl(child->Pos(), type, ctx.Expr);
+                if (!type) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+            bool isOptional = false;
+            const TDataExprType* dataType = nullptr;
+            if (!IsDataOrOptionalOfData(type, isOptional, dataType) ||
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+            {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
+                    << "Expected (optional) string/utf8 or corresponding Pg type, but got: " << *child->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            hasOptionals = hasOptionals || isOptional;
+        }
+
+        if (hasOptionals)
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
         else
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
@@ -11107,6 +11125,48 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus RangeToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureListType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto argType = input->Head().GetTypeAnn();
+        auto rangeType = argType->Cast<TListExprType>()->GetItemType();
+        if (!EnsureValidRange(input->Head().Pos(), rangeType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto boundaryType = rangeType->Cast<TTupleExprType>()->GetItems().front();
+        const auto& boundaryItems = boundaryType->Cast<TTupleExprType>()->GetItems();
+
+        TTypeAnnotationNode::TListType resultBoundaryItems;
+        resultBoundaryItems.reserve(boundaryItems.size());
+        for (size_t i = 0; i < boundaryItems.size(); ++i) {
+            if (i % 2 == 0) {
+                resultBoundaryItems.push_back(boundaryItems[i]);
+            } else {
+                auto keyType = boundaryItems[i]->Cast<TOptionalExprType>()->GetItemType();
+                auto pgKeyType = ToPgImpl(input->Head().Pos(), keyType, ctx.Expr);
+                if (!pgKeyType) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                resultBoundaryItems.push_back(ctx.Expr.MakeType<TOptionalExprType>(pgKeyType));
+            }
+        }
+
+        const TTypeAnnotationNode* resultBoundaryType = ctx.Expr.MakeType<TTupleExprType>(resultBoundaryItems);
+        const TTypeAnnotationNode* resultRangeType =
+            ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{resultBoundaryType, resultBoundaryType});
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultRangeType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus RangeCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
 
@@ -12164,6 +12224,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
+        Functions["RangeToPg"] = &RangeToPgWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;
         Functions["RangeEmpty"] = &RangeEmptyWrapper;
         Functions["RangeFor"] = &RangeForWrapper;

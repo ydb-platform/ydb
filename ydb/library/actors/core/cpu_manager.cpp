@@ -22,8 +22,17 @@ namespace NActors {
         TAffinity available;
         available.Current();
 
+        std::vector<i16> poolsWithSharedThreads;
+        for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
+            if (cfg.HasSharedThread) {
+                poolsWithSharedThreads.push_back(cfg.PoolId);
+            }
+        }
+        Shared.reset(new TSharedExecutorPool(Config.Shared, ExecutorPoolCount, poolsWithSharedThreads));
+        // auto sharedPool = static_cast<TSharedExecutorPool*>(Shared.get());
+
         ui64 ts = GetCycleCountFast();
-        Harmonizer.Reset(MakeHarmonizer(ts));
+        Harmonizer.reset(MakeHarmonizer(ts));
 
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);
 
@@ -90,7 +99,7 @@ namespace NActors {
     IExecutorPool* TCpuManager::CreateExecutorPool(ui32 poolId) {
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
             if (cfg.PoolId == poolId) {
-                return new TBasicExecutorPool(cfg, Harmonizer.Get());
+                return new TBasicExecutorPool(cfg, Harmonizer.get());
             }
         }
         for (TIOExecutorPoolConfig& cfg : Config.IO) {

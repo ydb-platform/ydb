@@ -582,7 +582,7 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
             &TSupportsAttributes::DoGetAttributeFragment,
             key,
             TYPath(tokenizer.GetInput())));
-   }
+    }
 }
 
 namespace {

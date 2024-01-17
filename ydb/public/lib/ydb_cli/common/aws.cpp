@@ -2,10 +2,12 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 
+#if !defined(_win32_)
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
+#endif
 
 namespace NYdb::NConsoleClient {
 
@@ -41,6 +43,19 @@ TString TCommandWithAwsCredentials::ReadIniKey(const TString& iniKey) {
     }
 }
 
+#if defined(_win32_)
+std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFromS3Settings& settings) {
+    throw yexception() << "AWS API is not supported for windows platform";
+}
+
+void InitAwsAPI() {
+    throw yexception() << "AWS API is not supported for windows platform";
+}
+
+void ShutdownAwsAPI() {
+    throw yexception() << "AWS API is not supported for windows platform";
+}
+#else
 class TS3ClientWrapper : public IS3ClientWrapper {
 public:
     TS3ClientWrapper(const NImport::TImportFromS3Settings& settings) 
@@ -100,5 +115,6 @@ void InitAwsAPI() {
 void ShutdownAwsAPI() {
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
+#endif
 
 }

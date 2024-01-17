@@ -264,7 +264,7 @@ public:
         info.ActorSystem = std::make_unique<TActorSystem>(setup, &AppData, LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, 0, info.ActorSystem.get(), pool,
-            info.MailboxTable.get(), nullptr, "TestExecutor");
+            info.MailboxTable.get(), "TestExecutor");
     }
 
     void StartNode(ui32 nodeId) {

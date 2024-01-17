@@ -4,8 +4,7 @@
 
 package runtime
 
-import _ "unsafe"
-// for go:linkname
+import _ "unsafe" // for go:linkname
 
 //go:linkname setMaxStack runtime/debug.setMaxStack
 func setMaxStack(in int) (out int) {

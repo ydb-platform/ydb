@@ -42,12 +42,13 @@
                                                 "TopSortBy": "argument.J1_TBL.i"
                                             },
                                             {
+                                                "Condition": "i = k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

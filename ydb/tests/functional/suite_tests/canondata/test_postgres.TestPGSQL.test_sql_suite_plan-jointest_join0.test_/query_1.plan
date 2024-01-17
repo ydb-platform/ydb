@@ -42,12 +42,13 @@
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Condition": "q2 = i2_1.q2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -73,6 +74,7 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter-TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Condition": "q1 = x",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1

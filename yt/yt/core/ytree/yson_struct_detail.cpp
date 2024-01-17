@@ -4,6 +4,8 @@
 
 namespace NYT::NYTree {
 
+using namespace NYPath;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 std::optional<EUnrecognizedStrategy> GetRecursiveUnrecognizedStrategy(EUnrecognizedStrategy strategy)
@@ -94,7 +96,7 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const TString& key,
 void TYsonStructMeta::Postprocess(TYsonStructBase* target, const TYPath& path) const
 {
     for (const auto& [name, parameter] : Parameters_) {
-        parameter->Postprocess(target, path + "/" + name);
+        parameter->Postprocess(target, path + "/" + ToYPathLiteral(name));
     }
 
     try {
@@ -140,7 +142,7 @@ void TYsonStructMeta::LoadStruct(
             }
         }
         auto loadOptions = TLoadParameterOptions{
-            .Path = path + "/" + key,
+            .Path = path + "/" + ToYPathLiteral(key),
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
         parameter->Load(target, child, loadOptions);
@@ -154,7 +156,7 @@ void TYsonStructMeta::LoadStruct(
         for (const auto& [key, child] : mapNode->GetChildren()) {
             if (!registeredKeys.contains(key)) {
                 if (ShouldThrow(unrecognizedStrategy)) {
-                    THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + key)
+                    THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
                         << TErrorAttribute("key", key)
                         << TErrorAttribute("path", path);
                 }
@@ -187,7 +189,7 @@ void TYsonStructMeta::LoadStruct(
 
     auto createLoadOptions = [&] (TStringBuf key) {
         return TLoadParameterOptions{
-            .Path = path + "/" + key,
+            .Path = path + "/" + ToYPathLiteral(key),
             .RecursiveUnrecognizedRecursively = GetRecursiveUnrecognizedStrategy(unrecognizedStrategy),
         };
     };
@@ -242,7 +244,7 @@ void TYsonStructMeta::LoadStruct(
             return;
         }
         if (ShouldThrow(unrecognizedStrategy)) {
-            THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + key)
+            THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
                 << TErrorAttribute("key", key)
                 << TErrorAttribute("path", path);
         }

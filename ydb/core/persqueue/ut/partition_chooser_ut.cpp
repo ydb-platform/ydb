@@ -53,9 +53,9 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig(bool SplitMergeEnabled)
 
     AddPartition(result, 0, {}, "C");
     AddPartition(result, 1, "C", "F");
-    AddPartition(result, 2, "F", {});
-    AddPartition(result, 3, "D", {}, {4});
-    AddPartition(result, 4, "D", {});
+    AddPartition(result, 2, "F", "Z");
+    AddPartition(result, 3, "Z", {}, {4});
+    AddPartition(result, 4, "Z", {});
 
     return result;
 }

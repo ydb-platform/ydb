@@ -97,7 +97,7 @@ public:
     TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         TSerializationStats result;
         for (auto&& i : Records) {
-            if (schema.GetFieldByColumnId(i.ColumnId)) {
+            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
                 result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
             }
         }

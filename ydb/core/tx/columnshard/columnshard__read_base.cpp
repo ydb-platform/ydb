@@ -45,6 +45,7 @@ bool TTxReadBase::ParseProgram(NKikimrSchemeOp::EOlapProgramType programType,
             AFL_VERIFY(namesChecker.emplace(names.back()).second);
         }
         NOlap::TProgramContainer container;
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "overriden_columns")("columns", JoinSeq(",", names));
         container.OverrideProcessingColumns(std::vector<TString>(names.begin(), names.end()));
         read.SetProgram(std::move(container));
         return true;

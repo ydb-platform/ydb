@@ -323,7 +323,7 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     }
     if (filter.IsTotalDenyFilter()) {
         batch = batch->Slice(0, 0);
-        return false;
+        return true;
     }
     if (filter.IsTotalAllowFilter()) {
         return true;
@@ -343,11 +343,11 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     return false;
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) {
+bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     return ApplyImpl<arrow::Datum::TABLE>(*this, batch, startPos, count);
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) {
+bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     return ApplyImpl<arrow::Datum::RECORD_BATCH>(*this, batch, startPos, count);
 }
 

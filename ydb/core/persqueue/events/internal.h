@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -171,6 +172,8 @@ struct TEvPQ {
         EvProvideDirectReadInfo,
         EvCheckPartitionStatusRequest,
         EvCheckPartitionStatusResponse,
+        EvGetWriteInfoRequest,
+        EvGetWriteInfoResponse,
         EvEnd
     };
 
@@ -1004,7 +1007,53 @@ struct TEvPQ {
     struct TEvCheckPartitionStatusResponse : public TEventPB<TEvCheckPartitionStatusResponse, NKikimrPQ::TEvCheckPartitionStatusResponse, EvCheckPartitionStatusResponse> {
     };
 
+    struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
+        explicit TEvGetWriteInfoRequest(ui32 cookie) :
+            Cookie(cookie)
+        {
+        }
 
+        ui32 Cookie; // ShadowPartitionId
+    };
+
+    struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
+        struct TError {
+        };
+
+        struct TSuccess {
+            TString SourceId;
+            ui64 MinSeqNo, MaxSeqNo;
+            NKikimrPQ::TPartitionKeyRange KeyRange;
+            NPQ::THead Head;
+        };
+
+        explicit TEvGetWriteInfoResponse(ui32 cookie) :
+            Cookie(cookie),
+            Result(TError{})
+        {
+        }
+
+        TEvGetWriteInfoResponse(ui32 cookie,
+                                TString sourceId,
+                                ui64 minSeqNo, ui64 maxSeqNo,
+                                NKikimrPQ::TPartitionKeyRange keyRange,
+                                NPQ::THead head) :
+            Cookie(cookie),
+            Result(TSuccess{std::move(sourceId), minSeqNo, maxSeqNo, std::move(keyRange), std::move(head)})
+        {
+        }
+
+        bool IsSuccess() const {
+            return Result.index() == 1;
+        }
+
+        const TSuccess& GetSuccess() const {
+            return get<1>(Result);
+        }
+
+        ui32 Cookie; // ShadowPartitionId
+        std::variant<TError, TSuccess> Result;
+    };
 };
 
 } //NKikimr

@@ -88,6 +88,7 @@ protected:
 class TWorkloadCommandInit : public TWorkloadCommandBase {
 public:
     TWorkloadCommandInit(const TString& key);
+    virtual void Config(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 

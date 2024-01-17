@@ -166,7 +166,7 @@ There are alternative options to see the applied changes:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after the first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after the first migration](../_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Using YDB CLI
 
@@ -258,7 +258,7 @@ Let's use the same methods to see the new changes:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png)
+  ![YDB UI after apply second migration](../_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Using YDB CLI
 
@@ -322,7 +322,7 @@ Let's check the changes again:
 
 - Using YDB UI on http://localhost:8765
 
-  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png)
+  ![YDB UI after apply first migration](../_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Using YDB CLI
 

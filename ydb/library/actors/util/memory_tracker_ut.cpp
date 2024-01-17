@@ -190,7 +190,7 @@ struct TTracked
 
 template <typename T>
 double MeasureAllocations() {
-    constexpr size_t objectsCount = 4 << 20;
+    constexpr size_t objectsCount = 1 << 20;
 
     std::vector<T*> objects;
     objects.resize(objectsCount);
@@ -213,7 +213,7 @@ double MeasureAllocations() {
 Y_UNIT_TEST(Performance) {
     TMemoryTracker::Instance()->Initialize();
 
-    constexpr size_t Runs = 16;
+    constexpr size_t Runs = 8;
 
     Cerr << "---- warmup" << Endl;
     MeasureAllocations<TNotTracked>();

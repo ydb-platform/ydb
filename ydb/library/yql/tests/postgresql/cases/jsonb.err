@@ -5938,12 +5938,6 @@ select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, NULL}', '"new_value"');
 -- jsonb_set_lax
 \pset null NULL
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\pset null NULL
-	^
 <sql-statement>
 -- pass though non nulls to jsonb_set
 select jsonb_set_lax('{"a":1,"b":2}','{b}','5') ;
@@ -6063,7 +6057,6 @@ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'use_
 <sql-statement>
 \pset null ''
 </sql-statement>
-Metacommand \pset null '' is not supported
 <sql-statement>
 -- jsonb_insert
 select jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"');

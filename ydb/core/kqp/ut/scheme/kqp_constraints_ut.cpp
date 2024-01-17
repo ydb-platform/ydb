@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
@@ -464,6 +463,123 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
         }        
+    }
+
+    Y_UNIT_TEST(AlterTableAddNotNullWithDefaultIndexed) {
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/AlterTableAddNotNullColumn` (
+                    Key Uint32,
+                    Value String,
+                    Value2 Int32 NOT NULL DEFAULT 1,
+                    PRIMARY KEY (Key),
+                    INDEX ByValue GLOBAL ON (Value) COVER (Value2)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        auto fQuery = [&](TString query) -> TString {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+            if (result.GetResultSets().size() > 0)  
+                return NYdb::FormatResultSetYson(result.GetResultSet(0));
+            return "";
+        };
+
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+        )");
+
+        auto fCompareTable = [&](TString expected) {
+            TString query = R"(
+                SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
+            )";
+            CompareYson(expected, fQuery(query));
+        };
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1]
+            ]
+        )");
+
+        fQuery(R"(
+            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+        )");
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1];[[2u];["New"];1]
+            ]
+        )");
+
+        
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value, Value2) VALUES (2, "New", 2);
+        )");
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1];[[2u];["New"];2]
+            ]
+        )");
+
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "OldNew");
+        )");        
+
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (3, "BrandNew");
+        )");
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1];[[2u];["OldNew"];2];[[3u];["BrandNew"];1]
+            ]
+        )");
+
+        CompareYson(
+            fQuery("SELECT Value, Value2 FROM `/Root/AlterTableAddNotNullColumn` VIEW ByValue WHERE Value = \"OldNew\""),
+            R"(
+            [
+                [["OldNew"];2]
+            ]
+            )"
+        );
+
+        CompareYson(
+            fQuery("SELECT Value, Value2 FROM `/Root/AlterTableAddNotNullColumn` VIEW ByValue WHERE Value = \"BrandNew\""),
+            R"(
+            [
+                [["BrandNew"];1]
+            ]
+            )"
+        );
+
     }
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {

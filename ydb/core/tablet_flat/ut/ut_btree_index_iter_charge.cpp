@@ -2,6 +2,7 @@
 #include "flat_part_btree_index_iter.h"
 #include "flat_part_charge.h"
 #include "flat_part_charge_btree_index.h"
+#include "flat_part_charge_range.h"
 #include "flat_part_iter_multi.h"
 #include "test/libs/table/test_writer.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
@@ -444,8 +445,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
-        // TODO: isn't working yet
-        // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
         // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
         // TODO: mixed
     }
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetRowId(), flat.GetRowId(), message);
     }
 
-    EReady SeekKey(TRunIt& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TString& message, ui32 failsAllowed = 10) {
+    EReady Seek(TRunIt& iter, TTouchEnv& env, ESeek seek, bool reverse, TCells key, const TString& message, ui32 failsAllowed = 10) {
         return Retry([&]() {
             return reverse ? iter.SeekReverse(key, seek) : iter.Seek(key, seek);
         }, env, message, failsAllowed);
@@ -482,7 +482,22 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }, env, message, failsAllowed);
     }
 
-    void CheckIterateKey(const TPartEggs& eggs) {
+    void Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+        while (true) {
+            auto result = reverse
+                ? ChargeRangeReverse(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true)
+                : ChargeRange(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true);
+            if (result) {
+                return;
+            }
+            env.LoadTouched(true);
+            UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
+        }
+        Y_UNREACHABLE();
+    }
+
+    void CheckIterate(const TPartEggs& eggs) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
@@ -512,18 +527,18 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                         TRunIt bTree(btreeRun, tags, eggs.Scheme->Keys, &bTreeEnv);
 
                         {
-                            TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
+                            TStringBuilder message = TStringBuilder() << (reverse ?  "IterateReverse" : "Iterate") << "(" << seek << ") ";
                             for (auto c : key) {
                                 message << c.AsValue<ui32>() << " ";
                             }
-                            EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, message);
-                            EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, message);
+                            EReady bTreeReady = Seek(bTree, bTreeEnv, seek, reverse, key, message);
+                            EReady flatReady = Seek(flat, flatEnv, seek, reverse, key, message);
                             AssertEqual(bTree, bTreeReady, flat, flatReady, message);
                             AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
                         }
 
                         for (ui32 steps = 1; steps <= 10; steps++) {
-                            TStringBuilder message = TStringBuilder() << (reverse ?  "SeekKeyReverse" : "SeekKey") << "(" << seek << ") ";
+                            TStringBuilder message = TStringBuilder() << (reverse ?  "IterateReverse" : "Iterate") << "(" << seek << ") ";
                             for (auto c : key) {
                                 message << c.AsValue<ui32>() << " ";
                             }
@@ -539,11 +554,63 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
     }
 
+    void CheckCharge(const TPartEggs& eggs) {
+        const auto part = *eggs.Lone();
+
+        TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
+        auto flatPart = part.CloneWithEpoch(part.Epoch);
+        for (auto& slice : *part.Slices) {
+            btreeRun.Insert(eggs.Lone(), slice);
+            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
+            pages->clear();
+            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
+            pages->clear();
+            flatRun.Insert(flatPart, slice);
+        }
+
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+
+        for (bool reverse : {false, true}) {
+            for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                            TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+                            TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
+
+                            TTouchEnv bTreeEnv, flatEnv;
+                            
+                            TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
+                            for (auto c : key1) {
+                                message << c.AsValue<ui32>() << " ";
+                            }
+                            message << ") (";
+                            for (auto c : key2) {
+                                message << c.AsValue<ui32>() << " ";
+                            }
+                            message << ")";
+
+                            // TODO: limits
+                            Charge(btreeRun, tags, bTreeEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
+                            Charge(flatRun, tags, flatEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
+
+                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     void CheckPart(bool slices, ui32 levels) {
         TPartEggs eggs = MakePart(slices, levels);
         const auto part = *eggs.Lone();
 
-        CheckIterateKey(eggs);
+        CheckIterate(eggs);
+        CheckCharge(eggs);
     }
 
     Y_UNIT_TEST(NoNodes_SingleSlice) {

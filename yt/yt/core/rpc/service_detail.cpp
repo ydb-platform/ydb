@@ -1716,7 +1716,7 @@ void TServiceBase::ReplyError(
     YT_LOG_EVENT(Logger, logLevel, richError);
 
     auto errorMessage = CreateErrorResponseMessage(requestId, richError);
-    YT_UNUSED_FUTURE(replyBus->Send(errorMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+    YT_UNUSED_FUTURE(replyBus->Send(errorMessage));
 }
 
 void TServiceBase::OnRequestAuthenticated(

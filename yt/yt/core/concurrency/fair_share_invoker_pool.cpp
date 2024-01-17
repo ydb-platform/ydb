@@ -128,15 +128,26 @@ public:
     TFairShareInvokerPool(
         IInvokerPtr underlyingInvoker,
         int invokerCount,
-        TFairShareCallbackQueueFactory callbackQueueFactory)
+        TFairShareCallbackQueueFactory callbackQueueFactory,
+        THistoricUsageAggregationParameters aggregatorParameters)
         : UnderlyingInvoker_(std::move(underlyingInvoker))
         , Queue_(callbackQueueFactory(invokerCount))
     {
         Invokers_.reserve(invokerCount);
+        InvokerQueueStates_.reserve(invokerCount);
         for (int index = 0; index < invokerCount; ++index) {
             Invokers_.push_back(New<TInvoker>(UnderlyingInvoker_, index, MakeWeak(this)));
+            InvokerQueueStates_.emplace_back(aggregatorParameters);
         }
-        InvokerQueueStates_.resize(invokerCount);
+    }
+
+    void UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters newParameters) override
+    {
+        auto guard = Guard(InvokerQueueStatesLock_);
+
+        for (auto& queueState : InvokerQueueStates_) {
+            queueState.UpdateActionTimeAggregatorParameters(newParameters);
+        }
     }
 
     int GetSize() const override
@@ -188,66 +199,80 @@ private:
     class TInvokerQueueState
     {
     public:
+        explicit TInvokerQueueState(
+            const THistoricUsageAggregationParameters& parameters)
+            : AverageTimeAggregator_(parameters)
+        { }
+
         void OnActionEnqueued(TInstant now)
         {
-            UpdateLatestObservedTime(now);
-
-            TotalWaitTime_ += LatestObservedTime_ - now;
             ActionEnqueueTimes_.push(now);
             ++EnqueuedActionCount_;
         }
 
-        void OnActionDequeued()
+        //! NB: We report action after execution and not after dequeue because
+        //! we must take into account execution time for the following special case:
+        //! We have enqueued just one action which freezes the invoker.
+        //! If we ignore execution time, we will have a close to zero waiting time
+        //! the next time we try to check if we should enqueue action.
+        //! This will result in more actions stuck in queue than needed
+        //! to determine whether or not invoker is frozen.
+        void OnActionExecuted(TInstant now)
         {
             YT_VERIFY(!ActionEnqueueTimes_.empty());
-
-            auto actionEnqueueTime = ActionEnqueueTimes_.front();
-            TotalWaitTime_ -= LatestObservedTime_ - actionEnqueueTime;
-            ActionEnqueueTimes_.pop();
             ++DequeuedActionCount_;
 
-            if (ActionEnqueueTimes_.empty()) {
-                YT_VERIFY(TotalWaitTime_ == TDuration::Zero());
-            }
+            auto totalWaitTime = now - ActionEnqueueTimes_.front();
+            ActionEnqueueTimes_.pop();
+
+            AverageTimeAggregator_.UpdateAt(now, totalWaitTime.MillisecondsFloat());
         }
 
         TInvokerStatistics GetInvokerStatistics(TInstant now) const
         {
-            UpdateLatestObservedTime(now);
-
             auto waitingActionCount = std::ssize(ActionEnqueueTimes_);
-            auto averageWaitTime = waitingActionCount > 0
-                ? TotalWaitTime_ / waitingActionCount
-                : TDuration::Zero();
 
             return TInvokerStatistics{
                 .EnqueuedActionCount = EnqueuedActionCount_,
                 .DequeuedActionCount = DequeuedActionCount_,
                 .WaitingActionCount = waitingActionCount,
-                .AverageWaitTime = averageWaitTime,
+                .TotalTimeEstimate = GetTotalTimeEstimate(now),
             };
         }
 
+        void UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters newParameters)
+        {
+            AverageTimeAggregator_.UpdateParameters(THistoricUsageAggregationParameters{
+                newParameters.Mode,
+                newParameters.EmaAlpha,
+                /*resetOnNewParameters*/ false,
+            });
+        }
+
     private:
+        THistoricUsageAggregator AverageTimeAggregator_;
         TRingQueue<TInstant> ActionEnqueueTimes_;
-        mutable TDuration TotalWaitTime_;
-        mutable TInstant LatestObservedTime_;
+
         i64 EnqueuedActionCount_ = 0;
         i64 DequeuedActionCount_ = 0;
 
-        void UpdateLatestObservedTime(TInstant now) const
+        TDuration GetTotalTimeEstimate(TInstant now) const
         {
-            if (now <= LatestObservedTime_) {
-                return;
+            //! Invoker-accumulated average relevancy decays over time
+            //! to account for the case when everything was fine
+            //! and then invoker gets stuck for a very long time.
+            auto maxWaitTime = GetMaxWaitTimeInQueue(now);
+            auto totalWaitTimeMilliseconds = AverageTimeAggregator_.SimulateUpdate(now, maxWaitTime.MillisecondsFloat());
+            return TDuration::MilliSeconds(totalWaitTimeMilliseconds);
+        }
+
+        TDuration GetMaxWaitTimeInQueue(TInstant now) const
+        {
+            if (ActionEnqueueTimes_.empty()) {
+                return TDuration::Zero();
             }
 
-            if (!ActionEnqueueTimes_.empty()) {
-                auto singleActionWaitTimeDelta = now - LatestObservedTime_;
-                int waitingActionCount = std::ssize(ActionEnqueueTimes_);
-                TotalWaitTime_ += waitingActionCount * singleActionWaitTimeDelta;
-            }
-
-            LatestObservedTime_ = now;
+            return now - ActionEnqueueTimes_.front();
         }
     };
 
@@ -324,12 +349,29 @@ private:
         YT_VERIFY(Queue_->TryDequeue(&callback, &bucketIndex));
         YT_VERIFY(IsValidInvokerIndex(bucketIndex));
 
-        {
+        //! NB1: Finally causes us to count total time (wait + execution) in our statistics.
+        //! This is done to compensate for the following situation:
+        //! Consider the first task in the batch
+        //! ("first" here means that invoker was not busy and the queue was empty during the enqueue call)
+        //! It's wait time is always zero. Suppose execution time is T = 1 / EmaAlpha milliseconds
+        //! Wait time for every task in the same batch after the first one would be at least T milliseconds.
+        //! Unless aggregator completely disregards the first task in the batch,
+        //! zero wait time can introduce a noticeable error to the average.
+        //! If the rest of the batch executes instantly, actual average would be T milliseconds.
+        //! Computed one would be T (1 - 1 / e) ~= 0.63T which is much less than what we would expect.
+
+        //! NB2: We use Finally here instead of simply recording data after the execution is complete
+        //! so that we dequeue task even if it threw an exception. Since we assume this invoker
+        //! to be a wrapper around an arbitrary invoker which can be capable of catching exceptions
+        //! and have some fallback strategy in case of a throwing callback we must ensure
+        //! exception safety.
+        auto cleanup = Finally([&] {
+            auto now = GetInstant();
             auto guard = Guard(InvokerQueueStatesLock_);
 
             auto& queueState = InvokerQueueStates_[bucketIndex];
-            queueState.OnActionDequeued();
-        }
+            queueState.OnActionExecuted(now);
+        });
 
         {
             TCurrentInvokerGuard currentInvokerGuard(Invokers_[bucketIndex].Get());
@@ -344,13 +386,15 @@ private:
 IDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
-    TFairShareCallbackQueueFactory callbackQueueFactory)
+    TFairShareCallbackQueueFactory callbackQueueFactory,
+    THistoricUsageAggregationParameters aggregatorParameters)
 {
     YT_VERIFY(0 < invokerCount && invokerCount < 100);
     return New<TFairShareInvokerPool>(
         std::move(underlyingInvoker),
         invokerCount,
-        std::move(callbackQueueFactory));
+        std::move(callbackQueueFactory),
+        aggregatorParameters);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

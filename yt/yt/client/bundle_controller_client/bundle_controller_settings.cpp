@@ -7,14 +7,11 @@ namespace NYT::NBundleControllerClient {
 void TCpuLimits::Register(TRegistrar registrar)
 {
     registrar.Parameter("write_thread_pool_size", &TThis::WriteThreadPoolSize)
-        .GreaterThan(0)
-        .Default(5);
+        .Optional();
     registrar.Parameter("lookup_thread_pool_size", &TThis::LookupThreadPoolSize)
-        .GreaterThan(0)
-        .Default(4);
+        .Optional();
     registrar.Parameter("query_thread_pool_size", &TThis::QueryThreadPoolSize)
-        .GreaterThan(0)
-        .Default(4);
+        .Optional();
 }
 
 void TMemoryLimits::Register(TRegistrar registrar)
@@ -60,72 +57,120 @@ bool TInstanceResources::operator==(const TInstanceResources& other) const
     return std::tie(Vcpu, Memory, Net) == std::tie(other.Vcpu, other.Memory, other.Net);
 }
 
+void TBundleTargetConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cpu_limits", &TThis::CpuLimits)
+        .DefaultNew();
+    registrar.Parameter("memory_limits", &TThis::MemoryLimits)
+        .DefaultNew();
+    registrar.Parameter("rpc_proxy_count", &TThis::RpcProxyCount)
+        .Optional();
+    registrar.Parameter("rpc_proxy_resource_guarantee", &TThis::RpcProxyResourceGuarantee)
+        .Default();
+    registrar.Parameter("tablet_node_count", &TThis::TabletNodeCount)
+        .Optional();
+    registrar.Parameter("tablet_node_resource_guarantee", &TThis::TabletNodeResourceGuarantee)
+        .Default();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NProto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define YT_FROMPROTO_OPTIONAL_PTR(messagePtr, messageField, structPtr, structField) (((messagePtr)->has_##messageField()) ? (structPtr)->structField = (messagePtr)->messageField() : (structPtr)->structField)
+#define YT_TOPROTO_OPTIONAL_PTR(messagePtr, messageField, structPtr, structField) (((structPtr)->structField.has_value()) ? (messagePtr)->set_##messageField((structPtr)->structField.value()) : void())
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ToProto(NBundleController::NProto::TCpuLimits* protoCpuLimits, const NBundleControllerClient::TCpuLimitsPtr cpuLimits)
 {
-    protoCpuLimits->set_lookup_thread_pool_size(cpuLimits->LookupThreadPoolSize);
-    protoCpuLimits->set_query_thread_pool_size(cpuLimits->QueryThreadPoolSize);
-    protoCpuLimits->set_write_thread_pool_size(cpuLimits->WriteThreadPoolSize);
+    YT_TOPROTO_OPTIONAL_PTR(protoCpuLimits, lookup_thread_pool_size, cpuLimits, LookupThreadPoolSize);
+    YT_TOPROTO_OPTIONAL_PTR(protoCpuLimits, query_thread_pool_size, cpuLimits, QueryThreadPoolSize);
+    YT_TOPROTO_OPTIONAL_PTR(protoCpuLimits, write_thread_pool_size, cpuLimits, WriteThreadPoolSize);
 }
 
 void FromProto(NBundleControllerClient::TCpuLimitsPtr cpuLimits, const NBundleController::NProto::TCpuLimits* protoCpuLimits)
 {
-    cpuLimits->LookupThreadPoolSize = protoCpuLimits->lookup_thread_pool_size();
-    cpuLimits->QueryThreadPoolSize = protoCpuLimits->query_thread_pool_size();
-    cpuLimits->WriteThreadPoolSize = protoCpuLimits->write_thread_pool_size();
+    YT_FROMPROTO_OPTIONAL_PTR(protoCpuLimits, lookup_thread_pool_size, cpuLimits, LookupThreadPoolSize);
+    YT_FROMPROTO_OPTIONAL_PTR(protoCpuLimits, query_thread_pool_size, cpuLimits, QueryThreadPoolSize);
+    YT_FROMPROTO_OPTIONAL_PTR(protoCpuLimits, write_thread_pool_size, cpuLimits, WriteThreadPoolSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const NBundleControllerClient::TMemoryLimitsPtr memoryLimits)
 {
-    protoMemoryLimits->set_compressed_block_cache(memoryLimits->CompressedBlockCache.value_or(0));
-    protoMemoryLimits->set_key_filter_block_cache(memoryLimits->KeyFilterBlockCache.value_or(0));
-    protoMemoryLimits->set_lookup_row_cache(memoryLimits->LookupRowCache.value_or(0));
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, compressed_block_cache, memoryLimits, CompressedBlockCache);
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, key_filter_block_cache, memoryLimits, KeyFilterBlockCache);
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, lookup_row_cache, memoryLimits, LookupRowCache);
 
-    protoMemoryLimits->set_tablet_dynamic(memoryLimits->TabletDynamic.value_or(0));
-    protoMemoryLimits->set_tablet_static(memoryLimits->TabletStatic.value_or(0));
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, tablet_dynamic, memoryLimits, TabletDynamic);
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, tablet_static, memoryLimits, TabletStatic);
 
-    protoMemoryLimits->set_uncompressed_block_cache(memoryLimits->UncompressedBlockCache.value_or(0));
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, uncompressed_block_cache, memoryLimits, UncompressedBlockCache);
 
-    protoMemoryLimits->set_versioned_chunk_meta(memoryLimits->VersionedChunkMeta.value_or(0));
+    YT_TOPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 }
 
 void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits)
 {
-    memoryLimits->CompressedBlockCache = protoMemoryLimits->compressed_block_cache();
-    memoryLimits->KeyFilterBlockCache = protoMemoryLimits->key_filter_block_cache();
-    memoryLimits->LookupRowCache = protoMemoryLimits->lookup_row_cache();
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, compressed_block_cache, memoryLimits, CompressedBlockCache);
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, key_filter_block_cache, memoryLimits, KeyFilterBlockCache);
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, lookup_row_cache, memoryLimits, LookupRowCache);
 
-    memoryLimits->TabletDynamic = protoMemoryLimits->tablet_dynamic();
-    memoryLimits->TabletStatic = protoMemoryLimits->tablet_static();
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, tablet_dynamic, memoryLimits, TabletDynamic);
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, tablet_static, memoryLimits, TabletStatic);
 
-    memoryLimits->UncompressedBlockCache = protoMemoryLimits->uncompressed_block_cache();
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, uncompressed_block_cache, memoryLimits, UncompressedBlockCache);
 
-    memoryLimits->VersionedChunkMeta = protoMemoryLimits->versioned_chunk_meta();
+    YT_FROMPROTO_OPTIONAL_PTR(protoMemoryLimits, versioned_chunk_meta, memoryLimits, VersionedChunkMeta);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const NBundleControllerClient::TInstanceResourcesPtr instanceResources)
 {
+    if (instanceResources == nullptr) return;
     protoInstanceResources->set_memory(instanceResources->Memory);
-    protoInstanceResources->set_net(instanceResources->Net.value_or(0));
+    YT_TOPROTO_OPTIONAL_PTR(protoInstanceResources, net, instanceResources, Net);
     protoInstanceResources->set_type(instanceResources->Type);
     protoInstanceResources->set_vcpu(instanceResources->Vcpu);
 }
 
 void FromProto(NBundleControllerClient::TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources)
 {
-    instanceResources->Memory = protoInstanceResources->memory();
-    instanceResources->Net = protoInstanceResources->net();
-    instanceResources->Type = protoInstanceResources->type();
-    instanceResources->Vcpu = protoInstanceResources->vcpu();
+    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, memory, instanceResources, Memory);
+    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, net, instanceResources, Net);
+    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, type, instanceResources, Type);
+    YT_FROMPROTO_OPTIONAL_PTR(protoInstanceResources, vcpu, instanceResources, Vcpu);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToProto(NBundleController::NProto::TBundleConfig* protoBundleConfig, const NBundleControllerClient::TBundleTargetConfigPtr bundleConfig)
+{
+    YT_TOPROTO_OPTIONAL_PTR(protoBundleConfig, rpc_proxy_count, bundleConfig, RpcProxyCount);
+    YT_TOPROTO_OPTIONAL_PTR(protoBundleConfig, tablet_node_count, bundleConfig, TabletNodeCount);
+    ToProto(protoBundleConfig->mutable_cpu_limits(), bundleConfig->CpuLimits);
+    ToProto(protoBundleConfig->mutable_memory_limits(), bundleConfig->MemoryLimits);
+    ToProto(protoBundleConfig->mutable_rpc_proxy_resource_guarantee(), bundleConfig->RpcProxyResourceGuarantee);
+    ToProto(protoBundleConfig->mutable_tablet_node_resource_guarantee(), bundleConfig->TabletNodeResourceGuarantee);
+}
+
+void FromProto(NBundleControllerClient::TBundleTargetConfigPtr bundleConfig, const NBundleController::NProto::TBundleConfig* protoBundleConfig)
+{
+    YT_FROMPROTO_OPTIONAL_PTR(protoBundleConfig, rpc_proxy_count, bundleConfig, RpcProxyCount);
+    YT_FROMPROTO_OPTIONAL_PTR(protoBundleConfig, tablet_node_count, bundleConfig, TabletNodeCount);
+    if (protoBundleConfig->has_cpu_limits())
+        FromProto(bundleConfig->CpuLimits, &protoBundleConfig->cpu_limits());
+    if (protoBundleConfig->has_memory_limits())
+        FromProto(bundleConfig->MemoryLimits, &protoBundleConfig->memory_limits());
+    if (protoBundleConfig->has_rpc_proxy_resource_guarantee())
+        FromProto(bundleConfig->RpcProxyResourceGuarantee, &protoBundleConfig->rpc_proxy_resource_guarantee());
+    if (protoBundleConfig->has_tablet_node_resource_guarantee())
+        FromProto(bundleConfig->TabletNodeResourceGuarantee, &protoBundleConfig->tablet_node_resource_guarantee());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

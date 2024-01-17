@@ -12,25 +12,30 @@ namespace NYT {
 
 THistoricUsageAggregationParameters::THistoricUsageAggregationParameters(
     EHistoricUsageAggregationMode mode,
-    double emaAlpha)
+    double emaAlpha,
+    bool resetOnNewParameters)
     : Mode(mode)
     , EmaAlpha(emaAlpha)
+    , ResetOnNewParameters(resetOnNewParameters)
 { }
 
 THistoricUsageAggregationParameters::THistoricUsageAggregationParameters(
     const THistoricUsageConfigPtr& config)
     : Mode(config->AggregationMode)
     , EmaAlpha(config->EmaAlpha)
+    , ResetOnNewParameters(config->ResetOnNewParameters)
 { }
-
-bool THistoricUsageAggregationParameters::operator==(const THistoricUsageAggregationParameters& other) const
-{
-    return Mode == other.Mode && EmaAlpha == other.EmaAlpha;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 THistoricUsageAggregator::THistoricUsageAggregator()
+{
+    Reset();
+}
+
+THistoricUsageAggregator::THistoricUsageAggregator(
+    const THistoricUsageAggregationParameters& parameters)
+    : Parameters_(parameters)
 {
     Reset();
 }
@@ -43,7 +48,9 @@ void THistoricUsageAggregator::UpdateParameters(
     }
 
     Parameters_ = newParameters;
-    Reset();
+    if (Parameters_.ResetOnNewParameters) {
+        Reset();
+    }
 }
 
 void THistoricUsageAggregator::Reset()
@@ -58,22 +65,44 @@ void THistoricUsageAggregator::UpdateAt(TInstant now, double value)
         return;
     }
 
-    // If LastExponentialMovingAverageUpdateTime_ is zero, this is the first update (after most
-    // recent reset) and we just want to leave EMA = 0.0, as if there was no previous usage.
-    if (Parameters_.Mode == EHistoricUsageAggregationMode::ExponentialMovingAverage &&
-        LastExponentialMovingAverageUpdateTime_ != TInstant::Zero())
-    {
-        auto sinceLast = now - LastExponentialMovingAverageUpdateTime_;
-        auto w = Exp2(-1. * Parameters_.EmaAlpha * sinceLast.SecondsFloat());
-        ExponentialMovingAverage_ = w * ExponentialMovingAverage_ + (1 - w) * value;
+    ExponentialMovingAverage_ = ApplyUpdate(ExponentialMovingAverage_, now, value);
+    LastExponentialMovingAverageUpdateTime_ = now;
+}
+
+double THistoricUsageAggregator::SimulateUpdate(TInstant now, double value) const
+{
+    auto simulatedValue = GetHistoricUsage();
+
+    if (now < LastExponentialMovingAverageUpdateTime_) {
+        return simulatedValue;
     }
 
-    LastExponentialMovingAverageUpdateTime_ = now;
+    return ApplyUpdate(simulatedValue, now, value);
 }
 
 double THistoricUsageAggregator::GetHistoricUsage() const
 {
     return ExponentialMovingAverage_;
+}
+
+bool THistoricUsageAggregator::ShouldFlush() const
+{
+    return
+        Parameters_.Mode == EHistoricUsageAggregationMode::None ||
+        Parameters_.EmaAlpha == 0.0 ||
+        LastExponentialMovingAverageUpdateTime_ == TInstant::Zero();
+}
+
+double THistoricUsageAggregator::ApplyUpdate(double current, TInstant now, double value) const
+{
+    if (ShouldFlush()) {
+        current = value;
+    } else {
+        auto sinceLast = now - LastExponentialMovingAverageUpdateTime_;
+        auto w = Exp2(-1. * Parameters_.EmaAlpha * sinceLast.SecondsFloat());
+        current = w * ExponentialMovingAverage_ + (1 - w) * value;
+    }
+    return current;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

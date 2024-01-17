@@ -51,8 +51,79 @@ void TDataShardUserDb::UpdateRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    auto* collector = GetChangeCollector(tableId);
+    TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
+    CheckWriteConflicts(tableId, keyCells);
+
+    if (LockTxId) {
+        Self.SysLocksTable().SetWriteLock(tableId, keyCells);
+    } else {
+        Self.SysLocksTable().BreakLocks(tableId, keyCells);
+    }
+    Self.SetTableUpdateTime(tableId, Now);
+
+
+    // apply special columns if declared
+    TUserTable::TSpecialUpdate specUpdates = Self.SpecialUpdates(Db, tableId);
+    if (specUpdates.HasUpdates) {
+        const NTable::TScheme& scheme = Db.GetScheme();
+        const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
+
+        TStackVec<NIceDb::TUpdateOp> extendedOps;
+        extendedOps.reserve(ops.size() + 3);
+        for (const NIceDb::TUpdateOp& op : ops) {
+            if (op.Tag == specUpdates.ColIdTablet)
+                specUpdates.ColIdTablet = Max<ui32>();
+            else if (op.Tag == specUpdates.ColIdEpoch)
+                specUpdates.ColIdEpoch = Max<ui32>();
+            else if (op.Tag == specUpdates.ColIdUpdateNo)
+                specUpdates.ColIdUpdateNo = Max<ui32>();
+
+            extendedOps.push_back(op);
+        }
+
+        auto addExtendedOp = [&scheme, &tableInfo, &extendedOps](const ui64 columnTag, const ui64& columnValue) {
+            const NScheme::TTypeInfo vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+            const char* ptr = static_cast<const char*>(static_cast<const void*>(&columnValue));
+            TRawTypeValue rawTypeValue(ptr, sizeof(ui64), vtype);
+            NIceDb::TUpdateOp extOp(columnTag, NTable::ECellOp::Set, rawTypeValue);
+            extendedOps.emplace_back(extOp);
+        };
+
+        if (specUpdates.ColIdTablet != Max<ui32>()) {
+            addExtendedOp(specUpdates.ColIdTablet, specUpdates.Tablet);
+        }
+
+        if (specUpdates.ColIdEpoch != Max<ui32>()) {
+            addExtendedOp(specUpdates.ColIdEpoch, specUpdates.Epoch);
+        }
+
+        if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
+            addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
+         }
+
+        UpdateRowInt(tableId, localTableId, key, extendedOps);
+    } else {
+        UpdateRowInt(tableId, localTableId, key, ops);
+    }
+
+    if (VolatileTxId) {
+        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, VolatileTxId, Db);
+    } else if (LockTxId) {
+        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, LockTxId, Db);
+    } else {
+        Self.GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells, Db);
+    }
+}
+
+void TDataShardUserDb::UpdateRowInt(
+    const TTableId& tableId,
+    ui64 localTableId,
+    const TArrayRef<const TRawTypeValue>& key,
+    const TArrayRef<const NIceDb::TUpdateOp>& ops)
+{
+    auto* collector = GetChangeCollector(tableId);
+    
     if (LockTxId == 0) {
         if (collector && !collector->OnUpdate(tableId, localTableId, NTable::ERowOp::Upsert, key, ops, WriteVersion))
             throw TNotReadyTabletException();
@@ -64,6 +135,14 @@ void TDataShardUserDb::UpdateRow(
 
         Db.UpdateTx(localTableId, NTable::ERowOp::Upsert, key, ops, LockTxId);
     }
+}
+
+TSmallVec<TCell> TDataShardUserDb::ConvertTableKeys(const TArrayRef<const TRawTypeValue>& key)
+{
+    TSmallVec<TCell> keyCells;
+    keyCells.reserve(key.size());
+    std::transform(key.begin(), key.end(), std::back_inserter(keyCells), [](const TRawTypeValue& x) { return TCell(&x); });
+    return keyCells;
 }
 
 void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion) {

@@ -203,4 +203,7 @@ NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const N
 void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
     const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes);
 
+void ConvertTableValues(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
+    const TArrayRef<const IEngineFlatHost::TUpdateCommand>& commands,  TSmallVec<NTable::TUpdateOp>& ops, ui64* valueBytes);
+
 }}

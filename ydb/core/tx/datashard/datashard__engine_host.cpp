@@ -202,7 +202,6 @@ public:
         : TEngineHost(db, counters, TEngineHostSettings(self->TabletID(), (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()), self->ByKeyFilterDisabled(), self->GetKeyAccessSampler()))
         , Self(self)
         , EngineBay(engineBay)
-        , DB(db)
         , UserDb(*self, db, TStepOrder(0, 0), TRowVersion::Min(), TRowVersion::Max(), now)
     {
     }
@@ -340,64 +339,21 @@ public:
             return;
         }
 
-        CheckWriteConflicts(tableId, row);
+        const NTable::TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTableId(tableId));
 
-        if (UserDb.GetLockTxId()) {
-            Self->SysLocksTable().SetWriteLock(tableId, row);
-        } else {
-            Self->SysLocksTable().BreakLocks(tableId, row);
-        }
-        Self->SetTableUpdateTime(tableId, UserDb.GetNow());
+        TSmallVec<TRawTypeValue> key;
+        ui64 keyBytes = 0;
+        ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
-        // apply special columns if declared
-        TUserTable::TSpecialUpdate specUpdates = Self->SpecialUpdates(DB, tableId);
-        if (specUpdates.HasUpdates) {
-            TStackVec<TUpdateCommand> extendedCmds;
-            extendedCmds.reserve(commands.size() + 3);
-            for (const TUpdateCommand& cmd : commands) {
-                if (cmd.Column == specUpdates.ColIdTablet)
-                    specUpdates.ColIdTablet = Max<ui32>();
-                else if (cmd.Column == specUpdates.ColIdEpoch)
-                    specUpdates.ColIdEpoch = Max<ui32>();
-                else if (cmd.Column == specUpdates.ColIdUpdateNo)
-                    specUpdates.ColIdUpdateNo = Max<ui32>();
+        ui64 valueBytes = 0;
+        TSmallVec<NTable::TUpdateOp> ops;
+        ConvertTableValues(Scheme, tableInfo, commands, ops, &valueBytes);
 
-                extendedCmds.push_back(cmd);
-            }
+        UserDb.UpdateRow(tableId, key, ops);
 
-            if (specUpdates.ColIdTablet != Max<ui32>()) {
-                extendedCmds.emplace_back(TUpdateCommand{
-                    specUpdates.ColIdTablet, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
-                    TCell::Make<ui64>(specUpdates.Tablet)
-                });
-            }
-
-            if (specUpdates.ColIdEpoch != Max<ui32>()) {
-                extendedCmds.emplace_back(TUpdateCommand{
-                    specUpdates.ColIdEpoch, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
-                    TCell::Make<ui64>(specUpdates.Epoch)
-                });
-            }
-
-            if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
-                extendedCmds.emplace_back(TUpdateCommand{
-                    specUpdates.ColIdUpdateNo, TKeyDesc::EColumnOperation::Set, EInplaceUpdateMode::Unknown,
-                    TCell::Make<ui64>(specUpdates.UpdateNo)
-                });
-            }
-
-            TEngineHost::UpdateRow(tableId, row, {extendedCmds.data(), extendedCmds.size()});
-        } else {
-            TEngineHost::UpdateRow(tableId, row, commands);
-        }
-
-        if (UserDb.GetVolatileTxId()) {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, UserDb.GetVolatileTxId(), Db);
-        } else if (UserDb.GetLockTxId()) {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, UserDb.GetLockTxId(), Db);
-        } else {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).RemoveUncommittedWrites(row, Db);
-        }
+        Settings.KeyAccessSampler->AddSample(tableId, row);
+        Counters.NUpdateRow++;
+        Counters.UpdateRowBytes += keyBytes + valueBytes;
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue>& key, const TArrayRef<const NIceDb::TUpdateOp>& ops) override {
@@ -510,7 +466,6 @@ private:
 
     TDataShard* Self;
     TEngineBay& EngineBay;
-    NTable::TDatabase& DB;
     mutable TDataShardUserDb UserDb;
 };
 

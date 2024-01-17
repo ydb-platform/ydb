@@ -78,6 +78,16 @@ public:
     bool IsValidKey(TKeyDesc& key) const;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const;
     bool IsPathErased(const TTableId& tableId) const;
+private:
+    static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue>& key);
+
+    void UpdateRowInt(
+        const TTableId& tableId,
+        ui64 localTableId,
+        const TArrayRef<const TRawTypeValue>& key,
+        const TArrayRef<const NIceDb::TUpdateOp>& ops
+    );
+
 public:    
     IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId);
 

@@ -36,6 +36,22 @@ void ConvertTableKeys(const TScheme& scheme, const TScheme::TTableInfo* tableInf
         *keyDataBytes = bytes;
 }
 
+void ConvertTableValues(const TScheme& scheme, const TScheme::TTableInfo* tableInfo,
+    const TArrayRef<const IEngineFlatHost::TUpdateCommand>& commands,  TSmallVec<NTable::TUpdateOp>& ops, ui64* valueBytes) 
+{
+    ui64 bytes = 0;
+    ops.reserve(commands.size());
+    for (size_t i = 0; i < commands.size(); i++) {
+        const IEngineFlatHost::TUpdateCommand& upd = commands[i];
+        Y_ABORT_UNLESS(upd.Operation == TKeyDesc::EColumnOperation::Set);
+        auto vtypeinfo = scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
+        ops.emplace_back(upd.Column, NTable::ECellOp::Set, upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
+        bytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
+    }
+    if (valueBytes)
+        *valueBytes = bytes;
+}
+
 TEngineHost::TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters, const TEngineHostSettings& settings)
     : Db(db)
     , Scheme(db.GetScheme())
@@ -822,14 +838,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 
     ui64 valueBytes = 0;
     TSmallVec<NTable::TUpdateOp> ops;
-    for (size_t i = 0; i < commands.size(); i++) {
-        const TUpdateCommand& upd = commands[i];
-        Y_ABORT_UNLESS(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
-        auto vtypeinfo = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
-        ops.emplace_back(upd.Column, NTable::ECellOp::Set,
-            upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtypeinfo));
-        valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
-    }
+    ConvertTableValues(Scheme, tableInfo, commands, ops, &valueBytes);
 
     auto* collector = GetChangeCollector(tableId);
 

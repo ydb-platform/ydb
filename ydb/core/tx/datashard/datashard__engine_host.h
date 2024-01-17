@@ -8,6 +8,7 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/tx/datashard/datashard_kqp_compute.h>
+#include "ydb/core/tx/datashard/operation.h"
 
 namespace NKikimr {
 
@@ -40,13 +41,7 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    struct TColumnWriteMeta {
-        NTable::TColumn Column;
-        ui32 MaxValueSizeBytes = 0;
-    };
-
-    TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
-               std::pair<ui64, ui64> stepTxId);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId);
 
     virtual ~TEngineBay();
 
@@ -57,26 +52,16 @@ public:
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
     EResult Validate() {
-        if (Info.Loaded)
+        if (TxInfo().Loaded)
             return EResult::Ok;
         Y_ABORT_UNLESS(Engine);
-        return Engine->Validate(Info);
+        return Engine->Validate(TxInfo());
     }
 
     EResult ReValidateKeys() {
-        Y_ABORT_UNLESS(Info.Loaded);
+        Y_ABORT_UNLESS(TxInfo().Loaded);
         Y_ABORT_UNLESS(Engine);
-        return Engine->ValidateKeys(Info);
-    }
-
-    void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
-        const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
-
-    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes,
-        const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
-
-    void MarkTxLoaded() {
-        Info.Loaded = true;
+        return Engine->ValidateKeys(TxInfo());
     }
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
@@ -96,10 +81,8 @@ public:
         EngineHost.Reset();
     }
 
-    ui64 GetStep() const { return StepTxId.first; }
-    ui64 GetTxId() const { return StepTxId.second; }
-
-    const TValidationInfo& TxInfo() const { return Info; }
+    TValidationInfo& TxInfo();
+    const TValidationInfo& TxInfo() const;
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
     void SetWriteVersion(TRowVersion writeVersion);
@@ -125,14 +108,10 @@ public:
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
 
 private:
-    std::pair<ui64, ui64> StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
     THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
     THolder<NMiniKQL::IEngineFlat> Engine;
-    TValidationInfo Info;
     TEngineHostCounters EngineHostCounters;
-    ui64 LockTxId;
-    ui32 LockNodeId;
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;

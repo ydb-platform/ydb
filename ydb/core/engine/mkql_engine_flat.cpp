@@ -12,6 +12,7 @@
 #include <ydb/library/yql/minikql/mkql_opt_literal.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
+#include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
 #include <util/string/printf.h>
@@ -2155,4 +2156,50 @@ void Out<NKikimr::NMiniKQL::IEngineFlat::EStatus>(IOutputStream& o, NKikimr::NMi
         case IEngineFlat::EStatus::Complete:  o << "Complete"; break;
         case IEngineFlat::EStatus::Aborted:   o << "Aborted"; break;
     }
+}
+
+void NKikimr::NMiniKQL::IEngineFlat::TValidationInfo::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry, ui64 itemsLimit, bool reverse)
+{
+    TVector<TKeyDesc::TColumnOp> columnOps;
+    columnOps.reserve(columns.size());
+    for (auto& column : columns) {
+        TKeyDesc::TColumnOp op;
+        op.Column = column.Id;
+        op.Operation = TKeyDesc::EColumnOperation::Read;
+        op.ExpectedType = column.PType;
+        columnOps.emplace_back(std::move(op));
+    }
+
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddReadRange: " << DebugPrintRange(keyTypes, range, typeRegistry) << " table: " << tableId);
+
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
+
+    Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
+    ++ReadsCount;
+    Loaded = true;
+}
+
+void NKikimr::NMiniKQL::IEngineFlat::TValidationInfo::AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, const NScheme::TTypeRegistry& typeRegistry, bool isPureEraseOp)
+{
+    TVector<TKeyDesc::TColumnOp> columnOps;
+    for (const auto& writeColumn : columns) {
+        TKeyDesc::TColumnOp op;
+        op.Column = writeColumn.Column.Id;
+        op.Operation = TKeyDesc::EColumnOperation::Set;
+        op.ExpectedType = writeColumn.Column.PType;
+        op.ImmediateUpdateSize = writeColumn.MaxValueSizeBytes;
+        columnOps.emplace_back(std::move(op));
+    }
+
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddWriteRange: " << DebugPrintRange(keyTypes, range, typeRegistry) << " table: " << tableId);
+
+    auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
+
+    Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true));
+    ++WritesCount;
+    if (!range.Point) {
+        ++DynKeysCount;
+    }
+    Loaded = true;
 }

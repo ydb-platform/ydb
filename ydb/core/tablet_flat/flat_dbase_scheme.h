@@ -5,6 +5,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/base/localdb.h>
+#include "ydb/core/scheme/scheme_tabledefs.h"
 #include <ydb/core/protos/scheme_log.pb.h>
 
 #include <util/generic/map.h>
@@ -151,6 +152,8 @@ public:
     bool IsEmpty() const {
         return Tables.empty();
     }
+
+    bool IsValidKey(ui64 localTableId, TKeyDesc& key) const;
 
     const TRoom* DefaultRoomFor(ui32 id) const noexcept
     {

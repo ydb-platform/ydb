@@ -21,7 +21,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    bool usesMvccSnapshot)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId.ToPair())
+    , EngineBay(self, txc, ctx, stepTxId)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , TxCacheUsage(0)
@@ -40,6 +40,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         ErrStr = "Failed to parse TxBody";
         return;
     }
+
+    auto& typeRegistry = *AppData()->TypeRegistry;
 
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
@@ -62,9 +64,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
             Y_ABORT_UNLESS(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
-            EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
-                                            tx.GetTableId().GetTableId()),
-                                   {}, range.ToTableRange(), info->KeyColumnTypes);
+            EngineBay.TxInfo().AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
+                tx.GetTableId().GetTableId()), {}, range.ToTableRange(), info->KeyColumnTypes, typeRegistry);
         } else {
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = "Trying to read from table that doesn't exist";
@@ -79,7 +80,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             return;
         }
 
-        auto& typeRegistry = *AppData()->TypeRegistry;
         auto& computeCtx = EngineBay.GetKqpComputeCtx();
 
         try {
@@ -156,8 +156,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
-            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay);
-            EngineBay.MarkTxLoaded();
+            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), typeRegistry, EngineBay);
+            EngineBay.TxInfo().SetLoaded();
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
 

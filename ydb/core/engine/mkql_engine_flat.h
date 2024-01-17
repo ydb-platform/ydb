@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/minikql_engine.pb.h>
+#include "ydb/core/tablet_flat/flat_table_column.h"
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -185,6 +186,21 @@ public:
             HasInReadsets = false;
             Loaded = false;
         }
+
+        void SetLoaded() {
+            Loaded = true;
+        }
+
+        struct TColumnWriteMeta {
+            NTable::TColumn Column;
+            ui32 MaxValueSizeBytes = 0;
+        };
+
+        void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns,
+            const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry, ui64 itemsLimit = 0, bool reverse = false);
+        void AddWriteRange(const TTableId& tableId, const TTableRange& range,
+            const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, const NScheme::TTypeRegistry& typeRegistry, bool isPureEraseOp);
+
     };
 
     //-- error reporting

@@ -3,6 +3,68 @@
 namespace NKikimr {
 namespace NTable {
 
+bool TScheme::IsValidKey(ui64 localTableId, TKeyDesc& key) const {
+    auto* tableInfo = GetTableInfo(localTableId);
+    Y_ABORT_UNLESS(tableInfo);
+    
+#define EH_VALIDATE(cond, err_status)                   \
+    do {                                                \
+        if (!(cond)) {                                  \
+            key.Status = TKeyDesc::EStatus::err_status; \
+            return false;                               \
+        }                                               \
+    } while (false) /**/
+
+    EH_VALIDATE(tableInfo, NotExists);  // Table does not exist
+    EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed);
+
+    // Specified keys types should be valid for any operation
+    for (size_t keyIdx = 0; keyIdx < key.KeyColumnTypes.size(); keyIdx++) {
+        ui32 keyCol = tableInfo->KeyColumns[keyIdx];
+        auto vtype = GetColumnInfo(tableInfo, keyCol)->PType;
+        EH_VALIDATE(key.KeyColumnTypes[keyIdx] == vtype, TypeCheckFailed);
+    }
+
+    if (key.RowOperation == TKeyDesc::ERowOperation::Read) {
+        if (key.Range.Point) {
+            EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);
+        } else {
+            EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed);
+        }
+
+        for (size_t i = 0; i < key.Columns.size(); i++) {
+            const TKeyDesc::TColumnOp& cop = key.Columns[i];
+            if (IsSystemColumn(cop.Column)) {
+                continue;
+            }
+            auto* cinfo = GetColumnInfo(tableInfo, cop.Column);
+            EH_VALIDATE(cinfo, TypeCheckFailed);  // Unknown column
+            auto vtype = cinfo->PType;
+            EH_VALIDATE(cop.ExpectedType == vtype, TypeCheckFailed);
+            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Read, OperationNotSupported);
+        }
+    } else if (key.RowOperation == TKeyDesc::ERowOperation::Update) {
+        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);  // Key must be full for updates
+        for (size_t i = 0; i < key.Columns.size(); i++) {
+            const TKeyDesc::TColumnOp& cop = key.Columns[i];
+            auto* cinfo = GetColumnInfo(tableInfo, cop.Column);
+            EH_VALIDATE(cinfo, TypeCheckFailed);  // Unknown column
+            auto vtype = cinfo->PType;
+            EH_VALIDATE(cop.ExpectedType.GetTypeId() == 0 || cop.ExpectedType == vtype, TypeCheckFailed);
+            EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Set, OperationNotSupported);  // TODO[serxa]: support inplace operations in IsValidKey
+        }
+    } else if (key.RowOperation == TKeyDesc::ERowOperation::Erase) {
+        EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);
+    } else {
+        EH_VALIDATE(false, OperationNotSupported);
+    }
+
+#undef EH_VALIDATE
+
+    key.Status = TKeyDesc::EStatus::Ok;
+    return true;
+}
+
 TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     TAlter delta;
 

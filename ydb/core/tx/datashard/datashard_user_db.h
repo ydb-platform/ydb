@@ -11,25 +11,25 @@ protected:
 
 public:
     virtual NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion = {}) = 0;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        NTable::TSelectStats& stats,
+        const TMaybe<TRowVersion>& readVersion = {}) = 0;
 
     virtual NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion = {}) = 0;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        const TMaybe<TRowVersion>& readVersion = {}) = 0;
 
     virtual void UpdateRow(
-            const TTableId& tableId,
-            NTable::TRawVals key,
-            TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
-
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue>& key,
+        const TArrayRef<const NIceDb::TUpdateOp>& ops
+    ) = 0;
 };
 
 class TDataShardUserDb final
@@ -37,81 +37,109 @@ class TDataShardUserDb final
     , public IDataShardChangeGroupProvider
 {
 public:
-    TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TRowVersion& readVersion, const TRowVersion& writeVersion)
-        : Self(self)
-        , Db(db)
-        , LockTxId(0)
-        , LockNodeId(0)
-        , ReadVersion(readVersion)
-        , WriteVersion(writeVersion)
-    {
-    }
+    TDataShardUserDb(
+        TDataShard& self,
+        NTable::TDatabase& db,
+        const TStepOrder& stepTxId,
+        const TRowVersion& readVersion,
+        const TRowVersion& writeVersion,
+        TInstant now
+    );
 
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion = {}) override;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        NTable::TSelectStats& stats,
+        const TMaybe<TRowVersion>& readVersion = {}) override;
 
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion = {}) override;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        const TMaybe<TRowVersion>& readVersion = {}) override;
 
     void UpdateRow(
-            const TTableId& tableId,
-            NTable::TRawVals key,
-            TArrayRef<const NIceDb::TUpdateOp> ops) override;
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue>& key,
+        const TArrayRef<const NIceDb::TUpdateOp>& ops) override;
 
-    void AddCommitTxId(ui64 txId, const TRowVersion& commitVersion);
-
-    absl::flat_hash_set<ui64>& GetVolatileReadDependencies() {
-        return VolatileReadDependencies;
-    }
-
-    const NMiniKQL::IEngineFlat::TValidationInfo& GetTxInfo() const;
-    void SetIsImmediateTx();
-    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
-    ui64 GetWriteTxId(const TTableId& tableId);
-    void SetVolatileTxId(ui64 txId);
-    void SetWriteVersion(TRowVersion writeVersion);
-    void SetReadVersion(TRowVersion readVersion);
-    void MarkTxLoaded();
-    
     std::optional<ui64> GetCurrentChangeGroup() const override;
     ui64 GetChangeGroup() override;
+
+    ui64 GetTableSchemaVersion(const TTableId& tableId) const;
+    void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
+    ui64 GetWriteTxId(const TTableId& tableId);
+
+    bool HasRemovedTx(ui32 table, ui64 txId) const;
+
+    bool IsValidKey(TKeyDesc& key) const;
+    bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const;
+    bool IsPathErased(const TTableId& tableId) const;
+public:    
     IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId);
 
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
-    
 
+    TVector<ui64> GetVolatileCommitTxIds() const;
+private:
+    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
+    YDB_READONLY_DEF(std::optional<ui64>, ChangeGroup);
+
+public:
+    void AddReadConflict(ui64 txId) const;
+    void CheckReadConflict(const TRowVersion& rowVersion) const;
+    void CheckReadDependency(ui64 txId);
+    bool NeedToReadBeforeWrite(const TTableId& tableId);
+    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells);
+    void AddWriteConflict(ui64 txId) const;
+    void BreakWriteConflict(ui64 txId);
+
+    NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId);
+    NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId);
 private:
     class TReadTxObserver;
-    NTable::ITransactionMapPtr& GetReadTxMap();
-    NTable::ITransactionObserverPtr& GetReadTxObserver();
-    void CheckReadDependency(ui64 txId);
+
+
+    absl::flat_hash_set<ui64> CommittedLockChanges;
+    absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
+    absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
+    YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileReadDependencies);
+    absl::flat_hash_set<ui64> VolatileCommitTxIds;
+    YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
+    YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
+
+public:
+    NMiniKQL::IEngineFlat::TValidationInfo& GetTxInfo();
+    const NMiniKQL::IEngineFlat::TValidationInfo& GetTxInfo() const;
+    ui64 GetStep() const;
+    ui64 GetTxId() const;
+    void SetWriteVersion(TRowVersion writeVersion);
+    TRowVersion GetWriteVersion() const;
+    void SetReadVersion(TRowVersion readVersion);
+    TRowVersion GetReadVersion() const;
 
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;
+
+    TDataShardChangeGroupProvider ChangeGroupProvider;
     NMiniKQL::IEngineFlat::TValidationInfo TxInfo;
-    ui64 LockTxId;
-    ui32 LockNodeId;
-    ui64 VolatileTxId = 0;
-    bool IsImmediateTx = false;
+    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
+    YDB_ACCESSOR_DEF(ui64, LockTxId);
+    YDB_ACCESSOR_DEF(ui32, LockNodeId);
+    YDB_ACCESSOR_DEF(ui64, VolatileTxId);
+    YDB_ACCESSOR_DEF(bool, IsImmediateTx);
+    YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
+
     TRowVersion ReadVersion;
     TRowVersion WriteVersion;
-    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
-    NTable::ITransactionMapPtr TxMap;
-    TIntrusivePtr<NTable::TDynamicTransactionMap> DynamicTxMap;
-    NTable::ITransactionObserverPtr TxObserver;
-    absl::flat_hash_set<ui64> VolatileReadDependencies;
-    std::optional<ui64> ChangeGroup = std::nullopt;
+
+    YDB_READONLY_DEF(TInstant, Now);
 };
 
 } // namespace NKikimr::NDataShard

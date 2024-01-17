@@ -7,10 +7,11 @@
 #include "datashard_failpoints.h"
 
 #include "key_conflicts.h"
-#include "range_ops.h"
+
 
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/actors/util/memory_track.h>
 
@@ -19,8 +20,7 @@ namespace NDataShard {
 
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
     : Ev(ev)
-    , UserDb(*self, txc.DB, readVersion, writeVersion)
-    , StepTxId(stepTxId)
+    , UserDb(*self, txc.DB, stepTxId, readVersion, writeVersion, TAppData::TimeProvider->Now())
     , ReceivedAt(receivedAt)
     , TxSize(0)
     , ErrCode(NKikimrTxDataShard::TError::OK)
@@ -29,17 +29,18 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
-    if (LockTxId())
-        UserDb.SetLockTxId(LockTxId(), LockNodeId());
+    if (LockTxId()) {
+        UserDb.SetLockTxId(LockTxId());
+        UserDb.SetLockNodeId(LockNodeId());
+    }
 
-    if (Immediate())
-        UserDb.SetIsImmediateTx();
+    UserDb.SetIsImmediateTx(Immediate());
 
     auto& typeRegistry = *AppData()->TypeRegistry;
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << StepTxId << " at " << self->TabletID() << ", record: " << GetRecord().ShortDebugString());
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << stepTxId << " at " << self->TabletID() << ", record: " << GetRecord().ShortDebugString());
 
     if (!ParseRecord(self->TableInfos))
         return;
@@ -47,8 +48,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     SetTxKeys(RecordOperation().GetColumnIds(), typeRegistry, self->TabletID(), ctx);
 
     // TODO Locks
-    //KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), UserDb);
-    UserDb.MarkTxLoaded();
+    //KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), typeRegistry, UserDb);
+    UserDb.GetTxInfo().SetLoaded();
 }
 
 TValidatedWriteTx::~TValidatedWriteTx() {
@@ -164,11 +165,11 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
     return true;
 }
 
-TVector<TEngineBay::TColumnWriteMeta> GetColumnWrites(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnTags) {
-    TVector<TEngineBay::TColumnWriteMeta> writeColumns;
+TVector<NMiniKQL::IEngineFlat::TValidationInfo::TColumnWriteMeta> GetColumnWrites(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnTags) {
+    TVector<NMiniKQL::IEngineFlat::TValidationInfo::TColumnWriteMeta> writeColumns;
     writeColumns.reserve(columnTags.size());
     for (ui32 columnTag : columnTags) {
-        TEngineBay::TColumnWriteMeta writeColumn;
+        NMiniKQL::IEngineFlat::TValidationInfo::TColumnWriteMeta writeColumn;
         writeColumn.Column = NTable::TColumn("", columnTag, {}, {});
 
         writeColumns.push_back(std::move(writeColumn));
@@ -187,48 +188,52 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << TableInfo->Path << ", shard: " << tabletId << ", "
                                                                 << "write point " << DebugPrintPoint(TableInfo->KeyColumnTypes, keyCells, typeRegistry));
         TTableRange tableRange(keyCells);
-        
-        // TODO Locks
-        Y_UNUSED(columnTags);
-        //UserDb.AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), false);
+        UserDb.GetTxInfo().AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), typeRegistry, false);
     }
 }
 
 ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 {
-    // TODO Locks
     Y_UNUSED(allowErrors);
-    return 0;
-    /*
-    using EResult = NMiniKQL::IEngineFlat::EResult;
-
-    EResult result = UserDb.Validate();
-    if (allowErrors) {
-        if (result != EResult::Ok) {
-            ErrStr = UserDb.GetEngine()->GetErrors();
-            ErrCode = ConvertErrCode(result);
-            return 0;
-        }
-    } else {
-        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", UserDb.GetEngine()->GetErrors().data());
-    }
+    Y_VERIFY(TxInfo().Loaded);
     return KeysCount();
-    */
 }
 
 bool TValidatedWriteTx::ReValidateKeys()
 {
-    // TODO Locks
-    /*
-    using EResult = NMiniKQL::IEngineFlat::EResult;
+    for (auto& validKey : TxInfo().Keys) {
+        TKeyDesc* key = validKey.Key.get();
 
-    auto [result, error] = UserDb.GetKqpComputeCtx().ValidateKeys(UserDb.GetTxInfo());
-    if (result != EResult::Ok) {
-        ErrStr = std::move(error);
-        ErrCode = ConvertErrCode(result);
-        return false;
+        bool valid = UserDb.IsValidKey(*key);
+
+        if (valid) {
+            auto curSchemaVersion = UserDb.GetTableSchemaVersion(key->TableId);
+            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
+                ErrStr = TStringBuilder()
+                         << "Schema version missmatch for table id: " << key->TableId
+                         << " mkql compiled on: " << key->TableId.SchemaVersion
+                         << " current version: " << curSchemaVersion;
+                ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SchemeChanged);
+                return false;
+            }
+        } else {
+            switch (key->Status) {
+                case TKeyDesc::EStatus::SnapshotNotExist:
+                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SnapshotNotExist);
+                    return false;
+                case TKeyDesc::EStatus::SnapshotNotReady:
+                    key->Status = TKeyDesc::EStatus::Ok;
+                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SnapshotNotReady);
+                    return false;
+                default:
+                    ErrStr = TStringBuilder()
+                             << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
+                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::KeyError);
+                    return false;
+            }
+        }
     }
-    */
+
     return true;
 }
 
@@ -428,7 +433,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(
 
     TVector<TSysTables::TLocksTable::TLock> locks;
     if (!IsImmediate() && !HasVolatilePrepareFlag()) {
-        NIceDb::TNiceDb db(txc.DB);ExtractKeys
+        NIceDb::TNiceDb db(txc.DB);
         bool ok = self->TransQueue.LoadTxDetails(db, GetTxId(), Target, Ev, locks, ArtifactFlags);
         if (!ok) {
             Ev.Reset();

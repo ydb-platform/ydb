@@ -92,6 +92,10 @@ public:
         UserDb.SetVolatileTxId(txId);
     }
 
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
+        UserDb.CommitChanges(tableId, lockId, writeVersion);
+    }
+
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
         return UserDb.GetCollectedChanges();
     }
@@ -140,7 +144,6 @@ private:
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 
-    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);

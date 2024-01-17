@@ -16,7 +16,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export_import/s3_import.md) command. Currently only available on Linux and Mac OS.
 
-* Added support for outputting the result of executing commands [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) in [parquet](https://parquet.apache.org/docs/) format.
+* Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 
 * In the `ydb table query explain` command, the `--collect-diagnostics` option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 

@@ -10,7 +10,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Added configuration management commands for the cluster `ydb admin config` and `ydb admin volatile-config`.
 
-* Added the `generic` type of requests in the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, with arbitrarily-sized results and with support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
+* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
 
 * Added support for loading postgres-types by command [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md). Only for row tables.
 

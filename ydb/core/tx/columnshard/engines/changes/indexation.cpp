@@ -73,6 +73,15 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         std::shared_ptr<arrow::RecordBatch> batch;
         {
             auto itBlobData = Blobs.find(blobRange);
+
+            if (itBlobData == Blobs.end()) {
+                bool skipLostBlobs = HasAppData() ? AppDataVerified().ColumnShardConfig.GetSkipLostBlobs() : false;
+                if (skipLostBlobs) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoConstructBlobs.SkipLostBlob")("blob_id", blobRange)("path_id", inserted.PathId);
+                    Blobs.erase(itBlobData);
+                    continue;
+                }
+            }
             Y_ABORT_UNLESS(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
             Y_ABORT_UNLESS(!itBlobData->second.empty(), "Blob data not present");
             // Prepare batch

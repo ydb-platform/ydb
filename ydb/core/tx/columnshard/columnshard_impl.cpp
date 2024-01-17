@@ -722,6 +722,15 @@ protected:
     }
     virtual bool DoOnError(const TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
+
+        const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
+        if (isInsert) {
+            bool skipLostBlobs = HasAppData() ? AppDataVerified().ColumnShardConfig.GetSkipLostBlobs() : false;
+            if (skipLostBlobs) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError.SkipLostBlob")("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
+                return true;
+            }
+        }
         AFL_VERIFY(false)("blob_id", range)("status", status.GetStatus());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));

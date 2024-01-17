@@ -1433,6 +1433,7 @@ message TColumnShardConfig {
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
     optional bool UseChunkedMergeOnCompaction = 9 [default = true];
+    optional bool SkipLostBlobs = 10 [default = false];
 }
 
 message TSchemeShardConfig {

@@ -5,5 +5,5 @@
 -- Simple UNION constructs
 SELECT 1 AS two UNION SELECT 2 ORDER BY 1;
 </sql-statement>
-NYql::TAggregateExpander::ExpandAggApply(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&) at /-S/ydb/library/yql/core/yql_aggregate_expander.cpp:119:51
+NYql::TAggregateExpander::ExpandAggApply(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&) at /-S/ydbwork/ydb/ydb/library/yql/core/yql_aggregate_expander.cpp:119:51
 ?? at ??:0:0

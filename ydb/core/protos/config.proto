@@ -1432,7 +1432,7 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
-    optional bool UseChunkedMergeOnCompaction = 9 [default = false];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
 }
 
 message TSchemeShardConfig {

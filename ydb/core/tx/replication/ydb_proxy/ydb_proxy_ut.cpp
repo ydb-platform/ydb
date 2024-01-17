@@ -109,23 +109,18 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         }
 
         template <typename TEvResponse>
-        auto Wait(bool rethrow = false) {
-            if (rethrow) {
-                return Server.GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(Sender);
-            } else {
-                return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
-            }
-        }
-
-        template <typename TEvResponse>
         auto Send(const TActorId& recipient, IEventBase* ev) {
             SendAsync(recipient, ev);
-            return Wait<TEvResponse>();
+            return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
         }
 
         template <typename TEvResponse>
         auto Send(IEventBase* ev) {
             return Send<TEvResponse>(YdbProxy, ev);
+        }
+
+        auto& GetRuntime() {
+            return *Server.GetRuntime();
         }
 
         const NYdb::TDriver& GetDriver() const {
@@ -138,6 +133,10 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         const TString& GetDatabase() const {
             return Database;
+        }
+
+        const TActorId& GetSender() const {
+            return Sender;
         }
 
     private:
@@ -742,43 +741,24 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         return result;
     }
 
-    template <typename TEvent>
-    TEvent ReadTopicAsync(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
-        const auto* event = std::get_if<TEvent>(&ev->Get()->Result);
-        UNIT_ASSERT_C(event, "Unexpected event: " << ev->Get()->Result.index());
-
-        return *event;
-    }
-
-    template <typename TEvent, typename Env>
-    TEvent ReadTopic(Env& env, const TActorId& reader) {
-        auto ev = env.template Send<TEvYdbProxy::TEvReadTopicResponse>(reader,
-            new TEvYdbProxy::TEvReadTopicRequest());
-        UNIT_ASSERT(ev);
-
-        return ReadTopicAsync<TEvent>(ev);
-    }
-
-    using TReadSessionEvent = NYdb::NTopic::TReadSessionEvent;
-
     template <typename Env>
-    TReadSessionEvent::TDataReceivedEvent ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
-        while (true) {
-            auto ev = env.template Send<TEvYdbProxy::TEvReadTopicResponse>(reader,
-                new TEvYdbProxy::TEvReadTopicRequest());
-            UNIT_ASSERT(ev);
+    TEvYdbProxy::TReadTopicResult ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
+        env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
 
-            switch (ev->Get()->Result.index()) {
-            case 0:
-                return ReadTopicAsync<TReadSessionEvent::TDataReceivedEvent>(ev);
-            case 5: // TPartitionSessionClosedEvent
-                env.SendAsync(reader, new TEvents::TEvPoison());
+        while (true) {
+            TAutoPtr<IEventHandle> handle;
+            auto result = env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvents::TEvGone>(handle);
+            if (handle->Recipient != env.GetSender()) {
+                continue;
+            }
+
+            if (auto* ev = std::get<TEvYdbProxy::TEvReadTopicResponse*>(result)) {
+                return ev->Result;
+            } else if (std::get<TEvents::TEvGone*>(result)) {
                 reader = CreateTopicReader(env, topicPath);
-                ReadTopic<TReadSessionEvent::TStartPartitionSessionEvent>(env, reader).Confirm();
-                break;
-            default:
-                UNIT_ASSERT_C(false, "Unexpected event: " << ev->Get()->Result.index());
-                break;
+                env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
+            } else {
+                UNIT_ASSERT("Unexpected event");
             }
         }
     }
@@ -803,15 +783,17 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
         {
-            ReadTopic<TReadSessionEvent::TStartPartitionSessionEvent>(env, reader).Confirm();
-
             auto data = ReadTopicData(env, reader, "/Root/topic");
-            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().at(0).GetData(), "message-1");
-            data.Commit();
+            UNIT_ASSERT_VALUES_EQUAL(data.Messages.size(), 1);
 
-            auto ack = ReadTopic<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(env, reader);
-            UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 1);
+            const auto& msg = data.Messages.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), "message-1");
+
+            auto ev = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(
+                new TEvYdbProxy::TEvCommitOffsetRequest("/Root/topic", 0, "consumer", msg.GetOffset() + 1, {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
 
         // wait next event
@@ -821,53 +803,30 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         // wait next event
         env.SendAsync(newReader, new TEvYdbProxy::TEvReadTopicRequest());
 
-        bool stopped = false;
-        bool closed = false;
-        bool started = false;
-        while (!stopped || !closed || !started) {
-            // wait response from any reader
-            TEvYdbProxy::TEvReadTopicResponse::TPtr ev;
-            try {
-                ev = env.Wait<TEvYdbProxy::TEvReadTopicResponse>(true);
-            } catch (yexception&) {
-                // bad luck, previous session was not closed, close it manually
-                env.SendAsync(reader, new TEvents::TEvPoison());
-                stopped = closed = true;
-                continue;
+        // wait event from previous session
+        try {
+            auto ev = env.GetRuntime().GrabEdgeEventRethrow<TEvents::TEvGone>(env.GetSender());
+            if (ev->Sender != reader) {
+                ythrow yexception();
             }
-
-            if (ev->Sender == reader) {
-                if (!stopped) {
-                    ReadTopicAsync<TReadSessionEvent::TStopPartitionSessionEvent>(ev).Confirm();
-                    env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
-                    stopped = true;
-                } else if (!closed) {
-                    ReadTopicAsync<TReadSessionEvent::TPartitionSessionClosedEvent>(ev);
-                    closed = true;
-                } else {
-                    UNIT_ASSERT_C(false, "Unexpected event from previous reader");
-                }
-            } else if (ev->Sender == newReader) {
-                if (!started) {
-                    ReadTopicAsync<TReadSessionEvent::TStartPartitionSessionEvent>(ev).Confirm();
-                    started = true;
-                } else {
-                    UNIT_ASSERT_C(false, "Unexpected event from new reader");
-                }
-            } else {
-                UNIT_ASSERT_C(false, "Unknown reader");
-            }
+        } catch (yexception&) {
+            // bad luck, previous session was not closed, close it manually
+            env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-2"));
         {
             auto data = ReadTopicData(env, newReader, "/Root/topic");
-            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().at(0).GetData(), "message-2");
-            data.Commit();
+            UNIT_ASSERT_VALUES_EQUAL(data.Messages.size(), 1);
 
-            auto ack = ReadTopic<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(env, newReader);
-            UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 2);
+            const auto& msg = data.Messages.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), "message-2");
+
+            auto ev = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(
+                new TEvYdbProxy::TEvCommitOffsetRequest("/Root/topic", 0, "consumer", msg.GetOffset() + 1, {}));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
     }
 

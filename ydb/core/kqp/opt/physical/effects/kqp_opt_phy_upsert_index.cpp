@@ -344,7 +344,8 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         .Done();
 }
 
-TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
+TMaybe<TCondenseInputResult> RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
+    const THashSet<TString>& checkDefaults,
     const TKikimrTableDescription& table, const TSecondaryIndexes& indexes,
     TPositionHandle pos, TExprContext& ctx)
 {
@@ -379,28 +380,37 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
         }
     }
 
-    if (missedKeyInput && hasUniqIndex) {
+    if (!hasUniqIndex) {
+        missedKeyInput.clear();
+    }
+
+    if (!missedKeyInput.empty() || !checkDefaults.empty()) {
         TVector<TExprBase> columns;
 
         TCoArgument inLambdaArg(ctx.NewArgument(pos, "in_lambda_arg"));
-        auto missedFromMain = TCoArgument(ctx.NewArgument(pos, "missed_from_main"));
+        auto lookupRowArgument = TCoArgument(ctx.NewArgument(pos, "lookup_row"));
 
-        TVector<TExprBase> resCol;
+        TVector<TExprBase> existingRow, nonExistingRow;
+        auto getterFromValue = [&ctx, &pos] (const TStringBuf& x, const TCoArgument& arg) -> TExprBase {
+            return Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(x)
+                .Value<TCoMember>()
+                    .Struct(arg)
+                    .Name().Build(x)
+                    .Build()
+                .Done();
+        };
 
         for (const auto& x : inputColumns) {
-            if (!missedKeyInput.contains(x)) {
-                resCol.emplace_back(
-                    Build<TCoNameValueTuple>(ctx, pos)
-                        .Name().Build(x)
-                        .Value<TCoMember>()
-                            .Struct(inLambdaArg)
-                            .Name().Build(x)
-                            .Build()
-                        .Done());
+            bool hasDefaultToCheck = checkDefaults.contains(x);
+            if (hasDefaultToCheck) {
+                existingRow.push_back(getterFromValue(x, lookupRowArgument));
+            } else {
+                existingRow.emplace_back(getterFromValue(x, inLambdaArg));
             }
-        }
 
-        TVector<TExprBase> resNullCol = resCol;
+            nonExistingRow.push_back(getterFromValue(x, inLambdaArg));
+        }
 
         for (const auto& x : missedKeyInput) {
             auto atom = Build<TCoAtom>(ctx, pos)
@@ -411,16 +421,8 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
             auto columnType = table.GetColumnType(TString(x));
             YQL_ENSURE(columnType);
 
-            resCol.emplace_back(
-                    Build<TCoNameValueTuple>(ctx, pos)
-                        .Name().Build(x)
-                        .Value<TCoMember>()
-                            .Struct(missedFromMain)
-                            .Name().Build(x)
-                            .Build()
-                        .Done());
-
-            resNullCol.emplace_back(
+            existingRow.emplace_back(getterFromValue(x, lookupRowArgument));
+            nonExistingRow.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
                     .Name().Build(x)
                     .Value<TCoNothing>()
@@ -436,8 +438,11 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
             columns.emplace_back(atom);
         }
 
-        auto inPrecompute = PrecomputeCondenseInputResult(*condenseResult, pos, ctx);
+        for(const auto& x: checkDefaults) {
+            columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
+        }
 
+        auto inPrecompute = PrecomputeCondenseInputResult(*condenseResult, pos, ctx);
         auto precomputeTableLookupDict = PrecomputeTableLookupDict(inPrecompute, table, columns, pos, ctx, true);
 
         TVector<TExprBase> keyLookupTuples;
@@ -475,13 +480,13 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
                                             .Build()
                                         .Build()
                                     .PresentHandler<TCoLambda>()
-                                        .Args({missedFromMain})
+                                        .Args({lookupRowArgument})
                                         .Body<TCoAsStruct>()
-                                            .Add(resCol)
+                                            .Add(existingRow)
                                             .Build()
                                         .Build()
                                     .MissingValue<TCoAsStruct>()
-                                        .Add(resNullCol)
+                                        .Add(nonExistingRow)
                                         .Build()
                                     .Build()
                                 .Build()
@@ -595,7 +600,7 @@ TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, c
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
-    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TKikimrTableDescription& table,
+    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table,
     const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx)
 {
     switch (mode) {
@@ -614,10 +619,15 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         inputColumnsSet.emplace(column.Value());
     }
 
+    THashSet<TString> columnsWithDefaultsSet;
+    for(const auto& column: columnsWithDefaults) {
+        columnsWithDefaultsSet.emplace(column.Value());
+    }
+
     auto filter =  (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
     const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
 
-    auto checkedInput = CheckUniqueConstraint(inputRows, inputColumnsSet, table, indexes, pos, ctx);
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
 
     if (!checkedInput) {
         return {};
@@ -901,7 +911,7 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, upsert.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
-        upsert.ReturningColumns(), table, upsert.Settings(), upsert.Pos(), ctx);
+        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), table, upsert.Settings(), upsert.Pos(), ctx);
 
     if (!effects) {
         return node;

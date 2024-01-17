@@ -1860,7 +1860,13 @@
             "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_pg-pg_types_orderby--Plan_/plan.txt"
         }
     ],
-    "test.test[pg-pg_types_orderby--Results]": [],
+    "test.test[pg-pg_types_orderby--Results]": [
+        {
+            "checksum": "1cd28382e5bb763d1a10fbef380b19f4",
+            "size": 918,
+            "uri": "https://{canondata_backend}/1925842/b9dbc79de0fb09dbc2b3e197272eb35de7410096/resource.tar.gz#test.test_pg-pg_types_orderby--Results_/results.txt"
+        }
+    ],
     "test.test[pg-select_having-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -2257,6 +2263,28 @@
         }
     ],
     "test.test[pg-unknown-default.txt-Results]": [],
+    "test.test[pg_catalog-pg_set_config_commit-default.txt-Analyze]": [
+        {
+            "checksum": "68060cb3253dfbfa478b2c0ff4ee0b52",
+            "size": 2171,
+            "uri": "https://{canondata_backend}/1880306/db71d33ed2525c218cc0dde3f5b7b9ce7f9aa317/resource.tar.gz#test.test_pg_catalog-pg_set_config_commit-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config_commit-default.txt-Debug]": [
+        {
+            "checksum": "33f854f63b0fc28ef95bb639aade1fe9",
+            "size": 876,
+            "uri": "https://{canondata_backend}/1880306/db71d33ed2525c218cc0dde3f5b7b9ce7f9aa317/resource.tar.gz#test.test_pg_catalog-pg_set_config_commit-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config_commit-default.txt-Plan]": [
+        {
+            "checksum": "68060cb3253dfbfa478b2c0ff4ee0b52",
+            "size": 2171,
+            "uri": "https://{canondata_backend}/1880306/db71d33ed2525c218cc0dde3f5b7b9ce7f9aa317/resource.tar.gz#test.test_pg_catalog-pg_set_config_commit-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config_commit-default.txt-Results]": [],
     "test.test[pragma-yson_auto_convert--Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

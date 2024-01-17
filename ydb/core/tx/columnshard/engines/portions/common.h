@@ -12,6 +12,10 @@ public:
         return ColumnId;
     }
 
+    ui32 GetChunkIdx() const {
+        return Chunk;
+    }
+
     TChunkAddress(const ui32 columnId, const ui16 chunk)
         : ColumnId(columnId)
         , Chunk(chunk) {

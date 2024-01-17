@@ -12,7 +12,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
 
-* Added support for loading postgres-types by command [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md). Only for row tables.
+* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md) command. Only for row-oriented tables.
 
 * Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export_import/s3_import.md) command. Currently only available on Linux and Mac OS.
 

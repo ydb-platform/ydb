@@ -56,24 +56,24 @@ public:
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
         FailOnError();
 
-        auto promise = NThreading::NewPromise<IDqComputeStorageActor::TKey>();
-
         ui64 size = blob.size();
 
         Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
-        WritingBlobs_.emplace(NextBlobId, std::make_pair(size, promise));
+        auto res = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>()));
         WritingBlobsSize_ += size;
 
         ++NextBlobId;
 
-        return promise.GetFuture();
+        return res.first->second.second.GetFuture();
     }
 
-    std::optional<NThreading::TFuture<TRope>> Get(ui64 blobId) override {
+    std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
         FailOnError();
 
         if (!SavedBlobs_.contains(blobId)) return std::nullopt;
+
+        auto promise = NThreading::NewPromise<TRope>();
 
         auto loadedIt = LoadedBlobs_.find(blobId);
         if (loadedIt != LoadedBlobs_.end()) {
@@ -85,7 +85,7 @@ public:
 
         auto result = LoadingBlobs_.emplace(blobId);
         if (result.second) {
-            Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+            Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
         }
 
         return false;
@@ -100,7 +100,7 @@ protected:
     void FailOnError() {
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            // TODO think about exception
+            Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -178,6 +178,7 @@ private:
 
     TSet<ui64> LoadingBlobs_;
     TMap<ui64, TBuffer> LoadedBlobs_;
+    TMap<IDqComputeStorageActor::TKey, std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>> WritingBlobs_;
 
     TMaybe<TString> Error_;
 

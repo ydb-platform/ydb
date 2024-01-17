@@ -73,11 +73,38 @@ public:
 
         if (!SavedBlobs_.contains(blobId)) return std::nullopt;
 
-        auto res = LoadingBlobs_.emplace(NextBlobId, NThreading::NewPromise<TRope>());
+        auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
 
         Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
         return res.first->second.GetFuture();
+    }
+
+    std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
+        FailOnError();
+
+        if (!SavedBlobs_.contains(blobId)) return std::nullopt;
+
+        auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
+
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        BlobsToRemoveAfterRead_.emplace(blobId);
+
+        return res.first->second.GetFuture();
+    }
+
+    NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
+        FailOnError();
+
+        auto promise = NThreading::NewPromise<void>();
+
+        promise.SetValue();
+
+
+        if (!SavedBlobs_.contains(blobId)) promise.GetFuture();
+
+        // TODO: actual delete
+        return promise.GetFuture();
     }
 
 protected:
@@ -148,9 +175,18 @@ private:
             return;
         }
 
+        if (BlobsToRemoveAfterRead_.contains(msg.BlobId)) {
+            StoredBlobsCount_--;
+            StoredBlobsSize_ -= msg.Blob.Size();
+            BlobsToRemoveAfterRead_.erase(msg.BlobId);
+            SavedBlobs_.erase(msg.BlobId);
+        }
+
         TRope res(std::move(msg.Blob.Data()));
 
         it->second.SetValue(std::move(res));
+
+        LoadingBlobs_.erase(it);
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
@@ -172,6 +208,7 @@ private:
     ui64 StoredBlobsSize_ = 0;
 
     TMap<IDqComputeStorageActor::TKey, NThreading::TPromise<TRope>> LoadingBlobs_;
+    TSet<IDqComputeStorageActor::TKey> BlobsToRemoveAfterRead_;
 
     TMaybe<TString> Error_;
 

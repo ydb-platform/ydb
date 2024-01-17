@@ -19,6 +19,10 @@ public:
     virtual NThreading::TFuture<TKey> Put(TRope&& blob) = 0;
 
     virtual std::optional<NThreading::TFuture<TRope>> Get(TKey key) = 0;
+
+    virtual std::optional<NThreading::TFuture<TRope>> Extract(TKey key) = 0;
+
+    virtual NThreading::TFuture<void> Delete(TKey key) = 0;
 };
 
 IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId);

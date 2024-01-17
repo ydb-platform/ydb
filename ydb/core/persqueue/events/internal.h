@@ -1018,6 +1018,12 @@ struct TEvPQ {
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
         struct TError {
+            enum ECode {
+                UnprocessedRequestsError,
+            };
+
+            ECode Code;
+            TString Message;
         };
 
         struct TSuccess {
@@ -1027,9 +1033,9 @@ struct TEvPQ {
             NPQ::THead Head;
         };
 
-        explicit TEvGetWriteInfoResponse(ui32 cookie) :
+        TEvGetWriteInfoResponse(ui32 cookie, TError::ECode code, TString message) :
             Cookie(cookie),
-            Result(TError{})
+            Result(TError{code, std::move(message)})
         {
         }
 
@@ -1045,6 +1051,10 @@ struct TEvPQ {
 
         bool IsSuccess() const {
             return Result.index() == 1;
+        }
+
+        const TError& GetError() const {
+            return get<0>(Result);
         }
 
         const TSuccess& GetSuccess() const {

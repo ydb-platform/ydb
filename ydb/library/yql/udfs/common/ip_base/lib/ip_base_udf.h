@@ -210,7 +210,7 @@ namespace {
         return res;
     }
 
-    TMaybe<TString> SerializeSubnet(const TIpAddressRange& range) {
+    TString SerializeSubnet(const TIpAddressRange& range) {
         TString res;
         if (range.Type() == TIpv6Address::Ipv4) {
             auto subnet4 = TRawIp4Subnet::FromIpRange(range);
@@ -218,8 +218,6 @@ namespace {
         } else if (range.Type() == TIpv6Address::Ipv6) {
             auto subnet6 = TRawIp6Subnet::FromIpRange(range);
             res = TString(reinterpret_cast<const char *>(&subnet6), sizeof subnet6);
-        } else {
-            return Nothing();
         }
         return res;
     }
@@ -237,7 +235,7 @@ namespace {
         TString str(strRef.Data(), strRef.Data() + strRef.Size());
         TIpAddressRange range = TIpAddressRange::FromCompactString(str);
         auto res = SerializeSubnet(range);
-        return res ? valueBuilder->NewString(res.GetRef()) : TUnboxedValue(TUnboxedValuePod());
+        return res ? valueBuilder->NewString(res) : TUnboxedValue(TUnboxedValuePod());
     }
 
     SIMPLE_UDF(TToString, char*(TAutoMapString)) {
@@ -251,6 +249,18 @@ namespace {
         result << '/';
         result << ToString(GetAddressRangePrefix(range));
         return valueBuilder->NewString(result);
+    }
+
+    SIMPLE_UDF(TSubnetMatch, bool(TAutoMapString, TAutoMapString)) {
+        Y_UNUSED(valueBuilder);
+        auto range1 = DeserializeSubnet(args[0].AsStringRef());
+        if (args[1].AsStringRef().Size() == sizeof(TRawIp4) || args[1].AsStringRef().Size() == sizeof(TRawIp6)) {
+            auto addr2 = DeserializeAddress(args[1].AsStringRef());
+            return TUnboxedValuePod(range1.Contains(addr2));
+        } else { // second argument is a whole subnet, not a single address
+            auto range2 = DeserializeSubnet(args[1].AsStringRef());
+            return TUnboxedValuePod(range1.Contains(range2));
+        }
     }
 
     SIMPLE_STRICT_UDF(TIsIPv4, bool(TOptionalString)) {
@@ -334,7 +344,6 @@ namespace {
     TIsIPv6, \
     TIsEmbeddedIPv4, \
     TConvertToIPv6, \
-    TGetSubnet
+    TGetSubnet, \
+    TSubnetMatch
 }
-
-

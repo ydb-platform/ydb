@@ -835,13 +835,15 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
     }
 
     auto lambda = Build<TCoLambda>(ctx, lmap.Lambda().Pos())
-        .Args({"stream"})
-        .template Body<TCoToStream>()
+        .Args({"arg"})
+        .template Body<TCoToFlow>()
             .template Input<TExprApplier>()
                 .Apply(lmap.Lambda())
-                .With(lmap.Lambda().Args().Arg(0), "stream")
+                .template With<TCoFromFlow>(0)
+                    .Input("arg")
                 .Build()
             .Build()
+        .Build()
         .Done();
 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
@@ -2253,13 +2255,10 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
     // Add LIMIT 1 via Take
     auto takeProgram = Build<TCoLambda>(ctx, node.Pos())
         .Args({"take_arg"})
-        // DqOutput expects stream as input, thus form stream with one element
-        .Body<TCoToStream>()
-            .Input<TCoTake>()
-                .Input({"take_arg"})
-                .Count<TCoUint64>()
-                    .Literal().Build("1")
-                    .Build()
+        .Body<TCoTake>()
+            .Input({"take_arg"})
+            .Count<TCoUint64>()
+                .Literal().Build("1")
                 .Build()
             .Build()
         .Done();

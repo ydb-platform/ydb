@@ -229,7 +229,7 @@ domains_config:
 
 {% list tabs %}
 
-- Block-4-2
+- `block-4-2`
 
    ```yaml
    domains_config:
@@ -252,7 +252,7 @@ domains_config:
        ssid: 1
 
 
-- Block-4-2 + Auth
+- `block-4-2` + Auth
 
    ```yaml
    domains_config:
@@ -277,7 +277,7 @@ domains_config:
        enforce_user_token_requirement: true
 
 
-- Mirror-3-dc
+- `mirror-3-dc`
 
    ```yaml
    domains_config:
@@ -300,7 +300,7 @@ domains_config:
        ssid: 1
    ```
 
-- Without fault tolerance
+- `none` (without fault tolerance)
 
    ```yaml
    domains_config:

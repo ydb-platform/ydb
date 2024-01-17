@@ -63,14 +63,17 @@ class Factory:
         )
 
         select_what = SelectWhat.asterisk(column_list=schema.columns)
+
+        test_case_name = f'select_with_schema_{select_what}'
+
         test_case = TestCase(
+            name=test_case_name,
             data_in=[[1, 2], [10, 20]],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             select_what=select_what,
             schema=schema,
             data_out_=[[1, 2], [10, 20]],
-            name=f'select_with_pg_schema_{EDataSourceKind.Name(EDataSourceKind.POSTGRESQL)}_{select_what}',
             pg_schema=pg_schema,
             pragmas=dict(),
         )

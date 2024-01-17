@@ -11,15 +11,14 @@ from ydb.library.yql.providers.generic.connector.tests.utils.settings import Gen
 
 @dataclass
 class BaseTestCase:
-    name: str
+    name_: str
     data_source_kind: EDataSourceKind.ValueType
     pragmas: Dict[str, str]
+    protocol: EProtocol
 
-    def __post_init__(self):
-        '''
-        Automatically assign suffix with data source kind to every test case.
-        '''
-        self.name = f'{self.name}_crab_{data_source_kind_alias(self.data_source_kind)}'
+    @property
+    def name(self) -> str:
+        return f'{self.name_}_{data_source_kind_alias(self.data_source_kind)}_{EProtocol.Name(self.protocol)}'
 
     @property
     def database(self) -> Database:

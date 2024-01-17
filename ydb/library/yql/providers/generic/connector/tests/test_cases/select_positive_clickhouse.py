@@ -117,7 +117,7 @@ class Factory:
         test_case_name = 'primitive_types'
 
         tc = TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
@@ -202,6 +202,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -235,13 +236,14 @@ class Factory:
         test_case_name_nullable = 'primitive_types_nullable'
 
         tc_nullable = TestCase(
-            name=test_case_name_nullable,
+            name_=test_case_name_nullable,
             schema=schema_nullable,
             select_what=SelectWhat.asterisk(schema_nullable.columns),
             select_where=None,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             data_in=data_in_nullable,
             data_out_=data_out_nullable,
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -269,7 +271,7 @@ class Factory:
         test_case_name = 'constant'
 
         tc = TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
@@ -296,6 +298,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.CLICKHOUSE,
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -319,7 +322,7 @@ class Factory:
         test_case_name = 'count'
 
         tc = TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
             select_where=None,
@@ -342,6 +345,7 @@ class Factory:
                     4,
                 ],
             ],
+            protocol=EProtocol.NATIVE,
             data_source_kind=EDataSourceKind.CLICKHOUSE,
             pragmas=dict(),
         )
@@ -388,13 +392,14 @@ class Factory:
 
         return [
             TestCase(
-                name=test_case_name,
+                name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
                 schema=schema,
             )
         ]
@@ -415,7 +420,6 @@ class Factory:
         for base_tc in base_test_cases:
             for protocol in protocols:
                 tc = replace(base_tc)
-                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
         return test_cases

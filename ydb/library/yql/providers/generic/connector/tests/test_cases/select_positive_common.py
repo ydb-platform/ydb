@@ -29,7 +29,6 @@ class TestCase(BaseTestCase):
     select_what: SelectWhat
     select_where: Optional[SelectWhere]
     data_out_: Optional[Sequence]
-    protocol: EProtocol = EProtocol.NATIVE
     check_output_schema: bool = False
 
     @property
@@ -191,11 +190,12 @@ class Factory:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
+                    protocol=EProtocol.NATIVE,
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
                     data_out_=data_out,
-                    name=test_case_name,
+                    name_=test_case_name,
                     pragmas=dict(),
                 )
 
@@ -243,8 +243,9 @@ class Factory:
         test_cases = []
         for data_source_kind in data_source_kinds:
             tc = TestCase(
-                name=test_case_name,
+                name_=test_case_name,
                 data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
                 data_in=data_in,
                 data_out_=data_in,
                 select_what=SelectWhat.asterisk(schema.columns),

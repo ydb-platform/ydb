@@ -12,6 +12,10 @@ using namespace NKikimr::NPQ;
 static constexpr bool SMEnabled = true;
 static constexpr bool SMDisabled = false;
 
+using namespace NKikimr;
+using namespace NActors;
+using namespace NKikimrPQ;
+
 void AddPartition(NKikimrSchemeOp::TPersQueueGroupDescription& conf,
                   ui32 id,
                   const std::optional<TString>&& boundaryFrom,
@@ -211,14 +215,42 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server, bool spliMer
     return ChoosePartition(server, config, sourceId, preferedPartition);
 }
 
-void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0) {
-    auto node = server.GetRuntime()->GetAnyNodeActorSystem();
-    node->Send(
-        NKikimr::NMetadata::NProvider::MakeServiceId(node->NodeId),
-        new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
-    );
+void InitTable(NPersQueue::TTestServer& server) {
+    class Initializer: public TActorBootstrapped<Initializer> {
+    public:
+        Initializer(NThreading::TPromise<void>& promise)
+            : Promise(promise) {}
 
-    Sleep(TDuration::Seconds(1));
+        void Bootstrap(const TActorContext& ctx) {
+            Become(&TThis::StateWork);
+            ctx.Send(
+                NKikimr::NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
+                new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant())
+            );
+        }
+
+    private:
+        void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext&) {
+            Promise.SetValue();
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
+            }
+        }
+
+    private:
+        NThreading::TPromise<void>& Promise;
+    };
+
+    NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
+    server.GetRuntime()->Register(new Initializer(promise));
+    promise.GetFuture().GetValueSync();
+}
+
+void WriteToTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 partitionId, ui64 seqNo = 0) {
+    InitTable(server);
 
     const auto& pqConfig = server.CleverServer->GetRuntime()->GetAppData().PQConfig;
     auto tableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
@@ -297,10 +329,6 @@ void AssertTable(NPersQueue::TTestServer& server, const TString& sourceId, ui32 
     UNIT_ASSERT_VALUES_EQUAL(*s.GetOptionalUint64().Get(), seqNo);
 }
 
-using namespace NKikimr;
-using namespace NActors;
-using namespace NKikimrPQ;
-
 class TPQTabletMock: public TActor<TPQTabletMock> {
 public:
     TPQTabletMock(ETopicPartitionStatus status, std::optional<ui64> seqNo)
@@ -353,6 +381,7 @@ NPersQueue::TTestServer CreateServer() {
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     server.EnableLogs({NKikimrServices::PQ_PARTITION_CHOOSER}, NActors::NLog::PRI_TRACE);
+
     return server;
 }
 

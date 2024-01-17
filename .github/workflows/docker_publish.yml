@@ -1,4 +1,4 @@
-name: Publish docker image
+name: Docker build
 
 on:
   schedule:

@@ -142,9 +142,9 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
         auto columnSaver = schema->GetColumnSaver(c.GetColumnId());
         auto stats = schema->GetColumnSerializationStats(c.GetColumnId());
         TSimpleSplitter splitter(columnSaver, Counters);
-        splitter.SetStats(stats);
-        std::vector<IPortionColumnChunk::TPtr> chunks;
-        for (auto&& i : splitter.Split(i, c.GetField(), Settings.GetMaxBlobSize())) {
+        if (stats) {
+            splitter.SetStats(*stats);
+        }
             chunks.emplace_back(std::make_shared<TSplittedColumnChunk>(c.GetColumnId(), i, Schema));
         }
         c.SetChunks(chunks);

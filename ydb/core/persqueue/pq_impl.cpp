@@ -3287,7 +3287,14 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
-    if (!CanProcessProposeTransactionQueue() && !CanProcessPlanStepQueue() && !CanProcessWriteTxs() && !CanProcessDeleteTxs() && !CanProcessGetOwnershipQueue()) {
+    bool canProcess =
+        CanProcessProposeTransactionQueue() ||
+        CanProcessPlanStepQueue() ||
+        CanProcessWriteTxs() ||
+        CanProcessDeleteTxs() ||
+        CanProcessGetOwnershipQueue()
+        ;
+    if (!canProcess) {
         return;
     }
 

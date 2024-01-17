@@ -38,10 +38,10 @@ public:
         EgressStats.Level = args.StatsLevel;
 
         BuildColumns();
+        PrepareBatchBuilder();
     }
 
     void Bootstrap() {
-        CA_LOG_D("Created Actor !!!!!!!!!!!!!!!!!");
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         ResolveShards();
         Become(&TKqpWriteActor::StateFunc);
@@ -51,10 +51,6 @@ public:
 
 private:
     virtual ~TKqpWriteActor() {
-        if (!PendingRows.empty() && Alloc) {
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            PendingRows.clear();
-        }
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -88,17 +84,19 @@ private:
     }
 
     void AddToInputQueue(NMiniKQL::TUnboxedValueBatch&& data) {
-        const auto guard = BindAllocator();
+        TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
-            PendingRows.emplace_back(Columns.size());
             for (size_t index = 0; index < Columns.size(); ++index) {
-                PendingRows.back()[index] = MakeCell(
+                cells[index] = MakeCell(
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ true);
-                MemoryUsed += PendingRows.back()[index].Size();
+                MemoryUsed += cells[index].Size();
             }
+            BatchBuilder.AddRow(
+                TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
+                TConstArrayRef<TCell>{cells.begin() + KeyColumns.size(), cells.end()});
         });
     }
 
@@ -160,7 +158,7 @@ private:
     }
 
     void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        //ProcessRows();
+        ProcessRows();
         CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
         CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
@@ -223,14 +221,11 @@ private:
     }
 
     void PassAway() override {
-        {
-            const auto guard = BindAllocator();
-            PendingRows.clear();
-        }
         TActorBootstrapped<TKqpWriteActor>::PassAway();
     }
 
     void BuildColumns() {
+        KeyColumns.reserve(Settings.KeyColumnsSize());
         i32 number = 0;
         for (const auto& column : Settings.GetKeyColumns()) {
             KeyColumns.emplace_back(
@@ -247,8 +242,11 @@ private:
             );
         }
 
+        ColumnIds.reserve(Settings.ColumnsSize());
+        Columns.reserve(Settings.ColumnsSize());
         number = 0;
         for (const auto& column : Settings.GetColumns()) {
+            ColumnIds.push_back(column.GetId());
             Columns.emplace_back(
                 column.GetName(),
                 column.GetId(),
@@ -264,56 +262,60 @@ private:
         }
     }
 
-    void ProcessRows() {
-        if (!Shards || PendingRows.empty()) {
-            return;
-        }
-
-        // TODO: move batching + limits
-        NArrow::TArrowBatchBuilder builder;
-        builder.Reserve(PendingRows.size());
+    void PrepareBatchBuilder() {
         std::vector<std::pair<TString, NScheme::TTypeInfo>> tmp;
         for (const auto& column : Columns) {
-            CA_LOG_D("Cols > " << column.Name << " - " << TypeName(column.PType));
             tmp.emplace_back(column.Name, column.PType);
         }
 
         TString err;
-        builder.Start(tmp, 0, 0, err);
+        BatchBuilder.Start(tmp, 0, 0, err);
+    }
 
-        for (const auto& row : PendingRows) {
-            CA_LOG_D("ROWS > " << row.size() << " " << KeyColumns.size() << " " << Columns.size());
-            builder.AddRow(
-                TConstArrayRef<TCell>{row.begin(), row.begin() + KeyColumns.size()},
-                TConstArrayRef<TCell>{row.begin() + KeyColumns.size(), row.end()});
+    void ProcessRows() {
+        SplitBatchByShards();
+        SendNewBatchesToShards();
+    }
+
+    void SplitBatchByShards() {
+        if (!Shards || BatchBuilder.Bytes() == 0) {
+            return;
         }
 
-        auto serializedData = builder.Finish();
+        InflightBatches[Shards->back().ShardId].emplace_back();
+        InflightBatches[Shards->back().ShardId].back().Data = std::move(BatchBuilder.Finish());
+    }
+
+    void SendNewBatchesToShards() {
+        if (InflightBatches.empty()) {
+            return;
+        }
+        if (InflightBatches.at(Shards->back().ShardId).front().SendAttempts == 0) {
+            SendRequestShard(Shards->back().ShardId);
+        }
+    }
+
+    void SendRequestShard(const ui64 shardId) {
+        auto& inflightBatch = InflightBatches.at(shardId).front();
+        ++inflightBatch.SendAttempts;
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             std::get<ui64>(TxId), NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-            .AddDataToPayload(std::move(serializedData));
+            .AddDataToPayload(TString(inflightBatch.Data));
 
-        std::vector<ui32> columnIds;
-        for (const auto& column : Columns) {
-            columnIds.push_back(column.Id);
-        }
-
-        // TODO: schema
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, Settings.GetTable().GetTableId(), 1/*Settings.GetTable().GetSchemaVersion()*/, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        evWrite->AddOperation(
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
+            Settings.GetTable().GetTableId(),
+            1/* // TODO: Settings.GetTable().GetSchemaVersion()*/,
+            ColumnIds,
+            payloadIndex,
+            NKikimrDataEvents::FORMAT_ARROW);
 
         Send(
             MakePipePeNodeCacheID(false),
-            new TEvPipeCache::TEvForward(evWrite.release(), Shards->back().ShardId, true),
+            new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
-        
-        CA_LOG_D("Send processed rows.");
-
-        {
-            const auto guard = BindAllocator();
-            PendingRows.clear();
-        }
     }
 
     TString LogPrefix;
@@ -330,19 +332,22 @@ private:
 
     TVector<TSysTables::TTableColumnInfo> KeyColumns;
     TVector<TSysTables::TTableColumnInfo> Columns;
+    std::vector<ui32> ColumnIds;
 
     const i64 MemoryLimit = 1024 * 1024 * 1024;
     i64 MemoryUsed = 0;
 
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Shards;
 
-    std::deque<TVector<TCell>> PendingRows;
-    //THashMap<Request, NKikimr::NMiniKQL::TUnboxedValueVector> InflightRows;
+    // TODO: move batching + limits
+    // TODO: notnull columns (like upload_rows_common_impl.h)
+    NArrow::TArrowBatchBuilder BatchBuilder;
 
-    //i64 ShardResolveAttempt;
-    //const i64 MaxShardResolveAttempts = 4;
-
-    //TVector<TKeyDesc::TPartitionInfo> Partitions;
+    struct TInflightBatch {
+        TString Data;
+        ui32 SendAttempts = 0;
+    };
+    THashMap<ui64, std::deque<TInflightBatch>> InflightBatches;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

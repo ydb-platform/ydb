@@ -295,10 +295,12 @@ public:
 
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
         Y_UNUSED(maxSnapshotTime);
-        if (TSysTables::IsSystemTable(key.TableId))
-            return DataShardSysTable(key.TableId).IsValidKey(key);
 
         return UserDb.IsValidKey(key);
+    }
+
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const override {
+        return UserDb.ValidateKeys();
     }
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -388,14 +390,10 @@ public:
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
-        if (TSysTables::IsSystemTable(tableId))
-            return DataShardSysTable(tableId).IsMyKey(row);
         return UserDb.IsMyKey(tableId, row);
     }
 
     bool IsPathErased(const TTableId& tableId) const override {
-        if (TSysTables::IsSystemTable(tableId))
-            return false;
         return UserDb.IsPathErased(tableId);
     }
 
@@ -404,8 +402,6 @@ public:
     }
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const override {
-        if (TSysTables::IsSystemTable(tableId))
-            return 0;
         return UserDb.GetTableSchemaVersion(tableId);
     }
 

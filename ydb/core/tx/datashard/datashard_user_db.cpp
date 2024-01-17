@@ -157,6 +157,9 @@ void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId, const T
 }
 
 ui64 TDataShardUserDb::GetTableSchemaVersion(const TTableId& tableId) const {
+    if (TSysTables::IsSystemTable(tableId))
+        return 0;
+
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected GetTableSchemaVersion for an unknown table");
 
@@ -227,6 +230,9 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
 }
 
 bool TDataShardUserDb::IsValidKey(TKeyDesc& key) const {
+    if (TSysTables::IsSystemTable(key.TableId))
+        return true;
+
     ui64 localTableId = Self.GetLocalTableId(key.TableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected IsValidKey for an unknown table");
 
@@ -249,8 +255,44 @@ bool TDataShardUserDb::IsValidKey(TKeyDesc& key) const {
     return Db.GetScheme().IsValidKey(localTableId, key);
 }
 
+std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TDataShardUserDb::ValidateKeys() const 
+{
+    for (auto& validKey : TxInfo.Keys) {
+        TKeyDesc* key = validKey.Key.get();
+
+        bool valid = IsValidKey(*key);
+
+        if (valid) {
+            auto curSchemaVersion = GetTableSchemaVersion(key->TableId);
+            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
+                auto error = TStringBuilder()
+                             << "Schema version mismatch for table id: " << key->TableId
+                             << " table schema version: " << key->TableId.SchemaVersion
+                             << " current schema version: " << curSchemaVersion;
+                return {NMiniKQL::IEngineFlat::EResult::SchemeChanged, std::move(error)};
+            }
+        } else {
+            switch (key->Status) {
+                case TKeyDesc::EStatus::SnapshotNotExist:
+                    return {NMiniKQL::IEngineFlat::EResult::SnapshotNotExist, ""};
+                case TKeyDesc::EStatus::SnapshotNotReady:
+                    key->Status = TKeyDesc::EStatus::Ok;
+                    return {NMiniKQL::IEngineFlat::EResult::SnapshotNotReady, ""};
+                default:
+                    auto error = TStringBuilder() << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
+                    return {NMiniKQL::IEngineFlat::EResult::KeyError, std::move(error)};
+            }
+        }
+    }
+
+    return {NMiniKQL::IEngineFlat::EResult::Ok, ""};
+}
+
 // Returns whether row belong this shard.
 bool TDataShardUserDb::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const {
+    if (TSysTables::IsSystemTable(tableId))
+        return Self.SysLocksTable().IsMyKey(row);
+
     ui64 localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected IsMyKey for an unknown table");
 
@@ -266,6 +308,9 @@ bool TDataShardUserDb::IsMyKey(const TTableId& tableId, const TArrayRef<const TC
     return (ComparePointAndRange(row, info.GetTableRange(), info.KeyColumnTypes, info.KeyColumnTypes) == 0);
 }
 bool TDataShardUserDb::IsPathErased(const TTableId& tableId) const {
+    if (TSysTables::IsSystemTable(tableId))
+        return false;
+
     ui64 localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected IsPathErased for an unknown table");
 

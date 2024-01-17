@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
 namespace NKikimr {
@@ -118,6 +119,8 @@ public:
     bool IsPathErased(const TTableId& tableId) const override;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;
+
+    virtual std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const = 0;
 
     void SetPeriodicCallback(TPeriodicCallback&& callback) override;
     void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} }

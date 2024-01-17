@@ -76,6 +76,7 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     bool IsValidKey(TKeyDesc& key) const;
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const;
     bool IsPathErased(const TTableId& tableId) const;
 private:

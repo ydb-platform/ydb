@@ -201,40 +201,14 @@ ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 
 bool TValidatedWriteTx::ReValidateKeys()
 {
-    for (auto& validKey : TxInfo().Keys) {
-        TKeyDesc* key = validKey.Key.get();
+    auto [errCode, errStr] = UserDb.ValidateKeys();
 
-        bool valid = UserDb.IsValidKey(*key);
+    if (errCode == NMiniKQL::IEngineFlat::EResult::Ok)
+        return true;
 
-        if (valid) {
-            auto curSchemaVersion = UserDb.GetTableSchemaVersion(key->TableId);
-            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
-                ErrStr = TStringBuilder()
-                         << "Schema version missmatch for table id: " << key->TableId
-                         << " mkql compiled on: " << key->TableId.SchemaVersion
-                         << " current version: " << curSchemaVersion;
-                ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SchemeChanged);
-                return false;
-            }
-        } else {
-            switch (key->Status) {
-                case TKeyDesc::EStatus::SnapshotNotExist:
-                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SnapshotNotExist);
-                    return false;
-                case TKeyDesc::EStatus::SnapshotNotReady:
-                    key->Status = TKeyDesc::EStatus::Ok;
-                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::SnapshotNotReady);
-                    return false;
-                default:
-                    ErrStr = TStringBuilder()
-                             << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
-                    ErrCode = ConvertErrCode(NMiniKQL::IEngineFlat::EResult::KeyError);
-                    return false;
-            }
-        }
-    }
-
-    return true;
+    ErrCode = ConvertErrCode(errCode);
+    ErrStr = errStr;
+    return false;
 }
 
 bool TValidatedWriteTx::CanCancel() {

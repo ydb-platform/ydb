@@ -1043,7 +1043,7 @@ public:
         }
 
         if (Y_LIKELY(result == EResult::Ok)) {
-            validationInfo.Loaded = true;
+            validationInfo.SetLoaded();
         }
 
         IsProgramValidated = true;
@@ -2176,7 +2176,7 @@ void NKikimr::NMiniKQL::IEngineFlat::TValidationInfo::AddReadRange(const TTableI
 
     Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
     ++ReadsCount;
-    Loaded = true;
+    SetLoaded();
 }
 
 void NKikimr::NMiniKQL::IEngineFlat::TValidationInfo::AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, const NScheme::TTypeRegistry& typeRegistry, bool isPureEraseOp)
@@ -2201,5 +2201,5 @@ void NKikimr::NMiniKQL::IEngineFlat::TValidationInfo::AddWriteRange(const TTable
     if (!range.Point) {
         ++DynKeysCount;
     }
-    Loaded = true;
+    SetLoaded();
 }

@@ -281,40 +281,9 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
     return ret;
 }
 
-std::pair<IEngineFlat::EResult, TString> TKqpDatashardComputeContext::ValidateKeys(
-    const IEngineFlat::TValidationInfo& validationInfo)
+std::tuple<IEngineFlat::EResult, TString> TKqpDatashardComputeContext::ValidateKeys()
 {
-    std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
-    for (auto& validKey : validationInfo.Keys) {
-        TKeyDesc * key = validKey.Key.get();
-
-        bool valid = EngineHost.IsValidKey(*key, maxSnapshotTime);
-
-        if (valid) {
-            auto curSchemaVersion = EngineHost.GetTableSchemaVersion(key->TableId);
-            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
-                auto error = TStringBuilder()
-                    << "Schema version missmatch for table id: " << key->TableId
-                    << " mkql compiled on: " << key->TableId.SchemaVersion
-                    << " current version: " << curSchemaVersion;
-                return {IEngineFlat::EResult::SchemeChanged, std::move(error)};
-            }
-        } else {
-            switch (key->Status) {
-                case TKeyDesc::EStatus::SnapshotNotExist:
-                    return {IEngineFlat::EResult::SnapshotNotExist, ""};
-                case TKeyDesc::EStatus::SnapshotNotReady:
-                    key->Status = TKeyDesc::EStatus::Ok;
-                    return {IEngineFlat::EResult::SnapshotNotReady, ""};
-                default:
-                    auto error = TStringBuilder()
-                        << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
-                    return {IEngineFlat::EResult::KeyError, std::move(error)};
-            }
-        }
-    }
-
-    return {IEngineFlat::EResult::Ok, ""};
+    return EngineHost.ValidateKeys();
 }
 
 static void BuildRowImpl(const TDbTupleRef& dbTuple, const THolderFactory& holderFactory,

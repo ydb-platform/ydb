@@ -158,17 +158,14 @@ public:
     TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); }
 
     ui64 GetMemoryAllocated() const {
-        if (!IsKqpDataTx()) {
-            const NMiniKQL::IEngineFlat * engine = EngineBay.GetEngine();
-            if (engine) {
-                return EngineBay.GetEngine()->GetMemoryAllocated();
-            }
-        }
+        if (!IsKqpDataTx() && GetEngine())
+            return GetEngine()->GetMemoryAllocated();
 
         return 0;
     }
 
     NMiniKQL::IEngineFlat *GetEngine() { return EngineBay.GetEngine(); }
+    const NMiniKQL::IEngineFlat *GetEngine() const { return EngineBay.GetEngine(); }
     void DestroyEngine() { EngineBay.DestroyEngine(); }
     const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
     void ResetCounters() { EngineBay.ResetCounters(); }

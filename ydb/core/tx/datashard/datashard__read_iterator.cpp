@@ -1498,7 +1498,7 @@ public:
             PrepareValidationInfo(ctx, state);
         } else {
             // There should be no keys when reading sysm tables
-            ValidationInfo.Loaded = true;
+            ValidationInfo.SetLoaded();
         }
     }
 
@@ -1797,7 +1797,7 @@ private:
             }
         }
 
-        ValidationInfo.Loaded = true;
+        ValidationInfo.SetLoaded();
     }
 
     void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {

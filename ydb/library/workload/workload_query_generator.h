@@ -60,6 +60,12 @@ using TBulkDataGeneratorList = std::list<std::shared_ptr<IBulkDataGenerator>>;
 
 class IWorkloadQueryGenerator {
 public:
+    struct TWorkloadType {
+        int Type = 0;
+        TString CommandName;
+        TString Description;
+    };
+public:
     virtual ~IWorkloadQueryGenerator() = default;
     virtual std::string GetDDLQueries() const = 0;
     virtual TQueryInfoList GetInitialData() = 0;
@@ -68,7 +74,7 @@ public:
     }
     virtual TVector<std::string> GetCleanPaths() const = 0;
     virtual TQueryInfoList GetWorkload(int type) = 0;
-    virtual TVector<std::string> GetSupportedWorkloadTypes() const = 0;
+    virtual TVector<TWorkloadType> GetSupportedWorkloadTypes() const = 0;
     std::string GetCleanDDLQueries() const {
         std::string cleanQuery;
         for (const auto& table : GetCleanPaths()) {
@@ -86,9 +92,10 @@ public:
         Clean  /* "clean" */
     };
     virtual ~TWorkloadParams() = default;
-    virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/) {
+    virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
     virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
+    virtual TString GetWorkloadName() const = 0;
 
 public:
     std::string DbPath;

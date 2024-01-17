@@ -133,12 +133,13 @@ TQueryInfoList TStockWorkloadGenerator::GetWorkload(int type) {
 }
 
 
-TVector<std::string> TStockWorkloadGenerator::GetSupportedWorkloadTypes() const {
-    auto names = GetEnumNames<EType>();
-    TVector<std::string> result;
-    for (const auto& [value, name]: names) {
-        result.emplace_back(name.c_str());
-    }
+TVector<IWorkloadQueryGenerator::TWorkloadType> TStockWorkloadGenerator::GetSupportedWorkloadTypes() const {
+    TVector<TWorkloadType> result;
+    result.emplace_back(static_cast<int>(EType::InsertRandomOrder), "add-rand-order", "Inserts orders with random ID without their processing");
+    result.emplace_back(static_cast<int>(EType::SubmitRandomOrder), "put-rand-order", "Submit random orders with processing");
+    result.emplace_back(static_cast<int>(EType::SubmitSameOrder), "put-same-order", "Submit orders with same products with processing");
+    result.emplace_back(static_cast<int>(EType::GetRandomCustomerHistory), "rand-user-hist", "Selects orders of random customer");
+    result.emplace_back(static_cast<int>(EType::GetCustomerHistory), "user-hist", "Selects orders of 10000th customer");
     return result;
 }
 
@@ -305,7 +306,7 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
     return res;
 }
 
-void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType) {
+void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
@@ -323,8 +324,19 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             .DefaultValue(false).StoreTrue(&EnableCdc).Hidden();
         break;
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption('p', "products", "Products count to use in workload.")
-            .DefaultValue(100).StoreResult(&ProductCount);
+        switch (static_cast<TStockWorkloadGenerator::EType>(workloadType)) {
+        case TStockWorkloadGenerator::EType::InsertRandomOrder:
+        case TStockWorkloadGenerator::EType::SubmitRandomOrder:
+        case TStockWorkloadGenerator::EType::SubmitSameOrder:
+            opts.AddLongOption('p', "products", "Products count to use in workload.")
+                .DefaultValue(100).StoreResult(&ProductCount);
+            break;
+        case TStockWorkloadGenerator::EType::GetRandomCustomerHistory:
+        case TStockWorkloadGenerator::EType::GetCustomerHistory:
+            opts.AddLongOption('l', "limit", "Number of last orders to select.")
+                .DefaultValue(10).StoreResult(&Limit);
+            break;
+        }
         break;
     case TWorkloadParams::ECommandType::Clean:
         break;
@@ -333,6 +345,10 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
 
 THolder<IWorkloadQueryGenerator> TStockWorkloadParams::CreateGenerator() const {
     return MakeHolder<TStockWorkloadGenerator>(this);
+}
+
+TString TStockWorkloadParams::GetWorkloadName() const {
+    return "stock";
 }
 
 }

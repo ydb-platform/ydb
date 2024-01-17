@@ -1,7 +1,7 @@
 function(ensure_antlr)
     if(NOT ANTLR3_EXECUTABLE)
         find_program(ANTLR3_EXECUTABLE
-                     NAMES antlr3)
+                     NAMES antlr4)
         if (NOT ANTLR3_EXECUTABLE)
             message(FATAL_ERROR "Unable to find antlr3 program. Please install antlr3 and make sure executable file present in the $PATH env.")
         endif()

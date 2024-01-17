@@ -59,34 +59,7 @@ struct TPartitionInfo {
     TTabletCountersBase Baseline;
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
-    struct TCommandParams {
-        TCommandParams(ui64 cookie,
-                       const NKikimrClient::TPersQueuePartitionRequest& request,
-                       const TActorId& sender) :
-            Cookie(cookie),
-            Request(request),
-            Sender(sender)
-        {
-        }
-        TCommandParams(const TCommandParams& rhs) :
-            Cookie(rhs.Cookie),
-            Request(rhs.Request),
-            Sender(rhs.Sender)
-        {
-        }
-        TCommandParams(TCommandParams&& rhs) noexcept :
-            Cookie(rhs.Cookie),
-            Request(std::move(rhs.Request)),
-            Sender(std::move(rhs.Sender))
-        {
-        }
-
-        ui64 Cookie;
-        NKikimrClient::TPersQueuePartitionRequest Request;
-        TActorId Sender;
-    };
-
-    TDeque<TCommandParams> GetOwnershipRequests;
+    TDeque<TCmdGetOwnershipRequestParams> GetOwnershipRequests;
 };
 
 struct TChangeNotification {

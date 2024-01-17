@@ -236,11 +236,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
         {2, 22}, {2, 27}};
 
     Y_UNIT_TEST(Test1) {
-        TestWithSaveLoadImpl(input1, expected, true, false);
-    }
-
-    Y_UNIT_TEST(Test2) {
-        TestWithSaveLoadImpl(input1, expected, false, false);
+        TestWithSaveLoadImpl(input1, expected, false);
     }
 }
 

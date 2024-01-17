@@ -13,13 +13,58 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <util/generic/singleton.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
+
+namespace {
+    struct TWriteActorBackoffSettings {
+        TDuration StartRetryDelay = TDuration::MilliSeconds(100);
+        TDuration MaxRetryDelay = TDuration::Seconds(5);
+        double UnsertaintyRatio = 0.5;
+        double Multiplier = 2.0;
+
+        ui64 MaxWriteAttempts = 16;
+    };
+
+    const TWriteActorBackoffSettings* BackoffSettings() {
+        return Singleton<TWriteActorBackoffSettings>();
+    }
+
+    TDuration CalculateNextAttemptDelay(ui64 attempt) {
+        auto delay = BackoffSettings()->StartRetryDelay;
+        for (ui64 index = 0; index < attempt; ++index) {
+            delay *= BackoffSettings()->Multiplier;
+        }
+
+        delay *= 1 + BackoffSettings()->UnsertaintyRatio * (1 - 2 * RandomNumber<double>());
+        delay = Min(delay, BackoffSettings()->MaxRetryDelay);
+
+        return delay;
+    }
+}
 
 namespace NKikimr {
 namespace NKqp {
 
 class TKqpWriteActor : public TActorBootstrapped<TKqpWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
     using TBase = TActorBootstrapped<TKqpWriteActor>;
+
+    struct TEvPrivate {
+        enum EEv {
+            EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        };
+
+        struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
+            ui64 ShardId;
+            ui64 TxId;
+
+            TEvShardRequestTimeout(ui64 shardId, ui64 txId)
+                : ShardId(shardId)
+                , TxId(txId) {
+            }
+        };
+    };
+
 public:
     TKqpWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
@@ -111,9 +156,9 @@ private:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolve);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNewTxId);
-                //hFunc(TEvRetryShard, HandleRetry);
-                //IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-                //IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                hFunc(TEvPrivate::TEvShardRequestTimeout, HandleTimeout);
+                IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -136,14 +181,17 @@ private:
         Y_ABORT_UNLESS(ev->Get()->Request.Get());
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
-                << TableId, NYql::NDqProto::StatusIds::SCHEME_ERROR);
+                << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
-        CA_LOG_D("Resolved TableId=" << TableId);
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
+
+        YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
         // TODO: do we need to check usertoken here?
+
+        CA_LOG_D("Resolved TableId=" << TableId << " " << SchemeEntry->ToString());
 
         ProcessRows();
     }
@@ -180,10 +228,12 @@ private:
             transaction.SetMaxStep(ev->Get()->Record.GetMaxStep());
 
             Send(
-                MakePipePeNodeCacheID(false),
-                new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true));
+                PipeCacheId,
+                new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
+                IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            // duplicate completed for duplicate writes
+            // TODO: duplicate completed for duplicate writes
+            // Can loose data here
             InflightBatches.at(ev->Get()->Record.GetOrigin()).pop_front();
         }
 
@@ -191,10 +241,9 @@ private:
     }
 
     void NotifyCAResume() {
-        Callbacks->ResumeExecution();
-    }
-
-    void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        if (GetFreeSpace() > 0) {
+            Callbacks->ResumeExecution();
+        }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -205,10 +254,6 @@ private:
 
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
-
-        //if (ReadActorSpan) {
-        //    ReadActorSpan.EndError(issues.ToOneLineString());
-        //}
 
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
@@ -285,7 +330,7 @@ private:
     }
 
     NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
-            const std::shared_ptr<arrow::RecordBatch>& batch) {
+            const std::shared_ptr<arrow::RecordBatch>& batch) const {
         struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
             std::shared_ptr<arrow::RecordBatch> Batch;
 
@@ -346,9 +391,8 @@ private:
         }
     }
 
-    bool IsInflightBatchesEmpty() {
+    bool IsInflightBatchesEmpty() const {
         for (const auto& [shardId, batches] : InflightBatches) {
-            CA_LOG_D("CHECK ::::: > " << shardId << " " << batches.size());
             if (!batches.empty()) {
                 return false;
             }
@@ -358,7 +402,12 @@ private:
 
     void SendRequestShard(const ui64 shardId) {
         auto& inflightBatch = InflightBatches.at(shardId).front();
-        ++inflightBatch.SendAttempts;
+
+        if (inflightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+            RuntimeError(
+                TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "' retry limit exceeded",
+                NYql::NDqProto::StatusIds::UNAVAILABLE);
+        }
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
             inflightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
@@ -375,9 +424,37 @@ private:
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << " TxId=" << inflightBatch.TxId << " data size = " << inflightBatch.Data.size());
         Send(
-            MakePipePeNodeCacheID(false),
+            PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
+
+        TlsActivationContext->Schedule(
+            CalculateNextAttemptDelay(inflightBatch.SendAttempts),
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inflightBatch.TxId)));
+
+        ++inflightBatch.SendAttempts;
+    }
+
+    void HandleTimeout(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
+        if (!InflightBatches.contains(ev->Get()->ShardId)) {
+            return;
+        }
+        if (InflightBatches.at(ev->Get()->ShardId).empty()) {
+            return;
+        }
+        if (InflightBatches.at(ev->Get()->ShardId).front().TxId != ev->Get()->TxId) {
+            return;
+        }
+
+        SendRequestShard(ev->Get()->ShardId);
+    }
+
+    void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        if (!InflightBatches.contains(ev->Get()->TabletId)) {
+            return;
+        }
+        SendRequestShard(ev->Get()->TabletId);
     }
 
     void HandleNewTxId(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
@@ -398,6 +475,7 @@ private:
         return result;
     }
 
+    NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
@@ -420,7 +498,6 @@ private:
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
-    // TODO: move batching + limits???
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
     struct TInflightBatch {

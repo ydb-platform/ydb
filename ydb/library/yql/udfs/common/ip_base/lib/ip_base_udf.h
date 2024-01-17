@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
+#include <library/cpp/ipv6_address/ipv6_address.h>
 #include <library/cpp/ipmath/ipmath.h>
 #include <util/generic/buffer.h>
 

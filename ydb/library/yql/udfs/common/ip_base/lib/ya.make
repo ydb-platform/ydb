@@ -13,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/library/yql/public/udf
     library/cpp/ipmath
+    library/cpp/ipv6_address
 )
 
 END()

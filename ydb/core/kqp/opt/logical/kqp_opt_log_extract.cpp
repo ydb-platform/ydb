@@ -214,6 +214,17 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
             .Done();
     }
 
+    if (auto maybeStreamLookup = lookup.Maybe<TKqlStreamLookupTable>()) {
+        auto streamLookup = maybeStreamLookup.Cast();
+
+        return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
+            .Table(streamLookup.Table())
+            .LookupKeys(streamLookup.LookupKeys())
+            .Columns(usedColumns.Cast())
+            .LookupStrategy(streamLookup.LookupStrategy())
+            .Done();
+    }
+
     return Build<TKqlLookupTableBase>(ctx, lookup.Pos())
         .CallableName(lookup.CallableName())
         .Table(lookup.Table())

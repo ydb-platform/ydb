@@ -152,6 +152,51 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             UNIT_ASSERT_VALUES_EQUAL(t + inserted_rows, description.GetTableRows());
         }
     }
+
+    Y_UNIT_TEST(DescibeTableStore) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
+
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+
+        TTestHelper testHelper(runnerSettings);
+
+        TTestHelper::TColumnTableStore testTableStore;
+
+        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTableStore);
+
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        for (size_t t = 0; t < 2; t++) {
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t))
+                .SetPrimaryKey({"id"})
+                .SetSharding({"id"})
+                .SetSchema(schema);
+            testHelper.CreateTable(testTable);
+
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            for (size_t i = 0; i < inserted_rows; i++) {
+                tableInserter.AddRow()
+                    .Add(i + t * tables_in_store)
+                    .Add("test_res_" + std::to_string(i + t * tables_in_store))
+                    .AddNull();
+            }
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        Sleep(TDuration::Seconds(10));
+
+        auto settings = TDescribeTableSettings().WithTableStatistics(true);
+
+        auto describeStoreResult =
+            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/", settings).GetValueSync();
+        UNIT_ASSERT_C(describeStoreResult.IsSuccess(), describeStoreResult.GetIssues().ToString());
+        const auto& storeDescription = describeStoreResult.GetTableDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(2000, storeDescription.GetTableRows());
+    }
 }
 
 }   // namespace NKqp

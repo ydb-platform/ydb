@@ -26,6 +26,7 @@ items:
 - { name: Integrations,                                    include: { mode: link, path: integrations/toc_p.yaml } }
 - { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
+- { name: Working with the Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
 - { name: Development,                                     include: { mode: link, path: development/toc_p.yaml } }
 # Footer
 - { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }

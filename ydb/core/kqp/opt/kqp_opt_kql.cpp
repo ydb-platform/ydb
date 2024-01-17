@@ -313,11 +313,16 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, write.Pos(), ctx);
+    auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
+    YQL_ENSURE(generateColumnsIfInsertNode);
+    TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
+
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
         .Input(input.Ptr())
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
+        .GenerateColumnsIfInsert(generateColumnsIfInsert)
         .Done();
 
     return effect;
@@ -348,6 +353,7 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
         .Input(input.Ptr())
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
+        .GenerateColumnsIfInsert<TCoAtomList>().Build()
         .Done();
 
     return effect;

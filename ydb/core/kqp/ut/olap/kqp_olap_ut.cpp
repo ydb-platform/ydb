@@ -1590,6 +1590,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3 > 4)",
             R"(`level` / 2 <= 1)",
             R"(`level` % 3 != 1)",
+            R"(-`level` < -2)",
+            R"(Abs(`level` - 3) >= 1)",
+            R"(LENGTH(`message`) > 1037U)",
+            R"(LENGTH(`uid`) > 1U OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 2U AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 3U OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U AND `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U OR `resource_id` = "10001"))",
+            R"(`level` IS NULL OR `message` IS NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NULL)",
+            R"(`level` IS NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NULL)",
 #endif
         };
 
@@ -1658,6 +1672,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
             // We can handle this case in future
             R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+            R"(`level` * 3.14 > 4)",
 #if SSA_RUNTIME_VERSION < 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1773,7 +1788,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
             { R"(`uid` LIKE "uid%")", "TableFullScan" },
             { R"(`uid` LIKE "%001")", "TableFullScan" },
+#if SSA_RUNTIME_VERSION >= 4U
+            { R"(`uid` LIKE "uid%001")", "TableFullScan" },
+#else
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
+#endif
         };
         std::string query = R"(
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE

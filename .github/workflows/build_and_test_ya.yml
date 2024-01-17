@@ -49,7 +49,9 @@ on:
       put_build_results_to_cache:
         type: boolean
         default: true
-
+defaults:
+  run:
+    shell: bash
 jobs:
   main:
     name: Build and test ${{ inputs.build_preset }}
@@ -63,7 +65,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
       if: github.event.pull_request.head.sha == ''
-
+    
+    - name: comment-build-start
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
+        # tricky: we are searching job with name that contains build_preset
+        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
+        
+        echo "Pre-commit [check]($check_url) for ${{ github.event.pull_request.head.sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
+    
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -101,3 +116,10 @@ jobs:
         bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}
+    
+    - name: comment-if-cancel
+      if: cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      env:
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black

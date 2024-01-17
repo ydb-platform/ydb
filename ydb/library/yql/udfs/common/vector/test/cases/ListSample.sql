@@ -1,0 +1,1 @@
+select ListSample(NULL, 0.5, 1);

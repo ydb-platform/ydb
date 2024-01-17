@@ -11864,7 +11864,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Fold1"] = &Fold1Wrapper;
         Functions["Condense"] = &CondenseWrapper;
         Functions["Condense1"] = &Condense1Wrapper;
-        Functions["Sample"] = &SampleWrapper;
+        Functions["Sample"] = &SampleWrapper<EDataSlot::Double>;
+        Functions["SampleN"] = &SampleWrapper<EDataSlot::Uint64>;
+        Functions["Shuffle"] = &ShuffleWrapper;
         Functions["Squeeze"] = &SqueezeWrapper;
         Functions["Squeeze1"] = &Squeeze1Wrapper;
         Functions["Discard"] = &DiscardWrapper;
@@ -12175,6 +12177,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListUniq"] = &ListUniqWrapper;
         Functions["ListUniqStable"] = &ListUniqStableWrapper;
         Functions["ListSample"] = &ListSampleWrapper;
+        Functions["ListSampleN"] = &ListSampleNWrapper;
+        Functions["ListShuffle"] = &ListShuffleWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;

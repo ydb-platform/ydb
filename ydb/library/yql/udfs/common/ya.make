@@ -22,6 +22,7 @@ RECURSE(
     topfreq
     unicode_base
     url_base
+    vector
     yson2
 )
 

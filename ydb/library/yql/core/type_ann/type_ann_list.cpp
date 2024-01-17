@@ -1430,6 +1430,14 @@ namespace {
         return OptListWrapperImpl<3, -1>(input, output, ctx, "Sample");
     }
 
+    IGraphTransformer::TStatus ListSampleNWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<3, -1>(input, output, ctx, "SampleN");
+    }
+
+    IGraphTransformer::TStatus ListShuffleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<2, -1>(input, output, ctx, "Shuffle");
+    }
+
     IGraphTransformer::TStatus OptListFold1WrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, TExprNode::TPtr&& updateLambda) {
         if (IsNull(input->Head())) {
             output = input->HeadPtr();
@@ -3500,8 +3508,9 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<EDataSlot Slot>
     IGraphTransformer::TStatus SampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (IsEmptyList(input->Head())) {
+        if (IsEmptyList(input->Head()) || input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -3510,7 +3519,15 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double);
+        auto argType = input->Child(1)->GetTypeAnn();
+        auto argTargetType = ctx.Expr.MakeType<TDataExprType>(Slot);
+        const TTypeAnnotationNode* expectedType;
+        if (argType->GetKind() == ETypeAnnotationKind::Optional) {
+            expectedType = ctx.Expr.MakeType<TOptionalExprType>(argTargetType);
+        } else {
+            expectedType = argTargetType;
+        }
+
         auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
         if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
@@ -3519,6 +3536,23 @@ namespace {
 
         if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
             return convertStatus;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template IGraphTransformer::TStatus SampleWrapper<EDataSlot::Uint64>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus SampleWrapper<EDataSlot::Double>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+    IGraphTransformer::TStatus ShuffleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn());

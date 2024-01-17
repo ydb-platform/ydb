@@ -3361,6 +3361,92 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
     return OptimizeExtend<true>(node, ctx, optCtx);
 }
 
+auto MakeVectorCallables(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const TTypeAnnotationNode* itemType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    auto expandedItemType = ExpandType(node->Pos(), *itemType, ctx);
+
+    auto vectorCreate = ctx.Builder(node->Pos())
+        .Callable("Udf")
+            .Atom(0, "Vector.Create")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "TupleType")
+                    .Callable(0, "DataType")
+                        .Atom(0, "Uint64", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .Callable(1, "StructType").Seal()
+                .Add(2, expandedItemType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto resourceType = ctx.Builder(node->Pos())
+        .Callable("TypeOf")
+            .Callable(0, "Apply")
+                .Add(0, vectorCreate)
+                .Callable(1, "Uint64")
+                    .Atom(0, 0u)
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto vectorEmplace = ctx.Builder(node->Pos())
+        .Callable("Udf")
+            .Atom(0, "Vector.Emplace")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "TupleType")
+                    .Add(0, resourceType)
+                    .Callable(1, "DataType")
+                        .Atom(0, "Uint64", TNodeFlags::Default)
+                    .Seal()
+                    .Add(2, expandedItemType)
+                .Seal()
+                .Callable(1, "StructType").Seal()
+                .Add(2, expandedItemType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto vectorSwap = ctx.Builder(node->Pos())
+        .Callable("Udf")
+            .Atom(0, "Vector.Swap")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "TupleType")
+                    .Add(0, resourceType)
+                    .Callable(1, "DataType")
+                        .Atom(0, "Uint64", TNodeFlags::Default)
+                    .Seal()
+                    .Callable(2, "DataType")
+                        .Atom(0, "Uint64", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+                .Callable(1, "StructType").Seal()
+                .Add(2, expandedItemType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto vectorGetResult = ctx.Builder(node->Pos())
+        .Callable("Udf")
+            .Atom(0, "Vector.GetResult")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "TupleType")
+                    .Add(0, resourceType)
+                .Seal()
+                .Callable(1, "StructType").Seal()
+                .Add(2, expandedItemType)
+            .Seal()
+        .Seal()
+        .Build();
+    
+    return std::make_tuple(vectorCreate, vectorEmplace, vectorSwap, vectorGetResult);
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -4031,13 +4117,69 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["Sample"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return ctx.Builder(node->Pos())
-            .Callable("OrderedFilter")
-                .Add(0, node->HeadPtr())
-                .Lambda(1)
-                    .Param("item")
-                    .Callable("<=")
-                        .Callable(0, "Random")
+
+        auto filterLambda = ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("probability")
+                .Callable(0, "OrderedFilter")
+                    .Add(0, node->HeadPtr())
+                    .Lambda(1)
+                        .Param("item")
+                        .Callable("<=")
+                            .Callable(0, "Random")
+                                .Callable(0, "DependsOn")
+                                    .Arg(0, "item")
+                                .Seal()
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "probability")
+                                .Seal()
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    for (ui32 i = 2; i < node->ChildrenSize(); ++i) {
+                                        parent.Callable(i - 2 + 2, "DependsOn")
+                                            .Add(0, node->Child(i))
+                                            .Seal();
+                                    }
+
+                                    return parent;
+                                })
+                            .Seal()
+                            .Arg(1, "probability")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        auto probability = node->Child(1);
+        if (probability->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            return ctx.Builder(node->Pos())
+                .Callable("Coalesce")
+                    .Callable(0, "Map")
+                        .Add(0, probability)
+                        .Add(1, filterLambda)
+                    .Seal()
+                    .Add(1, node->HeadPtr())
+                .Seal()
+                .Build();
+        } else {
+            return ctx.Builder(node->Pos())
+                .Apply(filterLambda)
+                    .With(0, probability)
+                .Seal()
+                .Build();
+        }
+    };
+
+    map["SampleN"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+        const auto [vectorCreate, vectorEmplace, _, vectorGetResult] = MakeVectorCallables(node, ctx);
+
+        auto emplacePosition = ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("item")
+                .Callable(0, "Coalesce")
+                    .Callable(0, "%")
+                        .Callable(0, "RandomNumber")
                             .Callable(0, "DependsOn")
                                 .Arg(0, "item")
                             .Seal()
@@ -4047,11 +4189,224 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                         .Add(0, node->Child(i))
                                         .Seal();
                                 }
-
                                 return parent;
                             })
                         .Seal()
-                        .Add(1, node->Child(1))
+                        .Callable(1, "+")
+                            .Callable(0, "Nth")
+                                .Arg(0, "item")
+                                .Atom(1, 0u)
+                            .Seal()
+                            .Callable(1, "Uint64")
+                                .Atom(0, 1u)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Uint64")
+                        .Atom(0, 0u)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        auto sampleLambda = ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("count")
+                .Callable(0, "Apply")
+                    .Add(0, vectorGetResult)
+                    .Callable(1, "Fold")
+                        .Callable(0, "Skip")
+                            .Callable(0, "Enumerate")
+                                .Add(0, node->HeadPtr())
+                            .Seal()
+                            .Arg(1, "count")
+                        .Seal()
+                        .Callable(1, "Fold")
+                            .Callable(0, "Take")
+                                .Add(0, node->HeadPtr())
+                                .Arg(1, "count")
+                            .Seal()
+                            .Callable(1, "NamedApply")
+                                .Add(0, vectorCreate)
+                                .List(1)
+                                    .Arg(0, "count")
+                                .Seal()
+                                .Callable(2, "AsStruct").Seal()
+                                .Callable(3, "DependsOn")
+                                    .Add(0, node->HeadPtr())
+                                .Seal()
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    for (ui32 i = 2; i < node->ChildrenSize(); ++i) {
+                                        parent.Callable(i - 2 + 4, "DependsOn")
+                                            .Add(0, node->Child(i))
+                                            .Seal();
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                            .Lambda(2)
+                                .Param("item")
+                                .Param("state")
+                                .Callable(0, "Apply")
+                                    .Add(0, vectorEmplace)
+                                    .Arg(1, "state")
+                                    .Arg(2, "count")
+                                    .Arg(3, "item")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Lambda(2)
+                            .Param("item")
+                            .Param("state")
+                            .Callable(0, "If")
+                                .Callable(0, "<")
+                                    .Apply(0, emplacePosition)
+                                        .With(0, "item")
+                                    .Seal()
+                                    .Arg(1, "count")
+                                .Seal()
+                                .Callable(1, "NamedApply")
+                                    .Add(0, vectorEmplace)
+                                    .List(1)
+                                        .Arg(0,  "state")
+                                        .Apply(1, emplacePosition)
+                                            .With(0, "item")
+                                        .Seal()
+                                        .Callable(2, "Nth")
+                                            .Arg(0, "item")
+                                            .Atom(1, 1u)
+                                        .Seal()
+                                    .Seal()
+                                    .Callable(2, "AsStruct").Seal()
+                                    .Callable(3, "DependsOn")
+                                        .Arg(0, "item")
+                                    .Seal()
+                                .Seal()
+                                .Arg(2, "state")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        auto count = node->Child(1);
+        if (count->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            return ctx.Builder(node->Pos())
+                .Callable("Coalesce")
+                    .Callable(0, "Map")
+                        .Add(0, count)
+                        .Add(1, sampleLambda)
+                    .Seal()
+                    .Add(1, node->HeadPtr())
+                .Seal()
+                .Build();
+        } else {
+            return ctx.Builder(node->Pos())
+                .Apply(sampleLambda)
+                    .With(0, count)
+                .Seal()
+                .Build();
+        }
+    };
+
+    map["Shuffle"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+        const auto [vectorCreate, vectorEmplace, vectorSwap, vectorGetResult] = MakeVectorCallables(node, ctx);
+
+        auto swapPosition = ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("item")
+                .Callable(0, "Coalesce")
+                    .Callable(0, "%")
+                        .Callable(0, "RandomNumber")
+                            .Callable(0, "DependsOn")
+                                .Arg(0, "item")
+                            .Seal()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                                    parent.Callable(i - 1 + 1, "DependsOn")
+                                        .Add(0, node->Child(i))
+                                        .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                        .Callable(1, "+")
+                            .Callable(0, "Nth")
+                                .Arg(0, "item")
+                                .Atom(1, 0u)
+                            .Seal()
+                            .Callable(1, "Uint64")
+                                .Atom(0, 1u)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Uint64")
+                        .Atom(0, 0u)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        return ctx.Builder(node->Pos())
+            .Callable("Apply")
+                .Add(0, vectorGetResult)
+                .Callable(1, "Fold")
+                    .Callable(0, "Enumerate")
+                        .Add(0, node->HeadPtr())
+                    .Seal()
+                    .Callable(1, "NamedApply")
+                        .Add(0, vectorCreate)
+                        .List(1)
+                            .Callable(0, "Uint64")
+                                .Atom(0, 1u)
+                            .Seal()
+                        .Seal()
+                        .Callable(2, "AsStruct").Seal()
+                        .Callable(3, "DependsOn")
+                            .Add(0, node->HeadPtr())
+                        .Seal()
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                                parent.Callable(i - 1 + 4, "DependsOn")
+                                    .Add(0, node->Child(i))
+                                    .Seal();
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                    .Lambda(2)
+                        .Param("item")
+                        .Param("state")
+                        .Callable(0, "NamedApply")
+                            .Add(0, vectorSwap)
+                            .List(1)
+                                .Callable(0, "Apply")
+                                    .Add(0, vectorEmplace)
+                                    .Arg(1, "state")
+                                    .Callable(2, "Nth")
+                                        .Arg(0, "item")
+                                        .Atom(1, 0u)
+                                    .Seal()
+                                    .Callable(3, "Nth")
+                                        .Arg(0, "item")
+                                        .Atom(1, 1u)
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "Nth")
+                                    .Arg(0, "item")
+                                    .Atom(1, 0u)
+                                .Seal()
+                                .Apply(2, swapPosition)
+                                    .With(0, "item")
+                                .Seal()
+                            .Seal()
+                            .Callable(2, "AsStruct").Seal()
+                            .Callable(3, "DependsOn")
+                                .Arg(0, "item")
+                            .Seal()
+                        .Seal()
                     .Seal()
                 .Seal()
             .Seal()

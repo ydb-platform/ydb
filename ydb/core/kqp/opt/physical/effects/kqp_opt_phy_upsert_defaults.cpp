@@ -24,59 +24,8 @@ TMaybeNode<TDqPhyPrecompute> PrecomputeCurrentDefaultsForKeys(const TDqPhyPrecom
         lookupColumns.push_back(atom);
     }
 
-    auto lookupColumnsList = Build<TCoAtomList>(ctx, pos)
-        .Add(lookupColumns)
-        .Done();
-
-    auto lookupStage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(lookupKeys)
-            .Build()
-        .Program()
-            .Args({"keys_list"})
-            .Body<TKqpLookupTable>()
-                .Table(BuildTableMeta(table, pos, ctx))
-                .LookupKeys<TCoIterator>()
-                    .List("keys_list")
-                    .Build()
-                .Columns(lookupColumnsList)
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    auto lookup = Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage(lookupStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-
-    auto lookupPayloadSelector = MakeRowsPayloadSelector(lookupColumnsList, table, lookupKeys.Pos(), ctx);
-    auto condenseLookupResult = CondenseInputToDictByPk(lookup, table, lookupPayloadSelector, ctx);
-    if (!condenseLookupResult) {
-        return {};
-    }
-
-    auto computeDictStage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(condenseLookupResult->StageInputs)
-            .Build()
-        .Program()
-            .Args(condenseLookupResult->StageArgs)
-            .Body(condenseLookupResult->Stream)
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    return Build<TDqPhyPrecompute>(ctx, pos)
-        .Connection<TDqCnValue>()
-            .Output()
-                .Stage(computeDictStage)
-                .Index().Build("0")
-                .Build()
-            .Build()
-        .Done();
+    return PrecomputeTableLookupDict(
+        lookupKeys, table, lookupColumns, pos, ctx, false);
 }
 
 TCoAtomList BuildNonDefaultColumns(
@@ -115,34 +64,15 @@ TCoAtomList BuildNonDefaultColumns(
         .Done();
 }
 
-TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    auto maybeInsertOnConlictUpdate = node.Maybe<TKqlInsertOnConflictUpdateRows>();
-    if (!maybeInsertOnConlictUpdate) {
-        return node;
-    }
-
-    auto insertOnConlictUpdate = maybeInsertOnConlictUpdate.Cast();
-    YQL_ENSURE(insertOnConlictUpdate.GenerateColumnsIfInsert().Ref().ChildrenSize() > 0);
-    TCoAtomList columnsWithDefault = insertOnConlictUpdate.GenerateColumnsIfInsert();
-
-    auto input = insertOnConlictUpdate.Input();
-    auto pos = insertOnConlictUpdate.Input().Pos();
-
-    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insertOnConlictUpdate.Table().Path());
-
-    auto payloadSelector = MakeRowsPayloadSelector(insertOnConlictUpdate.Columns(), tableDesc, pos, ctx);
-    auto condenseResult = CondenseInputToDictByPk(input, tableDesc, payloadSelector, ctx);
-    if (!condenseResult) {
-        return node;
-    }
-
-    auto inputDictAndKeys = PrecomputeDictAndKeys(*condenseResult, pos, ctx);
-    auto lookupDict = PrecomputeCurrentDefaultsForKeys(inputDictAndKeys.KeysPrecompute, columnsWithDefault, tableDesc, pos, ctx);
-    if (!lookupDict) {
-        return node;
-    }
-
-    auto nonDefaultColumns = BuildNonDefaultColumns(tableDesc, insertOnConlictUpdate.Columns(), columnsWithDefault, pos, ctx);
+TDqStage BuildInsertOnConflictUpdateInputStage(
+    const TKikimrTableDescription& table,
+    const TCoAtomList& upsertColumns,
+    const TCoAtomList& columnsWithDefault,
+    const TDictAndKeysResult& inputDictAndKeys,
+    const TDqPhyPrecompute& lookupDict,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    auto nonDefaultColumns = BuildNonDefaultColumns(table, upsertColumns, columnsWithDefault, pos, ctx);
 
     auto inputKeysArg = TCoArgument(ctx.NewArgument(pos, "input_keys"));
     auto inputDictArg = TCoArgument(ctx.NewArgument(pos, "input_dict"));
@@ -150,11 +80,11 @@ TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TK
     auto lookupDictArg = TCoArgument(ctx.NewArgument(pos, "lookup_dict"));
     auto presetHandlerPayload = TCoArgument(ctx.NewArgument(pos, "payload"));
 
-    auto filterStage = Build<TDqStage>(ctx, pos)
+    return Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(inputDictAndKeys.KeysPrecompute)
             .Add(inputDictAndKeys.DictPrecompute)
-            .Add(lookupDict.Cast())
+            .Add(lookupDict)
             .Build()
         .Program()
             .Args({inputKeysArg, inputDictArg, lookupDictArg})
@@ -215,10 +145,38 @@ TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TK
             .Build()
         .Settings().Build()
         .Done();
+}
+
+TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    auto maybeInsertOnConlictUpdate = node.Maybe<TKqlInsertOnConflictUpdateRows>();
+    if (!maybeInsertOnConlictUpdate) {
+        return node;
+    }
+
+    auto insertOnConlictUpdate = maybeInsertOnConlictUpdate.Cast();
+    YQL_ENSURE(insertOnConlictUpdate.GenerateColumnsIfInsert().Ref().ChildrenSize() > 0);
+    TCoAtomList columnsWithDefault = insertOnConlictUpdate.GenerateColumnsIfInsert();
+
+    auto input = insertOnConlictUpdate.Input();
+    auto pos = insertOnConlictUpdate.Input().Pos();
+
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insertOnConlictUpdate.Table().Path());
+
+    auto payloadSelector = MakeRowsPayloadSelector(insertOnConlictUpdate.Columns(), tableDesc, pos, ctx);
+    auto condenseResult = CondenseInputToDictByPk(input, tableDesc, payloadSelector, ctx);
+    if (!condenseResult) {
+        return node;
+    }
+
+    auto inputDictAndKeys = PrecomputeDictAndKeys(*condenseResult, pos, ctx);
+    auto lookupDict = PrecomputeCurrentDefaultsForKeys(inputDictAndKeys.KeysPrecompute, columnsWithDefault, tableDesc, pos, ctx);
+    if (!lookupDict) {
+        return node;
+    }
 
     auto newInput = Build<TDqCnUnionAll>(ctx, pos)
         .Output()
-            .Stage(filterStage)
+            .Stage(BuildInsertOnConflictUpdateInputStage(tableDesc, insertOnConlictUpdate.Columns(), columnsWithDefault, inputDictAndKeys, lookupDict.Cast(), pos, ctx))
             .Index().Build("0")
             .Build()
         .Done();

@@ -223,8 +223,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TSizeGenerator SizeGenerator;
         NKikimrBlobStorage::EPutHandleClass PutHandleClass = NKikimrBlobStorage::EPutHandleClass::UserData;
 
-        uint64_t SizeToWrite;
-        uint64_t BlobsToWrite;
+        uint64_t SizeToWrite = 0;
+        uint64_t BlobsToWrite = 0;
         uint64_t ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
 

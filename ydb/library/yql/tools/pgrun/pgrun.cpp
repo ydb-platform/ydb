@@ -1014,6 +1014,16 @@ int Main(int argc, char* argv[])
     const TString username = GetUsername();
     THashSet<TString> sqlFlags;
 
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ClusterMapping = clusterMapping;
+    settings.DefaultCluster = DefaultCluster;
+    settings.Flags = sqlFlags;
+    settings.SyntaxVersion = 1;
+    settings.AnsiLexer = false;
+    settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
+    settings.AssumeYdbOnClusterWithSlash = false;
+    settings.PgParser = true;
+
     for (const auto& raw_stmt : TStatementIterator{Cin.ReadAll()}) {
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
@@ -1035,16 +1045,7 @@ int Main(int argc, char* argv[])
         }
 
         google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
-        settings.ClusterMapping = clusterMapping;
-        settings.DefaultCluster = DefaultCluster;
-        settings.Flags = sqlFlags;
-        settings.SyntaxVersion = 1;
-        settings.AnsiLexer = false;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
-        settings.AssumeYdbOnClusterWithSlash = false;
-        settings.PgParser = true;
 
         auto program = factory.Create("-stdin-", stmt);
 

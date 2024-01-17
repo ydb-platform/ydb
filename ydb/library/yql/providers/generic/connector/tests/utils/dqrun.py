@@ -66,17 +66,17 @@ Generic {
 {% for cluster in generic_settings.clickhouse_clusters %}
 
 {% if cluster.protocol == EProtocol.NATIVE %}
-{% set CLICKHOUSE_PORT = settings.clickhouse.native_port %}
+{% set CLICKHOUSE_PORT = settings.clickhouse.native_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = NATIVE %}
 {% elif cluster.protocol == EProtocol.HTTP %}
-{% set CLICKHOUSE_PORT = settings.clickhouse.http_port %}
+{% set CLICKHOUSE_PORT = settings.clickhouse.http_port_internal %}
 {% set CLICKHOUSE_PROTOCOL = HTTP %}
 {% endif %}
 
 {{ data_source(
     CLICKHOUSE,
     settings.clickhouse.cluster_name,
-    settings.clickhouse.host,
+    settings.clickhouse.host_internal,
     CLICKHOUSE_PORT,
     settings.clickhouse.username,
     settings.clickhouse.password,
@@ -90,8 +90,8 @@ Generic {
 {{ data_source(
     POSTGRESQL,
     settings.postgresql.cluster_name,
-    settings.postgresql.host,
-    settings.postgresql.port,
+    settings.postgresql.host_internal,
+    settings.postgresql.port_internal,
     settings.postgresql.username,
     settings.postgresql.password,
     NATIVE,

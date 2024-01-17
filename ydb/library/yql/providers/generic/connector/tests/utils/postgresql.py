@@ -52,7 +52,9 @@ class Client:
                 time.sleep(3)
                 continue
 
-        raise Exception(f"Failed to connect PostgreSQL in {attempt} attempt(s)")
+        ss = self.settings
+        params = f'{ss.username} {ss.password} {ss.host_external} {ss.port_external} {dbname}'
+        raise Exception(f"Failed to connect PostgreSQL in {attempt} attempt(s) with params: {params}")
 
 
 class Type(abc.ABC):

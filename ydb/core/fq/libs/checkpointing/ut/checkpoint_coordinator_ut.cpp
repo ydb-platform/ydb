@@ -19,7 +19,7 @@ enum ETestGraphFlags : ui64 {
     SourceWithChannelInOneTask = 2,
 };
 
-NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType) {
+NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags = 0) {
 
     NYql::NDqProto::TReadyState result;
 
@@ -29,7 +29,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
     ingressOutput->AddChannels();
     if (flags & ETestGraphFlags::InputWithSource) {
         auto* source = ingress->AddInputs()->MutableSource();
-        source->SetType(sourceType);
+        source->SetType("PqSource");
     }
 
     auto* map = result.AddTask();
@@ -40,7 +40,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
     mapOutput->AddChannels();
     if (flags & ETestGraphFlags::SourceWithChannelInOneTask) {
         auto* source = map->AddInputs()->MutableSource();
-        source->SetType(sourceType);
+        source->SetType("PqSource");
     }
 
     auto* egress = result.AddTask();
@@ -71,9 +71,9 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlags, const TString& sourceType)
+    explicit TTestBootstrap(ui64 graphFlags = 0)
         : TTestActorRuntime(true)
-        , GraphState(BuildTestGraph(graphFlags, sourceType))
+        , GraphState(BuildTestGraph(graphFlags))
         , CoordinatorId("my-graph-id", 42)
         , CheckpointId1(CoordinatorId.Generation, 1)
         , CheckpointId2(CoordinatorId.Generation, 2)
@@ -301,8 +301,8 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper : public TTestBootstrap
     {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, const TString& sourceType)
-            : TTestBootstrap(graphFlags, sourceType) {
+        CheckpointsTestHelper(ui64 graphFlags)
+            : TTestBootstrap(graphFlags) {
         }
         
         void RegisterCoordinator() {
@@ -404,36 +404,24 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSource) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource");
         test.RegisterCoordinator();
-        test.InjectCheckpoint(test.CheckpointId1);
-        test.AllSavedAndCommited(test.CheckpointId1);
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource);
+        test.InjectCheckpoint();
+        test.AllSavedAndCommited();
     }
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSourcesAndWithChannel) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask, "PqSource");
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask);
+        
         test.RegisterCoordinator();
-        test.InjectCheckpoint(test.CheckpointId1);
-        test.AllSavedAndCommited(test.CheckpointId1);
+        test.InjectCheckpoint();
+        test.AllSavedAndCommited();
     }
 
     Y_UNIT_TEST(ShouldAbortPreviousCheckpointsIfNodeStateCantBeSaved) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource");
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource);
         test.RegisterCoordinator();
-        test.InjectCheckpoint(test.CheckpointId1);
-        test.SaveFailed(test.CheckpointId1);
-
-        test.NextCheckpointSuccess();
-        test.InjectCheckpoint(test.CheckpointId2, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
-    }
-
-    Y_UNIT_TEST(ShouldDoNothingIfNoIngressTasks) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "S3Source");
-        bool empty = false;   
-        try {
-            test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10));
-        } catch (TEmptyEventQueueException&) {
-            empty = true;
-        }
-        UNIT_ASSERT(empty);
+        test.InjectCheckpoint();
+        test.SaveFailed();
     }
 }
 

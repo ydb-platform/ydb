@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
                     .Add("test_res_" + std::to_string(i + t * tables_in_store))
                     .AddNull();
             }
-            testHelper.InsertData(testTable, tableInserter);
+            testHelper.BulkUpsert(testTable, tableInserter);
         }
 
         Sleep(TDuration::Seconds(10));

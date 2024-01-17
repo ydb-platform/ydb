@@ -12,4 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
 )
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(kv_workload.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(stock_workload.h)
+
 END()

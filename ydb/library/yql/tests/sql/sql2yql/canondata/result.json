@@ -12046,6 +12046,13 @@
             "uri": "https://{canondata_backend}/1599023/af9c2f81df0601cf266a0926b5ce73b6101b9115/resource.tar.gz#test_sql2yql.test_pg-select_win_sum_null_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-select_yql_type]": [
+        {
+            "checksum": "7447752d11b2fc790e27004b7112fe31",
+            "size": 1975,
+            "uri": "https://{canondata_backend}/1937367/379ba745ff59ebd29c817a5b281c005a67df3be4/resource.tar.gz#test_sql2yql.test_pg-select_yql_type_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-set_of_as_records]": [
         {
             "checksum": "439ee1feaf9750daf11386fe54adbc05",

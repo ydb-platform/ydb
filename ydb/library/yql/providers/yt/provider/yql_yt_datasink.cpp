@@ -160,7 +160,16 @@ public:
             return false;
         }
 
-        NCommon::WriteStatistics(writer, totalOnly, State_->Statistics);
+        writer.OnBeginMap();
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false);
+            writer.OnKeyedItem("Hybrid");
+            writer.OnBeginMap();
+                for (const auto& [opName, stats] : State_->HybridStatistics) {
+                    writer.OnKeyedItem(opName);
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}});
+                }
+            writer.OnEndMap();
+        writer.OnEndMap();
 
         return true;
     }

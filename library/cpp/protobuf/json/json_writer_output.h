@@ -86,7 +86,7 @@ namespace NProtobufJson {
         {
         }
 
-    private:
+    protected:
         static NJson::TJsonWriterConfig CreateJsonWriterConfig(const TProto2JsonConfig& cfg);
     };
 
@@ -95,7 +95,8 @@ namespace NProtobufJson {
         template <typename TConfig>
         TJsonStringWriterOutput(TString* str, const TConfig& cfg)
             : TEmbedPolicy<TStringOutput>(*str)
-            , TJsonWriterOutput(TEmbedPolicy<TStringOutput>::Ptr(), cfg)
+            // If Unbuffered = false, TJsonWriter uses its own string and then flushes it into TStringOutput.
+            , TJsonWriterOutput(TEmbedPolicy<TStringOutput>::Ptr(), CreateJsonWriterConfig(cfg).SetUnbuffered(true))
         {
         }
     };

@@ -373,7 +373,7 @@ public:
             return this->GetUnwrappedParent();
         }
 
-         /// Open a map, call `func(*this, element)` for each `element` of range, then close the map.
+        /// Open a map, call `func(*this, element)` for each `element` of range, then close the map.
         template <class TFunc, class TIterator>
         TUnwrappedParent DoMapFor(const TIterator& begin, const TIterator& end, const TFunc& func)
         {

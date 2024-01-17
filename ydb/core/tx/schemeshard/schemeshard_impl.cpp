@@ -14,6 +14,7 @@
 #include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
 
@@ -129,8 +130,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
-    GenerateStatisticsMap();
-    ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvProcessStatistics());
+    InitializeStatistics(ctx);
 
     Become(&TThis::StateWork);
 }
@@ -332,7 +332,47 @@ TMessageSeqNo TSchemeShard::NextRound() {
 
 void TSchemeShard::Clear() {
     PathsById.clear();
+
     Tables.clear();
+    TTLEnabledTables.clear();
+
+    Indexes.clear();
+    CdcStreams.clear();
+    Sequences.clear();
+    Replications.clear();
+    BlobDepots.clear();
+
+    TablesWithSnapshots.clear();
+    SnapshotTables.clear();
+    SnapshotsStepIds.clear();
+
+    LockedPaths.clear();
+
+    Topics.clear();
+    RtmrVolumes.clear();
+    SolomonVolumes.clear();
+    SubDomains.clear();
+    BlockStoreVolumes.clear();
+    FileStoreInfos.clear();
+    KesusInfos.clear();
+    OlapStores.clear();
+    ExternalTables.clear();
+    ExternalDataSources.clear();
+    Views.clear();
+
+    ColumnTables = { };
+
+    RevertedMigrations.clear();
+
+    Operations.clear();
+    Publications.clear();
+    TxInFlight.clear();
+
+    ShardInfos.clear();
+    AdoptedShards.clear();
+    TabletIdToShardIdx.clear();
+
+    PartitionMetricsMap.clear();
 
     if (CompactionQueue) {
         CompactionQueue->Clear();
@@ -346,18 +386,6 @@ void TSchemeShard::Clear() {
 
     ShardsWithBorrowed.clear();
     ShardsWithLoaned.clear();
-    Topics.clear();
-    RtmrVolumes.clear();
-    SubDomains.clear();
-    BlockStoreVolumes.clear();
-    KesusInfos.clear();
-    TxInFlight.clear();
-    ShardInfos.clear();
-    Indexes.clear();
-    CdcStreams.clear();
-    RevertedMigrations.clear();
-    Sequences.clear();
-    Replications.clear();
 
     for(ui32 idx = 0; idx < TabletCounters->Simple().Size(); ++idx) {
         TabletCounters->Simple()[idx].Set(0);
@@ -366,8 +394,6 @@ void TSchemeShard::Clear() {
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].Clear();
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].Clear();
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
-
-    PartitionMetricsMap.clear();
 }
 
 void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {
@@ -2073,7 +2099,7 @@ void TSchemeShard::PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const
 
 template <class Table>
 void PersistSubDomainServerlessComputeResourcesModeImpl(NIceDb::TNiceDb& db, const TPathId& pathId,
-                                                        const TSubDomainInfo::TMaybeServerlessComputeResourcesMode& value) {
+                                                        const TMaybeServerlessComputeResourcesMode& value) {
     using Field = typename Table::ServerlessComputeResourcesMode;
     if (value) {
         db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(*value));
@@ -2202,7 +2228,8 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::BuildIndexId>(txState.BuildIndexId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceLocalPathId>(txState.SourcePathId.LocalPathId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceOwnerId>(txState.SourcePathId.OwnerId),
-                NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject)
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject),
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive)
                 );
 
     for (const auto& shardOp : txState.Shards) {
@@ -4190,6 +4217,10 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
 
+    if (SAPipeClientId) {
+        NTabletPipe::CloseClient(SelfId(), SAPipeClientId);
+    }
+
     PipeClientCache->Detach(ctx);
 
     if (CompactionQueue)
@@ -4239,6 +4270,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
+    EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4378,6 +4410,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvHive::TEvDeleteTabletReply, Handle);
         HFuncTraced(TEvHive::TEvDeleteOwnerTabletsReply, Handle);
         HFuncTraced(TEvHive::TEvUpdateTabletsObjectReply, Handle);
+        HFuncTraced(TEvHive::TEvUpdateDomainReply, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvDataShard::TEvSchemaChanged, Handle);
@@ -4509,9 +4542,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
-        HFuncTraced(TEvPrivate::TEvProcessStatistics, Handle);
-        HFuncTraced(TEvPrivate::TEvStatFastBroadcastCheck, Handle);
-        HFuncTraced(NStat::TEvStatistics::TEvRegisterNode, Handle);
+        HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -5143,6 +5175,11 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    if (clientId == SAPipeClientId) {
+        ConnectToSA();
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Failed to connect"
                    << ", to tablet: " << tabletId
@@ -5193,34 +5230,17 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
         return;
     }
 
+    if (clientId == SAPipeClientId) {
+        ConnectToSA();
+        return;
+    }
+
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
 }
 
-void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-    auto serverId = ev->Get()->ServerId;
-    auto itServer = StatNodePipes.find(serverId);
-
-    if (itServer != StatNodePipes.end()) {
-        auto nodeId = itServer->second;
-        StatNodePipes.erase(itServer);
-
-        auto itNode = StatNodes.find(nodeId);
-        if (itNode != StatNodes.end()) {
-            --itNode->second;
-            if (itNode->second == 0) {
-                StatNodes.erase(itNode);
-            }
-        }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::STATISTICS,
-            "ServerDisconnected"
-            << ", node id = " << nodeId
-            << ", server id = " << serverId
-            << ", at schemeshard: " << TabletID());
-    }
-
+void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &, const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Server pipe is reset"
                     << ", at schemeshard: " << TabletID());
@@ -5407,6 +5427,37 @@ void TSchemeShard::Handle(TEvHive::TEvUpdateTabletsObjectReply::TPtr &ev, const 
         return;
     }
 
+    Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorContext &ctx) {
+    const auto& record = ev->Get()->Record;
+
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Update domain reply"
+                    << ", message: " << record.ShortDebugString()
+                    << ", at schemeshard: " << TabletID());
+
+    const auto txId = TTxId(record.GetTxId());
+    if (!Operations.contains(txId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvUpdateDomainReply"
+                       << " for unknown txId " << txId
+                       << " at schemeshard " << TabletID());
+        return;
+    }
+
+    const auto tabletId = TTabletId(record.GetOrigin());
+    const auto partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
+    if (partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvHive::TEvUpdateDomainReply but partId is unknown"
+                       << ", for txId: " << txId
+                       << ", tabletId: " << tabletId
+                       << ", at schemeshard: " << TabletID());
+        return;
+    }
+    
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 
@@ -6696,6 +6747,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
+    EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -6911,147 +6963,121 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
     Execute(CreateTxLogin(ev), ctx);
 }
 
-void TSchemeShard::GenerateStatisticsMap() {
+void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext&) {
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    std::unique_ptr<TNavigate> request(ev->Get()->Request.Release());
+    if (request->ResultSet.size() != 1) {
+        return;
+    }
+    auto& entry = request->ResultSet.back();
+    if (entry.Status != TNavigate::EStatus::Ok) {
+        return;
+    }
+
+    if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
+        StatisticsAggregatorId = TTabletId(entry.DomainInfo->Params.GetStatisticsAggregator());
+        ConnectToSA();
+    }
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorContext& ctx) {
+    SendBaseStatsToSA();
+    auto seconds = SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds;
+    ctx.Schedule(TDuration::Seconds(SendStatsIntervalMinSeconds + RandomNumber<ui64>(seconds)),
+        new TEvPrivate::TEvSendBaseStatsToSA());
+}
+
+void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
+    if (!EnableStatistics) {
+        return;
+    }
+    ResolveSA();
+    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+}
+
+void TSchemeShard::ResolveSA() {
+    auto subDomainInfo = SubDomains.at(RootPathId());
+    if (IsServerlessDomain(subDomainInfo)) {
+        auto resourcesDomainId = subDomainInfo->GetResourcesDomainId();
+
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto navigate = std::make_unique<TNavigate>();
+        auto& entry = navigate->ResultSet.emplace_back();
+        entry.TableId = TTableId(resourcesDomainId.OwnerId, resourcesDomainId.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+    } else {
+        StatisticsAggregatorId = subDomainInfo->GetTenantStatisticsAggregatorID();
+        ConnectToSA();
+    }
+}
+
+void TSchemeShard::ConnectToSA() {
+    if (!EnableStatistics || !StatisticsAggregatorId) {
+        return;
+    }
+    auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    NTabletPipe::TClientConfig pipeConfig{policy};
+    SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), (ui64)StatisticsAggregatorId, pipeConfig));
+
+    auto connect = std::make_unique<NStat::TEvStatistics::TEvConnectSchemeShard>();
+    connect->Record.SetSchemeShardId(TabletID());
+
+    NTabletPipe::SendData(SelfId(), SAPipeClientId, connect.release());
+
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "ConnectToSA()"
+        << ", pipe client id: " << SAPipeClientId
+        << ", at schemeshard: " << TabletID());
+}
+
+void TSchemeShard::SendBaseStatsToSA() {
+    if (!EnableStatistics || !SAPipeClientId) {
+        return;
+    }
+
     int count = 0;
 
-    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
-    auto* record = broadcast->MutableRecord();
-
-    if (EnableStatistics) {
-        for (const auto& [pathId, tableInfo] : Tables) {
-            const auto& aggregated = tableInfo->GetStats().Aggregated;
-            auto* entry = record->AddEntries();
-            auto* entryPathId = entry->MutablePathId();
-            entryPathId->SetOwnerId(pathId.OwnerId);
-            entryPathId->SetLocalId(pathId.LocalPathId);
-            entry->SetRowCount(aggregated.RowCount);
-            entry->SetBytesSize(aggregated.DataSize);
-            ++count;
-        }
-        // TODO: column tables
+    NKikimrStat::TSchemeShardStats record;
+    for (const auto& [pathId, tableInfo] : Tables) {
+        const auto& aggregated = tableInfo->GetStats().Aggregated;
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
+    }
+    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
+    for (const auto& pathId : columnTablesPathIds) {
+        const auto& tableInfo = ColumnTables.GetVerified(pathId);
+        const auto& aggregated = tableInfo->Stats.Aggregated;
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
     }
 
-    PreSerializedStatisticsMapData.clear();
-    Y_PROTOBUF_SUPPRESS_NODISCARD record->SerializeToString(&PreSerializedStatisticsMapData);
+    TString stats;
+    stats.clear();
+    Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
+
+    auto event = std::make_unique<NStat::TEvStatistics::TEvSchemeShardStats>();
+    event->Record.SetSchemeShardId(TabletID());
+    event->Record.SetStats(stats);
+
+    NTabletPipe::SendData(SelfId(), SAPipeClientId, event.release());
 
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-        "Generate statistics map"
-        << ", table count = " << count
-        << ", at schemeshard: " << TabletID());
-}
-
-void TSchemeShard::BroadcastStatistics() {
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-        "Broadcast statistics"
-        << ", node count = " << StatNodes.size()
-        << ", at schemeshard: " << TabletID());
-
-    if (StatNodes.empty()) {
-        return;
-    }
-
-    ui32 leadingNodeId = StatNodes.begin()->first;
-
-    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
-    auto* record = broadcast->MutableRecord();
-    record->MutableNodeIds()->Reserve(StatNodes.size());
-    for (const auto& [nodeId, _] : StatNodes) {
-        if (nodeId == leadingNodeId) {
-            continue;
-        }
-        record->AddNodeIds(nodeId);
-    }
-
-    broadcast->PreSerializedData = PreSerializedStatisticsMapData;
-
-    Send(NStat::MakeStatServiceID(leadingNodeId), broadcast.release());
-}
-
-void TSchemeShard::BroadcastStatisticsFast() {
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-        "Broadcast statistics fast"
-        << ", node count = " << StatFastBroadcastNodes.size()
-        << ", at schemeshard: " << TabletID());
-
-    if (StatFastBroadcastNodes.empty()) {
-        return;
-    }
-
-    ui32 leadingNodeId = *StatFastBroadcastNodes.begin();
-
-    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
-    auto* record = broadcast->MutableRecord();
-    record->MutableNodeIds()->Reserve(StatFastBroadcastNodes.size());
-    for (const auto& nodeId : StatFastBroadcastNodes) {
-        if (nodeId == leadingNodeId) {
-            continue;
-        }
-        record->AddNodeIds(nodeId);
-    }
-
-    broadcast->PreSerializedData = PreSerializedStatisticsMapData;
-
-    Send(NStat::MakeStatServiceID(leadingNodeId), broadcast.release());
-
-    StatFastBroadcastNodes.clear();
-}
-
-void TSchemeShard::SendStatisticsToNode(ui32 nodeId) {
-    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-        "Send statistics to node"
-        << ", node id = " << nodeId
-        << ", at schemeshard: " << TabletID());
-
-    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
-    broadcast->PreSerializedData = PreSerializedStatisticsMapData;
-
-    Send(NStat::MakeStatServiceID(nodeId), broadcast.release());
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvProcessStatistics::TPtr&, const TActorContext& ctx) {
-    GenerateStatisticsMap();
-    BroadcastStatistics();
-    ctx.Schedule(TDuration::Minutes(2), new TEvPrivate::TEvProcessStatistics());
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvStatFastBroadcastCheck::TPtr&, const TActorContext& ctx) {
-    StatFastCheckInFlight = false;
-    BroadcastStatisticsFast();
-
-    if (++StatFastBroadcastCounter < STAT_OPTIMIZE_N_FIRST_NODES) {
-        ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvStatFastBroadcastCheck());
-        StatFastCheckInFlight = true;
-    }
-}
-
-void TSchemeShard::Handle(NStat::TEvStatistics::TEvRegisterNode::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    const ui32 nodeId = record.GetNodeId();
-    auto serverId = ev->Recipient;
-    const bool hasStatistics = record.GetHasStatistics();
-
-    if (StatNodePipes.find(serverId) == StatNodePipes.end()) {
-        StatNodePipes[serverId] = nodeId;
-        ++StatNodes[nodeId];
-    }
-
-    if (!hasStatistics) {
-        if (StatFastBroadcastCounter > 0) {
-            --StatFastBroadcastCounter;
-            SendStatisticsToNode(nodeId);
-        } else {
-            StatFastBroadcastNodes.insert(nodeId);
-        }
-        if (!StatFastCheckInFlight) {
-            ctx.Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvStatFastBroadcastCheck());
-            StatFastCheckInFlight = true;
-        }
-    }
-
-    LOG_DEBUG_S(ctx, NKikimrServices::STATISTICS,
-        "Register node"
-        << ", server id = " << serverId
-        << ", node id = " << nodeId
+        "SendBaseStatsToSA()"
+        << ", path count: " << count
         << ", at schemeshard: " << TabletID());
 }
 

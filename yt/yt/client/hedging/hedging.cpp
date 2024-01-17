@@ -88,7 +88,7 @@ public:
     RETRYABLE_METHOD(TFuture<NYson::TYsonString>, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
     RETRYABLE_METHOD(TFuture<bool>, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
     RETRYABLE_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (const NYPath::TYPath&, const TFileReaderOptions&));
-    RETRYABLE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+    RETRYABLE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 
     // Unsupported methods.
     UNSUPPORTED_METHOD(TFuture<ITransactionPtr>, StartTransaction, (NTransactionClient::ETransactionType, const TTransactionStartOptions&));
@@ -195,7 +195,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (EMaintenanceComponent, const TString&, EMaintenanceType, const TString&, const TAddMaintenanceOptions&));
     UNSUPPORTED_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (EMaintenanceComponent, const TString&, const TMaintenanceFilter&, const TRemoveMaintenanceOptions&));
     UNSUPPORTED_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (const TString&, const std::vector<TGuid>&, const TDisableChunkLocationsOptions&));
-    UNSUPPORTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const TString&, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
+    UNSUPPORTED_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (const TString&, bool, const std::vector<TGuid>&, const TDestroyChunkLocationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (const TString&, const std::vector<TGuid>&, const TResurrectChunkLocationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (const TString&, const TRequestRestartOptions&));
     UNSUPPORTED_METHOD(TFuture<TPullRowsResult>, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
@@ -210,7 +210,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
-    UNSUPPORTED_METHOD(TFuture<TBundleConfigDescriptor>, GetBundleConfig, (const TString&, const TGetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const TGetBundleConfigOptions&));
 
 private:
     THedgingExecutorPtr Executor_;
@@ -225,8 +225,9 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options)
     return New<THedgingClient>(options, CreateDummyPenaltyProvider());
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptions& options,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return New<THedgingClient>(options, penaltyProvider);
 }
@@ -241,9 +242,10 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const I
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache));
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config,
-                                          const IClientsCachePtr& clientsCache,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientConfig& config,
+    const IClientsCachePtr& clientsCache,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache), penaltyProvider);
 }

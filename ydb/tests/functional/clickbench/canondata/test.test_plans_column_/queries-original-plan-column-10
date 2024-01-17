@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 6
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 4
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -54,6 +64,11 @@
                                                                     {
                                                                         "Aggregation": "{_yql_agg_0: Inc(state._yql_agg_0)}",
                                                                         "GroupBy": "item.MobilePhoneModel",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 2
+                                                                            }
+                                                                        ],
                                                                         "Name": "Aggregate"
                                                                     }
                                                                 ],
@@ -74,9 +89,15 @@
                                                                                     {
                                                                                         "Aggregation": "state",
                                                                                         "GroupBy": "",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "MobilePhoneModel",

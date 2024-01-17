@@ -87,9 +87,10 @@ public:
                 } else {
                     SkipSubTree();
                 }
-            break;
-        default:
-            Tokenizer_.ThrowUnexpected();
+                break;
+
+            default:
+                Tokenizer_.ThrowUnexpected();
         }
     }
 

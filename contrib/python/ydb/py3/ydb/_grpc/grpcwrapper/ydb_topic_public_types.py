@@ -4,11 +4,10 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Optional, List, Union, Dict
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from ..v4.protos import ydb_topic_pb2
-else:
-    from ..common.protos import ydb_topic_pb2
+try:
+    from ydb.public.api.protos import ydb_topic_pb2
+except ImportError:
+    from contrib.ydb.public.api.protos import ydb_topic_pb2
 
 from .common_utils import IToProto
 from ...scheme import SchemeEntry

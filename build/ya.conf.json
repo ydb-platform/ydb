@@ -15,6 +15,49 @@
                 }
             }
         },
+        "black": {
+            "executable": {
+                "black": [
+                    "black"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-arm64": {
+                        "uri": "sbr:5599877541"
+                    },
+                    "darwin-x86_64": {
+                        "uri": "sbr:5599878022"
+                    },
+                    "linux-aarch64": {
+                        "uri": "sbr:5599877008"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:5599878769"
+                    },
+                    "win32-x86_64": {
+                        "uri": "sbr:5599878473"
+                    }
+                }
+            }
+        },
+        "clang-format": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-x86_64": {
+                        "uri": "sbr:4111727026"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:4111727778"
+                    }
+                }
+            }
+        },
         "clang16": {
             "executable": {
                 "c++": [
@@ -65,6 +108,26 @@
             "formula": "build/platform/clang/clang16.json"
         },
         "gdb": {
+            "executable": {
+                "gcore": [
+                    "gdb",
+                    "bin",
+                    "gcore"
+                ],
+                "gdb": [
+                    "gdb",
+                    "bin",
+                    "gdb"
+                ],
+                "gdbserver": [
+                    "gdb",
+                    "bin",
+                    "gdbserver"
+                ]
+            },
+            "formula": "build/external_resources/gdb/resources.json"
+        },
+        "gdbnew": {
             "executable": {
                 "gcore": [
                     "gdb",
@@ -161,6 +224,92 @@
                 "atop": {
                     "bottle": "atop",
                     "executable": "atop"
+                }
+            }
+        },
+        "black": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "black": {
+                    "bottle": "black",
+                    "executable": "black"
+                }
+            }
+        },
+        "clang-format": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format": {
+                    "bottle": "clang-format",
+                    "executable": "clang-format"
                 }
             }
         },
@@ -740,7 +889,7 @@
             },
             "platforms": [
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -750,7 +899,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -760,7 +909,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -770,7 +919,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -873,6 +1022,40 @@
             "tools": {
                 "gdb": {
                     "bottle": "gdb",
+                    "executable": "gdb"
+                }
+            }
+        },
+        "gdbnew": {
+            "env": {
+                "TERMINFO": [
+                    "$(ROOT)/gdb/lib/terminfo"
+                ]
+            },
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "gdbnew": {
+                    "bottle": "gdbnew",
                     "executable": "gdb"
                 }
             }
@@ -1123,8 +1306,8 @@
         }
     },
     "toolchain_aliases": {
-        "clang-win-i686": "clang14-win-i686",
-        "clang-win-x86_64": "clang14-win-x86_64",
+        "clang-win-i686": "default-win-i686",
+        "clang-win-x86_64": "default-win-x86_64",
         "gcc-linux-x86_64": "gcc82-linux-x86_64",
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },
@@ -1132,12 +1315,60 @@
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
+        "black": {
+            "description": "Python styler, Python 3 only"
+        },
+        "c++": {
+            "description": "Run C++ compiler"
+        },
+        "c++filt": {
+            "description": "Run c++filt"
+        },
+        "cc": {
+            "description": "Run C compiler"
+        },
+        "clang-format": {
+            "description": "Run Clang-Format source code formatter"
+        },
+        "clang-rename": {
+            "description": "Run Clang-Rename refactoring tool"
+        },
+        "gcov": {
+            "description": "Run gcov"
+        },
         "gdb": {
             "description": "Run gdb"
+        },
+        "gdbnew": {
+            "description": "Run gdb for Ubuntu 16.04 or later"
+        },
+        "go": {
+            "description": "Run go tool"
+        },
+        "gofmt": {
+            "description": "Run gofmt tool"
+        },
+        "llvm-cov": {
+            "description": "Run llvm-cov Clang utility"
+        },
+        "llvm-profdata": {
+            "description": "Run llvm-profdata Clang utility"
+        },
+        "llvm-symbolizer": {
+            "description": "Run llvm-symbolizer Clang utility"
+        },
+        "nm": {
+            "description": "Run nm"
+        },
+        "objcopy": {
+            "description": "Run objcopy"
         },
         "python": {
             "description": "Run pseudo-python",
             "visible": false
+        },
+        "strip": {
+            "description": "Run strip utility"
         },
         "ya-tc": {
             "description": "Run ya-tc tool",

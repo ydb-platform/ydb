@@ -20,7 +20,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    const TString &txBody,
                                    bool usesMvccSnapshot)
     : StepTxId_(stepTxId)
-    , TabletId_(self->TabletID())
     , TxBody(txBody)
     , EngineBay(self, txc, ctx, stepTxId.ToPair())
     , ErrCode(NKikimrTxDataShard::TError::OK)
@@ -33,6 +32,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , Cancelled(false)
     , ReceivedAt_(receivedAt)
 {
+    const ui64 tabletId = self->TabletID();
+
     bool success = Tx.ParseFromArray(TxBody.data(), TxBody.size());
     if (!success) {
         ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
@@ -70,7 +71,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         }
     } else if (IsKqpTx()) {
         if (Y_UNLIKELY(!IsKqpDataTx())) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << TabletId()
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Unexpected KQP transaction type, shard: " << tabletId
                 << ", txid: " << StepTxId_.TxId << ", tx: " << Tx.DebugString());
             ErrCode = NKikimrTxDataShard::TError::BAD_TX_KIND;
             ErrStr = TStringBuilder() << "Unexpected KQP transaction type: "
@@ -85,7 +86,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             bool hasPersistentChannels = false;
             if (!KqpValidateTransaction(GetTasks(), Immediate(), StepTxId_.TxId, ctx, hasPersistentChannels)) {
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed, datashard: "
-                    << TabletId() << ", txid: " << StepTxId_.TxId);
+                    << tabletId << ", txid: " << StepTxId_.TxId);
                 ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
                 ErrStr = "Transaction validation failed.";
                 return;
@@ -96,7 +97,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                 NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
                 if (!task.GetMeta().UnpackTo(&meta)) {
                     LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "KQP transaction validation failed"
-                        << ", datashard: " << TabletId()
+                        << ", datashard: " << tabletId
                         << ", txid: " << StepTxId_.TxId
                         << ", failed to load task meta: " << task.GetMeta().value());
                     ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
@@ -104,7 +105,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                     return;
                 }
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << TabletId()
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TxId: " << StepTxId_.TxId << ", shard " << tabletId
                     << ", task: " << task.GetId() << ", meta: " << meta.ShortDebugString());
 
                 auto& tableMeta = meta.GetTable();
@@ -139,7 +140,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                     }
                 }
 
-                KqpSetTxKeys(TabletId(), task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
+                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
 
                 for (auto& output : task.GetOutputs()) {
                     for (auto& channel : output.GetChannels()) {
@@ -166,13 +167,13 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
         } catch (const TMemoryLimitExceededException&) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Not enough memory to create tasks runner, datashard: "
-                << TabletId() << ", txid: " << StepTxId_.TxId);
+                << tabletId << ", txid: " << StepTxId_.TxId);
             ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
             ErrStr = TStringBuilder() << "Transaction validation failed: not enough memory.";
             return;
         } catch (const yexception& e) {
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while validating KQP transaction, datashard: "
-                << TabletId() << ", txid: " << StepTxId_.TxId << ", error: " << e.what());
+                << tabletId << ", txid: " << StepTxId_.TxId << ", error: " << e.what());
             ErrCode = NKikimrTxDataShard::TError::PROGRAM_ERROR;
             ErrStr = TStringBuilder() << "Transaction validation failed: " << e.what() << ".";
             return;
@@ -191,7 +192,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
         auto engine = EngineBay.GetEngine();
-        auto result = engine->AddProgram(TabletId_, Tx.GetMiniKQL(), Tx.GetReadOnly());
+        auto result = engine->AddProgram(tabletId, Tx.GetMiniKQL(), Tx.GetReadOnly());
 
         ErrStr = engine->GetErrors();
         ErrCode = ConvertErrCode(result);
@@ -258,7 +259,7 @@ bool TValidatedDataTx::CanCancel() {
     return true;
 }
 
-bool TValidatedDataTx::CheckCancelled() {
+bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     if (Cancelled) {
         return true;
     }
@@ -270,11 +271,11 @@ bool TValidatedDataTx::CheckCancelled() {
     TInstant now = AppData()->TimeProvider->Now();
     Cancelled = (now >= Deadline());
 
-    Cancelled = Cancelled || gCancelTxFailPoint.Check(TabletId(), TxId());
+    Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, TxId());
 
     if (Cancelled) {
         LOG_NOTICE_S(*TlsActivationContext->ExecutorThread.ActorSystem, NKikimrServices::TX_DATASHARD,
-            "CANCELLED TxId " << TxId() << " at " << TabletId());
+            "CANCELLED TxId " << TxId() << " at " << tabletId);
     }
     return Cancelled;
 }
@@ -310,30 +311,6 @@ void TValidatedDataTx::ComputeDeadline() {
         // If local timeout is specified in CancelAfterMs then take it into account as well
         Deadline_ = Min(Deadline_, ReceivedAt_ + TDuration::MilliSeconds(Tx.GetCancelAfterMs()));
     }
-}
-
-//
-
-TActiveTransaction::TActiveTransaction(const TBasicOpInfo &op,
-                                       TValidatedDataTx::TPtr dataTx)
-    : TActiveTransaction(op)
-{
-    TrackMemory();
-    FillTxData(dataTx);
-}
-
-TActiveTransaction::TActiveTransaction(TDataShard *self,
-                                       TTransactionContext &txc,
-                                       const TActorContext &ctx,
-                                       const TBasicOpInfo &op,
-                                       const TActorId &target,
-                                       const TString &txBody,
-                                       const TVector<TSysTables::TLocksTable::TLock> &locks,
-                                       ui64 artifactFlags)
-    : TActiveTransaction(op)
-{
-    TrackMemory();
-    FillTxData(self, txc, ctx, target, txBody, locks, artifactFlags);
 }
 
 TActiveTransaction::~TActiveTransaction()
@@ -571,7 +548,7 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "tx " << GetTxId() << " released its data");
 }
 
-void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
+void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
                                                TTransactionContext &txc,
                                                const TActorContext &ctx)
 {
@@ -594,10 +571,10 @@ void TActiveTransaction::DbStoreLocksAccessLog(TDataShard * self,
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Storing " << vec.size() << " locks for txid=" << GetTxId()
-                << " in " << self->TabletID());
+                << " in " << tabletId);
 }
 
-void TActiveTransaction::DbStoreArtifactFlags(TDataShard * self,
+void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
                                               TTransactionContext &txc,
                                               const TActorContext &ctx)
 {
@@ -609,7 +586,7 @@ void TActiveTransaction::DbStoreArtifactFlags(TDataShard * self,
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId()
-                << " in " << self->TabletID());
+                << " in " << tabletId);
 }
 
 ui64 TActiveTransaction::GetMemoryConsumption() const {

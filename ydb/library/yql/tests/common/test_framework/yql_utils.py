@@ -10,6 +10,7 @@ import re
 import tempfile
 import shutil
 
+from google.protobuf import text_format
 from collections import namedtuple, defaultdict, OrderedDict
 from functools import partial
 import codecs
@@ -37,11 +38,6 @@ def get_param(name, default=None):
     return yatest.common.get_param(name, os.environ.get(name) or default)
 
 
-def get_gateway_cfg_suffix():
-    default_suffix = None
-    return get_param('gateway_config_suffix', default_suffix) or ''
-
-
 def do_custom_query_check(res, sql_query):
     custom_check = re.search(r"/\* custom check:(.*)\*/", sql_query)
     if not custom_check:
@@ -54,12 +50,28 @@ def do_custom_query_check(res, sql_query):
     return True
 
 
+def get_gateway_cfg_suffix():
+    default_suffix = None
+    return get_param('gateway_config_suffix', default_suffix) or ''
+
+
 def get_gateway_cfg_filename():
     suffix = get_gateway_cfg_suffix()
     if suffix == '':
         return 'gateways.conf'
     else:
         return 'gateways-' + suffix + '.conf'
+
+
+def merge_default_gateway_cfg(cfg_dir, gateway_config):
+
+    with open(yql_source_path(os.path.join(cfg_dir, 'gateways.conf'))) as f:
+        text_format.Merge(f.read(), gateway_config)
+
+    suffix = get_gateway_cfg_suffix()
+    if suffix:
+        with open(yql_source_path(os.path.join(cfg_dir, 'gateways-' + suffix + '.conf'))) as f:
+            text_format.Merge(f.read(), gateway_config)
 
 
 def find_file(path):

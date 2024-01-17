@@ -15,7 +15,7 @@ PEERDIR(
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/file_storage/proto
     ydb/library/yql/core/file_storage/http_download
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/utils/threading

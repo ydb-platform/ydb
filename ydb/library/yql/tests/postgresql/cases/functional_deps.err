@@ -455,14 +455,6 @@ INNER JOIN users u ON u.uid = n.uid
 WHERE n.type = 'blog' AND n.status = 1
 GROUP BY u.uid, u.name;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: UnionAll, At function: Aggregate
-    	-- OK
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _alias_u.name, but got: pgvarchar
-        	-- OK
-	^
 <sql-statement>
 -- OK
 SELECT u.uid, u.name FROM node n

@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -34,9 +34,14 @@
 #include "curlx.h"
 
 #include "tool_dirhie.h"
-#include "tool_msgs.h"
 
 #include "memdebug.h" /* keep this as LAST include */
+
+#ifdef NETWARE
+#  ifndef __NOVELL_LIBC__
+#    define mkdir mkdir_510
+#  endif
+#endif
 
 #if defined(WIN32) || (defined(MSDOS) && !defined(__DJGPP__))
 #  define mkdir(x,y) (mkdir)((x))
@@ -45,38 +50,38 @@
 #  endif
 #endif
 
-static void show_dir_errno(struct GlobalConfig *global, const char *name)
+static void show_dir_errno(FILE *errors, const char *name)
 {
   switch(errno) {
 #ifdef EACCES
   case EACCES:
-    errorf(global, "You don't have permission to create %s", name);
+    fprintf(errors, "You don't have permission to create %s.\n", name);
     break;
 #endif
 #ifdef ENAMETOOLONG
   case ENAMETOOLONG:
-    errorf(global, "The directory name %s is too long", name);
+    fprintf(errors, "The directory name %s is too long.\n", name);
     break;
 #endif
 #ifdef EROFS
   case EROFS:
-    errorf(global, "%s resides on a read-only file system", name);
+    fprintf(errors, "%s resides on a read-only file system.\n", name);
     break;
 #endif
 #ifdef ENOSPC
   case ENOSPC:
-    errorf(global, "No space left on the file system that will "
-           "contain the directory %s", name);
+    fprintf(errors, "No space left on the file system that will "
+            "contain the directory %s.\n", name);
     break;
 #endif
 #ifdef EDQUOT
   case EDQUOT:
-    errorf(global, "Cannot create directory %s because you "
-           "exceeded your quota", name);
+    fprintf(errors, "Cannot create directory %s because you "
+            "exceeded your quota.\n", name);
     break;
 #endif
-  default:
-    errorf(global, "Error creating directory %s", name);
+  default :
+    fprintf(errors, "Error creating directory %s.\n", name);
     break;
   }
 }
@@ -96,7 +101,7 @@ static void show_dir_errno(struct GlobalConfig *global, const char *name)
 #endif
 
 
-CURLcode create_dir_hierarchy(const char *outfile, struct GlobalConfig *global)
+CURLcode create_dir_hierarchy(const char *outfile, FILE *errors)
 {
   char *tempdir;
   char *tempdir2;
@@ -152,7 +157,7 @@ CURLcode create_dir_hierarchy(const char *outfile, struct GlobalConfig *global)
       /* Create directory. Ignore access denied error to allow traversal. */
       if(!skip && (-1 == mkdir(dirbuildup, (mode_t)0000750)) &&
          (errno != EACCES) && (errno != EEXIST)) {
-        show_dir_errno(global, dirbuildup);
+        show_dir_errno(errors, dirbuildup);
         result = CURLE_WRITE_ERROR;
         break; /* get out of loop */
       }

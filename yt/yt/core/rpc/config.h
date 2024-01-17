@@ -90,6 +90,40 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Common options shared between all services in one server.
+class TServiceCommonDynamicConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    std::optional<bool> EnablePerUserProfiling;
+    std::optional<THistogramConfigPtr> HistogramTimerProfiling;
+    std::optional<bool> EnableErrorCodeCounting;
+    std::optional<ERequestTracingMode> TracingMode;
+
+    REGISTER_YSON_STRUCT(TServiceCommonDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServiceCommonDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TServerDynamicConfig
+    : public TServiceCommonDynamicConfig
+{
+public:
+    THashMap<TString, NYTree::INodePtr> Services;
+
+    REGISTER_YSON_STRUCT(TServerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TServiceConfig
     : public NYTree::TYsonStruct
 {
@@ -292,6 +326,10 @@ class TBalancingChannelConfig
 public:
     //! First option: static list of addresses.
     std::optional<std::vector<TString>> Addresses;
+
+    //! Disables discovery and balancing when just one address is given.
+    //! This is vital for jobs since node's redirector is incapable of handling
+    //! discover requests properly.
     bool DisableBalancingOnSingleAddress;
 
     //! Second option: SD endpoints.

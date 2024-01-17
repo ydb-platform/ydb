@@ -5,6 +5,8 @@
 
 #include <yt/yt_proto/yt/core/misc/proto/error.pb.h>
 
+#include <yt/yt/core/actions/callback.h>
+
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/proc.h>
 
@@ -14,6 +16,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -67,13 +70,16 @@ TString ToString(TErrorCode code)
 
 YT_THREAD_LOCAL(bool) ErrorSanitizerEnabled = false;
 YT_THREAD_LOCAL(TInstant) ErrorSanitizerDatetimeOverride = {};
+YT_THREAD_LOCAL(TErrorSanitizerGuard::THostNameSanitizer) LocalHostNameSanitizer = {};
 
-TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride)
+TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, THostNameSanitizer localHostNameSanitizer)
     : SavedEnabled_(ErrorSanitizerEnabled)
     , SavedDatetimeOverride_(GetTlsRef(ErrorSanitizerDatetimeOverride))
+    , SavedLocalHostNameSanitizer_(GetTlsRef(LocalHostNameSanitizer))
 {
     ErrorSanitizerEnabled = true;
     GetTlsRef(ErrorSanitizerDatetimeOverride) = datetimeOverride;
+    GetTlsRef(LocalHostNameSanitizer) = localHostNameSanitizer;
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -150,7 +156,7 @@ public:
         return &Message_;
     }
 
-    bool HasOriginAttributes() const
+    bool HasHost() const
     {
         return Host_.operator bool();
     }
@@ -158,6 +164,11 @@ public:
     TStringBuf GetHost() const
     {
         return Host_;
+    }
+
+    bool HasOriginAttributes() const
+    {
+        return ThreadName_.Length > 0;
     }
 
     bool HasDatetime() const
@@ -288,6 +299,8 @@ private:
     {
         if (ErrorSanitizerEnabled) {
             Datetime_ = GetTlsRef(ErrorSanitizerDatetimeOverride);
+            auto handleLocalHostName = GetTlsRef(LocalHostNameSanitizer);
+            Host_ = handleLocalHostName(NNet::ReadLocalHostName());
             return;
         }
 
@@ -472,12 +485,12 @@ TError& TError::SetMessage(TString message)
     return *this;
 }
 
-bool TError::HasOriginAttributes() const
+bool TError::HasHost() const
 {
     if (!Impl_) {
         return false;
     }
-    return Impl_->HasOriginAttributes();
+    return Impl_->HasHost();
 }
 
 TStringBuf TError::GetHost() const
@@ -486,6 +499,14 @@ TStringBuf TError::GetHost() const
         return {};
     }
     return Impl_->GetHost();
+}
+
+bool TError::HasOriginAttributes() const
+{
+    if (!Impl_) {
+        return false;
+    }
+    return Impl_->HasOriginAttributes();
 }
 
 bool TError::HasDatetime() const
@@ -932,6 +953,12 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
                 (!error.GetThreadName().empty() ? error.GetThreadName() : ToString(error.GetTid())),
                 error.GetFid()),
             indent);
+    } else if (ErrorSanitizerEnabled && error.HasHost()) {
+        AppendAttribute(
+            builder,
+            "host",
+            Format("%v", error.GetHost()),
+            indent);
     }
 
     if (error.HasDatetime()) {
@@ -1048,6 +1075,9 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
 
         static const TString FidKey("fid");
         addAttribute(FidKey, error.GetFid());
+    } else if (ErrorSanitizerEnabled && error.HasHost()) {
+        static const TString HostKey("host");
+        addAttribute(HostKey, error.GetHost());
     }
 
     if (error.HasDatetime()) {
@@ -1149,6 +1179,9 @@ void Serialize(
                         .Item("tid").Value(error.GetTid())
                         .Item("thread").Value(error.GetThreadName())
                         .Item("fid").Value(error.GetFid());
+                } else if (ErrorSanitizerEnabled && error.HasHost()) {
+                    fluent
+                        .Item("host").Value(error.GetHost());
                 }
                 if (error.HasDatetime()) {
                     fluent

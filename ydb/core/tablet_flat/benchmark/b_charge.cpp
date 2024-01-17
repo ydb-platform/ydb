@@ -32,35 +32,10 @@ namespace {
         ui64 TouchedCount = 0;
     };
 
-    struct TCooker {
-        TCooker(const TRowScheme &scheme)
-            : Tool(scheme)
-            , Writer(new TPartScheme(scheme.Cols), { }, NPage::TGroupId(0))
-        {
-
-        }
-
-        TCooker& Add(const NTest::TRow &row, ui64 offset, ui32 page)
-        {
-            const TCelled key(Tool.LookupKey(row), *Tool.Scheme.Keys, false);
-
-            return Writer.Add(key, offset, page), *this;
-        }
-
-        TSharedData Flush()
-        {
-            return Writer.Flush();
-        }
-
-    private:
-        const NTest::TRowTool Tool;
-        NPage::TIndexWriter Writer;
-    };
-
-    struct TModel : public benchmark::Fixture {
+    struct TPrechargeFixture : public benchmark::Fixture {
         using TGroupId = NPage::TGroupId;
 
-        TModel()
+        TPrechargeFixture()
             : Tool(*Mass.Model->Scheme)
         {
             Y_ABORT_UNLESS(NTest::IndexTools::CountMainPages(*Eggs.Lone()) > 120);
@@ -125,7 +100,7 @@ namespace {
     };
 }
 
-BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPrechargeFixture, PrechargeByKeys)(benchmark::State& state) {
     ui64 items = state.range(0);
 
     const auto &keyDefaults = *Tool.Scheme.Keys;
@@ -144,7 +119,7 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByKeys)(benchmark::State& state) {
     state.counters["Touched"] = benchmark::Counter(Env->TouchedCount, benchmark::Counter::kAvgIterations);
 }
 
-BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
+BENCHMARK_DEFINE_F(TPrechargeFixture, PrechargeByRows)(benchmark::State& state) {
     ui64 items = state.range(0);
 
     const auto &keyDefaults = *Tool.Scheme.Keys;
@@ -160,12 +135,18 @@ BENCHMARK_DEFINE_F(TModel, PrechargeByRows)(benchmark::State& state) {
     state.counters["Touched"] = Env->TouchedCount / it;
 }
 
-BENCHMARK_REGISTER_F(TModel, PrechargeByKeys)
-    ->ArgsProduct({/*items:*/ {0, 100, 1000}, /*fail:*/{0, 1}, /*groups:*/ {0, 1, 2}})
+BENCHMARK_REGISTER_F(TPrechargeFixture, PrechargeByKeys)
+    ->ArgsProduct({
+        /* items: */ {0, 100, 1000}, 
+        /* fail: */ {0, 1}, 
+        /* groups: */ {0, 1, 2}})
     ->Unit(benchmark::kMicrosecond);
 
-BENCHMARK_REGISTER_F(TModel, PrechargeByRows)
-    ->ArgsProduct({/*items:*/ {0, 100, 1000}, /*fail:*/{0, 1}, /*groups:*/ {0, 1, 2}})
+BENCHMARK_REGISTER_F(TPrechargeFixture, PrechargeByRows)
+    ->ArgsProduct({
+        /* items: */ {0, 100, 1000}, 
+        /* fail: */{0, 1}, 
+        /* groups: */ {0, 1, 2}})
     ->Unit(benchmark::kMicrosecond);
 
 }

@@ -1,4 +1,4 @@
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <cmath>
 

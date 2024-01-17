@@ -195,6 +195,9 @@ namespace NProtobufJson {
         using namespace google::protobuf;
         auto type = proto.GetDescriptor()->well_known_type();
 
+        // XXX static_cast will cause UB if used with dynamic messages
+        // (can be created by a DynamicMessageFactory with SetDelegateToGeneratedFactory(false). Unlikely, but still possible).
+        // See workaround with CopyFrom in JsonString2Duration, JsonString2Timestamp (json2proto.cpp)
         if (type == Descriptor::WellKnownType::WELLKNOWNTYPE_DURATION) {
             const auto& duration = static_cast<const Duration&>(proto);
             json.Write(util::TimeUtil::ToString(duration));
@@ -210,7 +213,8 @@ namespace NProtobufJson {
     void TProto2JsonPrinter::PrintSingleField(const Message& proto,
                                               const FieldDescriptor& field,
                                               IJsonOutput& json,
-                                              TStringBuf key) {
+                                              TStringBuf key,
+                                              bool inProtoMap) {
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
 
         if (!key) {
@@ -236,7 +240,7 @@ namespace NProtobufJson {
 
         const Reflection* reflection = proto.GetReflection();
 
-        bool shouldPrintField = reflection->HasField(proto, &field);
+        bool shouldPrintField = inProtoMap || reflection->HasField(proto, &field);
         if (!shouldPrintField && GetConfig().MissingSingleKeyMode == TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired) {
             if (field.has_default_value()) {
                 shouldPrintField = true;
@@ -404,12 +408,12 @@ namespace NProtobufJson {
 
     void TProto2JsonPrinter::PrintKeyValue(const NProtoBuf::Message& proto,
                                            IJsonOutput& json) {
-        const FieldDescriptor* keyField = proto.GetDescriptor()->FindFieldByName("key");
+        const FieldDescriptor* keyField = proto.GetDescriptor()->map_key();
         Y_ABORT_UNLESS(keyField, "Map entry key field not found.");
         TString key = MakeKey(proto, *keyField);
-        const FieldDescriptor* valueField = proto.GetDescriptor()->FindFieldByName("value");
+        const FieldDescriptor* valueField = proto.GetDescriptor()->map_value();
         Y_ABORT_UNLESS(valueField, "Map entry value field not found.");
-        PrintField(proto, *valueField, json, key);
+        PrintSingleField(proto, *valueField, json, key, true);
     }
 
     TString TProto2JsonPrinter::MakeKey(const NProtoBuf::Message& proto,

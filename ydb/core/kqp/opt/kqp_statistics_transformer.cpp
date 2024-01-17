@@ -55,7 +55,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     double nRows = tableData.Metadata->RecordsCount;
     int nAttrs = tableData.Metadata->Columns.size();
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ", nrows: " << nRows << ", nattrs: " << nAttrs;
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ", nrows: " << nRows << ", nattrs: " << nAttrs << ", nKeyColumns: " << tableData.Metadata->KeyColumnNames.size();
 
     auto outputStats = TOptimizerStatistics(EStatisticsType::BaseTable, nRows, nAttrs, 0.0, tableData.Metadata->KeyColumnNames);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));

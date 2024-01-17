@@ -13,7 +13,8 @@
 #include "table_client.h"
 #include "queue_client.h"
 #include "query_tracker_client.h"
-#include "bundle_controller_client.h"
+
+#include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
 
 namespace NYT::NApi {
 

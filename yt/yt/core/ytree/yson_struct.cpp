@@ -135,9 +135,9 @@ std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key)
     return result;
 }
 
-void TYsonStructBase::GetSchema(IYsonConsumer* consumer) const
+void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
 {
-    return Meta_->GetSchema(this, consumer);
+    return Meta_->WriteSchema(this, consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

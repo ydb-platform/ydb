@@ -2,7 +2,7 @@
 
 #include "sql_translation.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <util/string/split.h>
 
 namespace NSQLTranslationV1 {

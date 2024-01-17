@@ -5,13 +5,12 @@ from . import _apis
 
 from . import settings_impl as s_impl
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from ._grpc.v4.protos import ydb_import_pb2
-    from ._grpc.v4 import ydb_import_v1_pb2_grpc
-else:
-    from ._grpc.common.protos import ydb_import_pb2
-    from ._grpc.common import ydb_import_v1_pb2_grpc
+try:
+    from ydb.public.api.protos import ydb_import_pb2
+    from ydb.public.api.grpc import ydb_import_v1_pb2_grpc
+except ImportError:
+    from contrib.ydb.public.api.protos import ydb_import_pb2
+    from contrib.ydb.public.api.grpc import ydb_import_v1_pb2_grpc
 
 
 from . import operation

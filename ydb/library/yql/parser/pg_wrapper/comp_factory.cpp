@@ -462,6 +462,14 @@ public:
     }
 
     ~TReturnSetInfo() {
+        Free();
+    }
+
+    void Free() {
+        if (!Ptr) {
+            return;
+        }
+
         if (Ref().expectedDesc) {
             FreeTupleDesc(Ref().expectedDesc);
         }
@@ -471,9 +479,12 @@ public:
         }
 
         TWithDefaultMiniKQLAlloc::FreeWithSize(Ptr, sizeof(ReturnSetInfo));
+        Ptr = nullptr;
     }
 
     ReturnSetInfo& Ref() {
+        Y_ENSURE(Ptr, "ReturnSetInfo is dead");
+
         return *static_cast<ReturnSetInfo*>(Ptr);
     }
 
@@ -488,11 +499,21 @@ public:
     }
 
     ExprContext& Ref() {
+        Y_ENSURE(Ptr, "TExprContextHolder is dead");
+
         return *Ptr;
     }
 
     ~TExprContextHolder() {
+        Free();
+    }
+
+    void Free() {
+        if (!Ptr) {
+            return;
+        }
         FreeExprContext(Ptr, true);
+        Ptr = nullptr;
     }
 
 private:
@@ -739,9 +760,7 @@ private:
             }
 
             ~TIterator() {
-                if (TupleSlot) {
-                    ExecDropSingleTupleTableSlot(TupleSlot);
-                }
+                FinishAndFree();
             }
 
         private:
@@ -766,7 +785,7 @@ private:
                 } else {
                     YQL_ENSURE(!StructType);
                     if (RSInfo.Ref().isDone == ExprEndResult) {
-                        IsFinished = true;
+                        FinishAndFree();
                         return false;
                     }
 
@@ -782,7 +801,7 @@ private:
 
             bool CopyTuple(NUdf::TUnboxedValue& value) {
                 if (!tuplestore_gettupleslot(RSInfo.Ref().setResult, true, false, TupleSlot)) {
-                    IsFinished = true;
+                    FinishAndFree();
                     return false;
                 }
                 
@@ -833,6 +852,17 @@ private:
                         return PointerDatumToPod((Datum)MakeFixedString(orig, RetTypeDesc.TypeLen));
                     }
                 }
+            }
+
+            void FinishAndFree() {
+                if (TupleSlot) {
+                    ExecDropSingleTupleTableSlot(TupleSlot);
+                    TupleSlot = nullptr;
+                }
+                RSInfo.Free();
+                ExprContextHolder.Free();
+
+                IsFinished = true;
             }
 
             const std::string_view Name;

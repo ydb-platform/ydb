@@ -87,7 +87,8 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
             request->set_arrow_fallback_rowset_format(NYT::NApi::NRpcProxy::NProto::ERowsetFormat::RF_FORMAT);
         }
 
-        request->set_enable_row_index(true);
+        // TODO() Enable row indexes
+        request->set_enable_row_index(!isArrow);
         request->set_enable_table_index(true);
         // TODO() Enable range indexes
         request->set_enable_range_index(!isArrow);

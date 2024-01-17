@@ -182,7 +182,7 @@ void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config)
     GlobalProtobufInteropConfig()->Config.Store(std::move(config));
 }
 
-void GetSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -276,7 +276,7 @@ public:
         int fieldNumber,
         const TProtobufMessageBytesFieldConverter& converter)
     {
-        EmplaceOrCrash(MessageFieldConverterMap_, std::make_pair(descriptor, fieldNumber), converter);
+        EmplaceOrCrash(MessageFieldConverterMap_, std::pair(descriptor, fieldNumber), converter);
     }
 
     //! This method is called while reflecting types.
@@ -303,7 +303,7 @@ public:
         VERIFY_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
-        auto it = MessageFieldConverterMap_.find(std::make_pair(descriptor, fieldNumber));
+        auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
         if (it == MessageFieldConverterMap_.end()) {
             return std::nullopt;
         } else {
@@ -357,7 +357,7 @@ private:
     YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
     THashMap<const Descriptor*, std::unique_ptr<TProtobufMessageType>> MessageTypeMap_;
     TForkAwareSyncMap<const Descriptor*, const TProtobufMessageType*> MessageTypeSyncMap_;
-    THashMap<const EnumDescriptor*,std::unique_ptr<TProtobufEnumType>> EnumTypeMap_;
+    THashMap<const EnumDescriptor*, std::unique_ptr<TProtobufEnumType>> EnumTypeMap_;
     TForkAwareSyncMap<const EnumDescriptor*, const TProtobufEnumType*> EnumTypeSyncMap_;
 
     THashMap<const Descriptor*, TProtobufMessageConverter> MessageTypeConverterMap_;
@@ -501,17 +501,18 @@ public:
         return EnumYsonStorageType_;
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
         if (IsYsonMap()) {
-            BuildYsonFluently(consumer).BeginMap()
-                .Item("type_name").Value("dict")
-                .Item("key").Do([this] (auto&& fluent) {
-                    GetYsonMapKeyField()->GetSchema(fluent.GetConsumer());
-                })
-                .Item("value").Do([this] (auto&& fluent) {
-                    GetYsonMapValueField()->GetSchema(fluent.GetConsumer());
-                })
+            BuildYsonFluently(consumer)
+                .BeginMap()
+                    .Item("type_name").Value("dict")
+                    .Item("key").Do([&] (auto fluent) {
+                        GetYsonMapKeyField()->WriteSchema(fluent.GetConsumer());
+                    })
+                    .Item("value").Do([&] (auto fluent) {
+                        GetYsonMapValueField()->WriteSchema(fluent.GetConsumer());
+                    })
                 .EndMap();
 
             return;
@@ -558,10 +559,10 @@ public:
                 consumer->OnStringScalar("string");
                 break;
             case FieldDescriptor::TYPE_ENUM:
-                NYson::GetSchema(GetEnumType(), consumer);
+                NYson::WriteSchema(GetEnumType(), consumer);
                 break;
             case FieldDescriptor::TYPE_MESSAGE:
-                NYson::GetSchema(GetMessageType(), consumer);
+                NYson::WriteSchema(GetMessageType(), consumer);
                 break;
             default:
                 break;
@@ -690,20 +691,21 @@ public:
         }
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
         BuildYsonFluently(consumer).BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(0, Underlying_->field_count(), [this] (auto&& fluent, int index) {
+            .Item("members").DoListFor(0, Underlying_->field_count(), [&] (auto fluent, int index) {
                 auto* field = GetFieldByNumber(Underlying_->field(index)->number());
-                fluent.Item().BeginMap()
-                    .Item("name").Value(field->GetYsonName())
-                    .Item("type").Do([&] (auto&& fluent) {
-                        field->GetSchema(fluent.GetConsumer());
-                    })
-                    .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [&] (auto && fluent) {
-                        fluent.Item("required").Value(true);
-                    })
+                fluent.Item()
+                    .BeginMap()
+                        .Item("name").Value(field->GetYsonName())
+                        .Item("type").Do([&] (auto fluent) {
+                            field->WriteSchema(fluent.GetConsumer());
+                        })
+                        .DoIf(!field->IsYsonMap() && !field->IsRepeated() && !field->IsOptional(), [] (auto fluent) {
+                            fluent.Item("required").Value(true);
+                        })
                     .EndMap();
             })
             .EndMap();
@@ -821,14 +823,15 @@ public:
         return it == ValueToLiteral_.end() ? TStringBuf() : it->second;
     }
 
-    void GetSchema(IYsonConsumer* consumer) const
+    void WriteSchema(IYsonConsumer* consumer) const
     {
-        BuildYsonFluently(consumer).BeginMap()
-            .Item("type_name").Value("enum")
-            .Item("enum_name").Value(Underlying_->name())
-            .Item("values").DoListFor(0, Underlying_->value_count(), [this] (auto&& fluent, int index) {
-                fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
-            })
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("type_name").Value("enum")
+                .Item("enum_name").Value(Underlying_->name())
+                .Item("values").DoListFor(0, Underlying_->value_count(), [&] (auto fluent, int index) {
+                    fluent.Item().Value(FindLiteralByValue(Underlying_->value(index)->number()));
+                })
             .EndMap();
     }
 
@@ -1004,22 +1007,20 @@ protected:
         }
         switch (config->Utf8Check) {
             case EUtf8Check::Disable:
-                break;
+                return;
             case EUtf8Check::LogOnFail:
-                YT_LOG_WARNING("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
+                YT_LOG_WARNING("String field got non UTF-8 value (Path: %v, Value: %v)",
                     YPathStack_.GetHumanReadablePath(),
                     data);
-                break;
+                return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("Field %v accepts only valid UTF-8 sequence, but got (%Qv)",
-                    YPathStack_.GetHumanReadablePath(),
-                    data)
+                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v)",
+                    YPathStack_.GetHumanReadablePath())
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
-                    << TErrorAttribute("proto_field", fieldFullName);
-                break;
+                    << TErrorAttribute("proto_field", fieldFullName)
+                    << TErrorAttribute("non_utf8_string", data);
         }
     }
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3140,14 +3141,14 @@ TString YsonStringToProto(
     return serializedProto;
 }
 
-void GetSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufEnumType* type, IYsonConsumer* consumer)
 {
-    type->GetSchema(consumer);
+    type->WriteSchema(consumer);
 }
 
-void GetSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer)
 {
-    type->GetSchema(consumer);
+    type->WriteSchema(consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

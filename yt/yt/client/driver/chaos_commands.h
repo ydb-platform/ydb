@@ -4,7 +4,7 @@
 
 #include <yt/yt/client/chaos_client/replication_card.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NDriver {
 

@@ -1,6 +1,6 @@
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 

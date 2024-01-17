@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <util/system/file.h>
 
 #include <errno.h>
 
@@ -110,6 +110,7 @@ ui64 GetProcessCumulativeMajorPageFaults(int pid = -1);
 size_t GetCurrentProcessId();
 size_t GetCurrentThreadId();
 std::vector<size_t> GetCurrentProcessThreadIds();
+bool IsUserspaceThread(size_t tid);
 
 void ChownChmodDirectory(
     const TString& path,

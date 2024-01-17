@@ -108,7 +108,7 @@ TEST(TAsyncWriterTest, WriteFailed)
     ::memset(buffer.Begin(), 'a', buffer.Size());
 
     auto asyncWriteResult = writer->Write(buffer);
-    reader->Abort();
+    YT_UNUSED_FUTURE(reader->Abort());
 
     EXPECT_FALSE(asyncWriteResult.Get().IsOK())
         << ToString(asyncWriteResult.Get());
@@ -279,7 +279,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
 
     std::vector<char> data(dataSize, 'a');
 
-    BIND([&] () {
+    YT_UNUSED_FUTURE(BIND([&] () {
         auto dice = std::bind(
             std::uniform_int_distribution<int>(0, 127),
             std::default_random_engine());
@@ -287,7 +287,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
             data[i] = dice();
         }
     })
-    .AsyncVia(queue->GetInvoker()).Run();
+    .AsyncVia(queue->GetInvoker()).Run());
 
     auto writeError =  BIND(&WriteAll, Writer, data.data(), data.size(), blockSize)
         .AsyncVia(queue->GetInvoker())
@@ -307,10 +307,10 @@ INSTANTIATE_TEST_SUITE_P(
     ValueParametrized,
     TPipeBigReadWriteTest,
     ::testing::Values(
-        std::make_pair(2000 * 4096, 4096),
-        std::make_pair(100 * 4096, 10000),
-        std::make_pair(100 * 4096, 100),
-        std::make_pair(100, 4096)));
+        std::pair(2000 * 4096, 4096),
+        std::pair(100 * 4096, 10000),
+        std::pair(100 * 4096, 100),
+        std::pair(100, 4096)));
 
 #endif
 

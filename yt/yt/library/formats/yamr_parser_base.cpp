@@ -113,7 +113,7 @@ void TYamrDelimitedBaseParser::ProcessTableSwitch(TStringBuf tableIndex)
     YT_ASSERT(State == EState::InsideKey);
     i64 value;
     try {
-         value = FromString<i64>(tableIndex);
+        value = FromString<i64>(tableIndex);
     } catch (const std::exception& ex) {
         TString tableIndexString(tableIndex);
         if (tableIndex.size() > ContextBufferSize) {

@@ -159,6 +159,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     }
 
     {
+        TMemoryProfileGuard g("TTxInit/LongTxWrites");
         auto rowset = db.Table<Schema::LongTxWrites>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -179,13 +180,16 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    for (const auto& pr : Self->CommitsInFlight) {
-        ui64 txId = pr.first;
-        for (TWriteId writeId : pr.second.WriteIds) {
-            Y_ABORT_UNLESS(Self->LongTxWrites.contains(writeId),
-                "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
-                Self->TabletID(), txId, writeId);
-            Self->AddLongTxWrite(writeId, txId);
+    {
+        TMemoryProfileGuard g("TTxInit/CommitsInFlight");
+        for (const auto& pr : Self->CommitsInFlight) {
+            ui64 txId = pr.first;
+            for (TWriteId writeId : pr.second.WriteIds) {
+                Y_ABORT_UNLESS(Self->LongTxWrites.contains(writeId),
+                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
+                    Self->TabletID(), txId, writeId);
+                Self->AddLongTxWrite(writeId, txId);
+            }
         }
     }
     Self->UpdateInsertTableCounters();

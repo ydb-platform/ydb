@@ -1,3 +1,22 @@
+--
+-- SUBSELECT
+--
+SELECT 1 AS one WHERE 1 IN (SELECT 1);
+ one 
+-----
+   1
+(1 row)
+
+SELECT 1 AS zero WHERE 1 NOT IN (SELECT 1);
+ zero 
+------
+(0 rows)
+
+SELECT 1 AS zero WHERE 1 IN (SELECT 2);
+ zero 
+------
+(0 rows)
+
 -- Check grammar's handling of extra parens in assorted contexts
 SELECT * FROM (SELECT 1 AS x) ss;
  x 

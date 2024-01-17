@@ -66,6 +66,8 @@ runs:
         echo "TESTMO_TOKEN=${{ inputs.testman_token }}" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+        echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
     
     - name: prepare
       shell: bash
@@ -93,7 +95,6 @@ runs:
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
-        BUILD_PRESET="${{ inputs.build_preset }}"
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${ARCH}"
@@ -105,7 +106,7 @@ runs:
             TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
@@ -170,7 +171,7 @@ runs:
         )
         
         # FIXME: copy-paste from build_ya
-        case "${{ inputs.build_preset }}" in
+        case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")
             ;;
@@ -196,7 +197,7 @@ runs:
             )
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
@@ -213,11 +214,13 @@ runs:
         echo "::debug::get version"
         ./ya --version
         
+        echo "Tests are running..." | .github/scripts/tests/comment-pr.py
+        
         if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
           echo "::debug::start tests"
 
           ./ya test "${params[@]}" \
-            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" \
+            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
             --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
             --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
               RC=$?
@@ -227,7 +230,7 @@ runs:
         
         echo "::debug::save tests reports"
         ./ya test "${params[@]}" \
-          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
+          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
           --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests \
           --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
@@ -253,8 +256,7 @@ runs:
       shell: bash
       run: |
         .github/scripts/tests/transform-ya-junit.py -i \
-          --mu .github/config/muted_test.txt \
-          --mf .github/config/muted_functest.txt \
+          -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
           --log-url-prefix "$S3_URL_PREFIX/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
@@ -301,20 +303,16 @@ runs:
     - name: write tests summary
       shell: bash
       if: always()
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
       run: |
         mkdir $ARTIFACTS_DIR/summary/
         
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         
-        platform_name=$(uname | tr '[:upper:]' '[:lower:]')-$(arch)
-        
         .github/scripts/tests/generate-summary.py \
           --summary-out-path $ARTIFACTS_DIR/summary/ \
           --summary-url-prefix $S3_URL_PREFIX/summary/ \
           --test-history-url $TEST_HISTORY_URL \
-          --build-preset "${platform_name}-${{ inputs.build_preset }}" \
+          --build-preset "$BUILD_PRESET" \
           "Tests" ya-test.html "$JUNIT_REPORT_XML"
 
     - name: sync test results to s3

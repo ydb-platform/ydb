@@ -5,8 +5,8 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) Björn Stenberg, <bjorn@haxx.se>
+ * Copyright (C) 2020 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se>
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -122,9 +122,8 @@ static CURLcode mqtt_send(struct Curl_easy *data,
   struct MQTT *mq = data->req.p.mqtt;
   ssize_t n;
   result = Curl_write(data, sockfd, buf, len, &n);
-  if(result)
-    return result;
-  Curl_debug(data, CURLINFO_HEADER_OUT, buf, (size_t)n);
+  if(!result)
+    Curl_debug(data, CURLINFO_HEADER_OUT, buf, (size_t)n);
   if(len != (size_t)n) {
     size_t nsend = len - n;
     char *sendleftovers = Curl_memdup(&buf[n], nsend);
@@ -243,7 +242,7 @@ static int init_connpack(char *packet, char *remain, int remain_pos)
   /* keep-alive 0 = disabled */
   packet[remain_pos + 9] = 0x00;
   packet[remain_pos + 10] = 0x3c;
-  /* end of variable header */
+  /*end of variable header*/
   return remain_pos + 10;
 }
 
@@ -252,7 +251,7 @@ static CURLcode mqtt_connect(struct Curl_easy *data)
   CURLcode result = CURLE_OK;
   int pos = 0;
   int rc = 0;
-  /* remain length */
+  /*remain length*/
   int remain_pos = 0;
   char remain[4] = {0};
   size_t packetlen = 0;
@@ -605,7 +604,7 @@ static CURLcode mqtt_read_publish(struct Curl_easy *data, bool *done)
   unsigned char packet;
 
   switch(mqtt->state) {
-MQTT_SUBACK_COMING:
+  MQTT_SUBACK_COMING:
   case MQTT_SUBACK_COMING:
     result = mqtt_verify_suback(data);
     if(result)
@@ -636,7 +635,7 @@ MQTT_SUBACK_COMING:
 
     /* -- switched state -- */
     remlen = mq->remaining_length;
-    infof(data, "Remaining length: %zu bytes", remlen);
+    infof(data, "Remaining length: %zd bytes", remlen);
     if(data->set.max_filesize &&
        (curl_off_t)remlen > data->set.max_filesize) {
       failf(data, "Maximum file size exceeded");
@@ -688,7 +687,7 @@ MQTT_SUBACK_COMING:
     result = CURLE_WEIRD_SERVER_REPLY;
     goto end;
   }
-end:
+  end:
   return result;
 }
 

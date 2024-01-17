@@ -1083,8 +1083,9 @@ TYsonCursorConverter CreateYsonConverterImpl(
             return TYsonConsumerScannerFactory::CreateListScanner(descriptor, TListHandler(), elementConverter);
         }
         case ELogicalMetatype::Tuple: {
-            std::vector<TYsonCursorConverter> elementConverters;
             const auto size = type->GetElements().size();
+            std::vector<TYsonCursorConverter> elementConverters;
+            elementConverters.reserve(size);
             for (size_t i = 0; i != size; ++i) {
                 elementConverters.push_back(CreateYsonConverterImpl(descriptor.TupleElement(i), cache, config));
             }
@@ -1119,7 +1120,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
             }
         }
         case ELogicalMetatype::VariantTuple: {
-            std::vector<std::pair<int,TYsonCursorConverter>> elementConverters;
+            std::vector<std::pair<int, TYsonCursorConverter>> elementConverters;
             const auto size = type->GetElements().size();
             for (size_t i = 0; i != size; ++i) {
                 elementConverters.emplace_back(i, CreateYsonConverterImpl(descriptor.VariantTupleElement(i), cache, config));

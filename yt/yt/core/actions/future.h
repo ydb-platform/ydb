@@ -332,7 +332,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-class TFuture
+class [[nodiscard]] TFuture
     : public TFutureBase<T>
 {
 public:
@@ -376,7 +376,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <>
-class TFuture<void>
+class [[nodiscard]] TFuture<void>
     : public TFutureBase<void>
 {
 public:
@@ -472,7 +472,7 @@ public:
      *  If the value is set before the call to #handlered, then
      *  #handler is discarded.
      */
-    bool OnCanceled(TCallback<void (const TError&)> handler) const;
+    bool OnCanceled(TCallback<void(const TError&)> handler) const;
 
     //! Converts promise into future.
     operator TFuture<T>() const;

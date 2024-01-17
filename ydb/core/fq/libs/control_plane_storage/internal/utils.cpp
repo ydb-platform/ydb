@@ -302,4 +302,98 @@ TString GetPrettyStatistics(const TString& statistics) {
     return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
+namespace {
+
+const NJson::TJsonValue* GetStatisticsRoot(const NJson::TJsonValue& allStatistics) {
+    const NJson::TJsonValue* root = nullptr;
+    if (!allStatistics.GetValuePointer("ResultSet", &root)) {
+        allStatistics.GetValuePointer("Graph=0", &root);
+    }
+    return root;
+}
+
+std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJsonValue& root) {
+    std::unordered_map<TString, i64> aggregatedStats;
+
+    for (const auto& [stageName, stageStats] : root.GetMap()) {
+        if (!stageStats.IsMap()) {
+            continue;
+        }
+
+        for (const auto& [partKey, partStats] : stageStats.GetMap()) {
+            if (!partStats.IsMap()) {
+                continue;
+            }
+
+            constexpr std::string_view v2Prefix = "Ingress=";
+            if (!partKey.StartsWith(v2Prefix)) {
+                continue;
+            }
+            if (auto valuePtr = partStats.GetValueByPath("Ingress.Bytes.sum")) {
+                TString valueKey{partKey, v2Prefix.size(), partKey.size() - v2Prefix.size()};
+                i64 value = valuePtr->GetIntegerSafe();
+                aggregatedStats[valueKey] += value;
+                break;
+            }
+        }
+    }
+    return aggregatedStats;
+}
+}
+
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
+    NJson::TJsonValue statsJson;
+    if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
+        return;
+    }
+
+    auto root = GetStatisticsRoot(statsJson);
+    if (!root || !root->IsMap()) {
+        return;
+    }
+
+    using namespace std::string_view_literals;
+    auto field_to_path = {
+        std::make_pair("IngressBytes"sv, "IngressBytes.sum"sv),
+        {"EgressBytes", "EgressBytes.sum"},
+        {"InputBytes", "InputBytes.sum"},
+        {"OutputBytes", "OutputBytes.sum"}};
+
+    for (auto [field, path] : field_to_path) {
+        if (auto jsonField = root->GetValueByPath(path)) {
+            auto newValue = dest.Add();
+            newValue->set_name(TString{field});
+            newValue->set_value(jsonField->GetIntegerSafe());
+        }
+    }
+
+    std::unordered_map<TString, i64> aggregatedStatistics = AggregateStatisticsBySources(*root);
+    for (const auto& [source, ingress] : aggregatedStatistics) {
+        auto newEntry = dest.Add();
+        newEntry->set_name(source);
+        newEntry->set_value(ingress);
+    }
+}
+
+StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
+    StatsValuesList statPairs;
+    statPairs.reserve(statsProto.size());
+    for (const auto& stat : statsProto) {
+        statPairs.emplace_back(stat.name(), stat.value());
+    }
+    return statPairs;
+}
+
+TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics) {
+    bool first = true;
+    for (const auto& [field, value] : statistics.Stats) {
+        if (!first) {
+            builder << ", ";
+        }
+        builder << field << ": [" << value << "]";
+        first = false;
+    }
+    return builder;
+}
+
 };

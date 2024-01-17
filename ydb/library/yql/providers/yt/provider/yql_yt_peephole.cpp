@@ -19,7 +19,7 @@ namespace {
 
 class TYtPeepholeTransformer : public TOptimizeTransformerBase {
 public:
-    TYtPeepholeTransformer(TYtState::TPtr state, const TYtExtraPeepHoleSettings& settings)
+    TYtPeepholeTransformer(TYtState::TPtr state, const THashMap<TString, TString>& settings)
         : TOptimizeTransformerBase(state ? state->Types : nullptr, NLog::EComponent::ProviderYt, {})
         , State_(state)
         , Settings_(settings)
@@ -29,6 +29,7 @@ public:
         AddHandler(0, &TYtDqWideWrite::Match, HNDL(OptimizeYtDqWideWrite));
 #undef HNDL
     }
+
 private:
     TMaybeNode<TExprBase> OptimizeLength(TExprBase node, TExprContext& ctx) {
         std::optional<size_t> lengthRes;
@@ -59,41 +60,34 @@ private:
     }
 
     TMaybeNode<TExprBase> OptimizeYtDqWideWrite(TExprBase node, TExprContext& ctx) {
-        if (!Settings_.TmpTable) {
+        if (Settings_.empty()) {
             return node;
         }
 
-        if (GetSetting(TYtDqWideWrite(&node.Ref()).Settings().Ref(), "outTable")) {
+        auto cluster = Settings_.at("yt_cluster");
+        auto server = Settings_.at("yt_server");
+        auto table = Settings_.at("yt_table");
+        auto tableName = Settings_.at("yt_tableName");
+        auto tableType = Settings_.at("yt_tableType");
+        auto writeOptions = Settings_.at("yt_writeOptions");
+        auto outSpec = Settings_.at("yt_outSpec");
+        auto tx = Settings_.at("yt_tx");
+
+        // Check that we optimize only single YtDqWideWrite
+        if (auto setting = GetSetting(TYtDqWideWrite(&node.Ref()).Settings().Ref(), "table")) {
+            YQL_ENSURE(setting->Child(1)->Content() == table);
             return node;
-        }
-
-        auto server = State_->Gateway->GetClusterServer(Settings_.CurrentCluster);
-        YQL_ENSURE(server, "Invalid YT cluster: " << Settings_.CurrentCluster);
-
-        NYT::TRichYPath realTable = State_->Gateway->GetWriteTable(State_->SessionId, Settings_.CurrentCluster,
-            Settings_.TmpTable->Name().StringValue(), Settings_.TmpFolder);
-        realTable.Append(true);
-        YQL_ENSURE(realTable.TransactionId_.Defined(), "Expected TransactionId");
-
-        NYT::TNode spec;
-        TYqlRowSpecInfo(Settings_.TmpTable->RowSpec()).FillCodecNode(spec[YqlRowSpecAttribute]);
-        NYT::TNode outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
-        NYT::TNode writerOptions = NYT::TNode::CreateMap();
-
-        if (Settings_.Config->MaxRowWeight.Get(Settings_.CurrentCluster)) {
-            auto maxRowWeight = Settings_.Config->MaxRowWeight.Get(Settings_.CurrentCluster)->GetValue();
-            writerOptions["max_row_weight"] = static_cast<i64>(maxRowWeight);
         }
 
         TMaybeNode<TCoSecureParam> secParams;
         if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
-            secParams = Build<TCoSecureParam>(ctx, node.Pos()).Name().Build(TString("cluster:default_").append(Settings_.CurrentCluster)).Done();
+            secParams = Build<TCoSecureParam>(ctx, node.Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
         }
 
         auto settings = Build<TCoNameValueTupleList>(ctx, node.Pos())
             .Add()
                 .Name().Value("table", TNodeFlags::Default).Build()
-                .Value<TCoAtom>().Value(NYT::NodeToYsonString(NYT::PathToNode(realTable))).Build()
+                .Value<TCoAtom>().Value(table).Build()
             .Build()
             .Add()
                 .Name().Value("server", TNodeFlags::Default).Build()
@@ -101,23 +95,27 @@ private:
             .Build()
             .Add()
                 .Name().Value("outSpec", TNodeFlags::Default).Build()
-                .Value<TCoAtom>().Value(NYT::NodeToYsonString(outSpec)).Build()
+                .Value<TCoAtom>().Value(outSpec).Build()
             .Build()
             .Add()
                 .Name().Value("secureParams", TNodeFlags::Default).Build()
                 .Value(secParams)
             .Build()
             .Add()
-                .Name().Value("tx", TNodeFlags::Default).Build()
-                .Value<TCoAtom>().Value(GetGuidAsString(*realTable.TransactionId_), TNodeFlags::Default).Build()
-            .Build()
-            .Add()
-                .Name().Value("outTable", TNodeFlags::Default).Build()
-                .Value(*Settings_.TmpTable)
-            .Build()
-            .Add()
                 .Name().Value("writerOptions", TNodeFlags::Default).Build()
-                .Value<TCoAtom>().Value(NYT::NodeToYsonString(writerOptions)).Build()
+                .Value<TCoAtom>().Value(writeOptions).Build()
+            .Build()
+            .Add()
+                .Name().Value("tx", TNodeFlags::Default).Build()
+                .Value<TCoAtom>().Value(tx).Build()
+            .Build()
+            .Add() // yt_file gateway specific
+                .Name().Value("tableName", TNodeFlags::Default).Build()
+                .Value<TCoAtom>().Value(tableName).Build()
+            .Build()
+            .Add() // yt_file gateway specific
+                .Name().Value("tableType", TNodeFlags::Default).Build()
+                .Value<TCoAtom>().Value(tableType).Build()
             .Build()
             .Done().Ptr();
 
@@ -125,12 +123,12 @@ private:
     }
 
     const TYtState::TPtr State_;
-    const TYtExtraPeepHoleSettings Settings_;
+    const THashMap<TString, TString> Settings_;
 };
 
 }
 
-THolder<IGraphTransformer> CreateTYtPeepholeTransformer(TYtState::TPtr state, const TYtExtraPeepHoleSettings& settings) {
+THolder<IGraphTransformer> CreateYtPeepholeTransformer(TYtState::TPtr state, const THashMap<TString, TString>& settings) {
     return MakeHolder<TYtPeepholeTransformer>(std::move(state), settings);
 }
 

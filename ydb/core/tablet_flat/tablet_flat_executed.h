@@ -23,8 +23,8 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
-    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {});
-    void Execute(TAutoPtr<ITransaction> transaction, NWilson::TTraceId traceId = {});
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
+    void Execute(TAutoPtr<ITransaction> transaction);
     void EnqueueExecute(TAutoPtr<ITransaction> transaction);
 
     const NTable::TScheme& Scheme() const noexcept;

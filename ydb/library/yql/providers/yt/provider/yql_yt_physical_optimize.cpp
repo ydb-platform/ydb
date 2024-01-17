@@ -6934,6 +6934,18 @@ private:
                         continue;
                     }
 
+                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
+                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
+                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
+                        })) {
+                            continue;
+                        }
+                    }
+                    if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+                        continue;
+                    }
+
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                     auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
@@ -7460,6 +7472,12 @@ private:
         }
         if (NYql::HasNonEmptyKeyFilter(section)) {
             return node;
+        }
+        if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+            auto op = path.Table().Maybe<TYtOutput>().Operation().Cast();
+            if (!(op.Ref().HasResult() && op.Ref().GetResult().Type() == TExprNode::World || op.Maybe<TYtTouch>())) {
+                return node;
+            }
         }
         TYtOutTableInfo outTableInfo(merge.Output().Item(0));
         if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {

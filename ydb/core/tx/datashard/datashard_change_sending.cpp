@@ -334,6 +334,8 @@ public:
                 Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
             }
         }
+
+        Self->CheckStateChange(ctx);
     }
 
 private:

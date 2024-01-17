@@ -169,7 +169,7 @@ void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected)
     auto* factory = GetEphemeralNodeFactory();
     auto builder = CreateBuilderFromFactory(factory);
     builder->BeginTree();
-    ysonStruct->GetSchema(builder.get());
+    ysonStruct->WriteSchema(builder.get());
     auto actualNode = builder->EndTree();
     auto expectedNode = ConvertToNode(TYsonStringBuf(expected), factory);
     EXPECT_TRUE(AreNodesEqual(expectedNode, actualNode))

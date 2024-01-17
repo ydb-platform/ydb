@@ -35,7 +35,7 @@ struct ISubConsumerClient
     //! If oldOffset is specified, the current offset is read (within the transaction) and compared with oldOffset.
     //! If they are equal, the new offset is written, otherwise an exception is thrown.
     virtual void Advance(
-        const NApi::ITransactionPtr& transaction,
+        const NApi::ITransactionPtr& consumerTransaction,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset) const = 0;
@@ -43,19 +43,17 @@ struct ISubConsumerClient
     //! Collect partition infos. If there are entries in the consumer table with partition
     //! indices outside of range [0, expectedPartitionCount), they will be ignored.
     virtual TFuture<std::vector<TPartitionInfo>> CollectPartitions(
-        const NApi::IClientPtr& client,
         int expectedPartitionCount,
         bool withLastConsumeTime = false) const = 0;
 
     //! Collect partition infos.
     //! Entries in the consumer table with partition indices not in the given vector will be ignored.
     virtual TFuture<std::vector<TPartitionInfo>> CollectPartitions(
-        const NApi::IClientPtr& client,
         const std::vector<int>& partitionIndexes,
         bool withLastConsumeTime = false) const = 0;
 
     //! Fetch and parse the target_queue attribute of this consumer.
-    virtual TFuture<TCrossClusterReference> FetchTargetQueue(const NApi::IClientPtr& client) const = 0;
+    virtual TFuture<TCrossClusterReference> FetchTargetQueue() const = 0;
 
     struct TPartitionStatistics
     {
@@ -67,7 +65,6 @@ struct ISubConsumerClient
     // TODO(achulkov2): Move this to a separate IQueueClient class?
     //! Fetch relevant per-tablet statistics for queue.
     virtual TFuture<TPartitionStatistics> FetchPartitionStatistics(
-        const NApi::IClientPtr& client,
         const NYPath::TYPath& queue,
         int partitionIndex) const = 0;
 };
@@ -77,7 +74,7 @@ DEFINE_REFCOUNTED_TYPE(ISubConsumerClient)
 struct IConsumerClient
     : public TRefCounted
 {
-    virtual ISubConsumerClientPtr GetSubConsumerClient(const TCrossClusterReference& queue) const = 0;
+    virtual ISubConsumerClientPtr GetSubConsumerClient(const NApi::IClientPtr& queueClusterClient, const TCrossClusterReference& queueRef) const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IConsumerClient)
@@ -89,6 +86,7 @@ DEFINE_REFCOUNTED_TYPE(IConsumerClient)
 
 //! Creates a BigRT single-queue consumer client.
 ISubConsumerClientPtr CreateBigRTConsumerClient(
+    const NApi::IClientPtr& client,
     const NYPath::TYPath& path,
     const NTableClient::TTableSchema& schema);
 
@@ -100,23 +98,27 @@ ISubConsumerClientPtr CreateBigRTConsumerClient(
 
 //! Creates a native YT multi-queue consumer client.
 IConsumerClientPtr CreateConsumerClient(
-    const NYPath::TYPath& path,
-    const NTableClient::TTableSchema& schema);
+    const NApi::IClientPtr& consumerClusterClient,
+    const NYPath::TYPath& consumerPath,
+    const NTableClient::TTableSchema& consumerSchema);
 
 //! Uses the table mount cache to fetch the consumer's schema and
 //! make sure the consumer actually has YT consumer schema.
 IConsumerClientPtr CreateConsumerClient(
-    const NApi::IClientPtr& client,
-    const NYPath::TYPath& path);
+    const NApi::IClientPtr& clusterClient,
+    const NYPath::TYPath& consumerPath);
 
 //! Uses the table mount cache to fetch the consumer's schema and
 //! make sure the consumer actually has YT consumer schema.
 //! Uses the given queue path to fetch the corresponding subconsumer.
 //! If no cluster is set for queue, it is inferred from the given client.
 ISubConsumerClientPtr CreateSubConsumerClient(
-    const NApi::IClientPtr& client,
+    const NApi::IClientPtr& consumerClusterClient,
+    const NApi::IClientPtr& queueClusterClient,
     const NYPath::TYPath& consumerPath,
     NYPath::TRichYPath queuePath);
+
+const NTableClient::TTableSchemaPtr& GetConsumerSchema();
 
 ////////////////////////////////////////////////////////////////////////////////
 

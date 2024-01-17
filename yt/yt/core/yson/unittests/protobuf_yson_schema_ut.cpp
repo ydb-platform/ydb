@@ -14,13 +14,14 @@
 namespace NYT::NYson {
 namespace {
 
+////////////////////////////////////////////////////////////////////////////////
 
 TEST(TProtobufYsonSchemaTest, GetMessageSchema)
 {
     TStringStream outputStream;
     TYsonWriter ysonWriter(&outputStream, EYsonFormat::Text);
 
-    GetSchema(ReflectProtobufMessageType<NProto::TTestSchemaMessage>(), &ysonWriter);
+    WriteSchema(ReflectProtobufMessageType<NProto::TTestSchemaMessage>(), &ysonWriter);
     TStringBuf expected = R"({
         type_name="struct";
         members=[
@@ -53,6 +54,8 @@ TEST(TProtobufYsonSchemaTest, GetMessageSchema)
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n"
         << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n";
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

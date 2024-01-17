@@ -7,7 +7,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A simple base class that implements IClient and delegates
-//! all calls to an underlying instance.
+//! all calls to the underlying instance.
 class TDelegatingClient
     : public IClient
 {
@@ -37,7 +37,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options = {}) override;
 
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) override;
 
@@ -553,6 +553,7 @@ public:
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options = {}) override;
 
@@ -618,7 +619,7 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options) override;
 
-    virtual TFuture<TBundleConfigDescriptor> GetBundleConfig(
+    virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) override;
 

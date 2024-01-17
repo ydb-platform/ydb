@@ -970,27 +970,6 @@
             "uri": "https://{canondata_backend}/1942100/6767e2897b656f8e8dc640c9a7a579137125563a/resource.tar.gz#test.test_flexible_types-with_typeof-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Debug]": [
-        {
-            "checksum": "ce0562331c9caabbb8a788b7022306f5",
-            "size": 2199,
-            "uri": "https://{canondata_backend}/1925842/5e80a84d6f97951a292cbe7f85fe8f9d3b2846d7/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Plan]": [
-        {
-            "checksum": "bcc3183d43227514a3307ada3e4c43ba",
-            "size": 4171,
-            "uri": "https://{canondata_backend}/1871182/250608c52d287add59fe1b9e093f0d10967d8d55/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[hor_join-yql-12610_old_table_props-default.txt-Results]": [
-        {
-            "checksum": "05078f7be1fe3a44d3df7ba9c075671c",
-            "size": 2195,
-            "uri": "https://{canondata_backend}/1871182/250608c52d287add59fe1b9e093f0d10967d8d55/resource.tar.gz#test.test_hor_join-yql-12610_old_table_props-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[in-in_immediate_subquery-default.txt-Debug]": [
         {
             "checksum": "528a95fd0bd860189dcccc9ad834540c",

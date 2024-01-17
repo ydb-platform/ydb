@@ -19,11 +19,14 @@ class TThrottlingChannel
 public:
     TThrottlingChannel(
         TThrottlingChannelConfigPtr config,
-        IChannelPtr underlyingChannel)
+        IChannelPtr underlyingChannel,
+        NProfiling::TProfiler profiler)
         : TChannelWrapper(std::move(underlyingChannel))
         , Config_(std::move(config))
-        , Throttler_(CreateReconfigurableThroughputThrottler(TThroughputThrottlerConfig::Create(
-            Config_->RateLimit)))
+        , Throttler_(CreateReconfigurableThroughputThrottler(
+            TThroughputThrottlerConfig::Create(Config_->RateLimit),
+            /*logger*/ {},
+            std::move(profiler)))
     { }
 
     IClientRequestControlPtr Send(
@@ -74,14 +77,16 @@ private:
 
 IThrottlingChannelPtr CreateThrottlingChannel(
     TThrottlingChannelConfigPtr config,
-    IChannelPtr underlyingChannel)
+    IChannelPtr underlyingChannel,
+    NProfiling::TProfiler profiler)
 {
     YT_VERIFY(config);
     YT_VERIFY(underlyingChannel);
 
     return New<TThrottlingChannel>(
         std::move(config),
-        std::move(underlyingChannel));
+        std::move(underlyingChannel),
+        std::move(profiler));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

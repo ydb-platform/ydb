@@ -21,21 +21,10 @@
 #include <optional>
 #include <vector>
 
-#ifndef MKQL_DISABLE_CODEGEN
-namespace llvm {
-    class Value;
-    class BasicBlock;
-}
-#endif
-
 namespace NKikimr {
 namespace NMiniKQL {
 
 class TMemoryUsageInfo;
-
-#ifndef MKQL_DISABLE_CODEGEN
-struct TCodegenContext;
-#endif
 
 const ui32 CodegenArraysFallbackLimit = 1000u;
 
@@ -639,6 +628,199 @@ private:
     THashMap<TTypeBase, TValuePtr, THasherTType, TEqualTType> Registry;
 };
 
+class TDirectArrayHolderInplace : public TComputationValue<TDirectArrayHolderInplace> {
+public:
+    void* operator new(size_t sz) = delete;
+    void* operator new[](size_t sz) = delete;
+    void operator delete(void *mem, std::size_t sz) {
+        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + sizeof(TComputationValue<TDirectArrayHolderInplace>));
+        FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
+    }
+
+    void operator delete[](void *mem, std::size_t sz) = delete;
+
+    TDirectArrayHolderInplace(TMemoryUsageInfo* memInfo, ui64 size)
+        : TComputationValue(memInfo)
+        , Size(size)
+    {
+        MKQL_ENSURE(Size > 0U, "Can't create empty array holder.");
+        MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size * sizeof(NUdf::TUnboxedValue));
+        std::memset(GetPtr(), 0, Size * sizeof(NUdf::TUnboxedValue));
+    }
+
+    ~TDirectArrayHolderInplace() {
+        for (ui64 i = 0U; i < Size; ++i) {
+            (GetPtr() + i)->~TUnboxedValue();
+        }
+        MKQL_MEM_RETURN(GetMemInfo(), GetPtr(), Size * sizeof(NUdf::TUnboxedValue));
+    }
+
+    ui64 GetSize() const {
+        return Size;
+    }
+
+    NUdf::TUnboxedValue* GetPtr() const {
+        return (NUdf::TUnboxedValue*)(this + 1);
+    }
+
+private:
+    class TIterator : public TTemporaryComputationValue<TIterator> {
+    public:
+        TIterator(const TDirectArrayHolderInplace* parent)
+            : TTemporaryComputationValue(parent->GetMemInfo()), Parent(const_cast<TDirectArrayHolderInplace*>(parent))
+        {}
+
+    private:
+        bool Skip() final {
+            return ++Current < Parent->GetSize();
+        }
+
+        bool Next(NUdf::TUnboxedValue& value) final {
+            if (!Skip())
+                return false;
+            value = Parent->GetPtr()[Current];
+            return true;
+        }
+
+        bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
+            if (!Next(payload))
+                return false;
+            key = NUdf::TUnboxedValuePod(Current);
+            return true;
+        }
+
+        const NUdf::TRefCountedPtr<TDirectArrayHolderInplace> Parent;
+        ui64 Current = Max<ui64>();
+    };
+
+    class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
+    public:
+        TKeysIterator(const TDirectArrayHolderInplace& parent)
+            : TTemporaryComputationValue(parent.GetMemInfo()), Size(parent.GetSize())
+        {}
+    private:
+        bool Skip() final {
+            return ++Current < Size;
+        }
+
+        bool Next(NUdf::TUnboxedValue& key) final {
+            if (!Skip())
+                return false;
+            key = NUdf::TUnboxedValuePod(Current);
+            return true;
+        }
+
+        const ui64 Size;
+        ui64 Current = Max<ui64>();
+    };
+
+    bool HasListItems() const final {
+        return true;
+    }
+
+    bool HasDictItems() const final {
+        return true;
+    }
+
+    bool HasFastListLength() const final {
+        return true;
+    }
+
+    ui64 GetListLength() const final {
+        return Size;
+    }
+
+    ui64 GetDictLength() const final {
+        return Size;
+    }
+
+    ui64 GetEstimatedListLength() const final {
+        return Size;
+    }
+
+    NUdf::TUnboxedValue GetListIterator() const final {
+        return NUdf::TUnboxedValuePod(new TIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetDictIterator() const final {
+        return NUdf::TUnboxedValuePod(new TIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetPayloadsIterator() const final {
+        return NUdf::TUnboxedValuePod(new TIterator(this));
+    }
+
+    NUdf::TUnboxedValue GetKeysIterator() const final {
+        return NUdf::TUnboxedValuePod(new TKeysIterator(*this));
+    }
+
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const final {
+        if (1U >= Size)
+            return const_cast<TDirectArrayHolderInplace*>(this);
+
+        NUdf::TUnboxedValue* items = nullptr;
+        auto result = builder.NewArray(Size, items);
+        std::reverse_copy(GetPtr(), GetPtr() + Size, items);
+        return result.Release().AsBoxed();
+    }
+
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
+        if (!count)
+            return const_cast<TDirectArrayHolderInplace*>(this);
+
+        if (count >= Size)
+            return builder.NewEmptyList().Release().AsBoxed();
+
+        const auto newSize = Size - count;
+        NUdf::TUnboxedValue* items = nullptr;
+        auto result = builder.NewArray(newSize, items);
+        std::copy_n(GetPtr() + count, newSize, items);
+        return result.Release().AsBoxed();
+    }
+
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
+        if (!count)
+            return builder.NewEmptyList().Release().AsBoxed();
+
+        if (count >= Size)
+            return const_cast<TDirectArrayHolderInplace*>(this);
+
+        const auto newSize = count;
+        NUdf::TUnboxedValue* items = nullptr;
+        auto result = builder.NewArray(newSize, items);
+        std::copy_n(GetPtr(), newSize, items);
+        return result.Release().AsBoxed();
+    }
+
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder&) const final {
+        return const_cast<TDirectArrayHolderInplace*>(this);
+    }
+
+    bool Contains(const NUdf::TUnboxedValuePod& key) const final {
+        return key.Get<ui64>() < Size;
+    }
+
+    NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const final {
+        const auto index = key.Get<ui64>();
+        return index < Size ? GetPtr()[index].MakeOptional() : NUdf::TUnboxedValuePod();
+    }
+
+    NUdf::TUnboxedValue GetElement(ui32 index) const final {
+        Y_DEBUG_ABORT_UNLESS(index < Size);
+        return GetPtr()[index];
+    }
+
+    const NUdf::TUnboxedValue* GetElements() const final {
+        return GetPtr();
+    }
+
+    bool IsSortedDict() const override {
+        return true;
+    }
+
+    const ui64 Size;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -848,47 +1030,7 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
     return currentMemUsage * UsageAdjustor >= initMemUsage + memLimit;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// TNodeFactory
-//////////////////////////////////////////////////////////////////////////////
-class TNodeFactory: private TNonCopyable
-{
-public:
-    TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& mutables);
-
-    IComputationNode* CreateTypeNode(TType* type) const;
-
-    IComputationNode* CreateImmutableNode(NUdf::TUnboxedValue&& value) const;
-
-    IComputationNode* CreateEmptyNode() const;
-
-    IComputationNode* CreateArrayNode(TComputationNodePtrVector&& items) const;
-
-    IComputationNode* CreateOptionalNode(IComputationNode* item) const;
-
-    IComputationNode* CreateDictNode(
-            std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
-            const TKeyTypes& types, bool isTuple, TType* encodedType,
-            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const;
-
-    IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
-
-private:
-    TMemoryUsageInfo& MemInfo;
-    TComputationMutables& Mutables;
-};
-
 void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
-
-struct TContainerCacheOnContext : private TNonCopyable {
-    TContainerCacheOnContext(TComputationMutables& mutables);
-
-    NUdf::TUnboxedValuePod NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const;
-#ifndef MKQL_DISABLE_CODEGEN
-    llvm::Value* GenNewArray(ui64 sz, llvm::Value* items, const TCodegenContext& ctx, llvm::BasicBlock*& block) const;
-#endif
-    const ui32 Index;
-};
 
 class TPlainContainerCache {
 public:

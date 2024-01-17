@@ -208,10 +208,14 @@ message TDqTaskStats {
 
     google.protobuf.Any Extra = 200;
 
-    // to be reviewed
+    // BASIC: StartTs from TR since we don't have better times
+    // FULL+: min(FirstMessageMs) from all Inputs
     uint64 StartTimeMs = 158;
-    uint64 FinishTimeMs = 5;     // task finish time, timestamp in millis
-    uint64 FirstRowTimeMs = 4;   // first row time, timestamp in millis
+
+    // always FinishTs from TR
+    uint64 FinishTimeMs = 5;
+
+    reserved 4;   // was FirstRowTimeMs
     reserved 104;
     uint64 WaitInputTimeUs = 111;  // wait input wall time  (any input: channels, source, ...)
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
@@ -223,7 +227,7 @@ message TDqTaskStats {
 message TDqComputeActorStats {
     // basic stats
     uint64 CpuTimeUs = 1;  // total cpu time: tasks cpu time + self cpu time
-    uint64 DurationUs = 2; // compute actor duration, wall time (from FirstRowTime to FinishTime)
+    uint64 DurationUs = 2; // task.FinishTimeMs - task.StartTimeMs
     repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used
     uint64 MaxMemoryUsage = 4;
 
@@ -312,12 +316,21 @@ message TDqStageStats {
     TDqStatsAggr EgressBytes = 30;
     TDqStatsAggr EgressRows = 31;
 
-    TDqStatsMinMax FirstRowTimeMs = 13;
-    TDqStatsMinMax FinishTimeMs = 14;
-    TDqStatsMinMax StartTimeMs = 21;
-    uint64 DurationUs = 15; // microseconds from min(task_first_row_time) to max(task_finish_time)
+    reserved 13; // FirstRowTimeMs
+    reserved 14; // FinishTimeMs
+    reserved 21; // StartTimeMs
+    uint64 StageDurationUs = 15; // FinishTimeMs.Max - StartTimeMs.Min
 
-    repeated TDqTableAggrStats Tables = 16; // is it required?
+    // Sum has no meaning for times and should not be rendered
+    // important metric is Avg = Sum/Cnt
+    TDqStatsAggr FinishTimeMs = 32;
+    TDqStatsAggr StartTimeMs = 33;
+    TDqStatsAggr DurationUs = 34;    // just aggregate over task.DurationUs
+
+    TDqStatsAggr WaitInputTimeUs = 35;
+    TDqStatsAggr WaitOutputTimeUs = 36;
+
+    repeated TDqTableAggrStats Tables = 16;
 
     repeated TDqComputeActorStats ComputeActors = 17; // more detailed stats
     oneof LlvmOptions {

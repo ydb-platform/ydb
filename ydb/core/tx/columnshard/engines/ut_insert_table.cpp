@@ -27,12 +27,12 @@ public:
         return true;
     }
 
-    void WriteColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
-    void EraseColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
-    bool LoadColumns(ui32, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
+    void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {}
+    void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
+    bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
 
-    void WriteCounter(ui32, ui32, ui64) override {}
-    bool LoadCounters(ui32, const std::function<void(ui32 id, ui64 value)>&) override { return true; }
+    void WriteCounter(ui32, ui64) override {}
+    bool LoadCounters(const std::function<void(ui32 id, ui64 value)>&) override { return true; }
 };
 
 }

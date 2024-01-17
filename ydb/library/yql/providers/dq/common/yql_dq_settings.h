@@ -127,6 +127,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> UseBlockReader;
     NCommon::TConfSetting<ESpillingEngine, false> SpillingEngine;
     NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
+    NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

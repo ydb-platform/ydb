@@ -53,7 +53,7 @@ message TActorSystemConfig {
 
     enum EActorSystemProfile {
         DEFAULT = 1;
-        LOW_CPU_CONSUMPTION = 2;   
+        LOW_CPU_CONSUMPTION = 2;
         LOW_LATENCY = 3;
     }
 
@@ -1323,6 +1323,12 @@ message THiveConfig {
         HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
     }
 
+    enum EHiveChannelBalanceStrategy {
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
     enum EHiveNodeSelectStrategy {
         HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
         HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
@@ -1384,9 +1390,9 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 5000]; // milliseconds
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 30000]; // milliseconds, time to wait for known nodes on cluster restart
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
-    optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
+    optional double MaxWarmUpPeriod = 52 [default = 600.0]; // seconds
     optional bool WarmUpEnabled = 55 [default = true];
     optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
@@ -1400,6 +1406,8 @@ message THiveConfig {
     optional double MinCounterScatterToBalance = 65 [default = 0.02];
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
 }
 
 message TColumnShardConfig {
@@ -1422,6 +1430,9 @@ message TColumnShardConfig {
     optional bool IndexationEnabled = 4 [default = true];
     optional bool CompactionEnabled = 5 [default = true];
     optional bool TTLEnabled = 6 [default = true];
+    optional bool WritingEnabled = 7 [default = true];
+    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -1515,10 +1526,33 @@ message TCompactionConfig {
 }
 
 message TTracingConfig {
+    message TAuthConfig {
+        message TTvm {
+            optional string Host = 1;
+            optional uint32 Port = 2;
+
+            required uint32 SelfTvmId = 3;
+            required uint32 TracingTvmId = 4;
+
+            optional string DiskCacheDir = 5;
+
+            oneof Secret {
+                string PlainTextSecret = 6;
+                string SecretFile = 7;
+                string SecretEnvironmentVariable = 8;
+            }
+        }
+
+        oneof Method {
+            TTvm Tvm = 1;
+        }
+    }
+
     optional string Host = 1;
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
+    optional TAuthConfig AuthConfig = 5;
 }
 
 message TFailureInjectionConfig {

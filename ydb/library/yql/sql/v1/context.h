@@ -9,7 +9,7 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -308,6 +308,8 @@ namespace NSQLTranslationV1 {
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
+        bool BlockEngineEnable = false;
+        bool BlockEngineForce = false;
     };
 
     class TColumnRefScope {

@@ -14,9 +14,7 @@ bool TTxInsertTableCleanup::Execute(TTransactionContext& txc, const TActorContex
     auto storage = Self->StoragesManager->GetInsertOperator();
     BlobsAction = storage->StartDeclareRemovingAction("TX_CLEANUP");
     for (auto& [abortedWriteId, abortedData] : allAborted) {
-        Self->InsertTable->EraseAborted(dbTable, abortedData);
-        Y_ABORT_UNLESS(abortedData.GetBlobRange().IsFullBlob());
-        BlobsAction->DeclareRemove(abortedData.GetBlobRange().GetBlobId());
+        Self->InsertTable->EraseAborted(dbTable, abortedData, BlobsAction);
     }
     BlobsAction->OnExecuteTxAfterRemoving(*Self, blobManagerDb, true);
     return true;

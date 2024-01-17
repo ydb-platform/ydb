@@ -122,16 +122,6 @@ private:
         }
     }
 
-    bool AddFuture(const std::shared_ptr<TPortionInfo>& portion) {
-        auto portionMaxSnapshotInstant = TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-        if (Futures[portionMaxSnapshotInstant].emplace(portion->GetPortionId(), portion).second) {
-            Counters->FuturePortions->AddPortion(portion);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
     bool RemoveFutures(const TInstant instant) {
         auto itFutures = Futures.find(instant);
         if (itFutures == Futures.end()) {
@@ -144,26 +134,14 @@ private:
         return true;
     }
 
-    bool RemoveFutures(const TInstant instant, const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
-        if (portions.empty()) {
+    bool AddFuture(const std::shared_ptr<TPortionInfo>& portion) {
+        auto portionMaxSnapshotInstant = TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
+        if (Futures[portionMaxSnapshotInstant].emplace(portion->GetPortionId(), portion).second) {
+            Counters->FuturePortions->AddPortion(portion);
             return true;
-        }
-        auto itFutures = Futures.find(instant);
-        if (itFutures == Futures.end()) {
+        } else {
             return false;
         }
-        bool hasAbsent = false;
-        for (auto&& i : portions) {
-            if (!itFutures->second.erase(i->GetPortionId())) {
-                hasAbsent = true;
-            } else {
-                Counters->FuturePortions->RemovePortion(i);
-            }
-        }
-        if (itFutures->second.empty()) {
-            Futures.erase(itFutures);
-        }
-        return !hasAbsent;
     }
 
     bool AddFutures(const TInstant instant, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions) {
@@ -197,6 +175,29 @@ private:
         }
         return true;
     }
+
+    bool RemoveFutures(const TInstant instant, const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
+        if (portions.empty()) {
+            return true;
+        }
+        auto itFutures = Futures.find(instant);
+        if (itFutures == Futures.end()) {
+            return false;
+        }
+        bool hasAbsent = false;
+        for (auto&& i : portions) {
+            if (!itFutures->second.erase(i->GetPortionId())) {
+                hasAbsent = true;
+            } else {
+                Counters->FuturePortions->RemovePortion(i);
+            }
+        }
+        if (itFutures->second.empty()) {
+            Futures.erase(itFutures);
+        }
+        return !hasAbsent;
+    }
+
 public:
     bool Validate(const std::shared_ptr<TPortionInfo>& portion) const {
         if (portion) {
@@ -387,14 +388,17 @@ public:
         }
     }
 
-    void Remove(const std::shared_ptr<TPortionInfo>& portion) {
+    bool Remove(const std::shared_ptr<TPortionInfo>& portion) Y_WARN_UNUSED_RESULT {
         if (RemovePreActual(portion)) {
-            return;
+            return true;
         }
         if (RemoveActual(portion)) {
-            return;
+            return true;
         }
-        AFL_VERIFY(RemoveFuture(portion));
+        if (RemoveFuture(portion)) {
+            return true;
+        }
+        return false;
     }
 
     void MergeFrom(TPortionsPool& source) {
@@ -743,7 +747,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("stop_instant", stopInstant.value_or(TInstant::Zero()))("size", size)("next", NextBorder ? NextBorder->DebugString() : "")
             ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "");
         TSaverContext saverContext(storagesManager->GetOperator(IStoragesManager::DefaultStorageId), storagesManager);
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, portions, saverContext);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits.GetSplitSettings(), granule, portions, saverContext);
         if (MainPortion) {
             NIndexedReader::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true, false);
@@ -778,7 +782,7 @@ public:
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
-        Others.Remove(portion);
+        AFL_VERIFY(Others.Remove(portion))("portion", portion->DebugString())("bucket_start", MainPortion ? MainPortion->DebugString(true) : "-inf")("bucket_finish", NextBorder ? NextBorder->DebugString() : "undef");
     }
 
     void MergeOthersFrom(TPortionsBucket& dest) {
@@ -1016,18 +1020,9 @@ private:
     TPortionBuckets Buckets;
     const std::shared_ptr<IStoragesManager> StoragesManager;
 protected:
-    virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
+    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) override {
         const TInstant now = TInstant::Now();
-        for (auto&& i : add) {
-            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
-                continue;
-            }
-            if (Buckets.IsEmpty()) {
-                Counters->OptimizersCount->Add(1);
-            }
-            Buckets.AddPortion(i, now);
-        }
-        for (auto&& i : remove) {
+        for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
             }
@@ -1035,6 +1030,15 @@ protected:
             if (Buckets.IsEmpty()) {
                 Counters->OptimizersCount->Sub(1);
             }
+        }
+        for (auto&& [_, i] : add) {
+            if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
+                continue;
+            }
+            if (Buckets.IsEmpty()) {
+                Counters->OptimizersCount->Add(1);
+            }
+            Buckets.AddPortion(i, now);
         }
     }
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const override {

@@ -1,4 +1,0 @@
-go test fuzz v1
-byte('D')
-uint32(21)
-[]byte("00\xb300000000000000")

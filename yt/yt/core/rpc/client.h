@@ -137,7 +137,6 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(NCompression::ECodec, ResponseCodec, NCompression::ECodec::None);
     DEFINE_BYVAL_RW_PROPERTY(bool, EnableLegacyRpcCodecs, true);
     DEFINE_BYVAL_RW_PROPERTY(bool, GenerateAttachmentChecksums, true);
-    DEFINE_BYVAL_RW_PROPERTY(IMemoryReferenceTrackerPtr, MemoryReferenceTracker);
     // Field is used on client side only. So it is never serialized.
     DEFINE_BYREF_RW_PROPERTY(NTracing::TTraceContext::TTagList, TracingTags);
     // For testing purposes only.
@@ -251,8 +250,6 @@ private:
 
     void PrepareHeader();
     TSharedRefArray GetHeaderlessMessage() const;
-
-    TSharedRefArray TrackMemory(TSharedRefArray array) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientRequest)

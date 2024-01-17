@@ -6,6 +6,8 @@
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/serialize.h>
 
+#include <yt/yt/core/ytree/attributes.h>
+
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 #include <util/random/fast.h>

@@ -414,6 +414,7 @@ public:
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options) override;
 
@@ -482,7 +483,7 @@ public:
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
-    TFuture<TBundleConfigDescriptor> GetBundleConfig(
+    TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) override;
 

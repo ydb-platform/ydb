@@ -156,6 +156,7 @@ SRCS(
     export_scan.cpp
     finalize_build_index_unit.cpp
     finish_propose_unit.cpp
+    finish_propose_write_unit.cpp
     follower_edge.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
@@ -234,6 +235,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
@@ -309,4 +311,5 @@ RECURSE_FOR_TESTS(
     ut_upload_rows
     ut_volatile
     ut_write
+    ut_trace
 )

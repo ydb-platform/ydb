@@ -81,7 +81,6 @@ package time
 import (
 	"errors"
 	_ "unsafe" // for go:linkname
-
 )
 
 // A Time represents an instant in time with nanosecond precision.

@@ -1,4 +1,4 @@
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <util/generic/ylimits.h>

@@ -67,11 +67,6 @@ TEST_SRCS(
     # transport/test_urllib3.py
 )
 
-RESOURCE(
-    data/privatekey.pem data/privatekey.pem
-    data/public_cert.pem data/public_cert.pem
-)
-
 NO_LINT()
 
 END()

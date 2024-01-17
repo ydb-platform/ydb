@@ -58,6 +58,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"EmitAggApply", &TContext::EmitAggApply},
     {"AnsiLike", &TContext::AnsiLike},
     {"UseBlocks", &TContext::UseBlocks},
+    {"BlockEngineEnable", &TContext::BlockEngineEnable},
+    {"BlockEngineForce", &TContext::BlockEngineForce},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -84,6 +86,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {
         Libraries.emplace(lib, TLibraryStuff());

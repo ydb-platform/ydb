@@ -127,7 +127,7 @@ namespace Tests {
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
-        NKikimrConfig::TAppConfig AppConfig;
+        std::shared_ptr<NKikimrConfig::TAppConfig> AppConfig;
         std::shared_ptr<TKikimrRunConfig> KikimrRunConfig;
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
@@ -167,8 +167,8 @@ namespace Tests {
         TServerSettings& SetEnableNodeBroker(bool value) { EnableNodeBroker = value; return *this; }
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
-        TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }
-        TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(AppConfig); return *this; }
+        TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = std::make_shared<NKikimrConfig::TAppConfig>(value); return *this; }
+        TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(*AppConfig); return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
         TServerSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; }
@@ -219,14 +219,15 @@ namespace Tests {
             , PQConfig(pqConfig)
         {
             AddStoragePool("test", "/" + DomainName + ":test");
-            AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
-            AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
-            AppConfig.MutableHiveConfig()->SetWarmUpBootWaitingPeriod(10);
-            AppConfig.MutableHiveConfig()->SetMaxNodeUsageToKick(100);
-            AppConfig.MutableHiveConfig()->SetMinCounterScatterToBalance(100);
-            AppConfig.MutableHiveConfig()->SetMinScatterToBalance(100);
-            AppConfig.MutableHiveConfig()->SetObjectImbalanceToBalance(100);
-            AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+            AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+            AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
+            AppConfig->MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
+            AppConfig->MutableHiveConfig()->SetWarmUpBootWaitingPeriod(10);
+            AppConfig->MutableHiveConfig()->SetMaxNodeUsageToKick(100);
+            AppConfig->MutableHiveConfig()->SetMinCounterScatterToBalance(100);
+            AppConfig->MutableHiveConfig()->SetMinScatterToBalance(100);
+            AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
+            AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
         }
 
@@ -242,7 +243,7 @@ namespace Tests {
     protected:
         void SetupStorage();
 
-        void SetupMessageBus(ui16 port, const TString &tracePath);
+        void SetupMessageBus(ui16 port);
         void SetupDomains(TAppPrepare&);
         void CreateBootstrapTablets();
         void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData);
@@ -391,10 +392,6 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
         void InitRootScheme();
         void InitRootScheme(const TString& root);
-
-        void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
-        TString StartTrace(const TString &path);
-        void StopTrace();
 
         // Flat DB operations
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);

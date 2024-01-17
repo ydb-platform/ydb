@@ -19,6 +19,7 @@ enum class EExecutionUnitKind: ui32 {
     StoreCommitWritesTx,
     BuildAndWaitDependencies,
     FinishPropose,
+    FinishProposeWrite,
     CompletedOperations,
     WaitForPlan,
     PlanQueue,

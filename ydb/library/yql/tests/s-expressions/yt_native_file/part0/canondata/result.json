@@ -2285,9 +2285,6 @@
             "checksum": "097cc951a42c1490602cb2c3fa54f391",
             "size": 2150,
             "uri": "https://{canondata_backend}/1925821/dbf7e45bd25c73ba757e166a0254ae4690dfd12e/resource.tar.gz#test.test_ImplictCasts-AutoConvert-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_ImplictCasts-AutoConvert-Results_/extracted"
         }
     ],
     "test.test[ImplictCasts-AutoConvertByIf-Debug]": [
@@ -2309,9 +2306,6 @@
             "checksum": "d0a38074ae95a885af573a81649b785a",
             "size": 209,
             "uri": "https://{canondata_backend}/1925821/dbf7e45bd25c73ba757e166a0254ae4690dfd12e/resource.tar.gz#test.test_ImplictCasts-AutoConvertByIf-Results_/results.txt"
-        },
-        {
-            "uri": "file://test.test_ImplictCasts-AutoConvertByIf-Results_/extracted"
         }
     ],
     "test.test[ImplictCasts-ImplicitEqualsOverVariantStruct-Debug]": [

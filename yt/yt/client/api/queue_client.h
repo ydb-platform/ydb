@@ -77,6 +77,8 @@ struct TListQueueConsumerRegistrationsResult
 
 struct IQueueClientBase
 {
+    virtual ~IQueueClientBase() = default;
+
     virtual TFuture<TPullRowsResult> PullRows(
         const NYPath::TYPath& path,
         const TPullRowsOptions& options = {}) = 0;
@@ -86,6 +88,8 @@ struct IQueueClientBase
 
 struct IQueueClient
 {
+    virtual ~IQueueClient() = default;
+
     //! Reads a batch of rows from a given partition of a given queue, starting at (at least) the given offset.
     //! Requires the user to have read-access to the specified queue.
     virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(

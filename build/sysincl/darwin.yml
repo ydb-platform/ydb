@@ -203,6 +203,7 @@
   - CoreTelephony/CTTelephonyNetworkInfo.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
+  - DeviceCheck/DCAppAttestService.h
   - Foundation/Foundation.h
   - Foundation/NSException.h
   - Foundation/NSString.h

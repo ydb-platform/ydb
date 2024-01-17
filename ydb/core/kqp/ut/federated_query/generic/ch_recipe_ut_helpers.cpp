@@ -6,19 +6,19 @@
 namespace NTestUtils {
 
     TString GetChHost() {
-        return GetEnv("RECIPE_CLICKHOUSE_HOST", "localhost");
+        return "localhost";
     }
 
     ui32 GetChPort() {
-        return FromString<ui32>(GetEnv("RECIPE_CLICKHOUSE_NATIVE_PORT", "1234"));
+        return 19000;
     }
 
     TString GetChUser() {
-        return GetEnv("RECIPE_CLICKHOUSE_USER");
+        return "user";
     }
 
     TString GetChPassword() {
-        return GetEnv("RECIPE_CLICKHOUSE_PASSWORD");
+        return "password";
     }
 
     TString GetChDatabase() {
@@ -32,7 +32,20 @@ namespace NTestUtils {
             .SetPort(GetChPort())
             .SetUser(GetChUser())
             .SetPassword(GetChPassword());
-        return NClickHouse::TClient(opt);
+
+        TInstant start = TInstant::Now();
+        ui32 attempt = 0;
+        while ((TInstant::Now() - start).Seconds() < 60) {
+            attempt += 1;
+            try {
+                return NClickHouse::TClient(opt);
+            } catch (const TSystemError& e) {
+                Cerr << "Attempt " << attempt << ": " << e.what() << Endl;
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+
+        throw yexception() << "Failed to connect ClickHouse in " << attempt << " attempt(s)";
     }
 
 } // namespace NTestUtils

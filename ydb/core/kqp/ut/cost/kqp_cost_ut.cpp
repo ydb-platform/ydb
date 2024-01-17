@@ -11,10 +11,11 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static NKikimrConfig::TAppConfig GetAppConfig(bool sourceRead) {
+static NKikimrConfig::TAppConfig GetAppConfig(bool sourceRead, bool streamLookup = true) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(sourceRead);
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(sourceRead);
+    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
     return app;
 }
 
@@ -43,7 +44,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
     }
     Y_UNIT_TEST_TWIN(PointLookup, SourceRead) {
-        TKikimrRunner kikimr(GetAppConfig(SourceRead));
+        TKikimrRunner kikimr(GetAppConfig(SourceRead, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

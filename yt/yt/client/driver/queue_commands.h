@@ -118,6 +118,7 @@ private:
     int PartitionIndex;
     std::optional<i64> OldOffset;
     i64 NewOffset;
+    std::optional<bool> ClientSide;
 
     void DoExecute(ICommandContextPtr context) override;
 };

@@ -1,4 +1,4 @@
-#include "mkql_builtins_decimal.h"
+#include "mkql_builtins_decimal.h" // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -46,6 +46,10 @@ void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TMinus, TUnaryArgsOpt>(registry, "Minus");
     NDecimal::RegisterUnaryFunction<TDecimalMinus, TUnaryArgsOpt>(registry, "Minus");
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus");
+}
+
+void RegisterMinus(TKernelFamilyMap& kernelFamilyMap) {
+    kernelFamilyMap["Minus"] = std::make_unique<TUnaryNumericKernelFamily<TMinus>>();
 }
 
 } // namespace NMiniKQL

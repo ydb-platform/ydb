@@ -27,7 +27,7 @@ import google.auth.transport.requests
 from google.oauth2 import gdch_credentials
 from google.oauth2.gdch_credentials import ServiceAccountCredentials
 
-import yatest.common
+import yatest.common as yc
 
 
 class TestServiceAccountCredentials(object):
@@ -39,7 +39,7 @@ class TestServiceAccountCredentials(object):
     TOKEN_URI = "https://service-identity.<Domain>/authenticate"
 
     JSON_PATH = os.path.join(
-        yatest.common.test_source_path(), "data", "gdch_service_account.json"
+        os.path.dirname(yc.source_path(__file__)), "..", "data", "gdch_service_account.json"
     )
     with open(JSON_PATH, "rb") as fh:
         INFO = json.load(fh)

@@ -16,7 +16,7 @@
 
 #include <yt/yt/core/yson/consumer.h>
 
-#include <yt/yt/core/ytree/helpers.h>
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/node.h>
 #include <yt/yt/core/ytree/convert.h>
 
@@ -1314,7 +1314,7 @@ void ValidateReadTimestamp(TTimestamp timestamp)
 void ValidateGetInSyncReplicasTimestamp(TTimestamp timestamp)
 {
     if (timestamp != SyncLastCommittedTimestamp &&
-       (timestamp < MinTimestamp || timestamp > MaxTimestamp))
+        (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
         THROW_ERROR_EXCEPTION("Invalid GetInSyncReplicas timestamp %x", timestamp);
     }

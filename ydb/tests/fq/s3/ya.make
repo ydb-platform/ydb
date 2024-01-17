@@ -23,6 +23,7 @@ TEST_SRCS(
     test_bindings.py
     test_compressions.py
     test_early_finish.py
+    test_empty.py
     test_explicit_partitioning.py
     test_format_setting.py
     test_formats.py

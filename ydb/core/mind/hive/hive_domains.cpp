@@ -62,6 +62,18 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     }
 }
 
+void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
+    const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
+    TDomainInfo& domainInfo = Domains[subdomainKey];
+    if (ev->Get()->Record.GetServerlessComputeResourcesMode() != NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED) {
+        domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+    } else {
+        domainInfo.ServerlessComputeResourcesMode.Clear();
+    }
+    Execute(CreateUpdateDomain(subdomainKey, std::move(ev)));
+}
+
 TString THive::GetDomainName(TSubDomainKey domain) {
     auto itDomain = Domains.find(domain);
     if (itDomain != Domains.end()) {

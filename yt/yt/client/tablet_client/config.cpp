@@ -114,7 +114,7 @@ std::tuple<int, int> TReplicatedTableOptions::GetEffectiveMinMaxReplicaCount(int
 
     minSyncReplicas = MinSyncReplicaCount.value_or(maxSyncReplicas);
 
-    return std::make_tuple(minSyncReplicas, maxSyncReplicas);
+    return std::tuple(minSyncReplicas, maxSyncReplicas);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

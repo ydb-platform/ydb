@@ -61,7 +61,7 @@ struct IYsonStructParameter
     virtual const std::vector<TString>& GetAliases() const = 0;
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
-    virtual void GetSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
+    virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 };
 
 //using IYsonStructParameterPtr = TIntrusivePtr<IYsonStructParameter>;
@@ -101,7 +101,7 @@ struct IYsonStructMeta
     virtual void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) = 0;
     virtual void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) = 0;
 
-    virtual void GetSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
+    virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
 
     virtual ~IYsonStructMeta() = default;
 };
@@ -144,7 +144,7 @@ public:
     void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) override;
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) override;
 
-    void GetSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
+    void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
 
     void FinishInitialization(const std::type_info& structType);
 
@@ -250,7 +250,7 @@ public:
     const std::vector<TString>& GetAliases() const override;
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
-    void GetSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
+    void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);

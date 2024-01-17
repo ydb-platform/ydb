@@ -169,13 +169,6 @@ void WarnForUnrecognizedOptions(
     WarnForUnrecognizedOptionsImpl(logger, config->GetRecursiveUnrecognized());
 }
 
-void WarnForUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config)
-{
-    WarnForUnrecognizedOptionsImpl(logger, config->GetUnrecognizedRecursively());
-}
-
 void AbortOnUnrecognizedOptionsImpl(
     const NLogging::TLogger& logger,
     const IMapNodePtr& unrecognized)
@@ -193,13 +186,6 @@ void AbortOnUnrecognizedOptions(
     const NYTree::TYsonStructPtr& config)
 {
     AbortOnUnrecognizedOptionsImpl(logger, config->GetRecursiveUnrecognized());
-}
-
-void AbortOnUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config)
-{
-    AbortOnUnrecognizedOptionsImpl(logger, config->GetUnrecognizedRecursively());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

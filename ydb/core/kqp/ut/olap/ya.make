@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_olap_stats_ut.cpp
     kqp_olap_ut.cpp
 )
 

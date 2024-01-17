@@ -76,10 +76,20 @@ struct TIssueTokenOptions
     : public TTimeoutOptions
 { };
 
+struct TIssueTemporaryTokenOptions
+    : public TIssueTokenOptions
+{
+    TDuration ExpirationTimeout;
+};
+
 struct TIssueTokenResult
 {
     TString Token;
 };
+
+struct TRefreshTemporaryTokenOptions
+    : public TTimeoutOptions
+{ };
 
 struct TRevokeTokenOptions
     : public TTimeoutOptions
@@ -99,6 +109,8 @@ struct TListUserTokensResult
 
 struct ISecurityClient
 {
+    virtual ~ISecurityClient() = default;
+
     virtual TFuture<void> AddMember(
         const TString& group,
         const TString& member,

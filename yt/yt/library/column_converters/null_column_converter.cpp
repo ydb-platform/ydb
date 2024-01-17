@@ -12,8 +12,8 @@ class TNullColumnWriterConverter
     : public IColumnConverter
 {
 public:
-    TNullColumnWriterConverter(int columnIndex)
-        : ColumnIndex_(columnIndex)
+    TNullColumnWriterConverter(int columnId)
+        : ColumnId_(columnId)
     { }
 
     TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
@@ -22,7 +22,7 @@ public:
 
         auto column = std::make_shared<TBatchColumn>();
 
-        column->Id = ColumnIndex_;
+        column->Id = ColumnId_;
         column->Type = SimpleLogicalType(ESimpleLogicalValueType::Null);
         column->ValueCount = rowCount;
 
@@ -34,14 +34,14 @@ public:
     }
 
 private:
-    const int ColumnIndex_;
+    const int ColumnId_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateNullConverter(int columnIndex)
+IColumnConverterPtr CreateNullConverter(int columnId)
 {
-    return std::make_unique<TNullColumnWriterConverter>(columnIndex);
+    return std::make_unique<TNullColumnWriterConverter>(columnId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

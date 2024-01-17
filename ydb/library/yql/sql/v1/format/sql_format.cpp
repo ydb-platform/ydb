@@ -6,7 +6,7 @@
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -269,6 +269,10 @@ private:
             First = false;
         }
 
+        if (str == "$" && FuncCall) {
+            FuncCall = false;
+        }
+
         if (Scopes.back() == EScope::Identifier && !FuncCall) {
             if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
                 SB << "id";
@@ -281,6 +285,25 @@ private:
         } else {
             SB << str;
         }
+    }
+
+    void VisitPragmaValue(const TRule_pragma_value& msg) {
+        switch (msg.Alt_case()) {
+        case TRule_pragma_value::kAltPragmaValue1: {
+            NextToken = "0";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue3: {
+            NextToken = "'str'";
+            break;
+        }
+        case TRule_pragma_value::kAltPragmaValue4: {
+            NextToken = "false";
+            break;
+        }
+        default:;
+        }
+        VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
 
     void VisitLiteralValue(const TRule_literal_value& msg) {
@@ -398,7 +421,7 @@ private:
         } else {
             VisitAllFields(descr, msg);
         }
-        
+
         if (scopePtr) {
             Scopes.pop_back();
         }
@@ -867,27 +890,24 @@ private:
         NewLine();
         Visit(msg.GetToken1());
         Visit(msg.GetBlock2());
-        Visit(msg.GetRule_simple_table_ref3());
-        Visit(msg.GetToken4());
+        Visit(msg.GetBlock3());
+        Visit(msg.GetRule_simple_table_ref4());
+        Visit(msg.GetToken5());
         PushCurrentIndent();
         NewLine();
-        Visit(msg.GetRule_create_table_entry5());
-        for (const auto& b : msg.GetBlock6()) {
+        Visit(msg.GetRule_create_table_entry6());
+        for (const auto& b : msg.GetBlock7()) {
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_create_table_entry2());
         }
-        if (msg.HasBlock7()) {
-            Visit(msg.GetBlock7());
+        if (msg.HasBlock8()) {
+            Visit(msg.GetBlock8());
         }
 
         PopCurrentIndent();
         NewLine();
-        Visit(msg.GetToken8());
-        if (msg.HasBlock9()) {
-            NewLine();
-            Visit(msg.GetBlock9());
-        }
+        Visit(msg.GetToken9());
         if (msg.HasBlock10()) {
             NewLine();
             Visit(msg.GetBlock10());
@@ -899,6 +919,10 @@ private:
         if (msg.HasBlock12()) {
             NewLine();
             Visit(msg.GetBlock12());
+        }
+        if (msg.HasBlock13()) {
+            NewLine();
+            Visit(msg.GetBlock13());
         }
     }
 
@@ -1390,6 +1414,18 @@ private:
         VisitAllFields(TRule_drop_external_data_source_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateView(const TRule_create_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_view_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropView(const TRule_drop_view_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_view_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateAsyncReplication(const TRule_create_replication_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -1521,7 +1557,7 @@ private:
         }
 
         if (str == "," && !MarkTokenStack.empty()) {
-            const bool addNewline = 
+            const bool addNewline =
                 (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
              || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line);
             // add line for trailing comma
@@ -2067,7 +2103,7 @@ private:
             NewLine();
             PushCurrentIndent();
         }
-        
+
         if (details.HasBlock1()) {
             NewLine();
             Visit(details.GetBlock1());
@@ -2224,10 +2260,12 @@ private:
             NewLine();
         }
 
-        Y_ENSURE(msg.HasBlock4());
-        const auto& block = msg.GetBlock4();
-        VisitKeyword(block.GetToken1());
-        Visit(block.GetRule_expr2());
+        if (msg.HasBlock4()) {
+            const auto& block = msg.GetBlock4();
+            VisitKeyword(block.GetToken1());
+            Visit(block.GetRule_expr2());
+        }
+
         PopCurrentIndent();
         NewLine();
         Visit(msg.GetToken5());
@@ -2581,11 +2619,14 @@ TStaticData::TStaticData()
         {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
         {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
         {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
-        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)}
+        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
+        {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
+        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)}
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
         {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
+        {TRule_pragma_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitPragmaValue)},
         {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
         {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
         {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},
@@ -2727,7 +2768,7 @@ public:
 
             finalFormattedQuery << currentFormattedQuery;
             if (parsedTokens.back().Name != "SEMICOLON") {
-                if (hasTrailingComments 
+                if (hasTrailingComments
                      && !comments.back().Content.EndsWith("\n")
                      && comments.back().Content.StartsWith("--")) {
                     finalFormattedQuery << "\n";

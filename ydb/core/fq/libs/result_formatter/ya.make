@@ -9,7 +9,7 @@ PEERDIR(
     library/cpp/json/yson
     ydb/library/mkql_proto
     ydb/library/yql/ast
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/public/udf
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/ydb_proto

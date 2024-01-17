@@ -12,7 +12,7 @@ public:
     TDqTaskRunnerExecutionContext(TTxId txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp);
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem) const override;
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem, bool isConcurrent) const override;
 
 private:
     const TTxId TxId_;

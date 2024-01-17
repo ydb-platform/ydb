@@ -181,9 +181,7 @@ private:
         TInstant ExpirationTime;
 
         NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
-
-        // partitioId -> tabletId
-        std::unordered_map<ui32, ui64> partitions;
+        std::shared_ptr<IPartitionChooser> PartitionChooser;
     };
     std::map<TString, TTopicInfo> Topics;
 

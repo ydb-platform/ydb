@@ -1,3 +1,6 @@
+# FIXME:
+# mypy: disable-error-code="misc"
+
 from collections.abc import MutableSequence
 
 import pytest
@@ -85,7 +88,7 @@ class FrozenListMixin:
 
     def test_lt(self) -> None:
         _list = self.FrozenList([1])
-        assert _list <= [3]
+        assert _list < [3]
 
     def test_ge(self) -> None:
         _list = self.FrozenList([1])
@@ -239,8 +242,8 @@ class FrozenListMixin:
 
 
 class TestFrozenList(FrozenListMixin):
-    FrozenList = FrozenList
+    FrozenList = FrozenList  # type: ignore[assignment]  # FIXME
 
 
 class TestFrozenListPy(FrozenListMixin):
-    FrozenList = PyFrozenList
+    FrozenList = PyFrozenList  # type: ignore[assignment]  # FIXME

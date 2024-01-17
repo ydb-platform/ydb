@@ -5,6 +5,7 @@
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/net/address.h>
@@ -857,8 +858,8 @@ void UnversionedValueToListImpl(
             std::function<google::protobuf::Message*()> appender,
             const TProtobufMessageType* type)
             : Appender_(std::move(appender))
-              , Type_(type)
-              , OutputStream_(&WireBytes_)
+            , Type_(type)
+            , OutputStream_(&WireBytes_)
         { }
 
         void OnStringScalar(TStringBuf value) override

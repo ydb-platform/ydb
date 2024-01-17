@@ -38,16 +38,18 @@ private:
     using TBase = TObjectProcessorImpl;
     std::map<TString, TDeferredAtom> Features;
 protected:
+    bool ExistingOk = false;
+protected:
     virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q("createObject"))));
+        return Y(Q(Y(Q("mode"), Q(ExistingOk ? "createObjectIfNotExists" : "createObject"))));
     }
     virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
 public:
     TCreateObject(TPosition pos, const TString& objectId,
-        const TString& typeId, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context)
+        const TString& typeId, bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context)
         : TBase(pos, objectId, typeId, context)
-        , Features(std::move(features)) {
-
+        , Features(std::move(features))
+        , ExistingOk(existingOk) {
     }
 };
 
@@ -76,9 +78,12 @@ public:
 class TDropObject final: public TCreateObject {
 private:
     using TBase = TCreateObject;
+    bool MissingOk() const {
+        return ExistingOk; // Because we were derived from TCreateObject
+    }
 protected:
     virtual INode::TPtr BuildOptions() const override {
-        return Y(Q(Y(Q("mode"), Q("dropObject"))));
+        return Y(Q(Y(Q("mode"), Q(MissingOk() ? "dropObjectIfExists" : "dropObject"))));
     }
 public:
     using TBase::TBase;

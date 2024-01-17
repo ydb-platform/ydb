@@ -54,15 +54,18 @@ public:
         , Reverse(ReadMetadata->IsDescSorted())
         , KeySchema(NOlap::MakeArrowSchema(PrimaryIndexStatsSchema.Columns, PrimaryIndexStatsSchema.KeyColumns))
         , ResultSchema(NOlap::MakeArrowSchema(PrimaryIndexStatsSchema.Columns, ReadMetadata->ResultColumnIds))
-        , IndexStats(ReadMetadata->IndexStats.begin(), ReadMetadata->IndexStats.end())
+        , IndexPortions(ReadMetadata->IndexPortions)
     {
         if (ResultSchema->num_fields() == 0) {
             ResultSchema = KeySchema;
         }
+        if (Reverse) {
+            std::reverse(IndexPortions.begin(), IndexPortions.end());
+        }
     }
 
     bool Finished() const override {
-        return IndexStats.empty();
+        return IndexPortions.empty();
     }
 
     std::optional<NOlap::TPartialReadResult> GetBatch() override;
@@ -73,14 +76,13 @@ private:
     std::shared_ptr<arrow::Schema> KeySchema;
     std::shared_ptr<arrow::Schema> ResultSchema;
 
-    TMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
+    std::deque<std::shared_ptr<NOlap::TPortionInfo>> IndexPortions;
 
     std::shared_ptr<arrow::RecordBatch> FillStatsBatch();
 
     void ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,
-                     ui64 pathId, const NOlap::TColumnEngineStats& stats);
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const NOlap::TPortionInfo& portion);
 };
 
 }

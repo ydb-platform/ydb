@@ -10,7 +10,7 @@ namespace NActors {
 
 namespace NYql::NDq {
 
-NYql::NDq::IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
-    NYql::NDq::IDqChannelStorage::TWakeUpCallback wakeUpCb, NActors::TActorSystem* actorSystem);
+IDqChannelStorage::TPtr CreateDqChannelStorage(TTxId txId, ui64 channelId,
+    IDqChannelStorage::TWakeUpCallback wakeUpCb, NActors::TActorSystem* actorSystem, bool isConcurrent);
 
 } // namespace NYql::NDq

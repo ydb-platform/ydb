@@ -25,11 +25,10 @@ from ydb.driver import DriverConfig
 from ydb.settings import BaseRequestSettings
 from ydb import issues
 
-# Workaround for good IDE and universal for runtime
-if typing.TYPE_CHECKING:
-    from ydb._grpc.v4 import ydb_topic_v1_pb2_grpc
-else:
-    from ydb._grpc.common import ydb_topic_v1_pb2_grpc
+try:
+    from ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
+except ImportError:
+    from contrib.ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
 
 
 _stubs_list = (

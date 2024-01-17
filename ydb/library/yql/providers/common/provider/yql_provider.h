@@ -179,7 +179,7 @@ void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCo
 
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
-void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
+void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics, bool addExternalMap = true);
 void WriteStatistics(NYson::TYsonWriter& writer, const TOperationStatistics& statistics);
 
 bool ValidateCompressionForInput(std::string_view format, std::string_view compression, TExprContext& ctx);

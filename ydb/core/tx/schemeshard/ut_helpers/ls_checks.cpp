@@ -13,7 +13,7 @@ namespace NLs {
 
 using namespace NKikimr;
 
-#define DESCRIBE_ASSERT_EQUAL(name, type, expression, description)                                                    \
+#define DESCRIBE_ASSERT(op, name, type, expression, description)                                                      \
     TCheckFunc name(type expected) {                                                                                  \
         return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {                                           \
             UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());       \
@@ -22,12 +22,15 @@ using namespace NKikimr;
             const auto& subdomain = pathDescr.GetDomainDescription();                                                 \
             const auto& value = expression;                                                                           \
                                                                                                                       \
-            UNIT_ASSERT_EQUAL_C(value, expected,                                                                      \
+            UNIT_ASSERT_##op(value, expected,                                                                         \
                             description << " mismatch, subdomain with id " << subdomain.GetDomainKey().GetPathId() << \
                                 " has value " << value <<                                                             \
                                 " but expected " << expected);                                                        \
     };                                                                                                                \
 }
+
+#define DESCRIBE_ASSERT_EQUAL(name, type, expression, description) DESCRIBE_ASSERT(EQUAL_C, name, type, expression, description)
+#define DESCRIBE_ASSERT_GE(name, type, expression, description)    DESCRIBE_ASSERT(GE_C, name, type, expression, description)
 
 
 void NotInSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -671,6 +674,7 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
 
 DESCRIBE_ASSERT_EQUAL(TopicReservedStorage, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetReserveSize(), "Topic ReserveSize")
 DESCRIBE_ASSERT_EQUAL(TopicAccountSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
+DESCRIBE_ASSERT_GE(TopicAccountSizeGE, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
 DESCRIBE_ASSERT_EQUAL(TopicUsedReserveSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetUsedReserveSize(), "Topic UsedReserveSize")
 
 TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
@@ -1185,6 +1189,8 @@ TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeR
 }
 
 #undef DESCRIBE_ASSERT_EQUAL
+#undef DESCRIBE_ASSERT_GE
+#undef DESCRIBE_ASSERT
 
 } // NLs
 } // NSchemeShardUT_Private

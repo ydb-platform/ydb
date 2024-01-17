@@ -9,6 +9,8 @@
 
 #include <variant>
 
+#include "partition_chooser.h"
+
 namespace NKikimr::NPQ {
 
 constexpr ui64 INVALID_WRITE_ID = Max<ui64>();
@@ -166,10 +168,15 @@ struct TEvPartitionWriter {
 
 }; // TEvPartitionWriter
 
+
 struct TPartitionWriterOpts {
     bool CheckState = false;
     bool AutoRegister = false;
     bool UseDeduplication = true;
+
+    TString SourceId;
+    std::optional<ui32> ExpectedGeneration;
+
     TString Database;
     TString TopicPath;
     TString Token;
@@ -186,6 +193,9 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithCheckState(bool value) { CheckState = value; return *this; }
     TPartitionWriterOpts& WithAutoRegister(bool value) { AutoRegister = value; return *this; }
     TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
+    TPartitionWriterOpts& WithSourceId(const TString& value) { SourceId = value; return *this; }
+    TPartitionWriterOpts& WithExpectedGeneration(ui32 value) { ExpectedGeneration = value; return *this; }
+    TPartitionWriterOpts& WithExpectedGeneration(std::optional<ui32> value) { ExpectedGeneration = value; return *this; }
     TPartitionWriterOpts& WithCheckRequestUnits(const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode , const TRlContext& rlCtx) { MeteringMode = meteringMode; RlCtx = rlCtx; return *this; }
     TPartitionWriterOpts& WithDatabase(const TString& value) { Database = value; return *this; }
     TPartitionWriterOpts& WithTopicPath(const TString& value) { TopicPath = value; return *this; }
@@ -196,6 +206,9 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
 };
 
-IActor* CreatePartitionWriter(const TActorId& client, const std::optional<TString>& topicPath, ui64 tabletId, ui32 partitionId, const std::optional<ui32> expectedGeneration, const TString& sourceId,
+IActor* CreatePartitionWriter(const TActorId& client,
+                             // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                              ui64 tabletId,
+                              ui32 partitionId,
                               const TPartitionWriterOpts& opts = {});
 }

@@ -387,27 +387,37 @@ struct Schema : NIceDb::Schema {
 
     struct PrimaryIndexStats : Table<10> {
         struct PathId   : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Kind     : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Kind     : Column<2, NScheme::NTypeIds::Utf8> {};
         struct TabletId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Rows     : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct Bytes    : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct RawBytes : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct Portions : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct Blobs    : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct RawBytes : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ChunkIdx : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct ColumnName: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct InternalColumnId : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct Activity : Column<13, NScheme::NTypeIds::Bool> {};
+        struct TierName : Column<14, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<
-            PathId,
-            Kind,
-            TabletId>;
+        using TKey = TableKey<PathId, TabletId, PortionId, InternalColumnId, ChunkIdx>;
         using TColumns = TableColumns<
             PathId,
             Kind,
             TabletId,
             Rows,
-            Bytes,
             RawBytes,
-            Portions,
-            Blobs>;
+            PortionId,
+            ChunkIdx, 
+            ColumnName,
+            InternalColumnId,
+            BlobId,
+            BlobRangeOffset,
+            BlobRangeSize,
+            Activity,
+            TierName
+            >;
     };
 
     struct StorageStats : Table<11> {

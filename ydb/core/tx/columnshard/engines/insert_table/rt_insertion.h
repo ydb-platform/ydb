@@ -4,7 +4,7 @@
 #include "path_info.h"
 
 namespace NKikimr::NOlap {
-
+class IBlobsDeclareRemovingAction;
 class TInsertionSummary {
 public:
     struct TCounters {

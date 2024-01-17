@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {

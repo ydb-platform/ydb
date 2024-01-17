@@ -592,8 +592,9 @@ void TPDisk::ProcessLogReadQueue() {
             TLogReadContinue *read = static_cast<TLogReadContinue*>(req);
             read->CompletionAction->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize,
                     TDriveModel::OP_TYPE_READ);
+            auto traceId = read->Span.GetTraceId();
             BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, read->CompletionAction,
-                    read->ReqId, &read->TraceId); // ??? TraceId
+                    read->ReqId, &traceId); // ??? TraceId
             break;
         }
         case ERequestType::RequestLogSectorRestore:
@@ -722,7 +723,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
             PrepareLogError(logCommit, errorReason, status);
         }
     }
-    NWilson::TTraceId *traceId = nullptr;
+    NWilson::TTraceId traceId;
     size_t logOperationSizeBytes = 0;
     TVector<ui32> logChunksToCommit;
     for (TLogWrite *logWrite : JointLogWrites) {
@@ -733,8 +734,8 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
         if (status == NKikimrProto::OK) {
             LogWrite(*logWrite, logChunksToCommit);
             logWrite->ScheduleTime = HPNow();
-            if (logWrite->TraceId) {
-                traceId = &logWrite->TraceId;
+            if (logWrite->Span) {
+                traceId = logWrite->Span.GetTraceId();
             }
         } else {
             PrepareLogError(logWrite, errorReason, status);
@@ -748,14 +749,14 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
     TReqId reqId = JointLogWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
         this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
-    LogFlush(write.Get(), write->GetCommitedLogChunksPtr(), reqId, traceId);
+    LogFlush(write.Get(), write->GetCommitedLogChunksPtr(), reqId, &traceId);
     Y_UNUSED(write.Release());
 
     JointCommits.clear();
     JointLogWrites.clear();
 
     // Check if we can TRIM some chunks that were deleted
-    TryTrimChunk(false, 0);
+    TryTrimChunk(false, 0, NWilson::TSpan{});
 
     Mon.LogOperationSizeBytes.Increment(logOperationSizeBytes);
 }
@@ -890,31 +891,32 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
 
     // Write to log
-    CommonLogger->LogHeader(evLog.Owner, evLog.Signature, evLog.Lsn, payloadSize, evLog.ReqId, &evLog.TraceId);
-    OnNonceChange(NonceLog, evLog.ReqId, &evLog.TraceId);
+    auto evLogTraceId = evLog.Span.GetTraceId();
+    CommonLogger->LogHeader(evLog.Owner, evLog.Signature, evLog.Lsn, payloadSize, evLog.ReqId, &evLogTraceId);
+    OnNonceChange(NonceLog, evLog.ReqId, &evLogTraceId);
     if (evLog.Data.size()) {
-        CommonLogger->LogDataPart(evLog.Data.data(), evLog.Data.size(), evLog.ReqId, &evLog.TraceId);
+        CommonLogger->LogDataPart(evLog.Data.data(), evLog.Data.size(), evLog.ReqId, &evLogTraceId);
     }
     if (isCommitRecord) {
         ui32 commitChunksCount = evLog.CommitRecord.CommitChunks.size();
         if (commitChunksCount) {
             CommonLogger->LogDataPart(evLog.CommitRecord.CommitChunks.data(), commitChunksCount * sizeof(ui32),
-                    evLog.ReqId, &evLog.TraceId);
+                    evLog.ReqId, &evLogTraceId);
             TVector<ui64> commitChunkNonces(commitChunksCount);
             for (ui32 idx = 0; idx < commitChunksCount; ++idx) {
                 commitChunkNonces[idx] = ChunkState[evLog.CommitRecord.CommitChunks[idx]].Nonce;
             }
-            CommonLogger->LogDataPart(&commitChunkNonces[0], sizeof(ui64) * commitChunksCount, evLog.ReqId, &evLog.TraceId);
+            CommonLogger->LogDataPart(&commitChunkNonces[0], sizeof(ui64) * commitChunksCount, evLog.ReqId, &evLogTraceId);
         }
         ui32 deleteChunksCount = evLog.CommitRecord.DeleteChunks.size();
         if (deleteChunksCount) {
             CommonLogger->LogDataPart(evLog.CommitRecord.DeleteChunks.data(), deleteChunksCount * sizeof(ui32),
-                evLog.ReqId, &evLog.TraceId);
+                evLog.ReqId, &evLogTraceId);
         }
         NPDisk::TCommitRecordFooter footer(evLog.Data.size(), evLog.CommitRecord.FirstLsnToKeep,
             evLog.CommitRecord.CommitChunks.size(), evLog.CommitRecord.DeleteChunks.size(),
             evLog.CommitRecord.IsStartingPoint);
-        CommonLogger->LogDataPart(&footer, sizeof(footer), evLog.ReqId, &evLog.TraceId);
+        CommonLogger->LogDataPart(&footer, sizeof(footer), evLog.ReqId, &evLogTraceId);
 
         {
             TGuard<TMutex> guard(StateMutex);
@@ -1262,7 +1264,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
         }
     }
-    TryTrimChunk(false, 0);
+    TryTrimChunk(false, 0, req.Span);
 }
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
@@ -1275,7 +1277,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     }
 
     if (req.IsChunksFromLogSplice) {
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease));
+        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.Span.CreateChild(TWilson::PDisk, "PDisk.ReleaseChunks"));
 
         auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
 
@@ -1302,7 +1304,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         }
         IsLogChunksReleaseInflight = false;
 
-        TryTrimChunk(false, 0);
+        TryTrimChunk(false, 0, req.Span);
     }
 }
 

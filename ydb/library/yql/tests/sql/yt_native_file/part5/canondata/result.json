@@ -742,6 +742,27 @@
             "uri": "https://{canondata_backend}/1942671/812d348532a02502eb8901f04707aeea3f495e62/resource.tar.gz#test.test_compute_range-multiply_limit_with_dups-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[compute_range-pg_startswith-default.txt-Debug]": [
+        {
+            "checksum": "fb20b05a49ae3533e4b581ad09bc01f4",
+            "size": 1242,
+            "uri": "https://{canondata_backend}/1781765/f97b29106f835508c9465d1d8ba8cc89cdfb0bdc/resource.tar.gz#test.test_compute_range-pg_startswith-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[compute_range-pg_startswith-default.txt-Plan]": [
+        {
+            "checksum": "55515ae638f317612d048052be489bfd",
+            "size": 1740,
+            "uri": "https://{canondata_backend}/1781765/f97b29106f835508c9465d1d8ba8cc89cdfb0bdc/resource.tar.gz#test.test_compute_range-pg_startswith-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[compute_range-pg_startswith-default.txt-Results]": [
+        {
+            "checksum": "cc3057a2f21b5e8e4ef004621d352021",
+            "size": 19014,
+            "uri": "https://{canondata_backend}/1781765/f97b29106f835508c9465d1d8ba8cc89cdfb0bdc/resource.tar.gz#test.test_compute_range-pg_startswith-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[count-count_all-default.txt-Debug]": [
         {
             "checksum": "4545bbb3b7c7d6ac6fbcccdae8916f50",
@@ -1348,9 +1369,9 @@
     ],
     "test.test[join-anyjoin_common_dup--Debug]": [
         {
-            "checksum": "3ab12fcb50a85f95b1231cb93a45abff",
+            "checksum": "8199ba5a0e9767403faed20f4cff59d6",
             "size": 7595,
-            "uri": "https://{canondata_backend}/1936842/fd32f204cf92d07ec90f2a50a26edddf6812895e/resource.tar.gz#test.test_join-anyjoin_common_dup--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1946324/85fd14ff51e6571b3bee8a6ad27c4e3fdb9e917d/resource.tar.gz#test.test_join-anyjoin_common_dup--Debug_/opt.yql"
         }
     ],
     "test.test[join-anyjoin_common_dup--Plan]": [
@@ -2054,6 +2075,27 @@
             "uri": "https://{canondata_backend}/1773845/f8e51a5dd98665ee7534cca6737c91ce5a753b8e/resource.tar.gz#test.test_pg-select_win_count-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[pg-str_lookup_pg-default.txt-Debug]": [
+        {
+            "checksum": "66a86824b404ec795db5472f15e7ef6d",
+            "size": 1589,
+            "uri": "https://{canondata_backend}/1936842/c56dee9daebb93420da4effdb6b9e44f37cad049/resource.tar.gz#test.test_pg-str_lookup_pg-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-str_lookup_pg-default.txt-Plan]": [
+        {
+            "checksum": "a48ccc9922567dfee1170d2c2df45b6e",
+            "size": 2153,
+            "uri": "https://{canondata_backend}/1936842/c56dee9daebb93420da4effdb6b9e44f37cad049/resource.tar.gz#test.test_pg-str_lookup_pg-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-str_lookup_pg-default.txt-Results]": [
+        {
+            "checksum": "44d45e5210e293a4b93e68b00691927c",
+            "size": 9023,
+            "uri": "https://{canondata_backend}/1936842/c56dee9daebb93420da4effdb6b9e44f37cad049/resource.tar.gz#test.test_pg-str_lookup_pg-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[pg-sublink_order_any_corr-default.txt-Debug]": [
         {
             "checksum": "6db5afbb3a8a2d703d35a0425ea04cad",
@@ -2393,9 +2435,9 @@
     ],
     "test.test[produce-reduce_with_assume_in_subquery--Debug]": [
         {
-            "checksum": "5e037a02a03adec8bb02eb0830f4edc8",
-            "size": 2626,
-            "uri": "https://{canondata_backend}/1781765/46f4226358450412fe9b9f5dad584e1269a0622d/resource.tar.gz#test.test_produce-reduce_with_assume_in_subquery--Debug_/opt.yql"
+            "checksum": "896ae8e25eff50e472f3f2ed601f8ead",
+            "size": 2691,
+            "uri": "https://{canondata_backend}/1880306/a25c61d71a66c7f9632e662ac03578468e3ef05f/resource.tar.gz#test.test_produce-reduce_with_assume_in_subquery--Debug_/opt.yql"
         }
     ],
     "test.test[produce-reduce_with_assume_in_subquery--Plan]": [

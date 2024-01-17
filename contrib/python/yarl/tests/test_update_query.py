@@ -171,7 +171,7 @@ class _CStr(str):
 
 class _EmptyStrEr:
     def __str__(self):
-        return ""
+        return ""  # pragma: no cover  # <-- this should never happen
 
 
 class _CInt(int, _EmptyStrEr):

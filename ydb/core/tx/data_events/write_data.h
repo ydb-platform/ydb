@@ -6,6 +6,10 @@
 
 #include <ydb/library/actors/core/monotonic.h>
 
+namespace NKikimr::NOlap {
+class IBlobsWritingAction;
+}
+
 namespace NKikimr::NEvWrite {
 
 class IDataContainer {
@@ -44,15 +48,13 @@ public:
 class TWriteData {
 private:
     TWriteMeta WriteMeta;
-    IDataContainer::TPtr Data;
+    YDB_READONLY_DEF(IDataContainer::TPtr, Data);
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PrimaryKeySchema);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
 public:
-    TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data);
+    TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema, const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
 
-    const IDataContainer& GetData() const;
-
-    const IDataContainer::TPtr& GetDataPtr() const {
-        return Data;
-    }
+    const IDataContainer& GetDataVerified() const;
 
     const TWriteMeta& GetWriteMeta() const {
         return WriteMeta;

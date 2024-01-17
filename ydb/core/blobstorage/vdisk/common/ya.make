@@ -11,6 +11,7 @@ PEERDIR(
 
 SRCS(
     align.h
+    blobstorage_cost_tracker.cpp
     blobstorage_dblogcutter.cpp
     blobstorage_dblogcutter.h
     blobstorage_event_filter.cpp

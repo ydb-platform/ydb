@@ -2,6 +2,7 @@
 #include "blobs_reader/actor.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/actor.h"
+#include "engines/writer/buffer/actor.h"
 
 namespace NKikimr {
 
@@ -15,6 +16,8 @@ namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
+    ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+
     StoragesManager->Stop();
     if (Tiers) {
         Tiers->Stop();
@@ -33,8 +36,9 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
         for (auto&& i : TablesManager.GetTables()) {
-            ActivateTiering(i.first, i.second.GetTieringUsage());
+            ActivateTiering(i.first, i.second.GetTieringUsage(), true);
         }
+        OnTieringModified();
 
         Become(&TThis::StateWork);
         SignalTabletActive(ctx);
@@ -43,7 +47,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
     }
     EnqueueBackgroundActivities();
-    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+    ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
@@ -69,6 +73,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     CompactionLimits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
+    BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -154,7 +159,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
 
         SendPeriodicStats();
-        ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+        ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 }
 
@@ -254,7 +259,7 @@ ui64 TColumnShard::MemoryUsage() const {
         CommitsInFlight.size() * sizeof(TCommitMeta) +
         LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
         LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
-        (WaitingReads.size() + WaitingScans.size()) * (sizeof(TRowVersion) + sizeof(void*)) +
+        (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
@@ -289,15 +294,108 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
+void TColumnShard::ConfigureStats(const NOlap::TColumnEngineStats& indexStats,
+                                  ::NKikimrTableStats::TTableStats* tabletStats) {
+    NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
+    auto activeIndexStats = indexStats.Active();   // data stats excluding inactive and evicted
+
+    if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
+        LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows << " Bytes: " << activeIndexStats.Bytes
+                                                    << TabletID());
+
+        activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
+        activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
+    }
+
+    tabletStats->SetRowCount(activeIndexStats.Rows);
+    tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
+
+    // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
+    // tabletStats->SetIndexSize(); // TODO: calc size of internal tables
+
+    tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
+    tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
+}
+
+TDuration TColumnShard::GetControllerPeriodicWakeupActivationPeriod() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod(TSettings::DefaultPeriodicWakeupActivationPeriod);
+}
+
+TDuration TColumnShard::GetControllerStatsReportInterval() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval(TSettings::DefaultStatsReportInterval);
+}
+
+void TColumnShard::FillTxTableStats(::NKikimrTableStats::TTableStats* tableStats) const {
+    tableStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+    tableStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+    tableStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+}
+
+void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
+    ev->Record.SetGeneration(Executor()->Generation());
+    ev->Record.SetRound(StatsReportRound++);
+    ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+    ev->Record.SetStartTime(StartTime().MilliSeconds());
+    if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+        resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+    }
+    auto* tabletStats = ev->Record.MutableTableStats();
+    FillTxTableStats(tabletStats);
+    if (TablesManager.HasPrimaryIndex()) {
+        const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
+        ConfigureStats(indexStats, tabletStats);
+    }
+}
+
+void TColumnShard::FillColumnTableStats(const TActorContext& ctx,
+                                        std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+    if (!TablesManager.HasPrimaryIndex()) {
+        return;
+    }
+    const auto& tablesIndexStats = TablesManager.MutablePrimaryIndex().GetStats();
+    LOG_S_DEBUG("There are stats for " << tablesIndexStats.size() << " tables");
+    for (const auto& [tableLocalID, columnStats] : tablesIndexStats) {
+        if (!columnStats) {
+            LOG_S_ERROR("SendPeriodicStats: empty stats");
+            continue;
+        }
+
+        auto* periodicTableStats = ev->Record.AddTables();
+        periodicTableStats->SetDatashardId(TabletID());
+        periodicTableStats->SetTableLocalId(tableLocalID);
+
+        periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
+        periodicTableStats->SetGeneration(Executor()->Generation());
+        periodicTableStats->SetRound(StatsReportRound++);
+        periodicTableStats->SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+        periodicTableStats->SetStartTime(StartTime().MilliSeconds());
+
+        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+            resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
+        }
+
+        auto* tableStats = periodicTableStats->MutableTableStats();
+        FillTxTableStats(tableStats);
+        ConfigureStats(*columnStats, tableStats);
+
+        LOG_S_TRACE("Add stats for table, tableLocalID=" << tableLocalID);
+    }
+}
+
 void TColumnShard::SendPeriodicStats() {
+    LOG_S_DEBUG("Send periodic stats.");
+
     if (!CurrentSchemeShardId || !OwnerPathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
 
     const TActorContext& ctx = ActorContext();
-    TInstant now = TAppData::TimeProvider->Now();
+    const TInstant now = TAppData::TimeProvider->Now();
+
     if (LastStatsReport + StatsReportInterval > now) {
+        LOG_S_TRACE("Skip send periodic stats: report interavl = " << StatsReportInterval);
         return;
     }
     LastStatsReport = now;
@@ -309,46 +407,11 @@ void TColumnShard::SendPeriodicStats() {
     }
 
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
-    {
-        ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
-        ev->Record.SetGeneration(Executor()->Generation());
-        ev->Record.SetRound(StatsReportRound++);
-        ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
-        ev->Record.SetStartTime(StartTime().MilliSeconds());
 
-        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
-            resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
-        }
+    FillOlapStats(ctx, ev);
+    FillColumnTableStats(ctx, ev);
 
-        auto* tabletStats = ev->Record.MutableTableStats();
-        tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
-        tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
-        tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
-
-        if (TablesManager.HasPrimaryIndex()) {
-            const auto& indexStats = TablesManager.MutablePrimaryIndex().GetTotalStats();
-            NOlap::TSnapshot lastIndexUpdate = TablesManager.GetPrimaryIndexSafe().LastUpdate();
-            auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
-
-            if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
-                LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
-                    << " Bytes: " << activeIndexStats.Bytes << TabletID());
-
-                activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
-                activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
-            }
-
-            tabletStats->SetRowCount(activeIndexStats.Rows);
-            tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
-            // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
-            //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
-            tabletStats->SetLastAccessTime(LastAccessTime.MilliSeconds());
-            tabletStats->SetLastUpdateTime(lastIndexUpdate.GetPlanStep());
-        }
-    }
-
-    LOG_S_DEBUG("Sending periodic stats at tablet " << TabletID());
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
-}
+}   // namespace NKikimr::NColumnShard

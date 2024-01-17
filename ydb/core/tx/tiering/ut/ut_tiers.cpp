@@ -395,11 +395,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
     }
 
-    Y_UNIT_TEST(DSConfigs) {
+    void DSConfigsImpl(bool useQueryService) {
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
@@ -407,7 +410,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetForceColumnTablesCompositeMarks(true);
+            .SetForceColumnTablesCompositeMarks(true)
+            .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -418,6 +422,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
         TLocalHelper lHelper(*server);
+        lHelper.SetUseQueryService(useQueryService);
+
         lHelper.CreateTestOlapTable("olapTable");
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
@@ -436,7 +442,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc2") + "`");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 (TYPE TIERING_RULE) "
+        lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS tiering1 (TYPE TIERING_RULE) "
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "`)");
         lHelper.StartSchemaRequest("CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
             "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )", true, false);
@@ -473,6 +479,15 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
         //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
     }
+
+    Y_UNIT_TEST(DSConfigs) {
+        DSConfigsImpl(false);
+    }
+
+    Y_UNIT_TEST(DSConfigsWithQueryServiceDdl) {
+        DSConfigsImpl(true);
+    }
+
 //#define S3_TEST_USAGE
 #ifdef S3_TEST_USAGE
     const TString TierConfigProtoStr =

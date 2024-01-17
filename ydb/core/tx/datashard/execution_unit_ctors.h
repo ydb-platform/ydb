@@ -18,7 +18,8 @@ THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard &dataShard,
 THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard, TPipeline &pipeline);

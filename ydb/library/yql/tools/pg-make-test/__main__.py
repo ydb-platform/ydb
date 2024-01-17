@@ -160,13 +160,20 @@ class TestCaseBuilder:
                 ressql = stmts
                 resout = outs
 
+        if ressql is not None and resout is not None:
             LOGGER.info('Case built: %s', sqlfile.name)
             if is_split_logging:
                 logger.info('Case built: %s', sqlfile.name)
 
-        if ressql is not None and resout is not None:
             save_strings(ressqlfile, ressql)
             save_strings(resoutfile, resout)
+        else:
+            LOGGER.warning('Case is empty: %s', sqlfile.name)
+            if is_split_logging:
+                logger.warning('Case is empty: %s', sqlfile.name)
+
+            ressqlfile.unlink(missing_ok=True)
+            resoutfile.unlink(missing_ok=True)
 
         return Path(sqlfile).stem, stmts_count, stmts_run, round(stmts_run * 100 / stmts_count, 2)
 

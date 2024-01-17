@@ -1,4 +1,5 @@
 #include "source_id_encoding.h"
+#include "util/generic/fwd.h"
 #include "writer.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -734,6 +735,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
         }
         SendError("Unexpected termination");
+        TRlHelpers::PassAway(SelfId());
         TActorBootstrapped::PassAway();
     }
 
@@ -767,18 +769,15 @@ public:
 
     explicit TPartitionWriter(
             const TActorId& client,
-            const std::optional<TString>& topicPath,
             ui64 tabletId,
             ui32 partitionId,
-            const std::optional<ui32> expectedGeneration,
-            const TString& sourceId,
             const TPartitionWriterOpts& opts)
-        : TRlHelpers(topicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
+        : TRlHelpers(opts.TopicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
         , Client(client)
         , TabletId(tabletId)
         , PartitionId(partitionId)
-        , ExpectedGeneration(expectedGeneration)
-        , SourceId(sourceId)
+        , ExpectedGeneration(opts.ExpectedGeneration)
+        , SourceId(opts.SourceId)
         , Opts(opts)
     {
         if (Opts.MeteringMode) {
@@ -860,10 +859,13 @@ private:
     ui64 WriteId = INVALID_WRITE_ID;
 }; // TPartitionWriter
 
-IActor* CreatePartitionWriter(const TActorId& client, const std::optional<TString>& topicPath, ui64 tabletId, ui32 partitionId, 
-                              const std::optional<ui32> expectedGeneration, const TString& sourceId,
+
+IActor* CreatePartitionWriter(const TActorId& client,
+                             // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                              ui64 tabletId,
+                              ui32 partitionId, 
                               const TPartitionWriterOpts& opts) {
-    return new TPartitionWriter(client, topicPath, tabletId, partitionId, expectedGeneration, sourceId, opts);
+    return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
 
 #undef LOG_PREFIX

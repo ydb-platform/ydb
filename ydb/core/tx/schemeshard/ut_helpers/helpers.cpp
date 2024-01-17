@@ -2,6 +2,8 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -2256,31 +2258,31 @@ namespace NSchemeShardUT_Private {
         NKikimr::NPQ::CmdWrite(&runtime, tabletId, edge, partitionId, "sourceid0", msgSeqNo, data, false, {}, true, cookie, 0);
     }
 
-    void WriteRow(TTestActorRuntime& runtime, const TString& key, const TString& value, ui64 tabletId) {
+    void UpdateRow(TTestActorRuntime& runtime, const TString& table, const ui32 key, const TString& value, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;
         TString error;
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
             (
-                (let key '( '('key (Utf8 '%s) ) ) )
+                (let key '( '('key (Uint32 '%d) ) ) )
                 (let row '( '('value (Utf8 '%s) ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
+                (return (AsList (UpdateRow '__user__%s key row) ))
             )
-        )", key.c_str(), value.c_str()), result, error);
+        )", key, value.c_str(), table.c_str()), result, error);
 
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
-    void WriteRowPg(TTestActorRuntime& runtime, const TString& key, ui32 value, ui64 tabletId) {
+    void UpdateRowPg(TTestActorRuntime& runtime, const TString& table, const ui32 key, ui32 value, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;
         TString error;
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
             (
-                (let key '( '('key (Utf8 '%s) ) ) )
+                (let key '( '('key (Utf8 '%d) ) ) )
                 (let row '( '('value (PgConst '%u (PgType 'int4)) ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
+                (return (AsList (UpdateRow '__user__%s key row) ))
             )
-        )", key.c_str(), value), result, error);
+        )", key, value, table.c_str()), result, error);
 
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
@@ -2291,6 +2293,7 @@ namespace NSchemeShardUT_Private {
         auto tableDesc = DescribePath(runtime, tablePath, true, true);
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
         UNIT_ASSERT(partitionIdx < tablePartitions.size());
+        const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableDesc.GetPathId());
@@ -2314,7 +2317,36 @@ namespace NSchemeShardUT_Private {
         }
 
         const auto& sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, tablePartitions[partitionIdx].GetDatashardId(), sender, ev.Release());
+        ForwardToTablet(runtime, datashardTabletId, sender, ev.Release());
         runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
+        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+        const auto& pathDesc = tableDesc.GetPathDescription();
+        TTableId tableId(pathDesc.GetSelf().GetSchemeshardId(), pathDesc.GetSelf().GetPathId(), pathDesc.GetTable().GetTableSchemaVersion());
+
+        const auto& tablePartitions = pathDesc.GetTablePartitions();
+        UNIT_ASSERT(partitionIdx < tablePartitions.size());
+        const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();
+
+        const auto& sender = runtime.AllocateEdgeActor();
+
+        std::vector<ui32> columnIds{1, 2};
+
+        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32)), TCell(value.c_str(), value.size())};
+
+        TSerializedCellMatrix matrix(cells, 1, 2);
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(matrix.ReleaseBuffer()));
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+
+        ForwardToTablet(runtime, datashardTabletId, sender, evWrite.release());
+
+        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        auto status = ev->Get()->Record.GetStatus();
+
+        UNIT_ASSERT_C(successIsExpected == (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED), "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
     }
 }

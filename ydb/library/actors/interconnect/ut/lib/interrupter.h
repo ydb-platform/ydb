@@ -97,12 +97,12 @@ public:
     }
 
     ~TTrafficInterrupter() {
-        AtomicSet(Running, 0);
+        Running.store(false, std::memory_order_release);
         this->Join();
     }
 
 private:
-    TAtomic Running = 1;
+    std::atomic<bool> Running = true;
     TVector<char> Buf;
     TSocketPoller SocketPoller;
     THolder<TSockAddrInet6> ForwardAddrress;
@@ -146,7 +146,7 @@ private:
         SocketPoller.WaitRead(static_cast<SOCKET>(ListenSocket), &ListenSocket);
         Events.resize(10);
 
-        while (AtomicGet(Running)) {
+        while (Running.load(std::memory_order_acquire)) {
             if (RejectingTrafficTimeout != TDuration::Zero()) {
                 UpdateRejectingState();
             }

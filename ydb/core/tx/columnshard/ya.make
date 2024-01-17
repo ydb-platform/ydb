@@ -11,7 +11,6 @@ SRCS(
     columnshard__progress_tx.cpp
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
-    columnshard__read.cpp
     columnshard__read_base.cpp
     columnshard__scan.cpp
     columnshard__index_scan.cpp
@@ -26,7 +25,6 @@ SRCS(
     columnshard_view.cpp
     counters.cpp
     defs.cpp
-    read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
     tx_controller.cpp

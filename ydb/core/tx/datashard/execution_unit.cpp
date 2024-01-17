@@ -36,6 +36,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateBuildAndWaitDependenciesUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinishPropose:
         return CreateFinishProposeUnit(dataShard, pipeline);
+    case EExecutionUnitKind::FinishProposeWrite:
+        return CreateFinishProposeWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompletedOperations:
         return CreateCompletedOperationsUnit(dataShard, pipeline);
     case EExecutionUnitKind::WaitForPlan:

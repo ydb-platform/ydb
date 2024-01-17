@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yt/core/misc/ref_counted.h>
+#include <library/cpp/yt/memory/ref_counted.h>
 
 namespace NYT::NTracing {
 

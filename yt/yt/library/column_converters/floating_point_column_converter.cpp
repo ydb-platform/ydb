@@ -52,9 +52,13 @@ class TFloatingPointColumnConverter
 public:
     static_assert(std::is_floating_point_v<TValue>);
 
-    TFloatingPointColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema)
-        : ColumnIndex_(columnIndex)
+    TFloatingPointColumnConverter(
+        int columnId,
+        const NTableClient::TColumnSchema& columnSchema,
+        int columnOffset)
+        : ColumnId_(columnId)
         , ColumnSchema_(columnSchema)
+        , ColumnOffset_(columnOffset)
 
     { }
 
@@ -80,7 +84,7 @@ public:
             nullBitmapRef);
 
         column->Type = ColumnSchema_.LogicalType();
-        column->Id = ColumnIndex_;
+        column->Id = ColumnId_;
 
         TOwningColumn owner = {
             .Column = std::move(column),
@@ -92,8 +96,9 @@ public:
     }
 
 private:
-    const int ColumnIndex_;
+    const int ColumnId_;
     const TColumnSchema ColumnSchema_;
+    const int ColumnOffset_;
 
     std::vector<TValue> Values_;
     TBitmapOutput NullBitmap_;
@@ -107,7 +112,7 @@ private:
     void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
         for (const auto& rowValues : rowsValues) {
-            auto value = rowValues[ColumnIndex_];
+            auto value = rowValues[ColumnOffset_];
             bool isNull = !value || value->Type == NTableClient::EValueType::Null;
             TValue valueData = isNull ? 0 : value->Data.Double;
             NullBitmap_.Append(isNull);
@@ -120,14 +125,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateFloatingPoint32ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema)
+IColumnConverterPtr CreateFloatingPoint32ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TFloatingPointColumnConverter<float, NTableClient::EValueType::Double>>(columnIndex, columnSchema);
+    return std::make_unique<TFloatingPointColumnConverter<float, NTableClient::EValueType::Double>>(columnId, columnSchema, columnOffset);
 }
 
-IColumnConverterPtr CreateFloatingPoint64ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema)
+IColumnConverterPtr CreateFloatingPoint64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TFloatingPointColumnConverter<double, NTableClient::EValueType::Double>>(columnIndex, columnSchema);
+    return std::make_unique<TFloatingPointColumnConverter<double, NTableClient::EValueType::Double>>(columnId, columnSchema, columnOffset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

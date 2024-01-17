@@ -13,8 +13,17 @@ struct TAggregatorSchema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Value>;
     };
 
+    struct BaseStats : Table<2> {
+        struct SchemeShardId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Stats : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SchemeShardId>;
+        using TColumns = TableColumns<SchemeShardId, Stats>;
+    };
+
     using TTables = SchemaTables<
-        SysParams
+        SysParams,
+        BaseStats
     >;
 
     using TSettings = SchemaSettings<

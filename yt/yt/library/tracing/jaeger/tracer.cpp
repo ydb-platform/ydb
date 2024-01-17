@@ -11,10 +11,12 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/serialize.h>
+
 #include <yt/yt/core/utilex/random.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 #include <util/string/cast.h>
 #include <util/string/reverse.h>
@@ -287,7 +289,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
         batches.push_back(BatchQueue_[batchCount].second);
     }
 
-    return std::make_tuple(batches, batchCount, spanCount);
+    return std::tuple(batches, batchCount, spanCount);
 }
 
 TJaegerChannelManager::TJaegerChannelManager()

@@ -5,8 +5,10 @@ STYLE_PYTHON()
 PY_SRCS(
     clickhouse.py
     comparator.py
+    data_source_kind.py
     database.py
     dqrun.py
+    docker_compose.py
     generate.py
     kqprun.py
     log.py

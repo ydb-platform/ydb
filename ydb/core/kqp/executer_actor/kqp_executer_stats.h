@@ -84,9 +84,11 @@ struct TStageExecutionStats {
     std::vector<ui64> EgressRows;
     std::vector<ui64> EgressBytes;
 
-    std::vector<ui64> FirstRowTimeMs;
     std::vector<ui64> FinishTimeMs;
     std::vector<ui64> StartTimeMs;
+    std::vector<ui64> DurationUs;
+    std::vector<ui64> WaitInputTimeUs;
+    std::vector<ui64> WaitOutputTimeUs;
 
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;
@@ -98,7 +100,7 @@ struct TStageExecutionStats {
 
     void Resize(ui32 taskCount);
     void UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage);
+    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
 struct TQueryExecutionStats {
@@ -162,6 +164,7 @@ public:
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
+    void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
 
     void Finish();
 

@@ -137,7 +137,7 @@ public:
         TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem) const = 0;
+    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, NActors::TActorSystem* actorSystem, bool isConcurrent) const = 0;
 };
 
 class TDqTaskRunnerExecutionContextBase : public IDqTaskRunnerExecutionContext {
@@ -155,7 +155,7 @@ public:
         return {};
     };
 
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, NActors::TActorSystem* /*actorSystem*/) const override {
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, NActors::TActorSystem* /*actorSystem*/, bool /*isConcurrent*/) const override {
         return {};
     };
 

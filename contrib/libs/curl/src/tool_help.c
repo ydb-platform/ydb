@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -26,6 +26,7 @@
 /* use our own printf() functions */
 #include "curlx.h"
 
+#include "tool_panykey.h"
 #include "tool_help.h"
 #include "tool_libinfo.h"
 #include "tool_util.h"
@@ -75,6 +76,42 @@ static const struct category_descriptors categories[] = {
 
 extern const struct helptxt helptext[];
 
+struct feat {
+  const char *name;
+  int bitmask;
+};
+
+static const struct feat feats[] = {
+  {"AsynchDNS",      CURL_VERSION_ASYNCHDNS},
+  {"Debug",          CURL_VERSION_DEBUG},
+  {"TrackMemory",    CURL_VERSION_CURLDEBUG},
+  {"IDN",            CURL_VERSION_IDN},
+  {"IPv6",           CURL_VERSION_IPV6},
+  {"Largefile",      CURL_VERSION_LARGEFILE},
+  {"Unicode",        CURL_VERSION_UNICODE},
+  {"SSPI",           CURL_VERSION_SSPI},
+  {"GSS-API",        CURL_VERSION_GSSAPI},
+  {"Kerberos",       CURL_VERSION_KERBEROS5},
+  {"SPNEGO",         CURL_VERSION_SPNEGO},
+  {"NTLM",           CURL_VERSION_NTLM},
+  {"NTLM_WB",        CURL_VERSION_NTLM_WB},
+  {"SSL",            CURL_VERSION_SSL},
+  {"libz",           CURL_VERSION_LIBZ},
+  {"brotli",         CURL_VERSION_BROTLI},
+  {"zstd",           CURL_VERSION_ZSTD},
+  {"CharConv",       CURL_VERSION_CONV},
+  {"TLS-SRP",        CURL_VERSION_TLSAUTH_SRP},
+  {"HTTP2",          CURL_VERSION_HTTP2},
+  {"HTTP3",          CURL_VERSION_HTTP3},
+  {"UnixSockets",    CURL_VERSION_UNIX_SOCKETS},
+  {"HTTPS-proxy",    CURL_VERSION_HTTPS_PROXY},
+  {"MultiSSL",       CURL_VERSION_MULTI_SSL},
+  {"PSL",            CURL_VERSION_PSL},
+  {"alt-svc",        CURL_VERSION_ALTSVC},
+  {"HSTS",           CURL_VERSION_HSTS},
+  {"gsasl",          CURL_VERSION_GSASL},
+  {"threadsafe",     CURL_VERSION_THREADSAFE},
+};
 
 static void print_category(curlhelp_t category)
 {
@@ -151,21 +188,10 @@ void tool_help(char *category)
   free(category);
 }
 
-static bool is_debug(void)
-{
-  const char *const *builtin;
-  for(builtin = feature_names; *builtin; ++builtin)
-    if(curl_strequal("debug", *builtin))
-      return TRUE;
-  return FALSE;
-}
 
 void tool_version_info(void)
 {
-  const char *const *builtin;
-  if(is_debug())
-    fprintf(stderr, "WARNING: this libcurl is Debug-enabled, "
-            "do not use in production\n\n");
+  const char *const *proto;
 
   printf(CURL_ID "%s\n", curl_version());
 #ifdef CURL_PATCHSTAMP
@@ -174,20 +200,28 @@ void tool_version_info(void)
 #else
   printf("Release-Date: %s\n", LIBCURL_TIMESTAMP);
 #endif
-  if(built_in_protos[0]) {
-    printf("Protocols:");
-    for(builtin = built_in_protos; *builtin; ++builtin) {
+  if(curlinfo->protocols) {
+    printf("Protocols: ");
+    for(proto = curlinfo->protocols; *proto; ++proto) {
       /* Special case: do not list rtmp?* protocols.
          They may only appear together with "rtmp" */
-      if(!curl_strnequal(*builtin, "rtmp", 4) || !builtin[0][4])
-        printf(" %s", *builtin);
+      if(!curl_strnequal(*proto, "rtmp", 4) || !proto[0][4])
+        printf("%s ", *proto);
     }
     puts(""); /* newline */
   }
-  if(feature_names[0]) {
+  if(curlinfo->features) {
+    char *featp[ sizeof(feats) / sizeof(feats[0]) + 1];
+    size_t numfeat = 0;
+    unsigned int i;
     printf("Features:");
-    for(builtin = feature_names; *builtin; ++builtin)
-      printf(" %s", *builtin);
+    for(i = 0; i < sizeof(feats)/sizeof(feats[0]); i++) {
+      if(curlinfo->features & feats[i].bitmask)
+        featp[numfeat++] = (char *)feats[i].name;
+    }
+    qsort(&featp[0], numfeat, sizeof(char *), struplocompare4sort);
+    for(i = 0; i< numfeat; i++)
+      printf(" %s", featp[i]);
     puts(""); /* newline */
   }
   if(strcmp(CURL_VERSION, curlinfo->version)) {

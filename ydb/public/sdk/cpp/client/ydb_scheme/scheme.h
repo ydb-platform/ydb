@@ -41,7 +41,8 @@ enum class ESchemeEntryType : i32 {
     Replication = 16,
     Topic = 17,
     ExternalTable = 18,
-    ExternalDataSource = 19
+    ExternalDataSource = 19,
+    View = 20
 };
 
 struct TVirtualTimestamp {

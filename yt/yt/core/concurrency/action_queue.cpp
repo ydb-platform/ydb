@@ -631,10 +631,10 @@ private:
             }
 
             UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
-               &TSuspendableInvoker::RunCallback,
-               MakeStrong(this),
-               Passed(std::move(callback)),
-               Passed(std::move(guard))));
+                &TSuspendableInvoker::RunCallback,
+                MakeStrong(this),
+                Passed(std::move(callback)),
+                Passed(std::move(guard))));
         }
 
         SchedulingMore_ = false;

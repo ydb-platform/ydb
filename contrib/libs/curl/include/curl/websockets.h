@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -33,7 +33,6 @@ struct curl_ws_frame {
   int flags;            /* See the CURLWS_* defines */
   curl_off_t offset;    /* the offset of this data into the frame */
   curl_off_t bytesleft; /* number of pending bytes left of the payload */
-  size_t len;           /* size of the current data chunk */
 };
 
 /* flag bits */
@@ -54,13 +53,13 @@ struct curl_ws_frame {
  */
 CURL_EXTERN CURLcode curl_ws_recv(CURL *curl, void *buffer, size_t buflen,
                                   size_t *recv,
-                                  const struct curl_ws_frame **metap);
+                                  struct curl_ws_frame **metap);
 
-/* flags for curl_ws_send() */
+/* sendflags for curl_ws_send() */
 #define CURLWS_PONG       (1<<6)
 
 /*
- * NAME curl_ws_send()
+ * NAME curl_easy_send()
  *
  * DESCRIPTION
  *
@@ -69,13 +68,13 @@ CURL_EXTERN CURLcode curl_ws_recv(CURL *curl, void *buffer, size_t buflen,
  */
 CURL_EXTERN CURLcode curl_ws_send(CURL *curl, const void *buffer,
                                   size_t buflen, size_t *sent,
-                                  curl_off_t fragsize,
-                                  unsigned int flags);
+                                  curl_off_t framesize,
+                                  unsigned int sendflags);
 
 /* bits for the CURLOPT_WS_OPTIONS bitmask: */
 #define CURLWS_RAW_MODE (1<<0)
 
-CURL_EXTERN const struct curl_ws_frame *curl_ws_meta(CURL *curl);
+CURL_EXTERN struct curl_ws_frame *curl_ws_meta(CURL *curl);
 
 #ifdef  __cplusplus
 }

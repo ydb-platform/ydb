@@ -68,12 +68,14 @@ public:
     static_assert(std::is_integral_v<TValue>);
 
     TIntegerColumnConverter(
-        int columnIndex,
+        int columnId,
         NTableClient::EValueType ValueType,
-        NTableClient::TColumnSchema columnSchema)
-        : ColumnIndex_(columnIndex)
+        NTableClient::TColumnSchema columnSchema,
+        int columnOffset)
+        : ColumnId_(columnId)
         , ColumnSchema_(columnSchema)
         , ValueType_(ValueType)
+        , ColumnOffset_(columnOffset)
     { }
 
     TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
@@ -105,7 +107,7 @@ public:
             nullBitmapRef);
 
         column->Type = ColumnSchema_.LogicalType();
-        column->Id = ColumnIndex_;
+        column->Id = ColumnId_;
 
         TOwningColumn owner = {
             .Column = std::move(column),
@@ -118,9 +120,10 @@ public:
 
 
 private:
-    const int ColumnIndex_;
+    const int ColumnId_;
     const NTableClient::TColumnSchema ColumnSchema_;
     const NTableClient::EValueType ValueType_;
+    const int ColumnOffset_;
 
     i64 RowCount_ = 0;
     TBitmapOutput NullBitmap_;
@@ -141,7 +144,7 @@ private:
     void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
         for (const auto& rowValues : rowsValues) {
-            auto value = rowValues[ColumnIndex_];
+            auto value = rowValues[ColumnOffset_];
             bool isNull = !value || value->Type == NTableClient::EValueType::Null;
             ui64 data = 0;
             if (!isNull) {
@@ -159,15 +162,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateInt64ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema)
+IColumnConverterPtr CreateInt64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TIntegerColumnConverter<i64>>(columnIndex, NTableClient::EValueType::Int64, columnSchema);
+    return std::make_unique<TIntegerColumnConverter<i64>>(columnId, NTableClient::EValueType::Int64, columnSchema, columnOffset);
 }
 
 
-IColumnConverterPtr CreateUint64ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema)
+IColumnConverterPtr CreateUint64ColumnConverter(int columnId, const NTableClient::TColumnSchema& columnSchema, int columnOffset)
 {
-    return std::make_unique<TIntegerColumnConverter<ui64>>(columnIndex, NTableClient::EValueType::Uint64, columnSchema);
+    return std::make_unique<TIntegerColumnConverter<ui64>>(columnId, NTableClient::EValueType::Uint64, columnSchema, columnOffset);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

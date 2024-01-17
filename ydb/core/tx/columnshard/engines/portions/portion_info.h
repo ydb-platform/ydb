@@ -97,7 +97,9 @@ public:
     TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         TSerializationStats result;
         for (auto&& i : Records) {
-            result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+            }
         }
         return result;
     }
@@ -149,8 +151,7 @@ public:
         : PathId(pathId)
         , Portion(portionId)
         , MinSnapshot(minSnapshot)
-        , BlobsOperator(blobsOperator)
-    {
+        , BlobsOperator(blobsOperator) {
     }
 
     TString DebugString(const bool withDetails = false) const;
@@ -397,20 +398,28 @@ public:
     public:
         TAssembleBlobInfo(const ui32 rowsCount)
             : NullRowsCount(rowsCount) {
-
+            AFL_VERIFY(NullRowsCount);
         }
 
         TAssembleBlobInfo(const TString& data)
             : Data(data) {
-
+            AFL_VERIFY(!!Data);
         }
 
         ui32 GetNullRowsCount() const noexcept {
-             return NullRowsCount;
+            return NullRowsCount;
         }
 
         const TString& GetData() const noexcept {
             return Data;
+        }
+
+        bool IsBlob() const {
+            return !NullRowsCount && !!Data;
+        }
+
+        bool IsNull() const {
+            return NullRowsCount && !Data;
         }
 
         std::shared_ptr<arrow::RecordBatch> BuildRecordBatch(const TColumnLoader& loader) const;
@@ -435,8 +444,7 @@ public:
 
         TPreparedColumn(std::vector<TAssembleBlobInfo>&& blobs, const std::shared_ptr<TColumnLoader>& loader)
             : Loader(loader)
-            , Blobs(std::move(blobs))
-        {
+            , Blobs(std::move(blobs)) {
             Y_ABORT_UNLESS(Loader);
             Y_ABORT_UNLESS(Loader->GetExpectedSchema()->num_fields() == 1);
         }
@@ -503,8 +511,7 @@ public:
         TPreparedBatchData(std::vector<TPreparedColumn>&& columns, std::shared_ptr<arrow::Schema> schema, const size_t rowsCount)
             : Columns(std::move(columns))
             , Schema(schema)
-            , RowsCount(rowsCount)
-        {
+            , RowsCount(rowsCount) {
         }
 
         std::shared_ptr<arrow::RecordBatch> Assemble(const TAssembleOptions& options = {}) const;
@@ -523,8 +530,7 @@ public:
             : ColumnId(resultLoader->GetColumnId())
             , NumRows(numRows)
             , DataLoader(dataLoader)
-            , ResultLoader(resultLoader)
-        {
+            , ResultLoader(resultLoader) {
             AFL_VERIFY(ResultLoader);
             if (DataLoader) {
                 AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
@@ -596,8 +602,8 @@ public:
     }
 
     std::shared_ptr<arrow::RecordBatch> AssembleInBatch(const ISnapshotSchema& dataSchema,
-                                            const ISnapshotSchema& resultSchema,
-                                            THashMap<TBlobRange, TString>& data) const {
+        const ISnapshotSchema& resultSchema,
+        THashMap<TBlobRange, TString>& data) const {
         auto batch = PrepareForAssemble(dataSchema, resultSchema, data).Assemble();
         Y_ABORT_UNLESS(batch->Validate().ok());
         return batch;

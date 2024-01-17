@@ -77,7 +77,7 @@ NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus TTableStoreM
 }
 
 NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TTableStoreManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& /*schemeOperation*/,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
+        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& /*context*/) const {
     return NThreading::MakeFuture(NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus::Fail(
         "Execution of prepare operations for TABLE objects is not supported"));
 }

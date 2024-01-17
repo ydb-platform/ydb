@@ -666,11 +666,11 @@ namespace NTable {
                     for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                         auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
                         m->SetRootPageId(meta.PageId);
-                        m->SetLevelsCount(meta.LevelsCount);
+                        m->SetLevelCount(meta.LevelCount);
                         m->SetIndexSize(meta.IndexSize);
                         m->SetDataSize(meta.DataSize);
-                        m->SetCount(meta.Count);
-                        m->SetErasedCount(meta.ErasedCount);
+                        m->SetRowCount(meta.RowCount);
+                        m->SetErasedRowCount(meta.ErasedRowCount);
                     }
                 }
 

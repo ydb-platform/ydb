@@ -482,7 +482,10 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
         return;
     }
 
-    Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(ctx.SelfID, {/* topicPath */}, PartitionTabletId, Partition, { /* expectedGeneration */}, SourceId));
+    TPartitionWriterOpts opts;
+    opts.WithDeduplication(false)
+        .WithSourceId(SourceId);
+    Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(ctx.SelfID, PartitionTabletId, Partition, opts));
     State = ES_WAIT_WRITER_INIT;
 
     ui32 border = AppData(ctx)->PQConfig.GetWriteInitLatencyBigMs();

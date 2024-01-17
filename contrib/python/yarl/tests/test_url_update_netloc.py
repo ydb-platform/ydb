@@ -33,11 +33,11 @@ def test_with_user():
 
 def test_with_user_non_ascii():
     url = URL("http://example.com")
-    url2 = url.with_user("вася")
-    assert url2.raw_user == "%D0%B2%D0%B0%D1%81%D1%8F"
-    assert url2.user == "вася"
-    assert url2.raw_authority == "%D0%B2%D0%B0%D1%81%D1%8F@example.com"
-    assert url2.authority == "вася@example.com:80"
+    url2 = url.with_user("бажан")
+    assert url2.raw_user == "%D0%B1%D0%B0%D0%B6%D0%B0%D0%BD"
+    assert url2.user == "бажан"
+    assert url2.raw_authority == "%D0%B1%D0%B0%D0%B6%D0%B0%D0%BD@example.com"
+    assert url2.authority == "бажан@example.com:80"
 
 
 def test_with_user_percent_encoded():
@@ -159,11 +159,11 @@ def test_with_host_empty():
 
 def test_with_host_non_ascii():
     url = URL("http://example.com:123")
-    url2 = url.with_host("историк.рф")
-    assert url2.raw_host == "xn--h1aagokeh.xn--p1ai"
-    assert url2.host == "историк.рф"
-    assert url2.raw_authority == "xn--h1aagokeh.xn--p1ai:123"
-    assert url2.authority == "историк.рф:123"
+    url2 = url.with_host("оун-упа.укр")
+    assert url2.raw_host == "xn----8sb1bdhvc.xn--j1amh"
+    assert url2.host == "оун-упа.укр"
+    assert url2.raw_authority == "xn----8sb1bdhvc.xn--j1amh:123"
+    assert url2.authority == "оун-упа.укр:123"
 
 
 def test_with_host_percent_encoded():

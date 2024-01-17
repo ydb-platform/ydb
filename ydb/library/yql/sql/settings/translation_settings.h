@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
@@ -101,6 +103,7 @@ namespace NSQLTranslation {
         bool WarnOnV0;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
+        ISqlFeaturePolicy::TPtr BlockDefaultAuto;
         bool AssumeYdbOnClusterWithSlash;
         TString DynamicClusterProvider;
         TString FileAliasPrefix;
@@ -109,6 +112,8 @@ namespace NSQLTranslation {
         bool AutoParametrizeEnabled = false;
         bool AutoParametrizeValuesStmt = false;
         THashSet<TString> AutoParametrizeExprDisabledScopes = {};
+
+        TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

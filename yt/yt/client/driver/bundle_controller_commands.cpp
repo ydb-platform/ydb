@@ -22,12 +22,7 @@ void TGetBundleConfigCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(BuildYsonStringFluently()
-        .BeginMap()
-            .Item("bundle_name").Value(result.BundleName)
-            .Item("rpc_proxy_count").Value(result.RpcProxyCount)
-            .Item("tablet_node_count").Value(result.TabletNodeCount)
-        .EndMap());
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -629,9 +629,9 @@ public:
     void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) override;
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
     void DetachTablet(const TActorContext &ctx) override;
-    void DoExecute(TAutoPtr<ITransaction> transaction, bool allowImmediate, const TActorContext &ctx, NWilson::TTraceId traceId);
-    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) override;
-    void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx, NWilson::TTraceId traceId = {}) override;
+    void DoExecute(TAutoPtr<ITransaction> transaction, bool allowImmediate, const TActorContext &ctx);
+    void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
+    void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
 
     TLeaseCommit* AttachLeaseCommit(TLogCommit* commit, bool force = false);
     TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);

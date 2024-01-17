@@ -1,7 +1,7 @@
 #include "mkql_todict.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>

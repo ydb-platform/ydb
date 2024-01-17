@@ -2662,8 +2662,8 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
 
         ctx.Send(ev->Sender, result.release());
-        IncCounter(COUNTER_PREPARE_OVERLOADED);
-        IncCounter(COUNTER_PREPARE_COMPLETE);
+        IncCounter(COUNTER_WRITE_OVERLOADED);
+        IncCounter(COUNTER_WRITE_COMPLETE);
         return true;
     }
 
@@ -2818,9 +2818,13 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false), ctx);
+        NWilson::TSpan datashardTransactionSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
+        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan)), ctx);
     }
 }
+
 void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& record = msg->Record;
@@ -2835,7 +2839,10 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        Execute(new TTxWrite(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false), ctx);
+        NWilson::TSpan datashardTransactionSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+
+        Execute(new TTxWrite(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan)), ctx);
     }
 }
 
@@ -2900,12 +2907,18 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
             switch (item.Event->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item.Event));
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true), ctx);
+                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::Tablet, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+                    
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {
                     auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item.Event));
-                    Execute(new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true), ctx);
+                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::Tablet, std::move(event->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+
+                    Execute(new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
                     return;
                 }
                 default:
@@ -4116,12 +4129,13 @@ bool TDataShard::ReassignChannelsEnabled() const {
 }
 
 void TDataShard::ExecuteProgressTx(const TActorContext& ctx) {
-    Execute(new TTxProgressTransaction(this), ctx);
+    Execute(new TTxProgressTransaction(this, {}, {}), ctx);
 }
 
 void TDataShard::ExecuteProgressTx(TOperation::TPtr op, const TActorContext& ctx) {
     Y_ABORT_UNLESS(op->IsInProgress());
-    Execute(new TTxProgressTransaction(this, std::move(op)), ctx);
+    NWilson::TTraceId traceId = op->GetTraceId();
+    Execute(new TTxProgressTransaction(this, std::move(op), std::move(traceId)), ctx);
 }
 
 TDuration TDataShard::CleanupTimeout() const {

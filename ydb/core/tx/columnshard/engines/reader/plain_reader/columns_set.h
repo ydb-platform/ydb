@@ -18,12 +18,19 @@ private:
 
 public:
     TColumnsSet() = default;
+    bool IsEmpty() const {
+        return ColumnIds.empty();
+    }
+
+    bool operator!() const {
+        return IsEmpty();
+    }
 
     const std::vector<TString>& GetColumnNamesVector() const {
         return ColumnNamesVector;
     }
 
-    ui32 GetSize() const {
+    ui32 GetColumnsCount() const {
         return ColumnIds.size();
     }
 
@@ -94,29 +101,6 @@ public:
     TColumnsSet operator+(const TColumnsSet& external) const;
 
     TColumnsSet operator-(const TColumnsSet& external) const;
-};
-
-class TFetchingPlan {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
-    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
-    bool CanUseEarlyFilterImmediatelyFlag = false;
-public:
-    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
-        : FilterStage(filterStage)
-        , FetchingStage(fetchingStage)
-        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately) {
-
-    }
-
-    TString DebugString() const {
-        return TStringBuilder() << "{filter=" << (FilterStage ? FilterStage->DebugString() : "NO") << ";fetching=" <<
-            (FetchingStage ? FetchingStage->DebugString() : "NO") << ";use_filter=" << CanUseEarlyFilterImmediatelyFlag << "}";
-    }
-
-    bool CanUseEarlyFilterImmediately() const {
-        return CanUseEarlyFilterImmediatelyFlag;
-    }
 };
 
 }

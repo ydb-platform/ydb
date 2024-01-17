@@ -19,7 +19,7 @@ message TInPlaceCompute {
 
 message TLoadControlConfig {
     bool Enable = 1;
-    string MonitoringRequestDelay = 2;     // default 0 == non-stop polling
+    string MonitoringRequestDelay = 2;     // default "1s"
     string AverageLoadInterval = 3;        // default "10s", allowed min "1s"
     uint32 MaxClusterLoadPercentage = 4;   // default 0 == no load control
     uint32 DefaultQueryLoadPercentage = 5; // default 10

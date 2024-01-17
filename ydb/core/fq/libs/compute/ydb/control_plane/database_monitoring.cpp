@@ -72,7 +72,7 @@ public:
         : MonitoringClientActorId(monitoringClientActorId)
         , Counters(counters)
     {
-        MonitoringRequestDelay = GetDuration(config.GetMonitoringRequestDelay(), TDuration::Zero());
+        MonitoringRequestDelay = GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1));
         AverageLoadInterval = std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1));
         MaxClusterLoad = std::min<ui32>(config.GetMaxClusterLoadPercentage(), 100) / 100.0;
         DefaultQueryLoad = std::min<ui32>(config.GetDefaultQueryLoadPercentage(), 100) / 100.0;

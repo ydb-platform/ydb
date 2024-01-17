@@ -359,7 +359,7 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
                         totals.CpuTimeUs.Write(writer, "CpuTimeUs");
                         totals.SourceCpuTimeUs.Write(writer, "SourceCpuTimeUs");
                         if (cpuUsage) {
-                            *cpuUsage = (totals.CpuTimeUs.Sum + totals.SourceCpuTimeUs.Sum) / 1'000'000.0;
+                            *cpuUsage = (totals.CpuTimeUs.Sum + totals.SourceCpuTimeUs.Sum) / 1000000.0;
                         }
                         totals.InputBytes.Write(writer, "InputBytes");
                         totals.InputRows.Write(writer, "InputRows");

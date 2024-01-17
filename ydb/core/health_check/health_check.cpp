@@ -1248,8 +1248,12 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
+
+        if (databaseState.RestartsPerPeriod[nodeId] > 30) {
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::NodeState);
+        }
 
         auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
         if (itNodeSystemState != MergedNodeSystemState.end()) {
@@ -1308,8 +1312,9 @@ public:
             }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(nodeId, computeNode, {&context, "COMPUTE_NODE"});
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::NodeState});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node

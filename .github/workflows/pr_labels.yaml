@@ -17,7 +17,7 @@ jobs:
         id: update-pr-labels
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;

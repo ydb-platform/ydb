@@ -1,13 +1,16 @@
 RECURSE(
     accessor
+    actors
     aclib
     arrow_clickhouse
     arrow_kernels
+    arrow_parquet
     backup
     binary_json
     chunks_limiter
     dynumber
     folder_service
+    grpc
     http_proxy
     keys
     login
@@ -21,6 +24,7 @@ RECURSE(
     query_actor
     schlab
     security
+    table_creator
     testlib
     time_series_vec
     wilson_ids

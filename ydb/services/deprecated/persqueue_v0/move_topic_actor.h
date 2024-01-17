@@ -11,7 +11,7 @@ namespace NGRpcService {
 class TMoveTopicActor : public TActorBootstrapped<TMoveTopicActor> {
 public:
 
-    TMoveTopicActor(NGrpc::IRequestContextBase* request);
+    TMoveTopicActor(NYdbGrpc::IRequestContextBase* request);
 
     ~TMoveTopicActor() = default;
 
@@ -75,7 +75,7 @@ private:
     TMaybe<bool> SrcExists;
     TMaybe<bool> DstExists;
 
-    TIntrusivePtr<NGrpc::IRequestContextBase> RequestCtx;
+    TIntrusivePtr<NYdbGrpc::IRequestContextBase> RequestCtx;
 };
 
 } //namespace NGRpcProxy

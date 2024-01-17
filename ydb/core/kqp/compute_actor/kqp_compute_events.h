@@ -6,12 +6,19 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr::NKqp {
 
 struct TEvKqpCompute {
     struct TEvRemoteScanData : public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
         TKqpComputeEvents::EvRemoteScanData> {};
+
+    class IShardScanStats {
+    public:
+        virtual ~IShardScanStats() = default;
+        virtual THashMap<TString, ui64> GetMetrics() const = 0;
+    };
 
     /*
      * Scan communications.
@@ -25,7 +32,7 @@ struct TEvKqpCompute {
      * TEvScanDataAck follows the same pattern mostly for symmetry reasons.
      */
     struct TEvScanData : public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::EvScanData> {
-        TEvScanData(ui32 scanId, ui32 generation = 0)
+        TEvScanData(const ui32 scanId, const ui32 generation = 0)
             : ScanId(scanId)
             , Generation(generation)
             , Finished(false) {}
@@ -35,6 +42,8 @@ struct TEvKqpCompute {
         ui32 Generation;
         TVector<TOwnedCellVec> Rows;
         std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+        std::vector<std::vector<ui32>> SplittedBatches;
+        
         TOwnedCellVec LastKey;
         TDuration CpuTime;
         TDuration WaitTime;
@@ -43,6 +52,19 @@ struct TEvKqpCompute {
         bool Finished = false;
         bool PageFault = false; // page fault was the reason for sending this message
         mutable THolder<TEvRemoteScanData> Remote;
+        std::shared_ptr<IShardScanStats> StatsOnFinished;
+
+        template <class T>
+        const T& GetStatsAs() const {
+            Y_ABORT_UNLESS(!!StatsOnFinished);
+            return VerifyDynamicCast<const T&>(*StatsOnFinished);
+        }
+
+        template <class T>
+        bool CheckStatsIs() const {
+            auto p = dynamic_cast<const T*>(StatsOnFinished.get());
+            return p;
+        }
 
         ui32 GetRowsCount() const {
             if (ArrowBatch) {
@@ -70,19 +92,18 @@ struct TEvKqpCompute {
             return Remote->SerializeToArcadiaStream(chunker);
         }
 
-        NKikimrTxDataShard::EScanDataFormat GetDataFormat() const {
-            if (ArrowBatch != nullptr) {
-                return NKikimrTxDataShard::EScanDataFormat::ARROW;
+        NKikimrDataEvents::EDataFormat GetDataFormat() const {
+            if (ArrowBatch != nullptr || SplittedBatches.size()) {
+                return NKikimrDataEvents::FORMAT_ARROW;
             }
-            return NKikimrTxDataShard::EScanDataFormat::CELLVEC;
+            return NKikimrDataEvents::FORMAT_CELLVEC;
         }
 
 
         static NActors::IEventBase* Load(TEventSerializedData* data) {
             auto pbEv = THolder<TEvRemoteScanData>(static_cast<TEvRemoteScanData *>(TEvRemoteScanData::Load(data)));
-            auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId());
+            auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
 
-            ev->Generation = pbEv->Record.GetGeneration();
             ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
             ev->WaitTime = TDuration::MilliSeconds(pbEv->Record.GetWaitTimeMs());
             ev->PageFault = pbEv->Record.GetPageFault();
@@ -128,15 +149,15 @@ struct TEvKqpCompute {
                 }
 
                 switch (GetDataFormat()) {
-                    case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+                    case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+                    case NKikimrDataEvents::FORMAT_CELLVEC: {
                         Remote->Record.MutableRows()->Reserve(Rows.size());
                         for (const auto& row: Rows) {
                             Remote->Record.AddRows(TSerializedCellVec::Serialize(row));
                         }
                         break;
                     }
-                    case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                    case NKikimrDataEvents::FORMAT_ARROW: {
                         Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                         auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                         protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
@@ -201,25 +222,29 @@ struct TEvKqpCompute {
     struct TEvScanError : public NActors::TEventPB<TEvScanError, NKikimrKqp::TEvScanError,
         TKqpComputeEvents::EvScanError>
     {
-        TEvScanError(ui32 generation = 0) {
+        TEvScanError() = default;
+        TEvScanError(const ui32 generation, const ui64 tabletId) {
             Record.SetGeneration(generation);
+            Record.SetTabletId(tabletId);
         }
     };
 
     struct TEvScanInitActor : public NActors::TEventPB<TEvScanInitActor, NKikimrKqp::TEvScanInitActor,
         TKqpComputeEvents::EvScanInitActor>
     {
-        TEvScanInitActor() {}
+        TEvScanInitActor() = default;
 
-        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation = 0) {
+        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId) {
             Record.SetScanId(scanId);
             ActorIdToProto(scanActor, Record.MutableScanActorId());
             Record.SetGeneration(generation);
+            Record.SetTabletId(tabletId);
         }
     };
 
     struct TEvKillScanTablet : public NActors::TEventPB<TEvKillScanTablet, NKikimrKqp::TEvKillScanTablet,
         TKqpComputeEvents::EvKillScanTablet> {};
+
 };
 
 } // namespace NKikimr::NKqp

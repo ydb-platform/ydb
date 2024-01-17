@@ -2,20 +2,21 @@
 
 #include "flat_scan_iface.h"
 #include "flat_scan_spent.h"
-#include "flat_bio_events.h"
 #include "flat_writer_bundle.h"
 #include "flat_sausage_chop.h"
 #include "flat_row_misc.h"
 #include "flat_part_writer.h"
 #include "flat_part_loader.h"
-#include "flat_part_slice.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
 #include "util_basics.h"
+#include "flat_comp.h"
+#include "flat_executor_misc.h"
+#include "flat_bio_stats.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <bitset>
 
@@ -55,7 +56,7 @@ namespace NTabletFlatExecutor {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using TScheme = NTable::TRowScheme;
-        using TWriter = NTable::TPartWriter;
+        using TPartWriter = NTable::TPartWriter;
         using TBundle = NWriter::TBundle;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
@@ -122,7 +123,7 @@ namespace NTabletFlatExecutor {
 
                 auto *scheme = new NTable::TPartScheme(Scheme->Cols);
 
-                Writer = new TWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
+                Writer = new TPartWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
 
                 return EScan::Feed;
 
@@ -517,7 +518,7 @@ namespace NTabletFlatExecutor {
         THolder<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
         TAutoPtr<TBundle> Bundle;
-        TAutoPtr<TWriter> Writer;
+        TAutoPtr<TPartWriter> Writer;
         NTable::TWriteStats WriteStats;
         TVector<TBundle::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;

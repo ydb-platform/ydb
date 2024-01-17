@@ -1,7 +1,7 @@
 #pragma once
 
 #include "http_req.h"
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 
 namespace NKikimr::NPublicHttp {
 

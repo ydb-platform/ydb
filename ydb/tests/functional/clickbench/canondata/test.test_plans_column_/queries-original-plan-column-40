@@ -18,10 +18,20 @@
                                 "Node Type": "Limit-Offset",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     },
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 6
+                                            }
+                                        ],
                                         "Name": "Offset",
                                         "Offset": "100"
                                     }
@@ -37,7 +47,12 @@
                                                 "Node Type": "Limit",
                                                 "Operators": [
                                                     {
-                                                        "Limit": "10 + 100",
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 4
+                                                            }
+                                                        ],
+                                                        "Limit": "SUM(10,100)",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -52,7 +67,12 @@
                                                                 "Node Type": "TopSort",
                                                                 "Operators": [
                                                                     {
-                                                                        "Limit": "10 + 100",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 2
+                                                                            }
+                                                                        ],
+                                                                        "Limit": "SUM(10,100)",
                                                                         "Name": "TopSort",
                                                                         "TopSortBy": "argument.Count0"
                                                                     }
@@ -72,15 +92,26 @@
                                                                                 "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
                                                                                         "GroupBy": "",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Filter",
                                                                                         "Predicate": "item.EventDate >= \"15887\" And item.EventDate <= \"15917\" And item.TraficSourceID == -1 Or item.TraficSourceID == 6"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "CounterID",
@@ -123,7 +154,8 @@
                                                                                                                     "Id": 106
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 1
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -151,7 +183,8 @@
                                                                                                                     "Id": 108
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 1
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 1
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -179,7 +212,8 @@
                                                                                                                     "Id": 110
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 1
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 2
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -197,7 +231,8 @@
                                                                                                                     "Id": 111
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 11
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 3
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -215,7 +250,8 @@
                                                                                                                     "Id": 112
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 11
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 4
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -242,7 +278,7 @@
                                                                                                     }
                                                                                                 }
                                                                                             ],
-                                                                                            "Version": 3
+                                                                                            "Version": 4
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

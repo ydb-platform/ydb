@@ -1,6 +1,8 @@
 #include "yql_yt_key.h"
+#include <library/cpp/yson/node/node_io.h>
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <util/string/builder.h>
@@ -16,6 +18,8 @@ THashSet<TStringBuf> EXT_KEY_CALLABLES = {
     TStringBuf("Key"),
     TStringBuf("TempTable"),
     MrFolderName,
+    MrWalkFoldersName,
+    MrWalkFoldersImplName
 };
 
 THashSet<TStringBuf> KEY_CALLABLES = {
@@ -25,7 +29,8 @@ THashSet<TStringBuf> KEY_CALLABLES = {
 
 }
 
-bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx) {
+bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
+    using namespace NNodes;
     if (!key.IsCallable(EXT_KEY_CALLABLES)) {
         ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Expected key")));
         return false;
@@ -63,6 +68,47 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx) {
             " and may have second tag - view")));
         return false;
     }
+    else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFolders>(&key)) {
+        Type = EType::WalkFolders;
+        const auto walkFolders = maybeWalkFolders.Cast();
+
+        TFolderList initialListFolder;
+        initialListFolder.Prefix = walkFolders.Prefix();
+        Split(TString(walkFolders.Attributes().StringValue()), ";", initialListFolder.Attributes);
+
+        WalkFolderArgs = MakeMaybe(TWalkFoldersArgs{
+            .InitialFolder = std::move(initialListFolder),
+            .PickledUserState = walkFolders.PickledUserState().Ptr(),
+            .UserStateType = walkFolders.UserStateType().Ptr(),
+            .PreHandler = walkFolders.PreHandler().Ptr(),
+            .ResolveHandler = walkFolders.ResolveHandler().Ptr(),
+            .DiveHandler = walkFolders.DiveHandler().Ptr(),
+            .PostHandler = walkFolders.PostHandler().Ptr(),
+            .StateKey = walkFolders.Ref().UniqueId(),
+        });
+        
+        return true;
+    }
+    else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFoldersImpl>(&key)) {
+        Type = EType::WalkFoldersImpl;
+        const auto walkFolders = maybeWalkFolders.Cast();
+        
+        ui64 stateKey;
+        if (!TryFromString(walkFolders.ProcessStateKey().StringValue(), stateKey)) {
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()),
+                TStringBuilder() << MrWalkFoldersImplName << ": incorrect format of state map key"));
+            return false;
+        }
+        
+        WalkFolderImplArgs = MakeMaybe(TWalkFoldersImplArgs{
+            .UserStateExpr = walkFolders.PickledUserState().Ptr(),
+            .UserStateType = walkFolders.UserStateType().Ptr(),
+            .StateKey = stateKey,
+        });
+        
+        Type = EType::WalkFoldersImpl;
+        return true;
+    }
 
     auto tagName = key.Child(0)->Child(0)->Content();
     if (tagName == TStringBuf("table")) {
@@ -76,6 +122,9 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx) {
         if (key.ChildrenSize() > 3) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
             return false;
+        }
+        if (isOutput) {
+            Type = EType::Table;
         }
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tagName));
@@ -221,7 +270,7 @@ bool TYtOutputKey::Parse(const TExprNode& keyNode, TExprContext& ctx) {
     if (!keyNode.IsCallable(KEY_CALLABLES)) {
         return true;
     }
-    if (!TYtKey::Parse(keyNode, ctx)) {
+    if (!TYtKey::Parse(keyNode, ctx, true)) {
         return false;
     }
 

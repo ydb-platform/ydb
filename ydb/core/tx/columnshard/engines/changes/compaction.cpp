@@ -31,13 +31,6 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
     return TBase::DoApplyChanges(self, context);
 }
 
-ui32 TCompactColumnEngineChanges::NumSplitInto(const ui32 srcRows) const {
-    Y_ABORT_UNLESS(srcRows > 1);
-    const ui64 totalBytes = TotalBlobsSize();
-    const ui32 numSplitInto = (totalBytes / Limits.GranuleSizeForOverloadPrevent) + 1;
-    return std::max<ui32>(2, numSplitInto);
-}
-
 void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     TBase::DoWriteIndex(self, context);
 }
@@ -75,11 +68,9 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
-    : TBase(limits.GetSplitSettings(), saverContext, StaticTypeName())
-    , Limits(limits)
-    , GranuleMeta(granule)
-{
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+    : TBase(splitSettings, saverContext, StaticTypeName())
+    , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 
     SwitchedPortions.reserve(portions.size());

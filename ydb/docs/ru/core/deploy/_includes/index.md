@@ -4,7 +4,7 @@
 
 * [{#T}](../../cluster/system-requirements.md).
 * [{#T}](../../cluster/topology.md).
-* [Развертывание в Kubernetes](../orchestrated/concepts.md).
+* [Развертывание в Kubernetes](../../getting_started/kubernetes.md).
 * [Развертывание на виртуальных и железных серверах](../manual/deploy-ydb-on-premises.md).
 * [Конфигурирование](../configuration/config.md).
 * [Промышленные конфигурации BlobStorage](../../administration/production-storage-config.md).

@@ -65,7 +65,7 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("features", features.DebugJson().GetStringRobust())("count", features.GetPortionsCount());
 
     TSaverContext saverContext(StoragesManager->GetOperator(tierName.value_or(IStoragesManager::DefaultStorageId)), StoragesManager);
-    return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, portions, saverContext);
+    return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits.GetSplitSettings(), granule, portions, saverContext);
 }
 
 void TIntervalsOptimizerPlanner::RemovePortion(const std::shared_ptr<TPortionInfo>& info) {
@@ -141,12 +141,12 @@ void TIntervalsOptimizerPlanner::AddPortion(const std::shared_ptr<TPortionInfo>&
     AFL_VERIFY(RangedSegments.empty() == Positions.empty())("rs_size", RangedSegments.size())("p_size", Positions.size());
 }
 
-void TIntervalsOptimizerPlanner::DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-    for (auto&& i : remove) {
+void TIntervalsOptimizerPlanner::DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
+    for (auto&& [_, i] : remove) {
         SizeProblemBlobs.RemovePortion(i);
         RemovePortion(i);
     }
-    for (auto&& i : add) {
+    for (auto&& [_, i] : add) {
         SizeProblemBlobs.AddPortion(i);
         AddPortion(i);
     }

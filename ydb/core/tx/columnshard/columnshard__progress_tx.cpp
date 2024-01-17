@@ -31,7 +31,7 @@ private:
 
         std::unique_ptr<IEventBase> MakeEvent(ui64 tabletId) const {
             if (TxInfo.TxKind ==  NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE) {
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(TxInfo.TxId);
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(tabletId, TxInfo.TxId);
                 return result;
             } else {
                 auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
@@ -86,7 +86,7 @@ public:
                 case NKikimrTxColumnShard::TX_KIND_SCHEMA:
                 {
                     auto& meta = Self->AltersInFlight.at(txId);
-                    Self->RunSchemaTx(meta.Body, TRowVersion(step, txId), txc);
+                    Self->RunSchemaTx(meta.Body, NOlap::TSnapshot(step, txId), txc);
                     Self->ProtectSchemaSeqNo(meta.Body.GetSeqNo(), txc);
                     for (TActorId subscriber : meta.NotifySubscribers) {
                         TxEvents.emplace_back(subscriber, 0,

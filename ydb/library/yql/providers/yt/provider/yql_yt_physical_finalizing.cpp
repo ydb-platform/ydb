@@ -631,6 +631,12 @@ private:
 
             bool good = true;
             THashSet<TString> usedColumns;
+            if (NYql::HasSetting(*writer->Child(TYtTransientOpBase::idx_Settings), EYtSettingType::KeepSorted)) {
+                for (size_t i = 0; i < rowSpec.SortedBy.size(); ++i) {
+                    usedColumns.insert(rowSpec.SortedBy[i]);
+                }
+            }
+
             for (auto& item: x.second) {
                 if (auto rawSection = std::get<1>(item)) {
                     if (HasNonEmptyKeyFilter(TYtSection(rawSection))) {
@@ -2041,8 +2047,7 @@ private:
                     rewrite[writer] = newOp;
                     newOps[writer] = newOp;
 
-                    TVector<TExprNode::TPtr> newOuts;
-                    newOuts.resize(outCount);
+                    TNodeOnNodeOwnedMap newOuts;
                     TNodeSet processed;
                     for (auto& reader: x.second) {
                         auto oldOutput = TYtOutput(std::get<2>(reader));
@@ -2058,7 +2063,7 @@ private:
                                 .Done().Ptr();
                             rewrite[oldOutput.Raw()] = newOut;
                             if (!outRemap[oldNdx].second) {
-                                newOuts[oldNdx] = newOut;
+                                newOuts[oldOutput.Raw()] = newOut;
                             }
                         }
                     }
@@ -2071,11 +2076,10 @@ private:
                                 TVector<TYtPath> updatedPaths;
                                 for (auto path: section.Paths()) {
                                     if (path.Table().Maybe<TYtOutput>().Operation().Raw() == writer) {
-                                        auto oldNdx = FromString<size_t>(path.Table().Cast<TYtOutput>().OutIndex().Value());
-                                        if (newOuts[oldNdx]) {
+                                        if (auto it = newOuts.find(path.Table().Cast<TYtOutput>().Raw()); it != newOuts.cend()) {
                                             updatedPaths.push_back(Build<TYtPath>(ctx, path.Pos())
                                                 .InitFrom(path)
-                                                .Table(newOuts[oldNdx])
+                                                .Table(it->second)
                                                 .Done());
                                         }
                                         updated = true;
@@ -2101,9 +2105,8 @@ private:
                                 TExprNode::TListType updatedOuts;
                                 for (auto out: publish.Input()) {
                                     if (out.Operation().Raw() == writer) {
-                                        auto oldNdx = FromString<size_t>(out.OutIndex().Value());
-                                        if (newOuts[oldNdx]) {
-                                            updatedOuts.push_back(newOuts[oldNdx]);
+                                        if (auto it = newOuts.find(out.Raw()); it != newOuts.cend()) {
+                                            updatedOuts.push_back(it->second);
                                         }
                                         updated = true;
                                     } else {

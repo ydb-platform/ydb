@@ -330,13 +330,6 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsSupportedArithmeticalExpression(const TExprBase& node, const TSettings& settings) {
-    if (!settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
-        return false;
-    }
-    return node.Maybe<TCoMul>() || node.Maybe<TCoPlus>() || node.Maybe<TCoMinus>();
-}
-
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
         return IsSupportedCast(maybeSafeCast.Cast(), settings);
@@ -358,11 +351,11 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return true;
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ParameterExpression) && node.Maybe<TCoParameter>()) {
         return true;
-    } else if (IsSupportedArithmeticalExpression(node, settings)) {
-        TCoBinaryArithmetic op = node.Cast<TCoBinaryArithmetic>();
-        return CheckExpressionNodeForPushdown(op.Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Right(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoUnaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::UnaryOperators)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, settings);
+    } else if (const auto op = node.Maybe<TCoBinaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, settings);
     }
-
     return false;
 }
 

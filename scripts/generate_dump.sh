@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 TMP_FOLDER='/tmp/ydb-build-dump'
 
 rm -rf $TMP_FOLDER
@@ -86,8 +88,13 @@ fi
 DUMP_EXPORT_PATH="$TMP_FOLDER/ymake.$PLATFORM.conf"
 
 # generate params for ymake_conf.py
+if base64 --help | grep -q -e '^\s*-w,';then
+  base64cmd='base64 -w0'
+else
+  base64cmd='base64'
+fi
 python3 -c "import sys, string as s; v=sys.argv; p = v[1].replace('-', '_'); o, a = v[2].split('-'); print(s.Template(open('$TEMPLATE').read()).substitute(platform=p.upper(), arch=a, os=o.upper()))" $TARGET_PLATFORM $PLATFORM >$DUMP_EXPORT_PATH.params
-PARAMS=`base64 -w0 $DUMP_EXPORT_PATH.params`
+PARAMS=`cat $DUMP_EXPORT_PATH.params | $base64cmd`
 
 ARCADIA=`realpath .`
 python3 $ARCADIA/build/ymake_conf.py $ARCADIA release no --toolchain-params $PARAMS \
@@ -100,4 +107,4 @@ echo >>$DUMP_EXPORT_PATH
 cat $DUMP_EXPORT_PATH
 # cp $DUMP_EXPORT_PATH .
 
-rm -rf $TMP_FOLDER
+# rm -rf $TMP_FOLDER

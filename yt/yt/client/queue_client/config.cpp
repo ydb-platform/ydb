@@ -37,7 +37,9 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Postprocessor([] (TThis* trimConfig) {
-        if (trimConfig->RetainedLifetimeDuration && trimConfig->RetainedLifetimeDuration->GetValue() % TDuration::Seconds(1).GetValue() != 0) {
+        if (trimConfig->RetainedLifetimeDuration &&
+            trimConfig->RetainedLifetimeDuration->GetValue() % TDuration::Seconds(1).GetValue() != 0)
+        {
             THROW_ERROR_EXCEPTION("The value of \"retained_lifetime_duration\" must be a multiple of 1000 (1 second)");
         }
     });
@@ -45,7 +47,8 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
 
 bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs)
 {
-    return std::tie(lhs.Enable, lhs.RetainedRows, lhs.RetainedLifetimeDuration) == std::tie(rhs.Enable, rhs.RetainedRows, rhs.RetainedLifetimeDuration);
+    return std::tie(lhs.Enable, lhs.RetainedRows, lhs.RetainedLifetimeDuration) ==
+        std::tie(rhs.Enable, rhs.RetainedRows, rhs.RetainedLifetimeDuration);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,8 +58,12 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
     registrar.Parameter("export_period", &TThis::ExportPeriod)
         .GreaterThan(TDuration::Zero());
     registrar.Parameter("export_directory", &TThis::ExportDirectory);
+    registrar.Parameter("export_ttl", &TThis::ExportTtl)
+        .Default(TDuration::Zero());
     registrar.Parameter("output_table_name_pattern", &TThis::OutputTableNamePattern)
         .Default("%UNIX_TS-%PERIOD");
+    registrar.Parameter("use_upper_bound_for_table_names", &TThis::UseUpperBoundForTableNames)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ExportPeriod.GetValue() % TDuration::Seconds(1).GetValue() != 0) {

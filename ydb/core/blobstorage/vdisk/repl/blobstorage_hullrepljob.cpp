@@ -25,11 +25,14 @@ namespace NKikimr {
         std::unique_ptr<TRecoveryMachine> RecoveryMachine;
         TLogoBlobID LastKey;
         bool Eof;
+        std::deque<TLogoBlobID> DroppedBlobs;
 
-        TEvReplPlanFinished(std::unique_ptr<TRecoveryMachine>&& recoveryMachine, const TLogoBlobID& lastKey, bool eof)
+        TEvReplPlanFinished(std::unique_ptr<TRecoveryMachine>&& recoveryMachine, const TLogoBlobID& lastKey, bool eof,
+                std::deque<TLogoBlobID>&& droppedBlobs)
             : RecoveryMachine(std::move(recoveryMachine))
             , LastKey(lastKey)
             , Eof(eof)
+            , DroppedBlobs(std::move(droppedBlobs))
         {}
     };
 
@@ -46,6 +49,7 @@ namespace NKikimr {
         TEvReplFinished::TInfoPtr ReplInfo;
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr;
+        std::deque<TLogoBlobID> DroppedBlobs;
         ui64 QuantumBytes = 0;
         bool AddingTasks = true;
 
@@ -60,7 +64,7 @@ namespace NKikimr {
             ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->size();
 
             // prepare the recovery machine
-            RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo, std::move(UnreplicatedBlobsPtr));
+            RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo);
 
             // request for snapshot
             Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
@@ -91,8 +95,10 @@ namespace NKikimr {
                     } else {
                         const TLogoBlobID& key = BlobsToReplicatePtr->front();
                         it.Seek(key);
-                        if (it.Valid() && it.GetCurKey().LogoBlobID() == key) {
+                        const bool processed = it.Valid() && it.GetCurKey().LogoBlobID() == key &&
                             ProcessItem(it, *barriers, allowKeepFlags);
+                        if (!processed) {
+                            DroppedBlobs.push_back(key);
                         }
                     }
                 }
@@ -141,13 +147,14 @@ namespace NKikimr {
             }
 
             // the planning stage has finished, issue reply to the job actor
-            Send(Recipient, new TEvReplPlanFinished(std::move(RecoveryMachine), KeyToResumeNextTime.value_or(TLogoBlobID()), eof));
+            Send(Recipient, new TEvReplPlanFinished(std::move(RecoveryMachine), KeyToResumeNextTime.value_or(TLogoBlobID()),
+                eof, std::move(DroppedBlobs)));
 
             // finish processing for this actor
             PassAway();
         }
 
-        void ProcessItem(const TLogoBlobsSnapshot::TIndexForwardIterator& it,
+        bool ProcessItem(const TLogoBlobsSnapshot::TIndexForwardIterator& it,
                 TBarriersSnapshot::TBarriersEssence& barriers, bool allowKeepFlags) {
             // aliases for convenient access
             const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
@@ -158,13 +165,13 @@ namespace NKikimr {
             NMatrix::TVectorType parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
                 key) - ingress.LocalParts(topology.GType);
             if (parts.Empty()) {
-                return; // nothing to recover
+                return false; // nothing to recover
             }
 
             const NGc::TKeepStatus status = barriers.Keep(key, it.GetMemRec(), it.GetMemRecsMerged(), allowKeepFlags,
                 true /*allowGarbageCollection*/);
             if (!status.KeepData) {
-                return; // no need to recover
+                return false; // no need to recover
             }
 
             // scan for metadata parts
@@ -200,6 +207,8 @@ namespace NKikimr {
             if (RecoveryMachine->FullOfTasks() || QuantumBytes >= ReplCtx->VDiskCfg->ReplMaxQuantumBytes) {
                 AddingTasks = false;
             }
+
+            return true;
         }
 
         STRICT_STFUNC(StateFunc,
@@ -322,10 +331,11 @@ namespace NKikimr {
 
         void Bootstrap() {
             STLOG(PRI_DEBUG, BS_REPL, BSVR02, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "THullReplJobActor::Bootstrap"));
+
             TimeAccount.SetState(ETimeState::PREPARE_PLAN);
             auto actor = std::make_unique<THullReplPlannerActor>(ReplCtx, GInfo, StartKey, ReplInfo, BlobsToReplicatePtr, UnreplicatedBlobsPtr);
             auto aid = RunInBatchPool(ActorContext(), actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
             Become(&TThis::StatePreparePlan);
         }
 
@@ -335,6 +345,10 @@ namespace NKikimr {
             RecoveryMachine = std::move(ev->Get()->RecoveryMachine);
             LastKey = ev->Get()->LastKey;
             Eof = ev->Get()->Eof;
+
+            for (const TLogoBlobID& id : ev->Get()->DroppedBlobs) {
+                DropUnreplicatedBlobRecord(id);
+            }
 
             auto& mon = ReplCtx->MonGroup;
 
@@ -374,7 +388,8 @@ namespace NKikimr {
             Y_ABORT_UNLESS(!NumRunningProxies);
             for (const TVDiskProxyPtr& p : DiskProxySet) {
                 if (p) {
-                    ActiveActors.Insert(p->Run(SelfId()));
+                    ActiveActors.Insert(p->Run(SelfId()), __FILE__, __LINE__, TActivationContext::AsActorContext(),
+                        NKikimrServices::BLOBSTORAGE);
                     ++NumRunningProxies;
                 }
             }
@@ -599,26 +614,7 @@ namespace NKikimr {
                 }
 
                 // recover data
-                NMatrix::TVectorType parts;
-                TIngress ingress;
-                switch (RecoveryMachine->Recover(item, RecoveryQueue, parts, ingress)) {
-                    case TRecoveryMachine::ERecoverStatus::UNKNOWN:
-                        Y_ABORT();
-
-                    case TRecoveryMachine::ERecoverStatus::RESTORED:
-                        UnreplicatedBlobRecords.erase(item.Id);
-                        break;
-
-                    case TRecoveryMachine::ERecoverStatus::PHANTOM_CHECK:
-                        STLOG(PRI_INFO, BS_REPL, BSVR33, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Sending phantom validation query"),
-                            (GroupId, GInfo->GroupID), (CurKey, item.Id));
-                        PhantomChecksPending.emplace_back(item.Id, parts, item, ingress);
-                        break;
-
-                    case TRecoveryMachine::ERecoverStatus::RETRY:
-                        AddUnreplicatedBlobRecord(item, ingress, false);
-                        break;
-                }
+                RecoveryMachine->Recover(item, RecoveryQueue, *this);
                 CurrentItem.reset();
 
                 // process recovered items, if any; queueProcessed.first will be false when writer is not ready for new data
@@ -650,10 +646,13 @@ namespace NKikimr {
             TimeAccount.SetState(ETimeState::OTHER);
 
             if (!RecoveryMachineFinished) {
-                RecoveryMachine->Finish(RecoveryQueue);
+                RecoveryMachine->Finish(RecoveryQueue, *this);
                 RecoveryMachineFinished = true;
                 STLOG(PRI_DEBUG, BS_REPL, BSVR07, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "finished recovery machine"),
                     (RecoveryQueueSize, RecoveryQueue.size()));
+
+                // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
+                std::sort(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end());
                 return true;
             }
 
@@ -732,12 +731,9 @@ namespace NKikimr {
                 auto node = isPhantom.extract(id);
                 Y_ABORT_UNLESS(node);
                 auto [phantom, looksLikePhantom] = node.mapped();
-                RecoveryMachine->ProcessPhantomBlob(id, parts, phantom, looksLikePhantom);
+                RecoveryMachine->ProcessPhantomBlob(partSet, parts, phantom, looksLikePhantom, ingress, *this);
                 if (phantom) {
                     Phantoms.push_back(id);
-                    AddUnreplicatedBlobRecord(partSet, ingress, true);
-                } else {
-                    UnreplicatedBlobRecords.erase(id);
                 }
             }
 
@@ -747,7 +743,12 @@ namespace NKikimr {
             Merge();
         }
 
-        void AddUnreplicatedBlobRecord(const TRecoveryMachine::TPartSet& item, const TIngress& ingress, bool looksLikePhantom) {
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // TRecoveryMachine interoperation
+
+        friend class TRecoveryMachine;
+
+        void AddUnreplicatedBlobRecord(const TRecoveryMachine::TPartSet& item, TIngress ingress, bool looksLikePhantom) {
             TUnreplicatedBlobRecord record{ingress, item.PartsMask, item.DisksRepliedOK, item.DisksRepliedNODATA,
                 item.DisksRepliedNOT_YET, item.DisksRepliedOther, looksLikePhantom};
             const auto [it, inserted] = UnreplicatedBlobRecords.try_emplace(item.Id, record);
@@ -762,6 +763,7 @@ namespace NKikimr {
             } else if (record.LooksLikePhantom) {
                 ++ReplCtx->MonGroup.ReplPhantomBlobsWithProblems();
             }
+            UnreplicatedBlobsPtr->push_back(item.Id);
         }
 
         void DropUnreplicatedBlobRecord(const TLogoBlobID& id) {
@@ -772,6 +774,12 @@ namespace NKikimr {
                 }
                 UnreplicatedBlobRecords.erase(it);
             }
+        }
+
+        void AddPhantomBlobRecord(const TRecoveryMachine::TPartSet& item, TIngress ingress, NMatrix::TVectorType partsToRecover) {
+            STLOG(PRI_INFO, BS_REPL, BSVR33, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "Sending phantom validation query"),
+                (GroupId, GInfo->GroupID), (CurKey, item.Id));
+            PhantomChecksPending.emplace_back(item.Id, partsToRecover, item, ingress);
         }
 
         EProcessQueueAction ProcessQueue() {

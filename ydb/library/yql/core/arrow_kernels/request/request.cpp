@@ -29,6 +29,8 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
         Items_.emplace_back(Pb_.BlockNot(arg));
         break;
     case EUnaryOp::Size:
+    case EUnaryOp::Minus:
+    case EUnaryOp::Abs:
         Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, { arg }));
         break;
     }
@@ -50,6 +52,9 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
         break;
     case EBinaryOp::Xor:
         Items_.emplace_back(Pb_.BlockXor(arg1, arg2));
+        break;
+    case EBinaryOp::Coalesce:
+        Items_.emplace_back(Pb_.BlockCoalesce(arg1, arg2));
         break;
     case EBinaryOp::Add:
     case EBinaryOp::Sub:

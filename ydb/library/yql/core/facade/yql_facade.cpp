@@ -273,6 +273,7 @@ TProgram::TProgram(
     , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
+    , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
@@ -300,9 +301,11 @@ TProgram::TProgram(
 
 TProgram::~TProgram() {
     try {
-        CloseLastSession();
+        CloseLastSession().GetValueSync();
         // stop all non complete execution before deleting TExprCtx
-        DataProviders_.clear();
+        with_lock (DataProvidersLock_) {
+            DataProviders_.clear();
+        }
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
     }
@@ -681,7 +684,12 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
+
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteValidate) {
             continue;
         }
@@ -748,7 +756,12 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
+
+    for (const auto& dp : dataProviders) {
         if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
             continue;
         }
@@ -811,6 +824,11 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
+
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
@@ -943,6 +961,11 @@ TProgram::TFutureStatus TProgram::RunAsync(
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
 
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
+
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
             continue;
@@ -1016,6 +1039,11 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
@@ -1151,7 +1179,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 source->Reset();
             }
             TypeCtx_->Reset();
-            CleanupLastSession();
+            CleanupLastSession().GetValueSync();
 
             std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {
                 if (issue->Severity == TSeverityIds::S_ERROR
@@ -1427,39 +1455,63 @@ TProgram::TFutureStatus TProgram::ContinueAsync() {
     return AsyncTransformWithFallback(true);
 }
 
-void TProgram::Abort()
+NThreading::TFuture<void> TProgram::Abort()
 {
-    CloseLastSession();
+    return CloseLastSession();
 }
 
-void TProgram::CleanupLastSession() {
+NThreading::TFuture<void> TProgram::CleanupLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = GetSessionId();
     if (sessionId.empty()) {
-        return;
+        return MakeFuture();
     }
 
-    for (const auto& dp : DataProviders_) {
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
+
+    TVector<NThreading::TFuture<void>> cleanupFutures;
+    cleanupFutures.reserve(dataProviders.size());
+    for (const auto& dp : dataProviders) {
         if (dp.CleanupSession) {
             dp.CleanupSession(sessionId);
         }
+        if (dp.CleanupSessionAsync) {
+            cleanupFutures.push_back(dp.CleanupSessionAsync(sessionId));
+        }
     }
+
+    return NThreading::WaitExceptionOrAll(cleanupFutures);
 }
 
-void TProgram::CloseLastSession() {
+NThreading::TFuture<void> TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetSessionId());
 
     TString sessionId = TakeSessionId();
     if (sessionId.empty()) {
-        return;
+        return MakeFuture();
     }
 
-    for (const auto& dp : DataProviders_) {
+    TVector<TDataProviderInfo> dataProviders;
+    with_lock (DataProvidersLock_) {
+        dataProviders = DataProviders_;
+    }
+
+    TVector<NThreading::TFuture<void>> closeFutures;
+    closeFutures.reserve(dataProviders.size());
+    for (const auto& dp : dataProviders) {
         if (dp.CloseSession) {
             dp.CloseSession(sessionId);
         }
+        if (dp.CloseSessionAsync) {
+            dp.CloseSessionAsync(sessionId);
+        }
     }
+
+    return NThreading::WaitExceptionOrAll(closeFutures);
 }
 
 TString TProgram::ResultsAsString() const {
@@ -1522,7 +1574,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         }
 
         providerNames.insert(dp.Names.begin(), dp.Names.end());
-        DataProviders_.emplace_back(dp);
+        with_lock (DataProvidersLock_) {
+            DataProviders_.emplace_back(dp);
+        }
         if (dp.Source) {
             typeAnnotationContext->AddDataSource(dp.Names, dp.Source);
         }
@@ -1566,7 +1620,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         auto resultFormat = ResultFormat_;
         auto writerFactory = [resultFormat] () { return CreateYsonResultWriter(resultFormat); };
         ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
-            *FunctionRegistry_, IDataProvider::EResultFormat::Yson, ToString((ui32)resultFormat), writerFactory);
+            *FunctionRegistry_, ResultType_, ToString((ui32)resultFormat), writerFactory);
         ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
         auto resultProvider = CreateResultProvider(ResultProviderConfig_);
         typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
@@ -1591,11 +1645,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 TFuture<void> TProgram::OpenSession(const TString& username)
 {
     TVector<TFuture<void>> openFutures;
-    for (const auto& dp : DataProviders_) {
-        if (dp.OpenSession) {
-            auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
-                RandomProvider_, TimeProvider_);
-            openFutures.push_back(future);
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.OpenSession) {
+                auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
+                    RandomProvider_, TimeProvider_);
+                openFutures.push_back(future);
+            }
         }
     }
 
@@ -1626,20 +1682,26 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
 }
 
 bool TProgram::HasActiveProcesses() {
-    for (const auto& dp : DataProviders_) {
-        if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
-            return true;
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.HasActiveProcesses && dp.HasActiveProcesses()) {
+                return true;
+            }
         }
     }
+
     return false;
 }
 
 bool TProgram::NeedWaitForActiveProcesses() {
-    for (const auto& dp : DataProviders_) {
-        if (dp.HasActiveProcesses && dp.HasActiveProcesses() && dp.WaitForActiveProcesses) {
-            return true;
+    with_lock (DataProvidersLock_) {
+        for (const auto& dp : DataProviders_) {
+            if (dp.HasActiveProcesses && dp.HasActiveProcesses() && dp.WaitForActiveProcesses) {
+                return true;
+            }
         }
     }
+
     return false;
 }
 

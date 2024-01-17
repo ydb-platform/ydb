@@ -53,7 +53,7 @@ struct IExternalSource : public TThrRefBase {
         Validation of external data source properties.
         If an error occurs, an exception is thrown.
     */
-    virtual void ValidateProperties(const TString& properties) const = 0;
+    virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const = 0;
 };
 
 }

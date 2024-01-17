@@ -14,8 +14,8 @@ target_link_libraries(ydb-core-keyvalue PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
+  library-actors-core
+  library-actors-protos
   ydb-core-base
   core-blobstorage-base
   core-engine-minikql

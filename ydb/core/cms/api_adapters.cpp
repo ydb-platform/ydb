@@ -4,8 +4,8 @@
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <google/protobuf/util/time_util.h>
 

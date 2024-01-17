@@ -2,10 +2,12 @@
 
 #include "program.h"
 
-#include <library/cpp/yt/string/enum.h>
+#include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/convert.h>
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
+
+#include <library/cpp/yt/string/enum.h>
 
 #include <util/stream/file.h>
 

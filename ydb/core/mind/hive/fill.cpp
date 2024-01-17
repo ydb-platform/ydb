@@ -1,4 +1,4 @@
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "node_info.h"
@@ -30,6 +30,14 @@ protected:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TString GetDescription() const override {
+        return TStringBuilder() << "Fill(" << NodeId << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TActorContext& ctx) {

@@ -26,19 +26,22 @@ namespace Model
 
   /**
    * <p>Specifies a metrics configuration filter. The metrics configuration only
-   * includes objects that meet the filter's criteria. A filter must be a prefix, a
-   * tag, or a conjunction (MetricsAndOperator).</p><p><h3>See Also:</h3>   <a
+   * includes objects that meet the filter's criteria. A filter must be a prefix, an
+   * object tag, an access point ARN, or a conjunction (MetricsAndOperator). For more
+   * information, see <a
+   * href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketMetricsConfiguration.html">PutBucketMetricsConfiguration</a>.</p><p><h3>See
+   * Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/MetricsFilter">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API MetricsFilter
+  class MetricsFilter
   {
   public:
-    MetricsFilter();
-    MetricsFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
-    MetricsFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API MetricsFilter();
+    AWS_S3_API MetricsFilter(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API MetricsFilter& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -114,6 +117,47 @@ namespace Model
 
 
     /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline const Aws::String& GetAccessPointArn() const{ return m_accessPointArn; }
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline bool AccessPointArnHasBeenSet() const { return m_accessPointArnHasBeenSet; }
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline void SetAccessPointArn(const Aws::String& value) { m_accessPointArnHasBeenSet = true; m_accessPointArn = value; }
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline void SetAccessPointArn(Aws::String&& value) { m_accessPointArnHasBeenSet = true; m_accessPointArn = std::move(value); }
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline void SetAccessPointArn(const char* value) { m_accessPointArnHasBeenSet = true; m_accessPointArn.assign(value); }
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline MetricsFilter& WithAccessPointArn(const Aws::String& value) { SetAccessPointArn(value); return *this;}
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline MetricsFilter& WithAccessPointArn(Aws::String&& value) { SetAccessPointArn(std::move(value)); return *this;}
+
+    /**
+     * <p>The access point ARN used when evaluating a metrics filter.</p>
+     */
+    inline MetricsFilter& WithAccessPointArn(const char* value) { SetAccessPointArn(value); return *this;}
+
+
+    /**
      * <p>A conjunction (logical AND) of predicates, which is used in evaluating a
      * metrics filter. The operator must have at least two predicates, and an object
      * must match all of the predicates in order for the filter to apply.</p>
@@ -158,13 +202,16 @@ namespace Model
   private:
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
 
     Tag m_tag;
-    bool m_tagHasBeenSet;
+    bool m_tagHasBeenSet = false;
+
+    Aws::String m_accessPointArn;
+    bool m_accessPointArnHasBeenSet = false;
 
     MetricsAndOperator m_and;
-    bool m_andHasBeenSet;
+    bool m_andHasBeenSet = false;
   };
 
 } // namespace Model

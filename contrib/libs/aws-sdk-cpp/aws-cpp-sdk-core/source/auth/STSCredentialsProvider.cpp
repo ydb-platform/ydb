@@ -30,6 +30,8 @@ using Aws::Utils::Threading::ReaderLockGuard;
 using Aws::Utils::Threading::WriterLockGuard;
 
 static const char STS_ASSUME_ROLE_WEB_IDENTITY_LOG_TAG[] = "STSAssumeRoleWithWebIdentityCredentialsProvider";
+static const int STS_CREDENTIAL_PROVIDER_EXPIRATION_GRACE_PERIOD = 5 * 1000;
+
 STSAssumeRoleWebIdentityCredentialsProvider::STSAssumeRoleWebIdentityCredentialsProvider() :
     m_initialized(false)
 {
@@ -145,16 +147,21 @@ void STSAssumeRoleWebIdentityCredentialsProvider::Reload()
     m_credentials = result.creds;
 }
 
+bool STSAssumeRoleWebIdentityCredentialsProvider::ExpiresSoon() const
+{
+  return ((m_credentials.GetExpiration() - Aws::Utils::DateTime::Now()).count() < STS_CREDENTIAL_PROVIDER_EXPIRATION_GRACE_PERIOD);
+}
+
 void STSAssumeRoleWebIdentityCredentialsProvider::RefreshIfExpired()
 {
     ReaderLockGuard guard(m_reloadLock);
-    if (!m_credentials.IsExpiredOrEmpty())
+    if (!m_credentials.IsEmpty() && !ExpiresSoon())
     {
        return;
     }
 
     guard.UpgradeToWriterLock();
-    if (!m_credentials.IsExpiredOrEmpty()) // double-checked lock to avoid refreshing twice
+    if (!m_credentials.IsExpiredOrEmpty() && !ExpiresSoon()) // double-checked lock to avoid refreshing twice
     {
         return;
     }

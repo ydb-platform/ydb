@@ -26,12 +26,12 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetBucketAclResult
+  class GetBucketAclResult
   {
   public:
-    GetBucketAclResult();
-    GetBucketAclResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketAclResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketAclResult();
+    AWS_S3_API GetBucketAclResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketAclResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**

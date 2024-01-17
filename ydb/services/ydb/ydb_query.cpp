@@ -7,7 +7,7 @@
 
 namespace NKikimr::NGRpcService {
 
-void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Query;
     using namespace NQuery;
 
@@ -18,7 +18,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase* ctx) { \
+        [this](NYdbGrpc::IRequestContextBase* ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \

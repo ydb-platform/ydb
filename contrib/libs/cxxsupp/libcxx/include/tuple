@@ -219,6 +219,14 @@ template <class... Types>
 #include <type_traits>
 #include <version>
 
+#ifndef _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
+#  include <exception>
+#  include <iosfwd>
+#  include <new>
+#  include <typeinfo>
+#  include <utility>
+#endif
+
 // standard-mandated includes
 #include <compare>
 
@@ -460,23 +468,6 @@ struct _LIBCPP_DECLSPEC_EMPTY_BASES __tuple_impl<__tuple_indices<_Indx...>, _Tp.
             __tuple_leaf<_Ul, _Tl>()...
             {}
 
-#if defined(__NVCC__) && defined(_LIBCPP_COMPILER_MSVC)
-    // Yandex-specific: specialize the preceding constructor for the
-    // case of empty _Ul and _Tl to work around nvcc+msvc bug
-    // compiling libcxx std::map<int, int> m; m[1] = 2.
-    template <size_t ..._Uf, class ..._Tf,
-              class ..._Up>
-        _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
-        explicit
-        __tuple_impl(__tuple_indices<_Uf...>, __tuple_types<_Tf...>,
-                     __tuple_indices<>, __tuple_types<>,
-                     _Up&&... __u)
-                     _NOEXCEPT_((__all<is_nothrow_constructible<_Tf, _Up>::value...>::value)) :
-            __tuple_leaf<_Uf, _Tf>(_VSTD::forward<_Up>(__u))...
-            {}
-    // End of Yandex-specific
-#endif
-
     template <class _Alloc, size_t ..._Uf, class ..._Tf,
               size_t ..._Ul, class ..._Tl, class ..._Up>
         _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
@@ -491,10 +482,7 @@ struct _LIBCPP_DECLSPEC_EMPTY_BASES __tuple_impl<__tuple_indices<_Indx...>, _Tp.
             {}
 
     template <class _Tuple,
-              class = typename enable_if
-                      <
-                         __tuple_constructible<_Tuple, tuple<_Tp...> >::value
-                      >::type
+              class = __enable_if_t<__tuple_constructible<_Tuple, tuple<_Tp...> >::value>
              >
         _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
         __tuple_impl(_Tuple&& __t) _NOEXCEPT_((__all<is_nothrow_constructible<_Tp, typename tuple_element<_Indx,
@@ -504,10 +492,7 @@ struct _LIBCPP_DECLSPEC_EMPTY_BASES __tuple_impl<__tuple_indices<_Indx...>, _Tp.
             {}
 
     template <class _Alloc, class _Tuple,
-              class = typename enable_if
-                      <
-                         __tuple_constructible<_Tuple, tuple<_Tp...> >::value
-                      >::type
+              class = __enable_if_t<__tuple_constructible<_Tuple, tuple<_Tp...> >::value>
              >
         _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
         __tuple_impl(allocator_arg_t, const _Alloc& __a, _Tuple&& __t)
@@ -1345,11 +1330,7 @@ tuple(allocator_arg_t, _Alloc, tuple<_Tp...>) -> tuple<_Tp...>;
 
 template <class ..._Tp>
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
-typename enable_if
-<
-    __all<__is_swappable<_Tp>::value...>::value,
-    void
->::type
+__enable_if_t<__all<__is_swappable<_Tp>::value...>::value, void>
 swap(tuple<_Tp...>& __t, tuple<_Tp...>& __u)
                  _NOEXCEPT_(__all<__is_nothrow_swappable<_Tp>::value...>::value)
     {__t.swap(__u);}
@@ -1793,8 +1774,6 @@ pair<_T1, _T2>::pair(piecewise_construct_t,
     :  first(_VSTD::forward<_Args1>(_VSTD::get<_I1>( __first_args))...),
       second(_VSTD::forward<_Args2>(_VSTD::get<_I2>(__second_args))...)
 {
-    (void)__first_args;
-    (void)__second_args;
 }
 
 #if _LIBCPP_STD_VER > 14

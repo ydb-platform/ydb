@@ -1,7 +1,7 @@
 #include "handoff_mon.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NHandoff;
@@ -142,7 +142,7 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
             auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev);
             auto aid = ctx.Register(actor.release());
-            ActiveActors.Insert(aid);
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
         void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {

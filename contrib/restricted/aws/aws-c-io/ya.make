@@ -16,7 +16,6 @@ ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-io/archive/v0.13.21.tar.gz)
 PEERDIR(
     contrib/restricted/aws/aws-c-cal
     contrib/restricted/aws/aws-c-common
-    contrib/restricted/aws/s2n
 )
 
 ADDINCL(
@@ -44,8 +43,27 @@ CFLAGS(
     -DS2N_MADVISE_SUPPORTED
     -DS2N_STACKTRACE
     -DS2N___RESTRICT__SUPPORTED
-    -DUSE_S2N
 )
+
+IF (CLANG_CL)
+    CFLAGS(
+        -DAWS_IO_EXPORTS
+        -DAWS_USE_IO_COMPLETION_PORTS
+        -std=c99
+    )
+ELSEIF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_IO_EXPORTS
+        -DAWS_USE_IO_COMPLETION_PORTS
+    )
+ELSE()
+    PEERDIR(
+        contrib/restricted/aws/s2n
+    )
+    CFLAGS(
+        -DUSE_S2N
+    )
+ENDIF()
 
 SRCS(
     source/alpn_handler.c
@@ -60,12 +78,7 @@ SRCS(
     source/pkcs11_lib.c
     source/pkcs11_tls_op_handler.c
     source/pki_utils.c
-    source/posix/host_resolver.c
-    source/posix/pipe.c
-    source/posix/shared_library.c
-    source/posix/socket.c
     source/retry_strategy.c
-    source/s2n/s2n_tls_channel_handler.c
     source/socket_channel_handler.c
     source/standard_retry_strategy.c
     source/statistics.c
@@ -77,10 +90,20 @@ SRCS(
 IF (OS_DARWIN)
     SRCS(
         source/bsd/kqueue_event_loop.c
+        source/posix/host_resolver.c
+        source/posix/pipe.c
+        source/posix/shared_library.c
+        source/posix/socket.c
+        source/s2n/s2n_tls_channel_handler.c
     )
 ELSEIF (OS_LINUX)
     SRCS(
         source/linux/epoll_event_loop.c
+        source/posix/host_resolver.c
+        source/posix/pipe.c
+        source/posix/shared_library.c
+        source/posix/socket.c
+        source/s2n/s2n_tls_channel_handler.c
     )
 ENDIF()
 

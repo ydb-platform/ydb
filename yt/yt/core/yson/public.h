@@ -67,4 +67,14 @@ constexpr int DefaultYsonParserNestingLevelLimit = NewNestingLevelLimit;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(EUtf8Check,
+    (Disable)
+    (LogOnFail)
+    (ThrowOnFail)
+);
+
+DECLARE_REFCOUNTED_CLASS(TProtobufInteropDynamicConfig);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYson

@@ -36,41 +36,9 @@
 namespace boost {
 namespace detail { namespace variant {
 
-#if !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
-
 #   define BOOST_VARIANT_AUX_ENABLE_RECURSIVE_IMPL(T,Dest,Source) \
     substitute< T , Dest , Source > \
     /**/
-
-#else // defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
-
-///////////////////////////////////////////////////////////////////////////////
-// (detail) class template rebind1
-//
-// Limited workaround in case 'substitute' metafunction unavailable.
-//
-
-template <typename T, typename U1>
-struct rebind1
-{
-private:
-    typedef typename mpl::lambda<
-          mpl::identity<T>
-        >::type le_;
-
-public:
-    typedef typename mpl::eval_if<
-          is_same< le_, mpl::identity<T> >
-        , le_ // identity<T>
-        , mpl::apply1<le_, U1>
-        >::type type;
-};
-
-#   define BOOST_VARIANT_AUX_ENABLE_RECURSIVE_IMPL(T,Dest,Source) \
-    rebind1< T , Dest > \
-    /**/
-
-#endif // !defined(BOOST_VARIANT_DETAIL_NO_SUBSTITUTE)
 
 ///////////////////////////////////////////////////////////////////////////////
 // (detail) metafunction enable_recursive

@@ -56,12 +56,15 @@ typedef bool(aws_on_directory_entry)(const struct aws_directory_entry *entry, vo
 AWS_EXTERN_C_BEGIN
 
 /**
- * Don't use this. It never should have been added in the first place. It's now deprecated.
+ * Deprecated - Use aws_fopen_safe() instead, avoid const char * in public APIs.
+ * Opens file at file_path using mode. Returns the FILE pointer if successful.
+ * Otherwise, aws_last_error() will contain the error that occurred
  */
 AWS_COMMON_API FILE *aws_fopen(const char *file_path, const char *mode);
 
 /**
  * Opens file at file_path using mode. Returns the FILE pointer if successful.
+ * Otherwise, aws_last_error() will contain the error that occurred
  */
 AWS_COMMON_API FILE *aws_fopen_safe(const struct aws_string *file_path, const struct aws_string *mode);
 

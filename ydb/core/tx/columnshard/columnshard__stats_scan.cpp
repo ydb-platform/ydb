@@ -11,38 +11,46 @@ std::optional<NOlap::TPartialReadResult> TStatsIterator::GetBatch() {
     auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
     ApplyRangePredicates(batch);
-
+    if (!batch->num_rows()) {
+        return {};
+    }
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
+    NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
+    if (!resultBatch->num_rows()) {
+        return {};
+    }
+    NOlap::TPartialReadResult out(resultBatch, lastKey);
 
-    NOlap::TPartialReadResult out({}, resultBatch, lastKey);
-
-    out.ApplyProgram(ReadMetadata->GetProgram());
     return std::move(out);
 }
 
 std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {
-    ui64 numRows = 0;
-    numRows += NOlap::TColumnEngineStats::GetRecordsCount() * IndexStats.size();
-
+    std::vector<std::shared_ptr<NOlap::TPortionInfo>> portions;
+    ui32 recordsCount = 0;
+    while (IndexPortions.size()) {
+        auto& i = IndexPortions.front();
+        recordsCount += i->Records.size();
+        portions.emplace_back(i);
+        IndexPortions.pop_front();
+        if (recordsCount > 10000) {
+            break;
+        }
+    }
     std::vector<ui32> allColumnIds;
     for (const auto& c : PrimaryIndexStatsSchema.Columns) {
         allColumnIds.push_back(c.second.Id);
     }
     std::sort(allColumnIds.begin(), allColumnIds.end());
     auto schema = NOlap::MakeArrowSchema(PrimaryIndexStatsSchema.Columns, allColumnIds);
-    auto builders = NArrow::MakeBuilders(schema, numRows);
+    auto builders = NArrow::MakeBuilders(schema, recordsCount);
 
-    while (!IndexStats.empty()) {
-        auto it = Reverse ? std::prev(IndexStats.end()) : IndexStats.begin();
-        const auto& stats = it->second;
-        Y_ABORT_UNLESS(stats);
-        AppendStats(builders, it->first, *stats);
-        IndexStats.erase(it);
+    for (auto&& p: portions) {
+        AppendStats(builders, *p);
     }
 
     auto columns = NArrow::Finish(std::move(builders));
-    return arrow::RecordBatch::Make(schema, numRows, columns);
+    return arrow::RecordBatch::Make(schema, recordsCount, columns);
 }
 
 void TStatsIterator::ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -50,36 +58,33 @@ void TStatsIterator::ApplyRangePredicates(std::shared_ptr<arrow::RecordBatch>& b
     filter.Apply(batch);
 }
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64 pathId, const NOlap::TColumnEngineStats& stats) {
-    auto kinds = stats.GetKinds();
-    auto pathIds = stats.GetConstValues<arrow::UInt64Type::c_type>(pathId);
-    auto tabletIds = stats.GetConstValues<arrow::UInt64Type::c_type>(ReadMetadata->TabletId);
-    auto rows = stats.GetRowsValues();
-    auto bytes = stats.GetBytesValues();
-    auto rawBytes = stats.GetRawBytesValues();
-    auto portions = stats.GetPortionsValues();
-    auto blobs = stats.GetBlobsValues();
-
-    if (Reverse) {
-        std::reverse(std::begin(pathIds), std::end(pathIds));
-        std::reverse(std::begin(kinds), std::end(kinds));
-        std::reverse(std::begin(tabletIds), std::end(tabletIds));
-        std::reverse(std::begin(rows), std::end(rows));
-        std::reverse(std::begin(bytes), std::end(bytes));
-        std::reverse(std::begin(rawBytes), std::end(rawBytes));
-        std::reverse(std::begin(portions), std::end(portions));
-        std::reverse(std::begin(blobs), std::end(blobs));
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const NOlap::TPortionInfo& portion) {
+    std::vector<const NOlap::TColumnRecord*> records;
+    for (auto&& r: portion.Records) {
+        records.emplace_back(&r);
     }
-
-    NArrow::Append<arrow::UInt64Type>(*builders[0], pathIds);
-    NArrow::Append<arrow::UInt32Type>(*builders[1], kinds);
-    NArrow::Append<arrow::UInt64Type>(*builders[2], tabletIds);
-    NArrow::Append<arrow::UInt64Type>(*builders[3], rows);
-    NArrow::Append<arrow::UInt64Type>(*builders[4], bytes);
-    NArrow::Append<arrow::UInt64Type>(*builders[5], rawBytes);
-    NArrow::Append<arrow::UInt64Type>(*builders[6], portions);
-    NArrow::Append<arrow::UInt64Type>(*builders[7], blobs);
+    if (Reverse) {
+        std::reverse(records.begin(), records.end());
+    }
+    for (auto&& r: records) {
+        NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+        const std::string prod = ::ToString(portion.GetMeta().Produced);
+        NArrow::Append<arrow::StringType>(*builders[1], prod);
+        NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+        NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetNumRowsVerified());
+        NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytesVerified());
+        NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
+        NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
+        NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetColumnNameDef(r->GetColumnId()).value_or("undefined"));
+        NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetColumnId());
+        std::string blobIdString = r->BlobRange.BlobId.ToStringLegacy();
+        NArrow::Append<arrow::StringType>(*builders[9], blobIdString);
+        NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
+        NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
+        NArrow::Append<arrow::BooleanType>(*builders[12], !portion.HasRemoveSnapshot() || ReadMetadata->GetRequestSnapshot() < portion.GetRemoveSnapshot());
+        std::string strTierName(portion.GetMeta().GetTierName().data(), portion.GetMeta().GetTierName().size());
+        NArrow::Append<arrow::StringType>(*builders[13], strTierName);
+    }
 }
 
 }
-

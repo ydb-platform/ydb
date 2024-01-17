@@ -1,5 +1,5 @@
 #include "mkql_builtins.h"
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_compare.h"
 #include "mkql_builtins_string_kernels.h"
 
@@ -101,9 +101,11 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamily
     RegisterRotRight(registry);
     RegisterPlus(registry);
     RegisterMinus(registry);
+    RegisterMinus(kernelFamilyMap);
     RegisterBitNot(registry);
     RegisterCountBits(registry);
     RegisterAbs(registry);
+    RegisterAbs(kernelFamilyMap);
     RegisterConvert(registry);
     RegisterConcat(registry);
     RegisterSubstring(registry);

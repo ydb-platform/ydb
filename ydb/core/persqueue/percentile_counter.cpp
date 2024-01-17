@@ -7,6 +7,7 @@ namespace NKikimr {
 
 namespace NPQ {
 
+
 TMultiCounter::TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                              const TVector<NPersQueue::TPQLabelsInfo>& labels,
                              const TVector<std::pair<TString, TString>>& subgroups,

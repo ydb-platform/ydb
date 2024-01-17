@@ -10,6 +10,7 @@
 /* It's ok to include external headers because this is a PRIVATE header file
  * (it is usually a crime to include windows.h from header file) */
 #    include <Windows.h>
+#    include <Wincrypt.h>
 #endif /* _WIN32 */
 
 #ifdef AWS_OS_APPLE

@@ -45,7 +45,7 @@ public:
         TString endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
-        TDiscoverRequestHook discoverRequestHook)
+        IPeerDiscoveryPtr peerDiscovery)
         : Config_(std::move(config))
         , EndpointDescription_(endpointDescription)
         , EndpointAttributes_(ConvertToAttributes(BuildYsonStringFluently()
@@ -54,14 +54,13 @@ public:
                 .Item("service").Value(serviceName)
             .EndMap()))
         , ServiceName_(std::move(serviceName))
-        , DiscoverRequestHook_(std::move(discoverRequestHook))
         , Pool_(New<TDynamicChannelPool>(
             Config_,
             std::move(channelFactory),
             EndpointDescription_,
             EndpointAttributes_,
             ServiceName_,
-            DiscoverRequestHook_))
+            peerDiscovery))
     {
         if (Config_->Addresses) {
             ConfigureFromAddresses();
@@ -100,7 +99,6 @@ private:
     const TString EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const TString ServiceName_;
-    const TDiscoverRequestHook DiscoverRequestHook_;
 
     const TDynamicChannelPoolPtr Pool_;
 
@@ -180,10 +178,9 @@ public:
         IChannelFactoryPtr channelFactory,
         TString endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
-        TDiscoverRequestHook discoverRequestHook)
+        IPeerDiscoveryPtr peerDiscovery)
         : Config_(std::move(config))
         , ChannelFactory_(std::move(channelFactory))
-        , DiscoverRequestHook_(std::move(discoverRequestHook))
         , EndpointDescription_(Format("%v%v",
             endpointDescription,
             Config_->Addresses))
@@ -192,6 +189,7 @@ public:
                 .Item("addresses").Value(Config_->Addresses)
                 .Items(*endpointAttributes)
             .EndMap()))
+        , PeerDiscovery_(std::move(peerDiscovery))
     { }
 
     const TString& GetEndpointDescription() const override
@@ -206,10 +204,10 @@ public:
 
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& request) override
     {
-        if (Config_->Addresses && Config_->Addresses->size() == 1) {
-            // Disable discovery and balancing when just one address is given.
-            // This is vital for jobs since node's redirector is incapable of handling
-            // Discover requests properly.
+        if (Config_->DisableBalancingOnSingleAddress &&
+            Config_->Addresses &&
+            Config_->Addresses->size() == 1)
+        {
             return MakeFuture(ChannelFactory_->CreateChannel((*Config_->Addresses)[0]));
         } else {
             return GetSubprovider(request->GetService())->GetChannel(request);
@@ -244,10 +242,10 @@ public:
 private:
     const TBalancingChannelConfigPtr Config_;
     const IChannelFactoryPtr ChannelFactory_;
-    const TDiscoverRequestHook DiscoverRequestHook_;
 
     const TString EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
+    const IPeerDiscoveryPtr PeerDiscovery_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     THashMap<std::string, TBalancingChannelSubproviderPtr> SubproviderMap_;
@@ -276,7 +274,7 @@ private:
                 EndpointDescription_,
                 EndpointAttributes_,
                 serviceName,
-                DiscoverRequestHook_);
+                PeerDiscovery_);
             EmplaceOrCrash(SubproviderMap_, serviceName, subprovider);
             return subprovider;
         }
@@ -292,14 +290,15 @@ IChannelPtr CreateBalancingChannel(
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     IAttributeDictionaryPtr endpointAttributes,
-    TDiscoverRequestHook discoverRequestHook)
+    IPeerDiscoveryPtr peerDiscovery)
 {
     auto channelProvider = CreateBalancingChannelProvider(
         std::move(config),
         std::move(channelFactory),
         std::move(endpointDescription),
         std::move(endpointAttributes),
-        std::move(discoverRequestHook));
+        std::move(peerDiscovery));
+
     return CreateRoamingChannel(channelProvider);
 }
 
@@ -308,17 +307,18 @@ IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     IAttributeDictionaryPtr endpointAttributes,
-    TDiscoverRequestHook discoverRequestHook)
+    IPeerDiscoveryPtr peerDiscovery)
 {
     YT_VERIFY(config);
     YT_VERIFY(channelFactory);
+    YT_VERIFY(peerDiscovery);
 
     return New<TBalancingChannelProvider>(
         std::move(config),
         std::move(channelFactory),
         std::move(endpointDescription),
         std::move(endpointAttributes),
-        std::move(discoverRequestHook));
+        std::move(peerDiscovery));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

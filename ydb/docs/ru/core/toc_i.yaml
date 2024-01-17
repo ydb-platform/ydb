@@ -3,54 +3,27 @@ items:
 - name: Оглавление
   href: index.yaml
 - name: Начало работы
-  href: getting_started/quickstart.md
-# - name: Начало работы
-#   hidden: true
-#   include: { mode: link, path: getting_started/toc_p.yaml }
+  items:
+  - name: Быстрый старт
+    href: getting_started/quickstart.md
+  - name: Kubernetes
+    href: getting_started/kubernetes.md
+
 # Main
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Практические руководства,                include: { mode: link, path: operations/toc_p.yaml } }
-
 - { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
-# - { name: Диагностика,                             include: { mode: link, path: troubleshooting/toc_p.yaml } } moved into maintenance!
-# - { name: Развертывание,                           include: { mode: link, path: deploy/toc_p.yaml } }
-# - { name: Обслуживание,                            include: { mode: link, path: maintenance/toc_p.yaml } }
-
 - { name: Управление базами данных,                include: { mode: link, path: db/toc_p.yaml } }
 - { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
+
 # References
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
 - { name: Совместимость с PostgreSQL,              include: { mode: link, path: postgresql/toc_p.yaml } }
+- { name: Интеграции,                              include: { mode: link, path: integrations/toc_p.yaml } }
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
 - { name: Работа с Kafka API,                      include: { mode: link, path: reference/kafka-api/toc_p.yaml } }
-- name: Разработка
-  # hidden: true
-  items:
-  - name: Ядро
-    items:
-    - name: Тестирование с помощью нагружающих акторов
-      items:
-      - name: Обзор
-        href: development/load-actors-overview.md
-      - name: KqpLoad
-        href: development/load-actors-kqp.md
-      - name: KeyValueLoad
-        href: development/load-actors-key-value.md
-      - name: StorageLoad
-        href: development/load-actors-storage.md
-      - name: VDiskLoad
-        href: development/load-actors-vdisk.md
-      - name: PDiskWriteLoad
-        href: development/load-actors-pdisk-write.md
-      - name: PDiskReadLoad
-        href: development/load-actors-pdisk-read.md
-      - name: PDiskLogLoad
-        href: development/load-actors-pdisk-log.md
-      - name: MemoryLoad
-        href: development/load-actors-memory.md
-      - name: Stop
-        href: development/load-actors-stop.md
+- { name: Разработка,                              include: { mode: link, path: development/toc_p.yaml } }
 
 # Footer
 - { name: Вопросы и ответы,                        include: { mode: link, path: faq/toc_p.yaml } }

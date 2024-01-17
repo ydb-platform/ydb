@@ -2,7 +2,10 @@
 
 LIBRARY()
 
-LICENSE(Apache-2.0)
+LICENSE(
+    APSL-2.0 AND
+    Apache-2.0
+)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -36,11 +39,31 @@ SRCS(
     source/hash.c
     source/hmac.c
     source/symmetric_cipher.c
-    source/unix/openssl_aes.c
-    source/unix/openssl_platform_init.c
-    source/unix/opensslcrypto_ecc.c
-    source/unix/opensslcrypto_hash.c
-    source/unix/opensslcrypto_hmac.c
 )
+
+IF (OS_DARWIN)
+    LDFLAGS(
+        -framework
+        Security
+    )
+    SRCS(
+        source/darwin/common_cryptor_spi.h
+        source/darwin/commoncrypto_aes.c
+        source/darwin/commoncrypto_hmac.c
+        source/darwin/commoncrypto_md5.c
+        source/darwin/commoncrypto_platform_init.c
+        source/darwin/commoncrypto_sha1.c
+        source/darwin/commoncrypto_sha256.c
+        source/darwin/securityframework_ecc.c
+    )
+ELSEIF (OS_LINUX)
+    SRCS(
+        source/unix/openssl_aes.c
+        source/unix/openssl_platform_init.c
+        source/unix/opensslcrypto_ecc.c
+        source/unix/opensslcrypto_hash.c
+        source/unix/opensslcrypto_hmac.c
+    )
+ENDIF()
 
 END()

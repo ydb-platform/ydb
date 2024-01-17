@@ -21,6 +21,13 @@ namespace V1 {
 
 using namespace PersQueue::V1;
 
+Topic::StreamDirectReadMessage::FromServer FillDirectReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
+    Topic::StreamDirectReadMessage::FromServer res;
+    FillIssue(res.add_issues(), code, errorReason);
+    res.set_status(ConvertPersQueueInternalCodeToStatus(code));
+    return res;
+}
+
 
 
 IActor* CreatePQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
@@ -120,6 +127,43 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, c
     HandleStreamPQReadRequest<NGRpcService::TEvStreamTopicReadRequest>(ev, ctx);
 }
 
+void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx) {
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection");
+
+    if (TooMuchSessions()) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - too much sessions");
+        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
+        ev->Get()->GetStreamCtx()->WriteAndFinish(
+            FillDirectReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
+        return;
+    }
+    if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
+
+        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
+        ev->Get()->GetStreamCtx()->WriteAndFinish(
+            FillDirectReadResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
+        // TODO: Inc SLI Errors
+        return;
+    } else {
+        Y_ABORT_UNLESS(TopicsHandler != nullptr);
+        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
+
+        const ui64 cookie = NextCookie();
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new direct session created cookie " << cookie);
+
+        TActorId worker = ctx.Register(new TDirectReadSessionActor(
+                ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
+                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
+                *TopicsHandler
+        ));
+        Sessions[cookie] = worker;
+    }
+}
+
+
 void TPQReadService::Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx) {
     HandleStreamPQReadRequest<NGRpcService::TEvStreamPQMigrationReadRequest>(ev, ctx);
 }
@@ -168,6 +212,11 @@ bool TPQReadService::TooMuchSessions() {
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
 }
+
+void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
+}
+
 
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());

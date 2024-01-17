@@ -121,7 +121,7 @@ namespace NKikimr {
             // build handoff map (use LevelSnap by ref)
             auto hProxyAid = Hmp->BuildMap(ctx, LevelSnap, It, ctx.SelfID);
             if (hProxyAid) {
-                ActiveActors.Insert(hProxyAid);
+                ActiveActors.Insert(hProxyAid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 
             // build gc map (use LevelSnap by ref)

@@ -1,0 +1,2 @@
+#include "viewer_probes.h"
+LWTRACE_DEFINE_PROVIDER(VIEWER_PROVIDER)

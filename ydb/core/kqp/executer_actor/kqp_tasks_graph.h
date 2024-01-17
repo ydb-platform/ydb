@@ -211,6 +211,7 @@ public:
         EReadType ReadType = EReadType::Rows;
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
+        std::vector<std::string> GroupByColumnNames;
     };
 
     struct TWriteInfo {

@@ -5,7 +5,7 @@ import struct
 import subprocess
 import sys
 
-import container # 1
+import container  # 1
 
 
 def main(output_path, entry_path, input_paths, squashfs_path):
@@ -29,7 +29,7 @@ def main(output_path, entry_path, input_paths, squashfs_path):
     program_container_path = os.path.basename(program_path)
 
     os.symlink(program_container_path, 'entry')
-    add_cmd = [ os.path.join(squashfs_path, 'mksquashfs') ]
+    add_cmd = [os.path.join(squashfs_path, 'mksquashfs')]
     add_cmd.extend([program_path, 'entry', 'program_layer'])
     subprocess.run(add_cmd)
 
@@ -58,7 +58,6 @@ def main(output_path, entry_path, input_paths, squashfs_path):
 
                 if len(data) == 0:
                     break
-
 
         output.write(struct.pack('<Q', size))
 

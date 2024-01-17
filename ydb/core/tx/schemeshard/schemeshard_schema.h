@@ -735,6 +735,7 @@ struct Schema : NIceDb::Schema {
         struct ExportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
         struct ImportsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
+        struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -767,7 +768,8 @@ struct Schema : NIceDb::Schema {
             TableCdcStreamsLimit,
             ExportsLimit,
             ImportsLimit,
-            AuditSettings
+            AuditSettings,
+            ServerlessComputeResourcesMode
         >;
     };
 
@@ -790,6 +792,7 @@ struct Schema : NIceDb::Schema {
         struct DeclaredSchemeQuotas : Column<8, NScheme::NTypeIds::String> {};
         struct DatabaseQuotas : Column<9, NScheme::NTypeIds::String> {};
         struct AuditSettings : Column<10, NScheme::NTypeIds::String> {};
+        struct ServerlessComputeResourcesMode : Column<11, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -802,7 +805,8 @@ struct Schema : NIceDb::Schema {
             SharedHiveId,
             DeclaredSchemeQuotas,
             DatabaseQuotas,
-            AuditSettings
+            AuditSettings,
+            ServerlessComputeResourcesMode
         >;
     };
 
@@ -1056,6 +1060,7 @@ struct Schema : NIceDb::Schema {
         struct SourceLocalPathId : Column<14, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; static constexpr Type Default = InvalidLocalPathId; };
         struct PlanStep : Column<15, NScheme::NTypeIds::Uint64> { using Type = TStepId; };
         struct NeedUpdateObject : Column<16, NScheme::NTypeIds::Bool> {};
+        struct NeedSyncHive : Column<17, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
@@ -1074,7 +1079,8 @@ struct Schema : NIceDb::Schema {
             SourceOwnerId,
             SourceLocalPathId,
             PlanStep,
-            NeedUpdateObject
+            NeedUpdateObject,
+            NeedSyncHive
         >;
     };
 
@@ -1730,6 +1736,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct View : Table<108> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct QueryText : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, QueryText>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1836,7 +1851,8 @@ struct Schema : NIceDb::Schema {
         ExternalTable,
         ExternalDataSource,
         PersQueueGroupStats,
-        BuildColumnOperationSettings
+        BuildColumnOperationSettings,
+        View
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

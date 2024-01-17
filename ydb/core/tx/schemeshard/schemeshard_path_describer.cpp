@@ -48,6 +48,11 @@ static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescripti
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats.Aggregated);
 }
 
+static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
+    FillTableStats(pathDescription.MutableTableStats(), stats);
+    FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
+}
+
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
     FillChildDescr(descr, pathEl);
 
@@ -369,6 +374,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
+
     Y_ABORT_UNLESS(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
@@ -406,6 +412,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         *description->MutableSchema() = presetProto.GetSchema();
         if (description->HasSchemaPresetVersionAdj()) {
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
+        }
+        if (tableInfo->GetStats().TableStats.contains(pathId)) {
+            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId));
         }
     }
 }
@@ -712,6 +721,14 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }
+
+    if (const auto& serverlessComputeResourcesMode = subDomainInfo->GetServerlessComputeResourcesMode()) {
+        entry->SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
+    }
+    
+    if (TTabletId sharedHive = subDomainInfo->GetSharedHive()) {
+        entry->SetSharedHive(sharedHive.GetValue());
+    }
 }
 
 void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
@@ -853,6 +870,18 @@ void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pa
     entry->SetInstallation(externalDataSourceInfo->Installation);
     entry->MutableAuth()->CopyFrom(externalDataSourceInfo->Auth);
     entry->MutableProperties()->CopyFrom(externalDataSourceInfo->Properties);
+}
+
+void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->Views.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "View is not found");
+    TViewInfo::TPtr viewInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableViewDescription();
+    entry->SetName(pathEl->Name);
+    PathIdFromPathId(pathId, entry->MutablePathId());
+    entry->SetVersion(viewInfo->AlterVersion);
+    entry->SetQueryText(viewInfo->QueryText);
 }
 
 static bool ConsiderAsDropped(const TPath& path) {
@@ -1006,6 +1035,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             DescribeExternalDataSource(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeView:
+            DescribeView(ctx, base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

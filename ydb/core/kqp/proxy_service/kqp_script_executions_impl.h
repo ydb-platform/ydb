@@ -2,7 +2,7 @@
 
 #include "kqp_script_executions.h"
 
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NKqp::NPrivate {
 
@@ -10,7 +10,6 @@ struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
         EvCreateScriptOperationResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCreateTableResponse,
         EvLeaseCheckResult,
 
         EvEnd
@@ -35,10 +34,6 @@ struct TEvPrivate {
         const Ydb::StatusIds::StatusCode Status;
         const NYql::TIssues Issues;
         const TString ExecutionId;
-    };
-
-    struct TEvCreateTableResponse : public NActors::TEventLocal<TEvCreateTableResponse, EvCreateTableResponse> {
-        TEvCreateTableResponse() = default;
     };
 
     struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {

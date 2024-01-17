@@ -7,7 +7,7 @@
 
 
 namespace NKikimr::NOlap {
-    
+
 class TChunksNormalizer::TNormalizerResult : public INormalizerChanges {
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
 public:

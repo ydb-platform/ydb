@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "attributes.h"
 #include "ypath_client.h"
 
 #include <yt/yt/core/misc/error.h>
@@ -333,7 +334,7 @@ std::vector<IAttributeDictionary::TKeyValuePair> ListAttributesPairs(const IAttr
     for (const auto& key : keys) {
         auto value = attributes.FindYson(key);
         if (value) {
-            result.push_back(std::make_pair(key, value));
+            result.push_back(std::pair(key, value));
         }
     }
     return result;

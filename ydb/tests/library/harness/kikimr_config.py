@@ -158,6 +158,8 @@ class KikimrConfigGenerator(object):
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
             hive_config=None,
+            enforce_user_token_requirement=False,
+            default_user_sid=None
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -365,6 +367,12 @@ class KikimrConfigGenerator(object):
 
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
+
+        if enforce_user_token_requirement:
+            self.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
+
+        if default_user_sid:
+            self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
     @property
     def pdisks_info(self):

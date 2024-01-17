@@ -1,5 +1,5 @@
 #include <library/cpp/monlib/service/pages/mon_page.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr {
 

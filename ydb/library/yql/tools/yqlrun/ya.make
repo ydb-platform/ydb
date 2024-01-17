@@ -37,11 +37,18 @@ PEERDIR(
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/yt/gateway/file
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm
     ydb/library/yql/core/url_preprocessing
     ydb/library/yql/tools/yqlrun/http
     ydb/library/yql/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()
+
+FILES(
+    ui.sh
+    uig.sh
+)
 
 END()

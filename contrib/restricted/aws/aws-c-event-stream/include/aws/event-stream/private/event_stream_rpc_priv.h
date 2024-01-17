@@ -29,25 +29,25 @@ static const struct aws_byte_cursor s_json_content_type_value =
 
 static const struct aws_byte_cursor s_invalid_stream_id_error =
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("{ \"message\": \"non-zero stream-id field is only allowed for messages of "
-                                          "type APPLICATION_MESSAGE. The stream id max value is INT32_MAX.\"; }");
+                                          "type APPLICATION_MESSAGE. The stream id max value is INT32_MAX.\" }");
 
 static const struct aws_byte_cursor s_invalid_client_stream_id_error =
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("{ \"message\": \"stream-id values must be monotonically incrementing. A "
-                                          "stream-id arrived that was lower than the last seen stream-id.\"; }");
+                                          "stream-id arrived that was lower than the last seen stream-id.\" }");
 
 static const struct aws_byte_cursor s_invalid_new_client_stream_id_error =
     AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("{ \"message\": \"stream-id values must be monotonically incrementing. A new "
-                                          "stream-id arrived that was incremented by more than 1.\"; }");
+                                          "stream-id arrived that was incremented by more than 1.\" }");
 
-static const struct aws_byte_cursor s_invalid_message_type_error = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(
-    "{ \"message\": \"an invalid value for message-type field was received.\"; }");
+static const struct aws_byte_cursor s_invalid_message_type_error =
+    AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("{ \"message\": \"an invalid value for message-type field was received.\" }");
 
 static const struct aws_byte_cursor s_invalid_message_error = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(
     "{ \"message\": \"A message was received with missing required fields. Check that your client is sending at least, "
-    ":message-type, :message-flags, and :stream-id\"; }");
+    ":message-type, :message-flags, and :stream-id\" }");
 
 static const struct aws_byte_cursor s_internal_error = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(
-    "{ \"message\": \"An error occurred on the peer endpoint. This is not likely caused by your endpoint.\"; }");
+    "{ \"message\": \"An error occurred on the peer endpoint. This is not likely caused by your endpoint.\" }");
 
 static const struct aws_byte_cursor s_connect_not_completed_error = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(
     "{ \"message\": \"A CONNECT message must be received, and the CONNECT_ACK must be sent in response, before any "

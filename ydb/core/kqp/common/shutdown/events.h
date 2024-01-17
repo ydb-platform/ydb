@@ -1,6 +1,6 @@
 #pragma once
 #include "state.h"
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {

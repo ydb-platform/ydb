@@ -1,6 +1,6 @@
 #include "pool_stats_collector.h"
 
-#include <library/cpp/actors/helpers/pool_stats_collector.h>
+#include <ydb/library/actors/helpers/pool_stats_collector.h>
 
 namespace NYql {
 

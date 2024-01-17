@@ -12,7 +12,7 @@ public:
     using TGrpcServiceBase<Ydb::Query::V1::QueryService>::TGrpcServiceBase;
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 };
 
 } // namespace NKikimr::NGRpcService

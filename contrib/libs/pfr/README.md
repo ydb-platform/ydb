@@ -45,11 +45,13 @@ Outputs:
 Edgar Allan Poe was born in 1809
 ```
 
+[Run the above sample](https://godbolt.org/z/PfYsWKb7v)
+
 
 ### Motivating Example #1
 ```c++
 #include <iostream>
-#include "pfr/precise.hpp"
+#include "pfr.hpp"
 
 struct my_struct { // no ostream operator defined!
     int i;
@@ -74,7 +76,7 @@ my_struct has 3 fields: {100, H, 3.14159}
 
 ```c++
 #include <iostream>
-#include "pfr/precise.hpp"
+#include "pfr.hpp"
 
 struct my_struct { // no ostream operator defined!
     std::string s;
@@ -92,6 +94,58 @@ int main() {
 Outputs:
 ```
 my_struct has 2 fields: {"Das ist fantastisch!", 100}
+```
+
+### Motivating Example #3
+
+```c++
+#include <iostream>
+#include <string>
+
+#include <boost/config/warning_disable.hpp>
+#include <boost/spirit/home/x3.hpp>
+#include <boost/fusion/include/adapt_boost_pfr.hpp>
+
+#include "pfr/io.hpp"
+
+namespace x3 = boost::spirit::x3;
+
+struct ast_employee { // No BOOST_FUSION_ADAPT_STRUCT defined
+    int age;
+    std::string forename;
+    std::string surname;
+    double salary;
+};
+
+auto const quoted_string = x3::lexeme['"' >> +(x3::ascii::char_ - '"') >> '"'];
+
+x3::rule<class employee, ast_employee> const employee = "employee";
+auto const employee_def =
+    x3::lit("employee")
+    >> '{'
+    >>  x3::int_ >> ','
+    >>  quoted_string >> ','
+    >>  quoted_string >> ','
+    >>  x3::double_
+    >>  '}'
+    ;
+BOOST_SPIRIT_DEFINE(employee);
+
+int main() {
+    std::string str = R"(employee{34, "Chip", "Douglas", 2500.00})";
+    ast_employee emp;
+    x3::phrase_parse(str.begin(),
+                     str.end(),
+                     employee,
+                     x3::ascii::space,
+                     emp);
+    std::cout << pfr::io(emp) << std::endl;
+}
+
+```
+Outputs:
+```
+(34 Chip Douglas 2500)
 ```
 
 

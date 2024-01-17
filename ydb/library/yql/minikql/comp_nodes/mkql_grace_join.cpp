@@ -8,7 +8,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
 
@@ -204,10 +204,10 @@ void TGraceJoinPacker::Pack()  {
         if (!value) { // Null value
             ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
             ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
-            ui64 bitMask = (0x1) << remShift;
+            ui64 bitMask = ui64(0x1) << remShift;
             TupleIntVals[currNullsIdx] |= bitMask;
             if (pi.IsKeyColumn) {
-                TupleIntVals[0] |= (0x1);
+                TupleIntVals[0] |= ui64(0x1);
             }
             continue;
         }
@@ -318,7 +318,7 @@ void TGraceJoinPacker::UnPack()  {
         }
         ui64 currNullsIdx = (i + 1) / (sizeof(ui64) * 8);
         ui64 remShift = ( (i + 1) - currNullsIdx * (sizeof(ui64) * 8) );
-        ui64 bitMask = (0x1) << remShift;
+        ui64 bitMask = ui64(0x1) << remShift;
         if ( TupleIntVals[currNullsIdx] & bitMask ) {
             value = NYql::NUdf::TUnboxedValue();
             continue;
@@ -760,7 +760,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                         auto &valsRight = RightPacker->TupleHolder;
 
 
-                        for (ui32 i = 0; i < LeftRenames.size() / 2; i++)
+                        for (size_t i = 0; i < LeftRenames.size() / 2; i++)
                         {
                             auto & valPtr = output[LeftRenames[2 * i + 1]];
                             if ( valPtr ) {
@@ -768,12 +768,12 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                             }
                         }
 
-                        for (ui32 i = 0; i < RightRenames.size() / 2; i++)
+                        for (size_t i = 0; i < RightRenames.size() / 2; i++)
                         {
                             auto & valPtr = output[RightRenames[2 * i + 1]];
                             if ( valPtr ) {
                                 *valPtr = valsRight[RightRenames[2 * i]];
-                                }
+                            }
                         }
 
                         return EFetchResult::One;

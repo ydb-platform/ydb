@@ -264,17 +264,17 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
         // Compatibility with PG semantic - allow multiple null in columns with unique constaint
         TVector<TCoAtom> skipNullColumns;
         skipNullColumns.reserve(table.Metadata->Indexes[i].KeyColumns.size());
+
+        bool used = false;
         for (const auto& column : table.Metadata->Indexes[i].KeyColumns) {
-            if (!inputColumns || inputColumns->contains(column)) {
-                TCoAtom atom(ctx.NewAtom(pos, column));
-                skipNullColumns.emplace_back(atom);
-            }
+            used |= (!inputColumns || inputColumns->contains(column));
+            TCoAtom atom(ctx.NewAtom(pos, column));
+            skipNullColumns.emplace_back(atom);
         }
 
-        //no columns to skip -> no index columns to check -> skip check
-        if (skipNullColumns.empty()) {
-            continue;
-        }
+        // Just to doublecheck we are not trying to update index without data to update
+        YQL_ENSURE(used, "Index is used but not input columns for update. Probably it's a bug."
+            " Index: " << table.Metadata->Indexes[i].Name);
 
         auto skipNull = Build<TCoSkipNullMembers>(ctx, pos)
             .Input(rowsListArg)
@@ -292,11 +292,46 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
     return checks;
 }
 
+static TExprNode::TPtr CreateRowsToPass(const TCoArgument& rowsListArg, const THashSet<TStringBuf>* inputColumns,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    if (!inputColumns) {
+        return rowsListArg.Ptr();
+    }
+
+    auto arg = TCoArgument(ctx.NewArgument(pos, "arg"));
+
+    TVector<TExprBase> columns;
+    columns.reserve(inputColumns->size());
+
+    for (const auto x : *inputColumns) {
+        columns.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(x)
+                .Value<TCoMember>()
+                    .Struct(arg)
+                    .Name().Build(x)
+                    .Build()
+                .Done());
+    }
+
+    return Build<TCoMap>(ctx, pos)
+        .Input(rowsListArg)
+        .Lambda()
+            .Args({arg})
+            .Body<TCoAsStruct>()
+                .Add(columns)
+                .Build()
+            .Build()
+        .Done().Ptr();
+}
+
 TUniqBuildHelper::TUniqBuildHelper(const TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns, const THashSet<TString>* usedIndexes,
     TPositionHandle pos, TExprContext& ctx, bool skipPkCheck)
     : RowsListArg(ctx.NewArgument(pos, "rows_list"))
     , False(MakeBool(pos, false, ctx))
     , Checks(Prepare(RowsListArg, table, inputColumns, usedIndexes, pos, ctx, skipPkCheck))
+    , RowsToPass(CreateRowsToPass(RowsListArg, inputColumns, pos, ctx))
 {}
 
 TUniqBuildHelper::TUniqCheckNodes TUniqBuildHelper::MakeUniqCheckNodes(const TCoLambda& selector,
@@ -340,7 +375,7 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
 
     types.emplace_back(
         Build<TCoTypeOf>(ctx, pos)
-            .Value(RowsListArg)
+            .Value(RowsToPass)
             .Done()
     );
 
@@ -376,7 +411,7 @@ TDqStage TUniqBuildHelper::CreateComputeKeysStage(const TCondenseInputResult& co
 
     variants.emplace_back(
         Build<TCoVariant>(ctx, pos)
-            .Item(RowsListArg)
+            .Item(RowsToPass)
             .Index().Build("0")
             .VarType(variantType)
             .Done()

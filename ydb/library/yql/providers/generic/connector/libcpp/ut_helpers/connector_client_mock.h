@@ -355,7 +355,7 @@ namespace NYql::NConnector::NTest {
                 EXPECT_CALL(*Mock_, DescribeTableImpl(ProtobufRequestMatcher(*Result_)))
                     .WillOnce(Return(
                         TResult<NApi::TDescribeTableResponse>(
-                            {NGrpc::TGrpcStatus(),
+                            {NYdbGrpc::TGrpcStatus(),
                              *ResponseResult_})));
             }
 
@@ -621,7 +621,7 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -690,7 +690,7 @@ namespace NYql::NConnector::NTest {
         private:
             void SetExpectation() {
                 EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NGrpc::TGrpcStatus(), ResponseResult_}));
+                    .WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{NYdbGrpc::TGrpcStatus(), ResponseResult_}));
             }
 
         private:
@@ -743,7 +743,7 @@ namespace NYql::NConnector::NTest {
         }
 
     protected:
-        static TString StatusToDebugString(const NGrpc::TGrpcStatus& status) {
+        static TString StatusToDebugString(const NYdbGrpc::TGrpcStatus& status) {
             TStringBuilder s;
             s << "GRpcStatusCode: " << status.GRpcStatusCode << '\n';
             if (status.Msg) {

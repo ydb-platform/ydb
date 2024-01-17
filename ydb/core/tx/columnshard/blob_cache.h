@@ -8,8 +8,8 @@
 #include <ydb/core/base/blobstorage.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/actors/core/actorid.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/event_local.h>
 
 #include <util/generic/vector.h>
 

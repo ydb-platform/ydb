@@ -123,21 +123,6 @@ public:
         return VersionedIndex;
     }
 
-    TString SerializeMark(const NArrow::TReplaceKey& key) const override {
-        return TMark::SerializeComposite(key, MarkSchema());
-    }
-
-    NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const override {
-        if (markNumKeys) {
-            Y_ABORT_UNLESS(*markNumKeys == (ui32)MarkSchema()->num_fields());
-            return TMark::DeserializeComposite(key, MarkSchema());
-        } else {
-            NArrow::TReplaceKey markKey = TMark::DeserializeScalar(key, MarkSchema());
-            return TMark::ExtendBorder(markKey, MarkSchema());
-            return markKey;
-        }
-    }
-
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
     const TColumnEngineStats& GetTotalStats() override;
     ui64 MemoryUsage() const override;
@@ -156,9 +141,7 @@ public:
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;
 
-    void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
-
-
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const TPKRangesFilter& pkRangesFilter) const override;
@@ -206,13 +189,22 @@ public:
         return it->second;
     }
 
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const ui64 pathIdFrom, const ui64 pathIdTo) const {
+        std::vector<std::shared_ptr<TGranuleMeta>> result;
+        for (auto&& i : Tables) {
+            if (i.first < pathIdFrom || i.first > pathIdTo) {
+                continue;
+            }
+            result.emplace_back(i.second);
+        }
+        return result;
+    }
+
     ui64 GetTabletId() const {
         return TabletId;
     }
 
 private:
-    using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;
-
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     std::shared_ptr<TColumnsTable> ColumnsTable;
@@ -224,20 +216,8 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
-    mutable std::optional<TMark> CachedDefaultMark;
     bool Loaded = false;
 private:
-    const std::shared_ptr<arrow::Schema>& MarkSchema() const noexcept {
-        return VersionedIndex.GetIndexKey();
-    }
-
-    const TMark& DefaultMark() const {
-        if (!CachedDefaultMark) {
-            CachedDefaultMark = TMark(TMark::MinBorder(MarkSchema()));
-        }
-        return *CachedDefaultMark;
-    }
-
     bool LoadColumns(IDbWrapper& db);
     bool LoadCounters(IDbWrapper& db);
 
@@ -250,9 +230,6 @@ private:
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                             EStatsUpdateType updateType,
                             const TPortionInfo* exPortionInfo = nullptr) const;
-
-    /// Return lists of adjacent empty granules for the path.
-    std::vector<std::vector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;
 };
 
 } // namespace NKikimr::NOlap

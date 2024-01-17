@@ -10,12 +10,11 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.83.0)
+VERSION(1.84.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/thread/archive/boost-1.83.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/thread/archive/boost-1.84.0.tar.gz)
 
 PEERDIR(
-    contrib/restricted/boost/algorithm
     contrib/restricted/boost/assert
     contrib/restricted/boost/atomic
     contrib/restricted/boost/bind
@@ -28,10 +27,7 @@ PEERDIR(
     contrib/restricted/boost/date_time
     contrib/restricted/boost/exception
     contrib/restricted/boost/function
-    contrib/restricted/boost/intrusive
     contrib/restricted/boost/io
-    contrib/restricted/boost/iterator
-    contrib/restricted/boost/lexical_cast
     contrib/restricted/boost/move
     contrib/restricted/boost/optional
     contrib/restricted/boost/predef

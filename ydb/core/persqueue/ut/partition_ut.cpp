@@ -9,8 +9,8 @@
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <library/cpp/actors/core/actorid.h>
-#include <library/cpp/actors/core/event.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/hash.h>
@@ -265,6 +265,7 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
     auto actor = new NPQ::TPartition(Ctx->TabletId,
                                      id,
                                      Ctx->Edge,
+                                     0,
                                      Ctx->Edge,
                                      TopicConverter,
                                      "dcId",
@@ -339,8 +340,10 @@ void TPartitionFixture::SendCreateSession(ui64 cookie,
                                                      clientId,
                                                      0,
                                                      sessionId,
+                                                     0,
                                                      generation,
                                                      step,
+                                                     TActorId{},
                                                      TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -355,7 +358,9 @@ void TPartitionFixture::SendSetOffset(ui64 cookie,
                                                      offset,
                                                      sessionId,
                                                      0,
-                                                     0);
+                                                     0,
+                                                     0,
+                                                     TActorId{});
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -523,19 +528,19 @@ void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
     }
 
     if (matcher.Status) {
-        UNIT_ASSERT(event->Response.HasStatus());
-        UNIT_ASSERT(*matcher.Status == event->Response.GetStatus());
+        UNIT_ASSERT(event->Response->HasStatus());
+        UNIT_ASSERT(*matcher.Status == event->Response->GetStatus());
     }
 
     if (matcher.ErrorCode) {
-        UNIT_ASSERT(event->Response.HasErrorCode());
-        UNIT_ASSERT(*matcher.ErrorCode == event->Response.GetErrorCode());
+        UNIT_ASSERT(event->Response->HasErrorCode());
+        UNIT_ASSERT(*matcher.ErrorCode == event->Response->GetErrorCode());
     }
 
     if (matcher.Offset) {
-        UNIT_ASSERT(event->Response.HasPartitionResponse());
-        UNIT_ASSERT(event->Response.GetPartitionResponse().HasCmdGetClientOffsetResult());
-        UNIT_ASSERT_VALUES_EQUAL(*matcher.Offset, event->Response.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset());
+        UNIT_ASSERT(event->Response->HasPartitionResponse());
+        UNIT_ASSERT(event->Response->GetPartitionResponse().HasCmdGetClientOffsetResult());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Offset, event->Response->GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset());
     }
 }
 
@@ -1342,7 +1347,7 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
     SendChangeOwner(cookie, "owner1", Ctx->Edge);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1387,7 +1392,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvError&)> truth = [&](const TEvPQ::TEvError& e) { return cookie == e.Cookie; };
@@ -1437,7 +1442,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1464,7 +1469,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
 
     event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
     UNIT_ASSERT(event != nullptr);
-    UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response.GetStatus());
+    UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
 }
 
 Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
@@ -1493,7 +1498,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
     TAutoPtr<IEventHandle> handle;
     std::function<bool(const TEvPQ::TEvProxyResponse&)> truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
@@ -1520,7 +1525,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_IgnoreQuotaDeadline, TPartitionFixture)
 
     event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
     UNIT_ASSERT(event != nullptr);
-    UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response.GetStatus());
+    UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());
 }
 
 }

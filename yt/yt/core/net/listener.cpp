@@ -93,11 +93,12 @@ public:
                 Error_ = TError("Listener is shut down");
             }
             std::swap(Queue_, queue);
+            Acceptor_->Unarm(ServerSocket_, this);
             YT_VERIFY(TryClose(ServerSocket_, false));
         }
 
         for (auto& promise : queue) {
-           promise.Set(Error_);
+            promise.Set(Error_);
         }
     }
 

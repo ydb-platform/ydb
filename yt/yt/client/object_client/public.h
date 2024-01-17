@@ -5,6 +5,7 @@
 #include <library/cpp/yt/misc/hash.h>
 
 #include <yt/yt/client/election/public.h>
+#include <yt/yt/client/job_tracker_client/public.h>
 
 #include <library/cpp/yt/misc/strong_typedef.h>
 
@@ -102,6 +103,9 @@ DEFINE_ENUM(EObjectType,
     ((UploadNestedTransaction)                      (  8))
     ((SystemTransaction)                            (  9))
     ((SystemNestedTransaction)                      ( 10))
+    ((ExternalizedSystemTabletTransaction)          ( 11))
+    ((ExternalizedAtomicTabletTransaction)          ( 12))
+    ((ExternalizedNonAtomicTabletTransaction)       ( 13))
     ((TransactionMap)                               (407))
     ((TopmostTransactionMap)                        (418))
     ((LockMap)                                      (422))
@@ -345,8 +349,7 @@ constexpr EObjectType MaxErasureJournalChunkPartType = EObjectType::ErasureJourn
 using TTransactionId = TObjectId;
 constexpr TTransactionId NullTransactionId = {};
 
-using TOperationId = TObjectId;
-using TJobId = TObjectId;
+using NJobTrackerClient::TOperationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 

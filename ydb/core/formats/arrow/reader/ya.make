@@ -4,7 +4,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/simple_builder
     ydb/core/formats/arrow/switch
-    library/cpp/actors/core
+    ydb/library/actors/core
 )
 
 SRCS(

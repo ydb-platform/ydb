@@ -98,6 +98,10 @@ public:
         return ColumnId;
     }
 
+    const std::shared_ptr<arrow::Field>& GetField() const {
+        return ExpectedSchema->field(0);
+    }
+
     const std::shared_ptr<arrow::Schema>& GetExpectedSchema() const {
         return ExpectedSchema;
     }
@@ -120,7 +124,7 @@ struct TIndexInfo;
 
 class TColumnFeatures {
 private:
-    const ui32 ColumnId;
+    ui32 ColumnId;
     std::optional<NArrow::TCompression> Compression;
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
@@ -132,6 +136,15 @@ private:
         : ColumnId(columnId) {
     }
 public:
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "compression=" << (Compression ? Compression->DebugString() : "NO") << ";";
+        sb << "encoding=" << (DictionaryEncoding ? DictionaryEncoding->DebugString() : "NO") << ";";
+        sb << "loader=" << (Loader ? Loader->DebugString() : "NO") << ";";
+        return sb;
+    }
+
     NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
     static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo);
     static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo);

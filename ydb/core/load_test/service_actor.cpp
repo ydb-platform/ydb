@@ -14,7 +14,7 @@
 
 #include <ydb/public/lib/base/msgbus.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -459,6 +459,14 @@ public:
         }
         response->Record.SetTag(record.HasTag() ? record.GetTag() : 0);
         Send(ev->Sender, response.release());
+    }
+
+    void Handle(TEvLoad::TEvLoadTestResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+            LOG_E("Receieved non-OK LoadTestResponse from another node, Record# " << ev->ToString());
+        } else {
+            LOG_N("Receieved OK LoadTestResponse from another node# " << ev->ToString());
+        }
     }
 
     ui64 ProcessCmd(const NKikimr::TEvLoadTestRequest& record) {
@@ -1317,6 +1325,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvLoad::TEvLoadTestRequest, Handle)
+        hFunc(TEvLoad::TEvLoadTestResponse, Handle)
         hFunc(TEvLoad::TEvLoadTestFinished, Handle)
         hFunc(TEvLoad::TEvNodeFinishResponse, Handle)
         hFunc(NMon::TEvHttpInfo, Handle)

@@ -179,6 +179,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
+        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition);
+        Partition()->PartitionGraph.Rebuild(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
@@ -236,7 +238,7 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
     Y_ABORT_UNLESS(response.GetStatusResultSize());
 
     Partition()->DiskIsFull = DiskIsFull(ev);
-    if (!Partition()->DiskIsFull) {
+    if (Partition()->DiskIsFull) {
         Partition()->LogAndCollectError(NKikimrServices::PERSQUEUE, "disk is full", ctx);
     }
 

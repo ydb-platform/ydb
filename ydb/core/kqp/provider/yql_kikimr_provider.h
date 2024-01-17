@@ -10,7 +10,7 @@
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/cache/cache.h>
 
 #include <util/generic/flags.h>
@@ -235,7 +235,8 @@ enum class TYdbOperation : ui32 {
     CreateTopic          = 1 << 19,
     AlterTopic           = 1 << 20,
     DropTopic            = 1 << 21,
-    ModifyPermission     = 1 << 22
+    ModifyPermission     = 1 << 22,
+    RenameGroup          = 1 << 23
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -444,11 +445,14 @@ public:
         TKikimrConfiguration::TPtr config,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TIntrusivePtr<TKikimrTransactionContextBase> txCtx = nullptr)
         : Configuration(config)
         , TablesData(MakeIntrusive<TKikimrTablesData>())
         , QueryCtx(MakeIntrusive<TKikimrQueryContext>(functionRegistry, timeProvider, randomProvider))
-        , TxCtx(txCtx) {}
+        , TxCtx(txCtx)
+        , UserToken(userToken)
+    {}
 
     TKikimrSessionContext(const TKikimrSessionContext&) = delete;
     TKikimrSessionContext& operator=(const TKikimrSessionContext&) = delete;
@@ -479,8 +483,16 @@ public:
         UserName = userName;
     }
 
+    TString GetCluster() const {
+        return Cluster;
+    }
+
     TString GetDatabase() const {
         return Database;
+    }
+
+    void SetCluster(const TString& cluster) {
+        Cluster = cluster;
     }
 
     void SetDatabase(const TString& database) {
@@ -509,14 +521,20 @@ public:
         TempTablesState = tempTablesState;
     }
 
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetUserToken() const {
+        return UserToken;
+    }
+
 private:
     TString UserName;
+    TString Cluster;
     TString Database;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<TKikimrTransactionContextBase> TxCtx;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(

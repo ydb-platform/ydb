@@ -19,7 +19,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/yson
     ydb/library/mkql_proto
     ydb/library/yql/core/services

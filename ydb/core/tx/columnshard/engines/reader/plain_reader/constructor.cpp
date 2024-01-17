@@ -22,13 +22,13 @@ THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> TAssembleColumnsTaskConstr
 }
 
 void TEFTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
-    auto task = std::make_shared<TAssembleFilter>(Context, PortionInfo, Source, ColumnIds, UseEarlyFilter, BuildBatchAssembler());
+    auto task = std::make_shared<TAssembleFilter>(Context, PortionInfo, Source, Columns, UseEarlyFilter, BuildBatchAssembler());
     task->SetPriority(NConveyor::ITask::EPriority::Normal);
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
-    auto task = std::make_shared<TAssembleFFBatch>(Context, PortionInfo, Source, ColumnIds, BuildBatchAssembler(), AppliedFilter);
+    auto task = std::make_shared<TAssembleFFBatch>(Context, PortionInfo, Source, Columns, BuildBatchAssembler(), AppliedFilter);
     task->SetPriority(NConveyor::ITask::EPriority::High);
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }

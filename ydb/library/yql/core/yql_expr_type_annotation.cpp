@@ -386,7 +386,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (*castResult != NKikimr::NUdf::ECastOptions::Complete) {
+                if (*castResult != NKikimr::NUdf::ECastOptions::Complete
+                    && !(IsDataTypeIntegral(from) && IsDataTypeFloat(to))) {
                     auto issue = TIssue(node->Pos(ctx), TStringBuilder() <<
                         "Consider using explicit CAST or BITCAST to convert from " <<
                         NKikimr::NUdf::GetDataTypeInfo(from).Name << " to " << NKikimr::NUdf::GetDataTypeInfo(to).Name);
@@ -2328,6 +2329,60 @@ bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type
 
     if (type.GetKind() != ETypeAnnotationKind::Variant) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected variant type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureDataOrPgType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected data or pg type, but got lambda"));
+        return false;
+    }
+
+    return EnsureDataOrPgType(node.Pos(), *node.GetTypeAnn(), ctx);
+}
+
+bool EnsureDataOrPgType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Data && type.GetKind() != ETypeAnnotationKind::Pg) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data or pg type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsurePgType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected pg type, but got lambda"));
+        return false;
+    }
+
+    return EnsurePgType(node.Pos(), *node.GetTypeAnn(), ctx);
+}
+
+bool EnsurePgType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Pg) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected pg type, but got: " << type));
         return false;
     }
 
@@ -4871,13 +4926,17 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
     if (syncList) {
         if (auto right = TMaybeNode<TCoRight>(&lambdaBody)) {
-            auto cons = right.Cast().Input().Maybe<TCoCons>();
-            if (!cons) {
-                return false;
+            if (auto cons = right.Cast().Input().Maybe<TCoCons>()) {
+                syncList->emplace(cons.Cast().World().Ptr(), syncList->size());
+                return IsPureIsolatedLambdaImpl(cons.Cast().Input().Ref(), visited, syncList);
             }
 
-            syncList->emplace(cons.Cast().World().Ptr(), syncList->size());
-            return IsPureIsolatedLambdaImpl(cons.Cast().Input().Ref(), visited, syncList);
+            if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                syncList->emplace(right.Cast().Input().Ref().HeadPtr(), syncList->size());
+                return true;
+            }
+
+            return false;
         }
     }
 

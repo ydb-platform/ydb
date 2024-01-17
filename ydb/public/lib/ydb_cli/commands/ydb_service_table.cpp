@@ -368,7 +368,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EOutputFormat::Tsv,
+        EOutputFormat::Parquet,
     });
 
     AddParametersOption(config, "(for data & scan queries)");
@@ -816,10 +817,16 @@ void TCommandExplain::Config(TConfig& config) {
             EOutputFormat::Pretty,
             EOutputFormat::PrettyTable,
             EOutputFormat::JsonUnicode,
-            EOutputFormat::JsonBase64
+            EOutputFormat::JsonBase64,
+            EOutputFormat::JsonBase64Simplify
     });
 
     config.SetFreeArgsNum(0);
+}
+
+void TCommandExplain::SaveDiagnosticsToFile(const TString& diagnostics) {
+    TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+    file << diagnostics;
 }
 
 void TCommandExplain::Parse(TConfig& config) {
@@ -843,8 +850,14 @@ int TCommandExplain::Run(TConfig& config) {
             settings.Explain(true);
         }
 
+        if (CollectFullDiagnostics) {
+            settings.CollectFullDiagnostics(true);
+        }
+
         auto result = client.StreamExecuteScanQuery(Query, settings).GetValueSync();
         ThrowOnError(result);
+
+        TString diagnostics;
 
         SetInterruptHandlers();
         while (!IsInterrupted()) {
@@ -860,6 +873,13 @@ int TCommandExplain::Run(TConfig& config) {
                 planJson = proto.query_plan();
                 ast = proto.query_ast();
             }
+            if (tablePart.HasDiagnostics()) {
+                diagnostics = tablePart.ExtractDiagnostics();
+            }
+        }
+
+        if (CollectFullDiagnostics) {
+            SaveDiagnosticsToFile(diagnostics);
         }
 
         if (IsInterrupted()) {
@@ -930,8 +950,7 @@ int TCommandExplain::Run(TConfig& config) {
         ast = result.GetAst();
 
         if (CollectFullDiagnostics) {
-            TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-            file << result.GetDiagnostics();
+            SaveDiagnosticsToFile(result.GetDiagnostics());
         }
 
     } else {
@@ -1006,7 +1025,8 @@ void TCommandReadTable::Config(TConfig& config) {
         EOutputFormat::JsonBase64,
         EOutputFormat::JsonBase64Array,
         EOutputFormat::Csv,
-        EOutputFormat::Tsv
+        EOutputFormat::Tsv,
+        EOutputFormat::Parquet,
     });
 
     config.SetFreeArgsNum(1);

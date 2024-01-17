@@ -97,7 +97,7 @@ message TFeatureFlags {
     optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
-    optional bool EnableDataShardVolatileTransactions = 85 [default = false];
+    optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = false];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
@@ -112,11 +112,18 @@ message TFeatureFlags {
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
-    optional bool EnableTopicMessageMeta = 100 [default = false];
+    optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
     optional bool EnableUniqConstraint = 104 [default = false];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
     optional bool EnableStatistics = 106 [default = false];
+    optional bool EnableUuidAsPrimaryKey = 107 [default = false];
+    optional bool EnableTablePgTypes = 108 [default = false];
+    optional bool EnableLocalDBBtreeIndex = 109 [default = false];
+    optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
+    optional bool UseVDisksBalancing = 111 [default = false];
+    optional bool EnableViews = 112 [default = false];
+    optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
 }

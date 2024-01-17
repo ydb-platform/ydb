@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include "protobuf_interop_options.h"
 
 #include <yt/yt/core/ypath/public.h>
@@ -92,6 +94,7 @@ struct TProtobufRepeatedElement
 
 struct TProtobufMapElement
 {
+    TProtobufScalarElement KeyElement;
     TProtobufElement Element;
 };
 
@@ -104,11 +107,6 @@ struct TProtobufElementResolveResult
     TProtobufElement Element;
     TStringBuf HeadPath;
     TStringBuf TailPath;
-};
-
-struct TResolveProtobufElementByYPathOptions
-{
-    bool AllowUnknownYsonFields = false;
 };
 
 //! Introspects a given #rootType and locates an element (represented
@@ -135,23 +133,9 @@ constexpr int UnknownYsonFieldNumber = 3005;
 std::unique_ptr<IYsonConsumer> CreateProtobufWriter(
     ::google::protobuf::io::ZeroCopyOutputStream* outputStream,
     const TProtobufMessageType* rootType,
-    const TProtobufWriterOptions& options = TProtobufWriterOptions());
+    TProtobufWriterOptions options = TProtobufWriterOptions());
 
 ////////////////////////////////////////////////////////////////////////////////
-
-struct TProtobufParserOptions
-{
-    //! If |true| then fields with numbers not found in protobuf metadata are
-    //! silently skipped; otherwise an exception is thrown.
-    bool SkipUnknownFields = false;
-
-    //! If |true| then required fields not found in protobuf metadata are
-    //! silently skipped; otherwise an exception is thrown.
-    bool SkipRequiredFields = false;
-
-    // Check if |string| fields contain actual UTF-8 strings.
-    bool CheckUtf8 = false;
-};
 
 //! Parses a byte sequence and translates it into IYsonConsumer calls.
 /*!
@@ -255,7 +239,7 @@ struct TProtobufMessageBytesFieldConverter
 //! This method is called during static initialization and not assumed to be called during runtime.
 void RegisterCustomProtobufBytesFieldConverter(
     const google::protobuf::Descriptor* descriptor,
-    int fieldIndex,
+    int fieldNumber,
     const TProtobufMessageBytesFieldConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
@@ -284,6 +268,21 @@ TString YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode);
+
+TString YsonStringToProto(
+    const TYsonString& ysonString,
+    const TProtobufMessageType* payloadType,
+    TProtobufWriterOptions options);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetProtobufInteropConfig(TProtobufInteropDynamicConfigPtr config);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Returns type v3 schema for protobuf message type.
+//! Note: Recursive types (message has field with self type) are not supported.
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 

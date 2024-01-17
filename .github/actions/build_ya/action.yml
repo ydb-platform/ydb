@@ -42,7 +42,7 @@ runs:
         if [ ! -z "${{ inputs.build_target }}" ]; then
           extra_params+=(--target="${{ inputs.build_target }}")
         fi
-        
+
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           extra_params+=(--bazel-remote-store)
           extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
@@ -51,10 +51,13 @@ runs:
         if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
           extra_params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           extra_params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
-          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o)
+          extra_params+=(--bazel-remote-put --dist-cache-evict-bins --add-result .o --add-result .a)
         fi
         
         case "${{ inputs.build_preset }}" in
+          debug)
+            build_type=debug
+            ;;
           relwithdebinfo)
             build_type=relwithdebinfo
             ;;
@@ -68,17 +71,27 @@ runs:
             extra_params+=(--sanitize="thread")
             extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
             ;;
+          release-msan)
+            build_type=release
+            extra_params+=(--sanitize="memory")
+            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            ;;
           *)
             echo "Invalid preset: ${{ inputs.build_preset }}"
             exit 1
             ;;
         esac
         
-        ./ya make --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2' -T --stat  \
+        echo "::debug::get version"
+        ./ya --version
+        
+        ./ya make -k --build "${build_type}" --force-build-depends -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' -T --stat -DCONSISTENT_DEBUG \
           --log-file "$TMP_DIR/ya_log.txt" --evlog-file "$TMP_DIR/ya_evlog.jsonl" \
-          --dump-graph --dump-graph-to-file "$TMP_DIR/ya_graph.json" \
           --cache-size 512G --link-threads "${{ inputs.link_threads }}" \
-          "${extra_params[@]}"
+          "${extra_params[@]}" || (
+              RC=$?
+              echo "::debug::ya make RC=$RC"
+          )
 
     - name: sync logs to s3
       if: always()

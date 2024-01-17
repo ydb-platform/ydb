@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple

@@ -214,14 +214,14 @@ struct TKikimrColumnMetadata {
     TVector<TString> Families;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
-    NKikimrMiniKQL::TResult DefaultFromLiteral;
+    Ydb::TypedValue DefaultFromLiteral;
 
     TKikimrColumnMetadata() = default;
 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull,
         NKikimr::NScheme::TTypeInfo typeInfo = {}, const TString& typeMod = {}, const TString& defaultFromSequence = {},
         NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED,
-        const NKikimrMiniKQL::TResult& defaultFromLiteral = {})
+        const Ydb::TypedValue& defaultFromLiteral = {})
         : Name(name)
         , Id(id)
         , Type(type)
@@ -569,7 +569,7 @@ struct TModifyPermissionsSettings {
 
     EAction Action = EAction::Grant;
     THashSet<TString> Permissions;
-    THashSet<TString> Pathes;
+    THashSet<TString> Paths;
     THashSet<TString> Roles;
     bool IsPermissionsClear = false;
 };
@@ -582,11 +582,12 @@ struct TAlterUserSettings {
 
 struct TDropUserSettings {
     TString UserName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TCreateGroupSettings {
     TString GroupName;
+    std::vector<TString> Roles;
 };
 
 struct TAlterGroupSettings {
@@ -600,9 +601,14 @@ struct TAlterGroupSettings {
     std::vector<TString> Roles;
 };
 
+struct TRenameGroupSettings {
+    TString GroupName;
+    TString NewName;
+};
+
 struct TDropGroupSettings {
     TString GroupName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TAlterColumnTableSettings {
@@ -785,7 +791,7 @@ public:
         const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) = 0;
+        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
@@ -817,6 +823,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> RenameGroup(const TString& cluster, TRenameGroupSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
@@ -829,11 +837,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
@@ -842,23 +850,7 @@ public:
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
-    static TString CanonizePath(const TString& path);
-
-    template <typename TIter>
-    static TString CombinePath(TIter begin, TIter end, bool canonize = true) {
-        auto path = JoinRange("/", begin, end);
-        return canonize
-            ? CanonizePath(path)
-            : path;
-    }
-
-    static TVector<TString> SplitPath(const TString& path);
-
-    static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
-
     static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
-
-    static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
 
     static void BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult);
 };

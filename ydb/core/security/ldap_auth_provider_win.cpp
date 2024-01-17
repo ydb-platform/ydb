@@ -1,5 +1,5 @@
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ticket_parser_log.h"
 #include "ldap_auth_provider.h"

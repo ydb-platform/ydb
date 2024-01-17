@@ -68,7 +68,7 @@ namespace Aws
             }
 
             /**
-             * If credentials haven't been initialized or been initialized to emtpy values.
+             * If credentials haven't been initialized or been initialized to empty values.
              * Expiration date does not affect the result of this function.
              */
             inline bool IsEmpty() const { return m_accessKeyId.empty() && m_secretKey.empty(); }

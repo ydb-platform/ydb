@@ -11,7 +11,7 @@ add_library(compute-ydb-events)
 target_link_libraries(compute-ydb-events PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   libs-config-protos
   libs-control_plane_storage-proto
   fq-libs-protos

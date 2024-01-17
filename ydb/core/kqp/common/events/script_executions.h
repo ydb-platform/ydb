@@ -6,7 +6,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 #include <util/generic/maybe.h>
 
@@ -20,14 +20,16 @@ enum EFinalizationStatus : i32 {
 };
 
 struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, TInstant deadline)
         : Database(database)
         , OperationId(id)
+        , Deadline(deadline)
     {
     }
 
     TString Database;
     NOperationId::TOperationId OperationId;
+    TInstant Deadline;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {
@@ -174,12 +176,6 @@ struct TEvCancelScriptExecutionOperationResponse : public NActors::TEventLocal<T
 };
 
 struct TEvScriptExecutionFinished : public NActors::TEventLocal<TEvScriptExecutionFinished, TKqpScriptExecutionEvents::EvScriptExecutionFinished> {
-    explicit TEvScriptExecutionFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
-        : OperationAlreadyFinalized(false)
-        , Status(status)
-        , Issues(std::move(issues))
-    {}
-
     TEvScriptExecutionFinished(bool operationAlreadyFinalized, Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
         : OperationAlreadyFinalized(operationAlreadyFinalized)
         , Status(status)
@@ -277,8 +273,6 @@ struct TEvScriptFinalizeRequest : public NActors::TEventLocal<TEvScriptFinalizeR
     std::optional<TString> QueryPlan;
     std::optional<TString> QueryAst;
     std::optional<ui64> LeaseGeneration;
-    TDuration OperationTtl;
-    TDuration ResultsTtl;
 };
 
 struct TEvScriptFinalizeResponse : public NActors::TEventLocal<TEvScriptFinalizeResponse, TKqpScriptExecutionEvents::EvScriptFinalizeResponse> {

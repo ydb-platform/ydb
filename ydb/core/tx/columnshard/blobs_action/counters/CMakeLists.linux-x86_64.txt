@@ -13,7 +13,7 @@ target_link_libraries(columnshard-blobs_action-counters PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  cpp-actors-core
+  library-actors-core
   ydb-core-tablet_flat
 )
 target_sources(columnshard-blobs_action-counters PRIVATE

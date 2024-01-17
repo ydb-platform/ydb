@@ -14,7 +14,9 @@ class IColumnResolver {
 public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
+    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
     virtual const NTable::TScheme::TTableSchema& GetSchema() const = 0;
+    virtual NSsa::TColumnInfo GetDefaultColumn() const = 0;
 };
 
 class TProgramContainer {
@@ -22,22 +24,57 @@ private:
     std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
     TKernelsRegistry KernelsRegistry;
+    std::optional<std::set<std::string>> OverrideProcessingColumnsSet;
+    std::optional<std::vector<TString>> OverrideProcessingColumnsVector;
 public:
+    bool HasOverridenProcessingColumnIds() const {
+        return !!OverrideProcessingColumnsVector;
+    }
+
+    bool HasProcessingColumnIds() const {
+        return !!Program || !!OverrideProcessingColumnsVector;
+    }
+    void OverrideProcessingColumns(const std::vector<TString>& data) {
+        if (data.empty()) {
+            return;
+        }
+        Y_ABORT_UNLESS(!Program);
+        OverrideProcessingColumnsVector = data;
+        OverrideProcessingColumnsSet = std::set<std::string>(data.begin(), data.end());
+    }
+
     bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
+
+    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetSteps() const {
+        if (!Program) {
+            return Default<std::vector<std::shared_ptr<NSsa::TProgramStep>>>();
+        } else {
+            return Program->Steps;
+        }
+    }
+
+    std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const {
+        if (Program) {
+            return Program->ApplyEarlyFilter(batch, useFilter);
+        } else {
+            return nullptr;
+        }
+    }
 
     inline arrow::Status ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch) const {
         if (Program) {
             return Program->ApplyTo(batch, NArrow::GetCustomExecContext());
+        } else if (OverrideProcessingColumnsVector) {
+            batch = NArrow::ExtractColumnsValidate(batch, *OverrideProcessingColumnsVector);
         }
         return arrow::Status::OK();
     }
 
-    const THashMap<ui32, TString>& GetSourceColumns() const;
+    const THashMap<ui32, NSsa::TColumnInfo>& GetSourceColumns() const;
     bool HasProgram() const;
 
-    std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::Table>& batch) const;
-    std::shared_ptr<NArrow::TColumnFilter> BuildEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& batch) const;
     std::set<std::string> GetEarlyFilterColumns() const;
+    std::set<std::string> GetProcessingColumns() const;
 
     bool HasEarlyFilterOnly() const;
 private:

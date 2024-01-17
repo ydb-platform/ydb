@@ -16,6 +16,7 @@
 #include <yt/yt/core/concurrency/invoker_queue.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/spsc_queue.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -32,7 +33,7 @@
 
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_service.h>
-#include <yt/yt/core/ytree/yson_serializable.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/library/profiling/producer.h>
@@ -136,11 +137,6 @@ public:
             YT_ASSERT(rv >= static_cast<ssize_t>(sizeof(struct inotify_event)));
             struct inotify_event* event = (struct inotify_event*)buffer;
 
-            if (event->mask & IN_ATTRIB) {
-                YT_LOG_TRACE(
-                    "Watch %v has triggered metadata change (IN_ATTRIB)",
-                    event->wd);
-            }
             if (event->mask & IN_DELETE_SELF) {
                 YT_LOG_TRACE(
                     "Watch %v has triggered a deletion (IN_DELETE_SELF)",
@@ -200,9 +196,10 @@ public:
 
     void Run()
     {
-        Callback_();
-        // Reinitialize watch to hook to the newly created file.
+        // Unregister before create a new file.
         DropWatch();
+        Callback_();
+        // Register the newly created file.
         CreateWatch();
     }
 
@@ -214,7 +211,7 @@ private:
         WD_ = inotify_add_watch(
             FD_,
             Path_.c_str(),
-            IN_ATTRIB | IN_DELETE_SELF | IN_MOVE_SELF);
+            IN_DELETE_SELF | IN_MOVE_SELF);
 
         if (WD_ < 0) {
             YT_LOG_ERROR(TError::FromSystem(errno), "Error registering watch for %v",
@@ -359,6 +356,15 @@ using TThreadLocalQueue = TSpscQueue<TLoggerQueueItem>;
 
 static constexpr uintptr_t ThreadQueueDestroyedSentinel = -1;
 YT_THREAD_LOCAL(TThreadLocalQueue*) PerThreadQueue;
+
+/////////////////////////////////////////////////////////////////////////////
+
+struct TLocalQueueReclaimer
+{
+    ~TLocalQueueReclaimer();
+};
+
+YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -712,7 +718,7 @@ private:
                 "Logging",
                 "Logging",
                 /*threadPriority*/ NThreading::EThreadPriority::Normal,
-                /*shutdownPriority*/ 201)
+                /*shutdownPriority*/ 200)
             , Owner_(owner)
         { }
 
@@ -882,6 +888,7 @@ private:
         KeyToCachedWriter_.clear();
         WDToNotificationWatch_.clear();
         NotificationWatches_.clear();
+        InvalidNotificationWatches_.clear();
 
         for (const auto& [name, writerConfig] : config->Writers) {
             auto typedWriterConfig = ConvertTo<TLogWriterConfigPtr>(writerConfig);
@@ -900,12 +907,10 @@ private:
 
             if (auto fileWriter = DynamicPointerCast<IFileLogWriter>(writer)) {
                 auto watch = CreateNotificationWatch(config, fileWriter);
-                if (watch && watch->IsValid()) {
-                    // Watch can fail to initialize if the writer is disabled
-                    // e.g. due to the lack of space.
-                    EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch.get());
+                if (watch) {
+                    RegisterNotificatonWatch(watch.get());
+                    NotificationWatches_.push_back(std::move(watch));
                 }
-                NotificationWatches_.push_back(std::move(watch));
             }
         }
         for (const auto& [_, category] : NameToCategory_) {
@@ -982,6 +987,17 @@ private:
         }
     }
 
+    void RegisterNotificatonWatch(TNotificationWatch* watch)
+    {
+        if (watch->IsValid()) {
+            // Watch can fail to initialize if the writer is disabled
+            // e.g. due to the lack of space.
+            EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch);
+        } else {
+            InvalidNotificationWatches_.push_back(watch);
+        }
+    }
+
     void WatchWriters()
     {
         VERIFY_THREAD_AFFINITY(LoggingThread);
@@ -1006,14 +1022,19 @@ private:
 
             if (watch->GetWD() != currentWD) {
                 WDToNotificationWatch_.erase(it);
-                if (watch->GetWD() >= 0) {
-                    // Watch can fail to initialize if the writer is disabled
-                    // e.g. due to the lack of space.
-                    EmplaceOrCrash(WDToNotificationWatch_, watch->GetWD(), watch);
-                }
+                RegisterNotificatonWatch(watch);
             }
 
             previousWD = currentWD;
+        }
+        // Handle invalid watches, try to register they again.
+        {
+            std::vector<TNotificationWatch*> invalidNotificationWatches;
+            invalidNotificationWatches.swap(InvalidNotificationWatches_);
+            for (auto* watch : invalidNotificationWatches) {
+                watch->Run();
+                RegisterNotificatonWatch(watch);
+            }
         }
     }
 
@@ -1022,6 +1043,7 @@ private:
         if (!PerThreadQueue) {
             PerThreadQueue = new TThreadLocalQueue();
             RegisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
+            Y_UNUSED(LocalQueueReclaimer); // Touch thread-local variable so that its destructor is called.
         }
 
         ++EnqueuedEvents_;
@@ -1034,7 +1056,7 @@ private:
 
     const TCounter& GetWrittenEventsCounter(const TLogEvent& event)
     {
-        auto key = std::make_pair(event.Category->Name, event.Level);
+        auto key = std::pair(event.Category->Name, event.Level);
         auto it = WrittenEventsCounters_.find(key);
 
         if (it == WrittenEventsCounters_.end()) {
@@ -1369,7 +1391,7 @@ private:
     const TShutdownCookie ShutdownCookie_ = RegisterShutdownCallback(
         "LogManager",
         BIND_NO_PROPAGATE(&TImpl::Shutdown, MakeWeak(this)),
-        /*priority*/ 200);
+        /*priority*/ 201);
 
     DECLARE_THREAD_AFFINITY_SLOT(LoggingThread);
 
@@ -1442,27 +1464,23 @@ private:
     std::unique_ptr<TNotificationHandle> NotificationHandle_;
     std::vector<std::unique_ptr<TNotificationWatch>> NotificationWatches_;
     THashMap<int, TNotificationWatch*> WDToNotificationWatch_;
+    std::vector<TNotificationWatch*> InvalidNotificationWatches_;
 
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
 };
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-struct TLocalQueueReclaimer
+TLocalQueueReclaimer::~TLocalQueueReclaimer()
 {
-    ~TLocalQueueReclaimer()
-    {
-        if (PerThreadQueue) {
-            auto logManager = TLogManager::Get()->Impl_;
-            logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
-            PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
-        }
+    if (PerThreadQueue) {
+        auto logManager = TLogManager::Get()->Impl_;
+        logManager->UnregisteredLocalQueues_.Enqueue(GetTlsRef(PerThreadQueue));
+        PerThreadQueue = reinterpret_cast<TThreadLocalQueue*>(ThreadQueueDestroyedSentinel);
     }
-};
-
-YT_THREAD_LOCAL(TLocalQueueReclaimer) LocalQueueReclaimer;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

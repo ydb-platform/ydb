@@ -13,7 +13,7 @@ add_library(ydb-core-quoter)
 target_link_libraries(ydb-core-quoter PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-containers-ring_buffer
   ydb-core-base
   core-kesus-tablet

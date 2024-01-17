@@ -85,13 +85,13 @@ struct TPerfomancer {
                 readReg1 = TSimd<ui8>((ui8*) addr1);
                 ui32 currOffset = offsets[bucketNum];
                 readReg1.Store((ui8*) (bufAddr + currOffset));
-                offsets[bucketNum] += TTraits::Size / 8;
+                offsets[bucketNum] += 4;
                 if (currOffset + 4 >= (BufSize / sizeof(ui64))) {
                     offsets[bucketNum] = 0;
                     bucketAddr = arrBuckets + bucketNum * (BucketSize / sizeof(ui64));
                     for (ui32 j = 0; j < BufSize / TTraits::Size; j++ ) {
-                        readReg1 = TSimd<ui8>((ui8*) (bufAddr + TTraits::Size / 8 * j));
-                        readReg1.Load((ui8*) (bucketAddr + bigOffsets[bucketNum] + TTraits::Size / 8 * j));
+                        readReg1 = TSimd<ui8>((ui8*) (bufAddr + 4 * j));
+                        readReg1.StoreStream((ui8*) (bucketAddr + bigOffsets[bucketNum] + 4 * j));
                     }
                     bigOffsets[bucketNum] += (BufSize / sizeof(ui64));
                 }

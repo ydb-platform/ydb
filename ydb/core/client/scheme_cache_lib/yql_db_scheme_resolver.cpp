@@ -4,7 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr {
 namespace NSchCache {

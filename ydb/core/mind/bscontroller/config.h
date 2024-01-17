@@ -81,7 +81,6 @@ namespace NKikimr {
             THashMap<TVSlotId, TPDiskId> ExplicitReconfigureMap;
             std::set<TVSlotId> SuppressDonorMode;
             std::unordered_set<ui32> SanitizingRequests;
-            std::optional<ui32> TargetNodeId;
 
             // just-created vslots, which are not yet committed to the storage
             TSet<TVSlotId> UncommittedVSlots;

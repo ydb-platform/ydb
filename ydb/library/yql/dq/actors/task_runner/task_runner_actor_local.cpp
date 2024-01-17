@@ -15,7 +15,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/queue.h>
 
@@ -121,6 +121,7 @@ private:
         if (MemoryQuota) {
             MemoryQuota->TryReleaseQuota();
         }
+        TaskRunner.Reset();
         TActor<TLocalTaskRunnerActor>::PassAway();
     }
 

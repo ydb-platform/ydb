@@ -22,6 +22,7 @@ private:
     ui32 Count = 0;
     std::vector<ui32> Filter;
     mutable std::optional<std::vector<bool>> FilterPlain;
+    mutable std::optional<ui32> FilteredCount;
     TColumnFilter(const bool defaultFilterValue)
         : DefaultFilterValue(defaultFilterValue)
     {
@@ -47,7 +48,14 @@ private:
     class TMergerImpl;
     void Add(const bool value, const ui32 count = 1);
     void Reset(const ui32 count);
+    void ResetCaches() const {
+        FilterPlain.reset();
+        FilteredCount.reset();
+    }
 public:
+    std::optional<ui32> GetFilteredCount() const;
+    const std::vector<bool>& BuildSimpleFilter() const;
+    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
 
     ui64 GetDataSize() const {
         return Filter.capacity() * sizeof(ui32) + Count * sizeof(bool);
@@ -143,22 +151,18 @@ public:
         return Count;
     }
 
-    const std::vector<bool>& BuildSimpleFilter(const ui32 expectedSize) const;
-
-    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize) const;
-
     bool IsTotalAllowFilter() const;
     bool IsTotalDenyFilter() const;
     bool IsEmpty() const {
         return Filter.empty();
     }
 
-    static TColumnFilter BuildStopFilter() {
-        return TColumnFilter(false);
-    }
-
     static TColumnFilter BuildAllowFilter() {
         return TColumnFilter(true);
+    }
+
+    static TColumnFilter BuildDenyFilter() {
+        return TColumnFilter(false);
     }
 
     TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
@@ -167,8 +171,9 @@ public:
     // It makes a filter using composite predicate
     static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
 
-    bool Apply(std::shared_ptr<arrow::Table>& batch);
-    bool Apply(std::shared_ptr<arrow::RecordBatch>& batch);
+    bool Apply(std::shared_ptr<arrow::Table>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {});
+    bool Apply(std::shared_ptr<arrow::RecordBatch>& batch, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {});
+    void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
 
     // Combines filters by 'and' operator (extFilter count is true positions count in self, thought extFitler patch exactly that positions)
     TColumnFilter CombineSequentialAnd(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;

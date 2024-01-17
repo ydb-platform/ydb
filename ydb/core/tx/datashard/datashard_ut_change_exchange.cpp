@@ -693,7 +693,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnabled(true);
         pqConfig.SetEnableProtoSourceIdInfo(true);
-        pqConfig.SetRoundRobinPartitionMapping(true);
         pqConfig.SetTopicsAreFirstClassCitizen(true);
         pqConfig.SetMaxReadCookies(10);
         pqConfig.AddClientServiceType()->SetName("data-streams");

@@ -193,6 +193,12 @@ enum class EMatchRecognizeStreamingMode {
     Force,
 };
 
+enum class EBlockEngineMode {
+    Disable /* "disable" */,
+    Auto /* "auto" */,
+    Force /* "force" */,
+};
+
 struct TUdfCachedInfo {
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
@@ -251,6 +257,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool YsonCastToString = true;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
+    EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
     bool PgEmitAggApply = false;
     IArrowResolver::TPtr ArrowResolver;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
@@ -262,9 +269,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
+    THashSet<TString> OptimizerFlags;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
-    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx, bool overwrite = false);
+    IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
 
     // cached constants
     std::optional<ui64> CachedNow;
@@ -350,7 +358,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     void SetStats(const TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats) {
         StatisticsMap[input] = stats;
     }
-    
+
+    bool IsBlockEngineEnabled() const {
+        return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
+    }
 };
 
 template <> inline

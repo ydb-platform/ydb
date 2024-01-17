@@ -2,7 +2,7 @@
 
 #include <ydb/core/metering/metering.h>
 
-#include <library/cpp/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_pb.h>
 
 #include <algorithm>
 

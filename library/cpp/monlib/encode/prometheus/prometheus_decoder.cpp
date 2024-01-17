@@ -234,8 +234,10 @@ namespace NMonitoring {
                     SkipSpaces();
                     EPrometheusMetricType nextType = ReadType();
 
-                    bool inserted = SeenTypes_.emplace(nextName, nextType).second;
-                    Y_PARSER_ENSURE(inserted, "second TYPE line for metric " << nextName);
+                    auto emplaceResult = SeenTypes_.emplace(nextName, nextType);
+                    if (!emplaceResult.second) {
+                            Y_PARSER_ENSURE(emplaceResult.first->second == nextType, "second diferent TYPE for metric " << nextName);
+                    }
 
                     if (nextType == EPrometheusMetricType::HISTOGRAM) {
                         if (!HistogramBuilder_.Empty()) {

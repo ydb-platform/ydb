@@ -210,6 +210,9 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
 
+        ///////////// FEATURE FLAGS ////////////////////////
+        NKikimrConfig::TFeatureFlags FeatureFlags;
+
         TVDiskConfig(const TBaseInfo &baseInfo);
         void Merge(const NKikimrBlobStorage::TVDiskConfig &update);
     private:

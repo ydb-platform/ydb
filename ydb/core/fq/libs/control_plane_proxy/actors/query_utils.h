@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/signer/signer.h>
+#include <ydb/core/fq/libs/config/protos/common.pb.h>
 
 namespace NFq {
 namespace NPrivate {
@@ -15,8 +16,8 @@ TMaybe<TString> DropSecretObjectQuery(const TString& name);
 
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
-    const TString& objectStorageEndpoint,
-    const TSigner::TPtr& signer);
+    const TSigner::TPtr& signer,
+    const NConfig::TCommonConfig& common);
 
 TString MakeDeleteExternalDataSourceQuery(const TString& sourceName);
 

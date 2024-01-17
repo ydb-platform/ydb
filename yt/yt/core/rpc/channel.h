@@ -121,6 +121,8 @@ struct IChannel
 
     //! Raised whenever the channel is terminated.
     DECLARE_INTERFACE_SIGNAL(void(const TError&), Terminated);
+
+    virtual int GetInflightRequestCount() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IChannel)

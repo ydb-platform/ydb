@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/counters.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -86,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
 
         NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
-        NPar::LocalExecutor().ExecRange([kikimr, sessions, WaitDuration](int id) mutable {
+        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
             if (id == (i32)sessions.size()) {
                 Sleep(WaitDuration);
                 Cerr << "start sessions close....." << Endl;
@@ -95,6 +96,23 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 }
 
                 Cerr << "finished sessions close....." << Endl;
+                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
+
+                ui64 pendingCompilations = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
+                    Cerr << "still compiling... " << pendingCompilations << Endl;
+                } while (pendingCompilations != 0);
+
+                ui64 pendingSessions = 0;
+                do {
+                    Sleep(WaitDuration);
+                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
+                    Cerr << "still active sessions ... " << pendingSessions << Endl;
+                } while (pendingSessions != 0);
+
+                Sleep(TDuration::Seconds(5));
 
                 return;
             }

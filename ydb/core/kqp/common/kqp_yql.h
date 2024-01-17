@@ -55,6 +55,7 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SortedSettingName = "Sorted";
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
+    static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;

@@ -14,7 +14,7 @@ target_compile_options(library-folder_service-mock PRIVATE
 target_link_libraries(library-folder_service-mock PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-library-folder_service
   library-folder_service-proto
 )

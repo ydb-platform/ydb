@@ -6,9 +6,9 @@ PY_SRCS(
 
 IF (PYTHON2)
     ENV(PYTHON2_YDB_IMPORT='yes')
-    PEERDIR(ydb/public/sdk/python2)
+    PEERDIR(ydb/public/sdk/python)
 ELSE()
-    PEERDIR(ydb/public/sdk/python3)
+    PEERDIR(ydb/public/sdk/python)
 ENDIF()
 
 PEERDIR(

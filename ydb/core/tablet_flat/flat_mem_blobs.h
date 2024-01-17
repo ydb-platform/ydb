@@ -4,7 +4,7 @@
 #include "flat_sausage_fetch.h"
 #include "util_store.h"
 
-#include <library/cpp/actors/util/shared_data.h>
+#include <ydb/library/actors/util/shared_data.h>
 
 #include <util/generic/ptr.h>
 

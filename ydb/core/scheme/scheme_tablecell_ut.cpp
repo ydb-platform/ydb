@@ -222,6 +222,90 @@ Y_UNIT_TEST_SUITE(Scheme) {
         }
     }
 
+    ui64 GetCellsHash(TConstArrayRef<TCell> cells, const TVector<TTypeInfo>& types) {
+        UNIT_ASSERT_VALUES_EQUAL(cells.size(), types.size());
+
+        ui64 hash = 0;
+        for (ui16 i = 0; i < cells.size(); ++i)
+            hash ^= GetValueHash(types[i], cells[i]);
+        return hash;
+    }
+
+    void CompareTypedCellMatrix(const TSerializedCellMatrix& matrix, const TVector<TCell>& cells, const TVector<TTypeInfo>& types, ui64 hash) {
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), matrix.GetRowCount() * matrix.GetColCount());
+
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), cells.size());
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), types.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareTypedCellVectors(matrix.GetCells().data(), cells.data(), types.data(), matrix.GetCells().size(), cells.size()), 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(hash, GetCellsHash(matrix.GetCells(), types));
+    }
+
+    Y_UNIT_TEST(TSerializedCellMatrix) {
+        const ui32 rowCount = 10;
+        const ui16 colCount = 6;
+        
+        TVector<TCell> cells;
+        TVector<TTypeInfo> types;
+        TVector<TString> smallStrings;
+        TVector<TString> bigStrings;
+
+        for (ui16 i = 0; i < rowCount; ++i) {
+            ui64 intVal = 42 + i;
+            smallStrings.emplace_back(Sprintf("str1%d", i));
+            bigStrings.emplace_back(Sprintf(
+                "> You have requested to link your commit to an existing review request 849684\n"
+                "> This review request is not ready yet to be merged, see its merge requirements below %d", i
+            ));
+            float floatVal = 0.42 + (float)i;
+            double doubleVal = -0.0025 + (double)i;
+
+            cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
+            types.push_back(TTypeInfo(NTypeIds::Uint64));
+            cells.push_back(TCell(smallStrings[i].c_str(), smallStrings[i].size()));
+            types.push_back(TTypeInfo(NTypeIds::Utf8));
+            cells.push_back(TCell(bigStrings[i].c_str(), bigStrings[i].size()));
+            types.push_back(TTypeInfo(NTypeIds::Utf8));
+            cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
+            types.push_back(TTypeInfo(NTypeIds::Float));
+            cells.push_back(TCell((const char*)&doubleVal, sizeof(doubleVal)));
+            types.push_back(TTypeInfo(NTypeIds::Double));
+            cells.push_back(TCell());
+            types.push_back(TTypeInfo(NTypeIds::Utf8));
+        }
+
+        ui64 hash = GetCellsHash(cells, types);
+
+        TSerializedCellMatrix matrix(cells, rowCount, colCount);
+        CompareTypedCellMatrix(matrix, cells, types, hash);
+
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetBuffer().size(), 2146);
+
+        //test submatrix
+        {
+            TVector<TCell> submatrix;
+            matrix.GetSubmatrix(1, 2, 3, 5, submatrix);
+            UNIT_ASSERT_VALUES_EQUAL(submatrix.size(), 6);
+        }
+
+        TSerializedCellMatrix matrix2(matrix.GetBuffer());
+        CompareTypedCellMatrix(matrix2, cells, types, hash);
+
+        TSerializedCellMatrix matrix3(matrix);
+        CompareTypedCellMatrix(matrix3, cells, types, hash);
+
+        TSerializedCellMatrix matrix4(std::move(matrix));
+        CompareTypedCellMatrix(matrix4, cells, types, hash);
+
+        //if cells are destroyed, matrix should be still alive
+        cells.clear();
+        smallStrings.clear();
+        bigStrings.clear();
+        ui64 hash4 = GetCellsHash(matrix4.GetCells(), types);
+        UNIT_ASSERT_VALUES_EQUAL(hash4, hash);
+    }
+
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */

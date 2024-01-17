@@ -6,7 +6,7 @@
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 
-#include <util/generic/set.h>
+#include <util/generic/hash.h>
 
 namespace NKikimr::NCms {
 
@@ -27,8 +27,9 @@ public:
 
 class TErasureCounterBase: public IErasureCounter {
 protected:
-    TSet<TVDiskID> Down;
-    TSet<TVDiskID> Locked;
+    // id & reason
+    THashMap<TVDiskID, TString> Down;
+    THashMap<TVDiskID, TString> Locked;
     const TVDiskInfo& VDisk;
     const ui32 GroupId;
     bool HasAlreadyLockedDisks;

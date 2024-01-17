@@ -1,0 +1,337 @@
+<sql-statement>
+--
+-- encoding-sensitive tests for json and jsonb
+--
+SELECT getdatabaseencoding();           -- just to label the results files
+</sql-statement>
+<sql-statement>
+-- first json
+-- basic unicode input
+SELECT '"\u"'::json;			-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- first json
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u"
+
+        	-- first json
+	^
+<sql-statement>
+SELECT '"\u00"'::json;			-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u00"'::json;			-- ERROR, incomplete escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u00"
+
+        	SELECT '"\u00"'::json;			-- ERROR, incomplete escape
+	^
+<sql-statement>
+SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u000g...
+
+        	SELECT '"\u000g"'::json;		-- ERROR, g is not a hex digit
+	^
+<sql-statement>
+SELECT '"\u0000"'::json;		-- OK, legal escape
+</sql-statement>
+<sql-statement>
+SELECT '"\uaBcD"'::json;		-- OK, uppercase and lower case both OK
+</sql-statement>
+<sql-statement>
+-- handling of unicode surrogate pairs
+select json '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select json '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode high surrogate must not follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	select json '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+	^
+<sql-statement>
+select json '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select json '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	select json '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+	^
+<sql-statement>
+select json '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select json '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	select json '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+	^
+<sql-statement>
+select json '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select json '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	select json '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+	^
+<sql-statement>
+--handling of simple unicode escapes
+select json '{ "a":  "the Copyright \u00a9 sign" }' as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "dollar \u0024 character" }' as correct_everywhere;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "dollar \\u0024 character" }' as not_an_escape;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "null \u0000 escape" }' as not_unescaped;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "null \\u0000 escape" }' as not_an_escape;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "dollar \u0024 character" }' ->> 'a' as correct_everywhere;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "dollar \\u0024 character" }' ->> 'a' as not_an_escape;
+</sql-statement>
+<sql-statement>
+select json '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select json '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	select json '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+	^
+<sql-statement>
+select json '{ "a":  "null \\u0000 escape" }' ->> 'a' as not_an_escape;
+</sql-statement>
+<sql-statement>
+-- then jsonb
+-- basic unicode input
+SELECT '"\u"'::jsonb;			-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- then jsonb
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u"
+
+        	-- then jsonb
+	^
+<sql-statement>
+SELECT '"\u00"'::jsonb;			-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u00"'::jsonb;			-- ERROR, incomplete escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u00"
+
+        	SELECT '"\u00"'::jsonb;			-- ERROR, incomplete escape
+	^
+<sql-statement>
+SELECT '"\u000g"'::jsonb;		-- ERROR, g is not a hex digit
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u000g"'::jsonb;		-- ERROR, g is not a hex digit
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  "\u" must be followed by four hexadecimal digits.
+CONTEXT:  JSON data, line 1: "\u000g...
+
+        	SELECT '"\u000g"'::jsonb;		-- ERROR, g is not a hex digit
+	^
+<sql-statement>
+SELECT '"\u0045"'::jsonb;		-- OK, legal escape
+</sql-statement>
+<sql-statement>
+SELECT '"\u0000"'::jsonb;		-- ERROR, we don't support U+0000
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u0000"'::jsonb;		-- ERROR, we don't support U+0000
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: ...
+
+        	SELECT '"\u0000"'::jsonb;		-- ERROR, we don't support U+0000
+	^
+<sql-statement>
+-- use octet_length here so we don't get an odd unicode char in the
+-- output
+SELECT octet_length('"\uaBcD"'::jsonb::text); -- OK, uppercase and lower case both OK
+</sql-statement>
+<sql-statement>
+-- handling of unicode surrogate pairs
+SELECT octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text) AS correct_in_utf8;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode high surrogate must not follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
+	^
+<sql-statement>
+SELECT jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
+	^
+<sql-statement>
+SELECT jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
+	^
+<sql-statement>
+SELECT jsonb '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
+	^
+<sql-statement>
+-- handling of simple unicode escapes
+SELECT jsonb '{ "a":  "the Copyright \u00a9 sign" }' as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "dollar \u0024 character" }' as correct_everywhere;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "dollar \\u0024 character" }' as not_an_escape;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "null \u0000 escape" }' as fails;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "null \u0000 escape" }' as fails;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "null \u0000 escape" }' as fails;
+	^
+<sql-statement>
+SELECT jsonb '{ "a":  "null \\u0000 escape" }' as not_an_escape;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "dollar \u0024 character" }' ->> 'a' as correct_everywhere;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "dollar \\u0024 character" }' ->> 'a' as not_an_escape;
+</sql-statement>
+<sql-statement>
+SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+CONTEXT:  JSON data, line 1: { "a":...
+
+        	SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' as fails;
+	^
+<sql-statement>
+SELECT jsonb '{ "a":  "null \\u0000 escape" }' ->> 'a' as not_an_escape;
+</sql-statement>

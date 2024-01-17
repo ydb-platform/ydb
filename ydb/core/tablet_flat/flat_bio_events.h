@@ -5,7 +5,7 @@
 #include "flat_sausage_fetch.h"
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/base/events.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -34,10 +34,9 @@ namespace NBlockIO {
     struct TEvData: public TEventLocal<TEvData, ui32(EEv::Data)> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvData(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
+        TEvData(TAutoPtr<NPageCollection::TFetch> fetch, EStatus status)
             : Status(status)
-            , Cookie(cookie)
-            , Origin(origin)
+            , Fetch(fetch)
         {
 
         }
@@ -46,7 +45,7 @@ namespace NBlockIO {
         {
             out
                 << "Blocks{" << Blocks.size() << " pages"
-                << " " << Origin->Label()
+                << " " << Fetch->PageCollection->Label()
                 << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
                 << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
         }
@@ -60,8 +59,7 @@ namespace NBlockIO {
         }
 
         const EStatus Status;
-        const ui64 Cookie = Max<ui64>();
-        TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
+        TAutoPtr<NPageCollection::TFetch> Fetch;
         TVector<NPageCollection::TLoadedPage> Blocks;
     };
 

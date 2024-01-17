@@ -39,7 +39,8 @@ ui64 TFlightControl::TrySchedule() {
 }
 
 // Blocking Schedule method
-ui64 TFlightControl::Schedule() {
+ui64 TFlightControl::Schedule(double& blockedMs) {
+    NHPTimer::STime beginTime = 0;
     while (true) {
         ui64 idx = TrySchedule();
         if (idx) {
@@ -50,7 +51,11 @@ ui64 TFlightControl::Schedule() {
             if (idx) {
                 return idx;
             }
+            if (beginTime == 0) {
+                beginTime = HPNow();
+            }
             ScheduleCondVar.WaitI(ScheduleMutex);
+            blockedMs = HPMilliSecondsFloat(HPNow() - beginTime);
         }
     }
 }

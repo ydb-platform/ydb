@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
+static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
     const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     if (res.empty()) {
         return {};
@@ -14,14 +14,14 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
     return TString{res[0]};
 }
 
-void TGRpcAuthService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Auth::IN, Ydb::Auth::OUT, TGRpcAuthService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase* reqCtx) { \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) { \
            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
            ACTION; \
         }, &Ydb::Auth::V1::AuthService::AsyncService::Request ## NAME, \

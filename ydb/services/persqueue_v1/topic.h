@@ -1,10 +1,10 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 #include <ydb/core/grpc_services/base/base_service.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -18,13 +18,13 @@ class TGRpcTopicService
 public:
     TGRpcTopicService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache, const NActors::TActorId& grpcRequestProxy, bool rlAllowed);
 
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
     void StopService() noexcept override;
 
-    using NGrpc::TGrpcServiceBase<Ydb::Topic::V1::TopicService>::GetService;
+    using NYdbGrpc::TGrpcServiceBase<Ydb::Topic::V1::TopicService>::GetService;
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger) override;
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) override;
 
     static void DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpCtx> p,
                                              const IFacilityProvider &);

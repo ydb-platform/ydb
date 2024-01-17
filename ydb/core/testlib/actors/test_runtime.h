@@ -4,7 +4,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memobserver.h>
 
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/future.h>
 
@@ -88,9 +88,9 @@ namespace NActors {
         }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
-            const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0);
+            const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
-                                           ui32 nodeIndex = 0, ui64 cookie = 0);
+                                           ui32 nodeIndex = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {});
         TActorId ConnectToPipe(ui64 tabletId, const TActorId& sender, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
         void ClosePipe(TActorId clientId, const TActorId& sender, ui32 nodeIndex);
         void DisconnectNodes(ui32 fromNodeIndex, ui32 toNodeIndex, bool async = true);

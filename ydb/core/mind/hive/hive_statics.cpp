@@ -384,7 +384,7 @@ void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list) {
 
 bool IsValidTabletType(TTabletTypes::EType type) {
     return (type > TTabletTypes::Unknown
-            && type < TTabletTypes::Reserved41
+            && type < TTabletTypes::EType_MAX
             );
 }
 
@@ -415,6 +415,27 @@ TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmU
         str << " (Warming up...)";
     }
     return str;
+}
+
+bool IsResourceDrainingState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IsAliveState(TTabletInfo::EVolatileState state) {
+    switch (state) {
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
+    case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
+        return true;
+    default:
+        return false;
+    }
 }
 
 } // NHive

@@ -32,14 +32,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/MetricsAndOperator">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API MetricsAndOperator
+  class MetricsAndOperator
   {
   public:
-    MetricsAndOperator();
-    MetricsAndOperator(const Aws::Utils::Xml::XmlNode& xmlNode);
-    MetricsAndOperator& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API MetricsAndOperator();
+    AWS_S3_API MetricsAndOperator(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API MetricsAndOperator& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -123,13 +123,57 @@ namespace Model
      */
     inline MetricsAndOperator& AddTags(Tag&& value) { m_tagsHasBeenSet = true; m_tags.push_back(std::move(value)); return *this; }
 
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline const Aws::String& GetAccessPointArn() const{ return m_accessPointArn; }
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline bool AccessPointArnHasBeenSet() const { return m_accessPointArnHasBeenSet; }
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline void SetAccessPointArn(const Aws::String& value) { m_accessPointArnHasBeenSet = true; m_accessPointArn = value; }
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline void SetAccessPointArn(Aws::String&& value) { m_accessPointArnHasBeenSet = true; m_accessPointArn = std::move(value); }
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline void SetAccessPointArn(const char* value) { m_accessPointArnHasBeenSet = true; m_accessPointArn.assign(value); }
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline MetricsAndOperator& WithAccessPointArn(const Aws::String& value) { SetAccessPointArn(value); return *this;}
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline MetricsAndOperator& WithAccessPointArn(Aws::String&& value) { SetAccessPointArn(std::move(value)); return *this;}
+
+    /**
+     * <p>The access point ARN used when evaluating an <code>AND</code> predicate.</p>
+     */
+    inline MetricsAndOperator& WithAccessPointArn(const char* value) { SetAccessPointArn(value); return *this;}
+
   private:
 
     Aws::String m_prefix;
-    bool m_prefixHasBeenSet;
+    bool m_prefixHasBeenSet = false;
 
     Aws::Vector<Tag> m_tags;
-    bool m_tagsHasBeenSet;
+    bool m_tagsHasBeenSet = false;
+
+    Aws::String m_accessPointArn;
+    bool m_accessPointArnHasBeenSet = false;
   };
 
 } // namespace Model

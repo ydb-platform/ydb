@@ -16,6 +16,10 @@ private:
 
 public:
 
+    bool IsEmpty() const {
+        return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
+    }
+
     const TPredicateContainer& GetPredicateFrom() const {
         return PredicateFrom;
     }

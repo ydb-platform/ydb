@@ -9,7 +9,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/core/grpc_services/base/base_service.h>
 
@@ -15,7 +15,7 @@ public:
     using TGrpcServiceBase<Ydb::Scheme::V1::SchemeService>::TGrpcServiceBase;
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
 };
 

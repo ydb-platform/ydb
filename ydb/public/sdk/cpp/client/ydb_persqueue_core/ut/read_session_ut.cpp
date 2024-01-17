@@ -69,12 +69,12 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
     void CreateProcessor( // ISessionConnectionProcessorFactory method.
         typename IFactory::TConnectedCallback callback,
         const TRpcRequestSettings& requestSettings,
-        NGrpc::IQueueClientContextPtr connectContext,
+        NYdbGrpc::IQueueClientContextPtr connectContext,
         TDuration connectTimeout,
-        NGrpc::IQueueClientContextPtr connectTimeoutContext,
+        NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         typename IFactory::TConnectTimeoutCallback connectTimeoutCallback,
         TDuration connectDelay,
-        NGrpc::IQueueClientContextPtr connectDelayOperationContext) override
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext) override
     {
         UNIT_ASSERT_C(!ConnectedCallback, "Only one connect at a time is expected");
         UNIT_ASSERT_C(!ConnectTimeoutCallback, "Only one connect at a time is expected");
@@ -208,7 +208,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
 
     // Response from server.
     struct TServerReadInfo {
-        NGrpc::TGrpcStatus Status;
+        NYdbGrpc::TGrpcStatus Status;
         Ydb::PersQueue::V1::MigrationStreamingReadServerMessage Response;
 
         TServerReadInfo& Failure(grpc::StatusCode status = grpc::StatusCode::UNAVAILABLE, const TString& message = {}, bool internal = false) {
@@ -414,7 +414,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
 
 
     void ProcessRead() {
-        NGrpc::TGrpcStatus status;
+        NYdbGrpc::TGrpcStatus status;
         TReadCallback callback;
         with_lock (Lock) {
             *ActiveRead.Dst = ReadResponses.front().Response;
@@ -459,7 +459,7 @@ public:
     using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
 
-    struct TFakeContext : public NGrpc::IQueueClientContext {
+    struct TFakeContext : public NYdbGrpc::IQueueClientContext {
         IQueueClientContextPtr CreateContext() override {
             return std::make_shared<TFakeContext>();
         }

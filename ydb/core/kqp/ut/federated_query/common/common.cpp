@@ -25,21 +25,25 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
+        if (!appConfig) {
+            appConfig.emplace();
+        }
+        appConfig->MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
             nullptr,
             databaseAsyncResolver,
-            appConfig ? appConfig->GetQueryServiceConfig().GetS3() : NYql::TS3GatewayConfig(),
-            appConfig ? appConfig->GetQueryServiceConfig().GetGeneric() : NYql::TGenericGatewayConfig());
+            appConfig->GetQueryServiceConfig().GetS3(),
+            appConfig->GetQueryServiceConfig().GetGeneric());
 
         auto settings = TKikimrSettings()
                             .SetFeatureFlags(featureFlags)
                             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
                             .SetKqpSettings({});
 
-        settings = appConfig ? settings.SetAppConfig(appConfig.value()) : settings.SetAppConfig({});
+        settings = settings.SetAppConfig(appConfig.value());
 
         return std::make_shared<TKikimrRunner>(settings);
     }

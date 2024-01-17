@@ -25,17 +25,17 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    library/cpp/actors/core
-    library/cpp/actors/dnsresolver
-    library/cpp/actors/interconnect
-    library/cpp/actors/memory_log
-    library/cpp/actors/prof
-    library/cpp/actors/protos
-    library/cpp/actors/util
+    ydb/library/actors/core
+    ydb/library/actors/dnsresolver
+    ydb/library/actors/interconnect
+    ydb/library/actors/memory_log
+    ydb/library/actors/prof
+    ydb/library/actors/protos
+    ydb/library/actors/util
     library/cpp/getopt/small
-    library/cpp/grpc/client
-    library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    ydb/library/grpc/client
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/messagebus
@@ -67,6 +67,8 @@ PEERDIR(
     ydb/core/formats
     ydb/core/fq/libs/init
     ydb/core/fq/libs/logs
+    ydb/core/graph/service
+    ydb/core/graph/shard
     ydb/core/grpc_services
     ydb/core/grpc_services/base
     ydb/core/grpc_services/auth_processor

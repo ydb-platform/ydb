@@ -67,6 +67,7 @@ struct TDescribeTopicActorSettings {
     };
     EMode Mode;
     TString Consumer;
+    TSet<TString> Consumers;
     TVector<ui32> Partitions;
     bool RequireStats = false;
     bool RequireLocation = false;

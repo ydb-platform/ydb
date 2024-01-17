@@ -27,7 +27,7 @@
                     "columns": [
                         "Key1"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

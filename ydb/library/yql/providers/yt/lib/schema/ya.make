@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/utils/log
     ydb/library/yql/providers/common/codec
+    ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/yt/common
 )
 

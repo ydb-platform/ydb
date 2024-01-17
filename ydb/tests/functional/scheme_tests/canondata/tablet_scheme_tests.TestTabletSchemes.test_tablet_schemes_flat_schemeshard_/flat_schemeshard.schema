@@ -1413,6 +1413,11 @@
                 "ColumnId": 30,
                 "ColumnName": "AuditSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -1448,7 +1453,8 @@
                     27,
                     28,
                     29,
-                    30
+                    30,
+                    31
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2164,6 +2170,11 @@
                 "ColumnId": 10,
                 "ColumnName": "AuditSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ServerlessComputeResourcesMode",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -2179,7 +2190,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2595,6 +2607,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "NeedSyncHive",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "TxId",
                 "ColumnType": "Uint64"
@@ -2679,6 +2696,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -7137,6 +7155,53 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 108,
+        "TableName": "View",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "QueryText",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

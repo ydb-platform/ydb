@@ -138,23 +138,29 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TTopicClient client = setup.MakeClient();
 
-        {
+        for (size_t i = 0; i < 100; ++i) {
             auto writeSettings = TWriteSessionSettings()
                         .Path(TEST_TOPIC)
                         .ProducerId(TEST_MESSAGE_GROUP_ID)
                         .MessageGroupId(TEST_MESSAGE_GROUP_ID);
+            Cerr << ">>> open write session " << i << Endl;
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
             UNIT_ASSERT(writeSession->Write("message_using_MessageGroupId"));
+            Cerr << ">>> write session " << i << " message written" << Endl;
             writeSession->Close();
+            Cerr << ">>> write session " << i << " closed" << Endl;
         }
         {
             auto writeSettings = TWriteSessionSettings()
                         .Path(TEST_TOPIC)
                         .ProducerId(TEST_MESSAGE_GROUP_ID)
                         .PartitionId(0);
+            Cerr << ">>> open write session 100" << Endl;
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
             UNIT_ASSERT(writeSession->Write("message_using_PartitionId"));
+            Cerr << ">>> write session 100 message written" << Endl;
             writeSession->Close();
+            Cerr << ">>> write session 100 closed" << Endl;
         }
 
         {
@@ -176,9 +182,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             dataReceived.Commit();
 
             auto& messages = dataReceived.GetMessages();
-            UNIT_ASSERT(messages.size() == 2);
+            UNIT_ASSERT(messages.size() == 101);
             UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
-            UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
+            UNIT_ASSERT(messages[100].GetData() == "message_using_PartitionId");
         }
     }
 
@@ -195,7 +201,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic);
-            
+
         TWriteSessionSettings writeSettings;
         writeSettings
             .Path(TEST_TOPIC)

@@ -6,6 +6,8 @@ SRCS(
     config.cpp
     format.cpp
     parser.cpp
+    schemaful_writer.cpp
+    versioned_writer.cpp
 )
 
 PEERDIR(

@@ -1,0 +1,6 @@
+/** pqxx::robusttransaction class.
+ *
+ * pqxx::robusttransaction is a slower but safer transaction class.
+ */
+// Actual definitions in .hxx file so editors and such recognize file type.
+#include "pqxx/robusttransaction.hxx"

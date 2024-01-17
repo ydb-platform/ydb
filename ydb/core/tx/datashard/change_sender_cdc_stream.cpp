@@ -10,9 +10,9 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NDataShard {
@@ -39,8 +39,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Init() {
         auto opts = TPartitionWriterOpts()
             .WithCheckState(true)
-            .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
+            .WithAutoRegister(true)
+            .WithSourceId(SourceId);
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
     }
 

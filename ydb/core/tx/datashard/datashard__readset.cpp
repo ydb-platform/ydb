@@ -1,6 +1,6 @@
 #include "datashard_txs.h"
 
-#include <library/cpp/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 namespace NKikimr::NDataShard {
 

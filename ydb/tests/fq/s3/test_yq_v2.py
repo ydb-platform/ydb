@@ -85,3 +85,21 @@ Pear;15;33'''
         assert result_set.rows[2].items[0].int64_value == 33000000
         assert result_set.rows[2].items[1].bytes_value == b"Pear"
         assert result_set.rows[2].items[2].int32_value == 15
+
+    @yq_v2
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_removed_database_path(self, kikimr, s3, client):
+        kikimr.control_plane.wait_bootstrap(1)
+
+        def validate_query(sql, expected_message):
+            query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+            response = client.wait_query(query_id, statuses=[fq.QueryMeta.FAILED])
+
+            actual_message = response.query.issue[0].issues[0].issues[0].issues[0].message
+            assert expected_message == actual_message
+
+        validate_query(R"SELECT * FROM `non-existing-binding`;",
+                       R"Cannot find table 'non-existing-binding' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions.")
+
+        validate_query(R"SELECT 1 FROM foo.bar;",
+                       R"Cannot find table 'foo.[bar]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions.")

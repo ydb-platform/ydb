@@ -3,7 +3,7 @@ option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
 import "google/protobuf/duration.proto";
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
@@ -143,7 +143,7 @@ message TKqpColumnMetadataProto {
     optional bool NotNull = 6 [default = false];
     optional string DefaultFromSequence = 8;
     optional EDefaultKind DefaultKind = 9;
-    optional NKikimrMiniKQL.TResult DefaultFromLiteral = 10;
+    optional Ydb.TypedValue DefaultFromLiteral = 10;
 };
 
 message TKqpTableMetadataProto {
@@ -332,6 +332,7 @@ message TEvCreateSessionRequest {
 
 message TCreateSessionResponse {
     optional bytes SessionId = 1;
+    optional int64 NodeId = 2;
 }
 
 message TEvCreateSessionResponse {
@@ -432,8 +433,12 @@ message TEvExecuterStreamProfile {
     optional NYql.NDqProto.TDqExecutionStats Profile = 2;
 };
 
+// 1. Executer fills progress stats from it's own execution
+// 2. Session adds stats from early finished executions and builds complete plan 
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
+    optional string QueryPlan = 2;
+    optional NKqpProto.TKqpStatsQuery QueryStats = 3;
 };
 
 message TKqpProxyNodeResources {
@@ -577,12 +582,14 @@ message TEvScanInitActor {
     optional uint64 ScanId = 1;
     optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 };
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint32 Generation = 3;
+    optional uint64 TabletId = 4;
 }
 
 message TEvRemoteScanData {

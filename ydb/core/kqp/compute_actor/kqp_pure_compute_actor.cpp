@@ -74,7 +74,7 @@ void TKqpComputeActor::DoBootstrap() {
     auto wakeup = [this]{ ContinueExecute(); };
     try {
         PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
-            std::move(wakeup), TlsActivationContext->AsActorContext()));
+            std::move(wakeup)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;
@@ -211,17 +211,17 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     {
         auto guard = TaskRunner->BindAllocator();
         switch (msg.GetDataFormat()) {
-            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-            case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+            case NKikimrDataEvents::FORMAT_UNSPECIFIED:
+            case NKikimrDataEvents::FORMAT_CELLVEC: {
                 if (!msg.Rows.empty()) {
                     bytes = ScanData->AddData(msg.Rows, {}, TaskRunner->GetHolderFactory());
                     rowsCount = msg.Rows.size();
                 }
                 break;
             }
-            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+            case NKikimrDataEvents::FORMAT_ARROW: {
                 if(msg.ArrowBatch != nullptr) {
-                    bytes = ScanData->AddData(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory());
+                    bytes = ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.ArrowBatch), {}, TaskRunner->GetHolderFactory());
                     rowsCount = msg.ArrowBatch->num_rows();
                 }
                 break;

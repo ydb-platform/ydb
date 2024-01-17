@@ -8,7 +8,6 @@
 
 add_subdirectory(auth)
 add_subdirectory(backtrace_introspector)
-add_subdirectory(containers)
 add_subdirectory(decimal)
 add_subdirectory(erasure)
 add_subdirectory(monitoring)

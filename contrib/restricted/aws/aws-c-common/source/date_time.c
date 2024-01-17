@@ -61,7 +61,7 @@ static void s_check_init_str_to_int(void) {
     }
 }
 
-/* Get the 0-11 monthy number from a string representing Month. Case insensitive and will stop on abbreviation*/
+/* Get the 0-11 monthly number from a string representing Month. Case insensitive and will stop on abbreviation*/
 static int get_month_number_from_str(const char *time_string, size_t start_index, size_t stop_index) {
     s_check_init_str_to_int();
 

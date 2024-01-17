@@ -118,6 +118,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 Self->PersistSubDomainAuditSettings(db, Self->RootPathId(), *subdomain);
             }
 
+            if (record.HasServerlessComputeResourcesMode()) {
+                subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
+                Self->PersistSubDomainServerlessComputeResourcesMode(db, Self->RootPathId(), *subdomain);
+            }
+
             Self->PersistStoragePools(db, Self->RootPathId(), *subdomain);
             SideEffects.PublishToSchemeBoard(InvalidOperationId, Self->RootPathId());
             MakeSync();
@@ -185,6 +190,14 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 addPrivateShard(tenantSA, ETabletType::StatisticsAggregator);
             }
             Y_ABORT_UNLESS(tenantSA == subdomain->GetTenantStatisticsAggregatorID());
+        }
+
+        if (record.HasTenantGraphShard()) {
+            TTabletId tenantGS = TTabletId(record.GetTenantGraphShard());
+            if (!subdomain->GetTenantGraphShardID()) {
+                addPrivateShard(tenantGS, ETabletType::GraphShard);
+            }
+            Y_ABORT_UNLESS(tenantGS == subdomain->GetTenantGraphShardID());
         }
 
         if (record.HasUpdateTenantRootACL()) {

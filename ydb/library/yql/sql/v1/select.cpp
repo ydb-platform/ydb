@@ -2656,11 +2656,12 @@ TSourcePtr BuildSelectCore(
         having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
-class TUnionAll: public IRealSource {
+class TUnion: public IRealSource {
 public:
-    TUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings)
+    TUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings)
         : IRealSource(pos)
         , Sources(std::move(sources))
+        , QuantifierAll(quantifierAll)
         , Settings(settings)
     {
     }
@@ -2695,7 +2696,13 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        auto res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        TPtr res;
+        if (QuantifierAll) {
+            res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
+        } else {
+            res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
+        }
+
         for (auto& s: Sources) {
             auto input = s->Build(ctx);
             if (!input) {
@@ -2717,7 +2724,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return MakeIntrusive<TUnionAll>(Pos, CloneContainer(Sources), Settings);
+        return MakeIntrusive<TUnion>(Pos, CloneContainer(Sources), QuantifierAll, Settings);
     }
 
     bool IsSelect() const override {
@@ -2734,11 +2741,17 @@ public:
 
 private:
     TVector<TSourcePtr> Sources;
+    bool QuantifierAll;
     const TWriteSettings Settings;
 };
 
-TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings) {
-    return new TUnionAll(pos, std::move(sources), settings);
+TSourcePtr BuildUnion(
+    TPosition pos, 
+    TVector<TSourcePtr>&& sources, 
+    bool quantifierAll,
+    const TWriteSettings& settings
+) {
+    return new TUnion(pos, std::move(sources), quantifierAll, settings);
 }
 
 class TOverWindowSource: public IProxySource {

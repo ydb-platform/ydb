@@ -1,0 +1,52 @@
+package NYT.NBundleController.NProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TCpuLimits
+{
+    optional int32 lookup_thread_pool_size = 1;
+    optional int32 query_thread_pool_size = 2;
+    optional int32 write_thread_pool_size = 3;
+}
+
+message TMemoryLimits
+{
+    optional int64 compressed_block_cache = 1;
+    optional int64 key_filter_block_cache = 2;
+    optional int64 lookup_row_cache = 3;
+
+    optional int64 tablet_dynamic = 4;
+    optional int64 tablet_static = 5;
+
+    optional int64 uncompressed_block_cache = 6;
+    optional int64 versioned_chunk_meta = 7;
+}
+
+message TInstanceResources
+{
+    optional int64 memory = 1;
+    optional int64 net = 2;
+    optional string type = 3;
+    optional int32 vcpu = 4;
+}
+
+message TReqGetBundleConfig
+{
+    required string bundle_name = 1;
+}
+
+message TRspGetBundleConfig
+{
+    optional string bundle_name = 1;
+
+    optional TCpuLimits cpu_limits = 2;
+    optional TMemoryLimits memory_limits = 3;
+
+    optional int32 rpc_proxy_count = 4;
+    optional TInstanceResources rpc_proxy_resource_guarantee = 5;
+
+    optional int32 tablet_node_count = 6;
+    optional TInstanceResources tablet_node_resource_guarantee = 7;
+}
+
+////////////////////////////////////////////////////////////////////////////////

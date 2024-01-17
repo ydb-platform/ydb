@@ -14,11 +14,4 @@ target_include_directories(restricted-boost-ratio INTERFACE
 target_link_libraries(restricted-boost-ratio INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-integer
-  restricted-boost-mpl
-  restricted-boost-rational
-  restricted-boost-static_assert
-  restricted-boost-type_traits
 )

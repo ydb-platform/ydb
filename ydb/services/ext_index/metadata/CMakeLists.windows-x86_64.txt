@@ -12,7 +12,7 @@ add_library(services-ext_index-metadata)
 target_link_libraries(services-ext_index-metadata PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-grpc_services-local_rpc
   core-grpc_services-base
@@ -32,7 +32,7 @@ add_global_library_for(services-ext_index-metadata.global services-ext_index-met
 target_link_libraries(services-ext_index-metadata.global PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-grpc_services-local_rpc
   core-grpc_services-base

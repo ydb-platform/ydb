@@ -9,7 +9,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/protos
-    ydb/core/tx/sharding
+    ydb/core/formats/arrow/hash
 )
 
 YQL_LAST_ABI_VERSION()

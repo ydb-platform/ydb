@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 14
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,10 +32,24 @@
                                         "Node Type": "Limit-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "join_key = foo2.f1",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 12
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 10
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -54,6 +73,15 @@
                                                                         "Node Type": "LeftJoin (MapJoin)",
                                                                         "Operators": [
                                                                             {
+                                                                                "Condition": "f1 = unique2",
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 6
+                                                                                    },
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 4
+                                                                                    }
+                                                                                ],
                                                                                 "Name": "LeftJoin (MapJoin)"
                                                                             }
                                                                         ],
@@ -77,6 +105,7 @@
                                                                                                         "Node Type": "TableFullScan",
                                                                                                         "Operators": [
                                                                                                             {
+                                                                                                                "Inputs": [],
                                                                                                                 "Name": "TableFullScan",
                                                                                                                 "ReadColumns": [
                                                                                                                     "unique2"
@@ -108,6 +137,7 @@
                                                                                         "Node Type": "TableFullScan",
                                                                                         "Operators": [
                                                                                             {
+                                                                                                "Inputs": [],
                                                                                                 "Name": "TableFullScan",
                                                                                                 "ReadColumns": [
                                                                                                     "f1"
@@ -142,6 +172,7 @@
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "[{join_key: 0},{join_key: 1}]",
                                                                 "Name": "Iterator"
                                                             }

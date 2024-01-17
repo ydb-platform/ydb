@@ -3,15 +3,19 @@
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <ydb/core/kqp/counters/kqp_counters.h>
+
+#include <fmt/format.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
+using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(SessionFromPoolError) {
@@ -227,6 +231,77 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto commitTxResult = transaction.Commit().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commitTxResult.GetStatus(), EStatus::ABORTED, commitTxResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteQueryInteractiveTx) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        const TString query = "UPDATE TwoShard SET Value2 = 0";
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto transaction = result.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto checkResult = [&](TString expected) {
+            auto selectRes = db.ExecuteQuery(
+                "SELECT * FROM TwoShard ORDER BY Key",
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        };
+        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+
+        auto txRes = transaction->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(txRes.GetStatus(), EStatus::SUCCESS, txRes.GetIssues().ToString());
+
+        checkResult(R"([[[1u];["One"];[0]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+    }
+
+    Y_UNIT_TEST(ExecuteQueryInteractiveTxCommitWithQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto sessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), EStatus::SUCCESS, sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        const TString query = "UPDATE TwoShard SET Value2 = 0";
+        auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto transaction = result.GetTransaction();
+        UNIT_ASSERT(transaction->IsActive());
+
+        auto checkResult = [&](TString expected) {
+            auto selectRes = db.ExecuteQuery(
+                "SELECT * FROM TwoShard ORDER BY Key",
+                TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(selectRes.IsSuccess(), selectRes.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(selectRes.GetResultSet(0)));
+        };
+        checkResult(R"([[[1u];["One"];[-1]];[[2u];["Two"];[0]];[[3u];["Three"];[1]];[[4000000001u];["BigOne"];[-1]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[1]]])");
+
+        result = session.ExecuteQuery("UPDATE TwoShard SET Value2 = 1 WHERE Key = 1",
+            TTxControl::Tx(transaction->GetId()).CommitTx()).ExtractValueSync();;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(!result.GetTransaction()->IsActive());
+
+        checkResult(R"([[[1u];["One"];[1]];[[2u];["Two"];[0]];[[3u];["Three"];[0]];[[4000000001u];["BigOne"];[0]];[[4000000002u];["BigTwo"];[0]];[[4000000003u];["BigThree"];[0]]])");
+    }
+
+
+    Y_UNIT_TEST(ForbidInteractiveTxOnImplicitSession) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT 1";
+        UNIT_ASSERT_EXCEPTION(db.ExecuteQuery(query, TTxControl::BeginTx()).ExtractValueSync(), NYdb::TContractViolation);
     }
 
     Y_UNIT_TEST(ExecuteRetryQuery) {
@@ -469,7 +544,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
@@ -485,33 +562,694 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
 
+        enum EEx {
+            Empty,
+            IfExists,
+            IfNotExists,
+        };
+
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
+            const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                CREATE TABLE {if_not_exists} TestDdl_{name_suffix} (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+                )sql",
+                "if_not_exists"_a = ifNotExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
+            const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                DROP TABLE {if_exists} TestDdl_{name_suffix};
+                )sql",
+                "if_exists"_a = ifExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkUpsert = [&](int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                UPSERT INTO TestDdl_{name_suffix} (Key, Value) VALUES (1, "One");
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        auto checkExists = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                SELECT * FROM TestDdl_{name_suffix};
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            }
+        };
+
+        // usual create
+        checkCreate(true, EEx::Empty, 0);
+        checkUpsert(0);
+        checkExists(true, 0);
+
+        // create already existing table
+        checkCreate(false, EEx::Empty, 0); // already exists
+        checkCreate(true, EEx::IfNotExists, 0);
+        checkExists(true, 0);
+
+        // usual drop
+        checkDrop(true, EEx::Empty, 0);
+        checkExists(false, 0);
+        checkDrop(false, EEx::Empty, 0); // no such table
+
+        // drop if exists
+        checkDrop(true, EEx::IfExists, 0);
+        checkExists(false, 0);
+
+        // failed attempt to drop nonexisting table
+        checkDrop(false, EEx::Empty, 0);
+
+        // create with if not exists
+        checkCreate(true, EEx::IfNotExists, 1); // real creation
+        checkUpsert(1);
+        checkExists(true, 1);
+        checkCreate(true, EEx::IfNotExists, 1);
+
+        // drop if exists
+        checkDrop(true, EEx::IfExists, 1); // real drop
+        checkExists(false, 1);
+        checkDrop(true, EEx::IfExists, 1);
+    }
+
+    Y_UNIT_TEST(DdlUser) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
         auto result = db.ExecuteQuery(R"(
-            CREATE TABLE TestDdl (
+            CREATE USER user1 PASSWORD 'password1';
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE USER user1 PASSWORD 'password1';
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER USER user1 WITH ENCRYPTED PASSWORD 'password3';
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER USER user1 WITH ENCRYPTED PASSWORD 'password3';
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP USER IF EXISTS user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DdlGroup) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        // Check create and drop group
+        auto result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            DROP GROUP IF EXISTS group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Check rename group
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 RENAME TO group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        // Check add and drop users
+        result = db.ExecuteQuery(R"(
+            CREATE USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group1\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 0);
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user3\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user1\" is not a member of role \"group1\", code: 3 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group1 DROP USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Warning: Success, code: 4 subissue: { <main>: Warning: Role \"user2\" is not a member of role \"group1\", code: 3 } }");
+
+        //Check create with users
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group3 WITH USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group3 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group3\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group3 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group4 WITH USER user1, user3, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            CREATE GROUP group4;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Error: Group already exists, code: 2029 }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group4 ADD USER user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 1);
+        UNIT_ASSERT(result.GetIssues().ToOneLineString() == "{ <main>: Info: Success, code: 4 subissue: { <main>: Info: Role \"user1\" is already a member of role \"group4\", code: 2 } }");
+
+        result = db.ExecuteQuery(R"(
+            ALTER GROUP group4 ADD USER user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().Size() == 0);
+    }
+
+    struct ExpectedPermissions {
+        TString Path;
+        THashMap<TString, TVector<TString>> Permissions;
+    };
+
+    Y_UNIT_TEST(DdlPermission) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const auto checkPermissions = [](NYdb::NTable::TSession& session, TVector<ExpectedPermissions>&& expectedPermissionsValues) {
+            for (auto& value : expectedPermissionsValues) {
+                NYdb::NTable::TDescribeTableResult describe = session.DescribeTable(value.Path).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+                auto tableDesc = describe.GetTableDescription();
+                const auto& permissions = tableDesc.GetPermissions();
+
+                THashMap<TString, TVector<TString>> describePermissions;
+                for (const auto& permission : permissions) {
+                    auto& permissionNames = describePermissions[permission.Subject];
+                    permissionNames.insert(permissionNames.end(), permission.PermissionNames.begin(), permission.PermissionNames.end());
+                }
+
+                auto& expectedPermissions = value.Permissions;
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissions.size(), describePermissions.size(), "Number of user names does not equal on path: " + value.Path);
+                for (auto& item : expectedPermissions) {
+                    auto& expectedPermissionNames = item.second;
+                    auto& describedPermissionNames = describePermissions[item.first];
+                    UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissionNames.size(), describedPermissionNames.size(), "Number of permissions for " + item.first + " does not equal on path: " + value.Path);
+                    sort(expectedPermissionNames.begin(), expectedPermissionNames.end());
+                    sort(describedPermissionNames.begin(), describedPermissionNames.end());
+                    UNIT_ASSERT_VALUES_EQUAL_C(expectedPermissionNames, describedPermissionNames, "Permissions are not equal on path: " + value.Path);
+                }
+            }
+        };
+
+        auto result = db.ExecuteQuery(R"(
+            GRANT ROW SELECT ON `/Root` TO user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'ROW'");
+        checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+
+        result = db.ExecuteQuery(R"(
+            GRANT `ydb.database.connect` ON `/Root` TO user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token '`ydb.database.connect`'");
+        checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+
+        result = db.ExecuteQuery(R"(
+            GRANT CONNECT, READ ON `/Root` TO user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected token 'READ'");
+        checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+
+        result = db.ExecuteQuery(R"(
+            GRANT "" ON `/Root` TO user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown permission name: ");
+        checkPermissions(session, {{.Path = "/Root", .Permissions = {}}});
+
+        result = db.ExecuteQuery(R"(
+            CREATE TABLE TestDdl1 (
                 Key Uint64,
-                Value String,
                 PRIMARY KEY (Key)
             );
         )", TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetResultSets().empty());
 
         result = db.ExecuteQuery(R"(
-            UPSERT INTO TestDdl (Key, Value) VALUES (1, "One");
-            SELECT * FROM TestDdl;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CREATE TABLE TestDdl2 (
+                Key Uint64,
+                PRIMARY KEY (Key)
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
 
         result = db.ExecuteQuery(R"(
-            DROP TABLE TestDdl;
+            GRANT CONNECT ON `/Root` TO user1;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user1", {"ydb.database.connect"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
 
         result = db.ExecuteQuery(R"(
-            SELECT * FROM TestDdl;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            REVOKE "ydb.database.connect" ON `/Root` FROM user1;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {}},
+            {.Path = "/Root/TestDdl1", .Permissions = {}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            GRANT MODIFY TABLES, 'ydb.tables.read' ON `/Root/TestDdl1`, `/Root/TestDdl2` TO user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE SELECT TABLES, "ydb.tables.modify", ON `/Root/TestDdl2` FROM user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            GRANT "ydb.generic.read", LIST, "ydb.generic.write", USE LEGACY ON `/Root` TO user3, user4, user5;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {
+                {"user3", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                {"user4", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}
+            }},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE "ydb.generic.use_legacy", SELECT, "ydb.generic.list", INSERT ON `/Root` FROM user4, user3;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            GRANT ALL ON `/Root` TO user6;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {
+                {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                {"user6", {"ydb.generic.full"}}
+            }},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE ALL PRIVILEGES ON `/Root` FROM user6;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            GRANT "ydb.generic.use", "ydb.generic.manage" ON `/Root` TO user7 WITH GRANT OPTION;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {
+                {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                {"user7", {"ydb.generic.use", "ydb.generic.manage", "ydb.access.grant"}}
+            }},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE GRANT OPTION FOR USE, MANAGE ON `/Root` FROM user7;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            GRANT USE LEGACY, FULL LEGACY, FULL, CREATE, DROP, GRANT,
+                  SELECT ROW, UPDATE ROW, ERASE ROW, SELECT ATTRIBUTES,
+                  MODIFY ATTRIBUTES, CREATE DIRECTORY, CREATE TABLE, CREATE QUEUE,
+                  REMOVE SCHEMA, DESCRIBE SCHEMA, ALTER SCHEMA ON `/Root` TO user8;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {
+                {"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}},
+                {"user8", {"ydb.generic.use_legacy", "ydb.generic.full_legacy", "ydb.generic.full", "ydb.database.create",
+                    "ydb.database.drop", "ydb.access.grant", "ydb.granular.select_row", "ydb.granular.update_row",
+                    "ydb.granular.erase_row", "ydb.granular.read_attributes", "ydb.granular.write_attributes",
+                    "ydb.granular.create_directory", "ydb.granular.create_table", "ydb.granular.create_queue",
+                    "ydb.granular.remove_schema", "ydb.granular.describe_schema", "ydb.granular.alter_schema"}}
+            }},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE "ydb.granular.write_attributes", "ydb.granular.create_directory", "ydb.granular.create_table", "ydb.granular.create_queue",
+                   "ydb.granular.select_row", "ydb.granular.update_row", "ydb.granular.erase_row", "ydb.granular.read_attributes",
+                   "ydb.generic.use_legacy", "ydb.generic.full_legacy", "ydb.generic.full", "ydb.database.create", "ydb.database.drop", "ydb.access.grant",
+                   "ydb.granular.remove_schema", "ydb.granular.describe_schema", "ydb.granular.alter_schema" ON `/Root` FROM user8;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.list", "ydb.generic.write", "ydb.generic.use_legacy"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE LIST, INSERT ON `/Root` FROM user9, user4, user5;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {{"user5", {"ydb.generic.read", "ydb.generic.use_legacy"}}}},
+            {.Path = "/Root/TestDdl1", .Permissions = {{"user2", {"ydb.tables.read", "ydb.tables.modify"}}}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+
+        result = db.ExecuteQuery(R"(
+            REVOKE ALL ON `/Root`, `/Root/TestDdl1` FROM user9, user4, user5, user2;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        checkPermissions(session, {
+            {.Path = "/Root", .Permissions = {}},
+            {.Path = "/Root/TestDdl1", .Permissions = {}},
+            {.Path = "/Root/TestDdl2", .Permissions = {}}
+        });
+    }
+
+    Y_UNIT_TEST(DdlSecret) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        enum EEx {
+            Empty,
+            IfExists,
+            IfNotExists,
+        };
+
+        auto executeSql = [&](const TString& sql, bool expectSuccess) {
+            Cerr << "Execute SQL:\n" << sql << Endl;
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
+            const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                CREATE OBJECT {if_not_exists} my_secret_{name_suffix} (TYPE SECRET) WITH (value="qwerty");
+                )sql",
+                "if_not_exists"_a = ifNotExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkAlter = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                ALTER OBJECT my_secret_{name_suffix} (TYPE SECRET) SET value = "abcde";
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkUpsert = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                UPSERT OBJECT my_secret_{name_suffix} (TYPE SECRET) WITH value = "edcba";
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
+            const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                DROP OBJECT {if_exists} my_secret_{name_suffix} (TYPE SECRET);
+                )sql",
+                "if_exists"_a = ifExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            executeSql(sql, expectSuccess);
+        };
+
+        checkCreate(true, EEx::Empty, 0);
+        checkCreate(false, EEx::Empty, 0);
+        checkAlter(true, 0);
+        checkAlter(false, 2); // not exists
+        checkDrop(true, EEx::Empty, 0);
+        checkDrop(true, EEx::Empty, 0); // we don't check object existence
+
+        checkCreate(true, EEx::IfNotExists, 1);
+        checkCreate(true, EEx::IfNotExists, 1);
+        checkDrop(true, EEx::IfExists, 1);
+        checkDrop(true, EEx::IfExists, 1);
+
+        checkUpsert(true, 2);
+        checkCreate(false, EEx::Empty, 2); // already exists
+        checkUpsert(true, 2);
     }
 
     Y_UNIT_TEST(DdlCache) {
@@ -616,6 +1354,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             SELECT * FROM KeyValue;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(Tcl) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT 1;
+            COMMIT;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+
+        result = db.ExecuteQuery(R"(
+            SELECT 1;
+            ROLLBACK;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
     }
 
     Y_UNIT_TEST(MaterializeTxResults) {

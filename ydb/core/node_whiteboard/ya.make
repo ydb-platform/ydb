@@ -5,10 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/helpers
-    library/cpp/actors/interconnect
-    library/cpp/actors/protos
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/interconnect
+    ydb/library/actors/protos
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace/mon

@@ -59,14 +59,12 @@ TDuration TBackoffStrategy::GetBackoff() const
 
 void TBackoffStrategy::ApplyJitter()
 {
-    BackoffWithJitter_ = ::NYT::ApplyJitter(Backoff_, Options_.BackoffJitter, +[]{
-        //! StdNormalRandom produces [-6.660, 6.660] according to Wiki
-        const double StdNormalRandomMaxValue = 7.0;
-
-        return StdNormalRandom<double>() / StdNormalRandomMaxValue;
+    BackoffWithJitter_ = ::NYT::ApplyJitter(Backoff_, Options_.BackoffJitter, [] {
+        // StdNormalRandom is unlikely to produce a value outside of [-Max, Max] range.
+        constexpr double Max = 7.0;
+        return std::clamp(StdNormalRandom<double>() / Max, -1.0, +1.0);
     });
 }
-
 
 void TBackoffStrategy::UpdateOptions(const TExponentialBackoffOptions& newOptions)
 {

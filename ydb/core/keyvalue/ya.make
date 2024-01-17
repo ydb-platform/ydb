@@ -41,8 +41,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/protos
+    ydb/library/actors/core
+    ydb/library/actors/protos
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/engine/minikql
@@ -62,4 +62,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_trace
 )

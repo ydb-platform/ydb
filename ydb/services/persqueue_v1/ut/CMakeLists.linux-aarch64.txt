@@ -56,6 +56,10 @@ target_sources(ydb-services-persqueue_v1-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/functions_executor_wrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/topic_service_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/demo_tx.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/pqtablet_mock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/kqp_mock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/partition_writer_cache_actor_fixture.cpp
 )
 set_property(
   TARGET

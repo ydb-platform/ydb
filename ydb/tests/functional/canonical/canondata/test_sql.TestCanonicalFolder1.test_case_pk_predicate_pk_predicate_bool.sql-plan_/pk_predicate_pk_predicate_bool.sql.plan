@@ -11,12 +11,6 @@
                     "columns": [
                         "Value"
                     ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Value"
-                    ],
                     "limit": "1001",
                     "lookup_by": [
                         "Key1 (false)"
@@ -24,7 +18,7 @@
                     "scan_by": [
                         "Key2 (false, +\u221e)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 },
                 {
                     "columns": [
@@ -36,6 +30,12 @@
                     ],
                     "scan_by": [
                         "Key2 (null, true)"
+                    ],
+                    "type": "Scan"
+                },
+                {
+                    "columns": [
+                        "Value"
                     ],
                     "type": "Lookup"
                 }

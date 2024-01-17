@@ -70,7 +70,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
     }
 
 
-    TempTuple[0] &= (0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
+    TempTuple[0] &= ui64(0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
     for (ui32 i = 1; i < NullsBitmapSize_; i ++) {
         TempTuple[i] = 0;
     }
@@ -82,7 +82,7 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     ui64 bucket = hash & BucketsMask;
 
-
+    
 
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
     std::vector<ui32, TMKQLAllocator<ui32>> & stringsOffsets = TableBuckets[bucket].StringsOffsets;
@@ -157,6 +157,7 @@ void TTable::ResetIterator() {
     CurrIterIndex = 0;
     CurrIterBucket = 0;
     CurrJoinIdsIterIndex = 0;
+    Table2Initialized_ = false;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
@@ -340,7 +341,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             slotSize = slotSize + avgStringsSize;
         }
 
-
+        
         ui64 nSlots = 3 * bucket2->TuplesNum + 1;
         joinSlots.clear();
         spillSlots.clear();
@@ -559,7 +560,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
     HasMoreLeftTuples_ = hasMoreLeftTuples;
     HasMoreRightTuples_ = hasMoreRightTuples;
 
-
+    
 }
 
 inline void TTable::GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData & td) {
@@ -720,7 +721,7 @@ inline bool TTable::AddKeysToHashTable(KeysHashTable& t, ui64* keys) {
             }
 
             ui64 * stringsStart;
-            if (storedKeysSize < t.SlotSize) {
+            if (storedKeysSize <= t.SlotSize) {
                 stringsStart = it + HeaderSize;
             } else {
                 ui64 spillOffset = *(it + HeaderSize);
@@ -1031,6 +1032,12 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             return true;
         }
         td1.AllNulls = true;
+
+        if (!Table2Initialized_) {
+            CurrIterBucket = 0;
+            CurrJoinIdsIterIndex = 0;
+            Table2Initialized_ = true;
+        }
 
         while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 

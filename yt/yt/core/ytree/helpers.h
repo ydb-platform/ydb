@@ -54,7 +54,7 @@ void ValidateYPathResolutionDepth(const NYPath::TYPath& path, int depth);
 //! Helps implementing IAttributeDictionary::ListPairs by delegating to
 //! IAttributeDictionary::ListKeys and IAttributeDictionary::FindYson for those not capable
 //! of providing a custom efficient implementation.
-std::vector<IAttributeDictionary::TKeyValuePair> ListAttributesPairs(const IAttributeDictionary& attributes);
+std::vector<std::pair<TString, NYson::TYsonString>> ListAttributesPairs(const IAttributeDictionary& attributes);
 
 ////////////////////////////////////////////////////////////////////////////////
 

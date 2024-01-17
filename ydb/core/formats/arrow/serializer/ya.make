@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/common
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/protos
 )
 

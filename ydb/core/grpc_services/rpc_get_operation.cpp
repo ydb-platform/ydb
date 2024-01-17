@@ -21,7 +21,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/string/cast.h>
 
@@ -243,7 +243,9 @@ private:
     void Handle(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev, const TActorContext& ctx) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        deferred->set_id(GetProtoRequest()->id());
+        if (ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
+            deferred->set_id(GetProtoRequest()->id());
+        }
         deferred->set_ready(ev->Get()->Ready);
         deferred->set_status(ev->Get()->Status);
         if (ev->Get()->Issues) {

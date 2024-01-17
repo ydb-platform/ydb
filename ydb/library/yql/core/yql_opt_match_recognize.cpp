@@ -31,6 +31,79 @@ bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typ
 }
 } //namespace
 
+// returns std::nullopt if all vars could be used
+std::optional<TSet<TStringBuf>> FindUsedVars(const TExprNode::TPtr& params) {
+    TSet<TStringBuf> usedVars;
+    bool allVarsUsed = false;
+
+    const auto createVisitor = [&usedVars, &allVarsUsed](const TExprNode::TPtr& varsArg) {
+        return [&varsArg, &usedVars, &allVarsUsed](const TExprNode::TPtr& node) -> bool {
+            if (node->IsCallable("Member")) {
+                if (node->ChildRef(0) == varsArg) {
+                    usedVars.insert(node->ChildRef(1)->Content());
+                    return false;
+                }
+            }
+            if (node == varsArg) {
+                allVarsUsed = true;
+            }
+            return true;
+        };
+    };
+
+    const auto& measures = params->ChildRef(0);
+    static constexpr size_t measureLambdasStartPos = 3;
+    for (size_t pos = measureLambdasStartPos; pos != measures->ChildrenSize(); pos++) {
+        const auto& lambda = measures->ChildRef(pos);
+        const auto& lambdaArgs = lambda->ChildRef(0);
+        const auto& lambdaBody = lambda->ChildRef(1);
+        const auto& varsArg = lambdaArgs->ChildRef(1);
+        NYql::VisitExpr(lambdaBody, createVisitor(varsArg));
+    }
+
+    const auto& defines = params->ChildRef(4);
+    static constexpr size_t defineLambdasStartPos = 3;
+    for (size_t pos = defineLambdasStartPos; pos != defines->ChildrenSize(); pos++) {
+        const auto& lambda = defines->ChildRef(pos);
+        const auto& lambdaArgs = lambda->ChildRef(0);
+        const auto& lambdaBody = lambda->ChildRef(1);
+        const auto& varsArg = lambdaArgs->ChildRef(1);
+        NYql::VisitExpr(lambdaBody, createVisitor(varsArg));
+    }
+
+    return allVarsUsed ? std::nullopt : std::make_optional(usedVars);
+}
+
+// usedVars can be std::nullopt if all vars could probably be used
+TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext& ctx, const std::optional<TSet<TStringBuf>> &usedVars) {
+    const auto pos = node->Pos();
+    if (node->ChildrenSize() != 0 && node->ChildRef(0)->IsAtom()) {
+        const auto& varName = node->ChildRef(0)->Content();
+        bool varUsed = !usedVars.has_value() || usedVars.value().contains(varName);
+        return ctx.Builder(pos)
+            .List()
+                .Add(0, node->ChildRef(0))
+                .Add(1, node->ChildRef(1))
+                .Add(2, node->ChildRef(2))
+                .Add(3, node->ChildRef(3))
+                .Add(4, node->ChildRef(4))
+                .Add(5, ctx.NewAtom(pos, varUsed ? "0" : "1"))
+            .Seal()
+        .Build();
+    }
+    TExprNodeList newChildren;
+    for (size_t chPos = 0; chPos != node->ChildrenSize(); chPos++) {
+        newChildren.push_back(MarkUnusedPatternVars(node->ChildRef(chPos), ctx, usedVars));
+    }
+    if (node->IsCallable()) {
+        return ctx.Builder(pos).Callable(node->Content()).Add(std::move(newChildren)).Seal().Build();
+    } else if (node->IsList()) {
+        return ctx.Builder(pos).List().Add(std::move(newChildren)).Seal().Build();
+    } else { // Atom
+        return node;
+    }
+}
+
 TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx) {
     YQL_ENSURE(node->IsCallable({"MatchRecognize"}));
     const auto& input = node->ChildRef(0);
@@ -55,7 +128,13 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                     .Seal()
                     .Add(1, partitionKeySelector)
                     .Add(2, partitionColumns)
-                    .Add(3, params)
+                    .Callable(3, params->Content())
+                        .Add(0, params->ChildRef(0))
+                        .Add(1, params->ChildRef(1))
+                        .Add(2, params->ChildRef(2))
+                        .Add(3, MarkUnusedPatternVars(params->ChildRef(3), ctx, FindUsedVars(params)))
+                        .Add(4, params->ChildRef(4))
+                    .Seal()
                     .Add(4, settings)
                 .Seal()
             .Seal()

@@ -249,7 +249,7 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateTYtWideFlowTransformer(TYtState::TPtr state) {
+THolder<IGraphTransformer> CreateYtWideFlowTransformer(TYtState::TPtr state) {
     return MakeHolder<TYtWideFlowTransformer>(std::move(state));
 }
 

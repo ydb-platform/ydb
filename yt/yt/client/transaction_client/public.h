@@ -45,6 +45,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ForeignParentTransaction)         (11010))
     ((ForeignPrerequisiteTransaction)   (11011))
     ((IncompletePrepareSignature)       (11012))
+    ((TransactionSuccessorHasLeases)    (11013))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/pgproxy/pg_proxy.h>
 #include <ydb/core/pgproxy/pg_log.h>

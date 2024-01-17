@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <util/thread/pool.h>
 
@@ -15,8 +15,8 @@
 
 namespace NYdb {
 
-using NGrpc::IQueueClientContext;
-using NGrpc::IQueueClientEvent;
+using NYdbGrpc::IQueueClientContext;
+using NYdbGrpc::IQueueClientEvent;
 
 class TGRpcConnectionsImpl;
 struct TPlainStatus;
@@ -114,7 +114,7 @@ class TGRpcErrorResponse
 {
 public:
     TGRpcErrorResponse(
-            NGrpc::TGrpcStatus&& status,
+            NYdbGrpc::TGrpcStatus&& status,
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
@@ -138,7 +138,7 @@ public:
     }
 
 private:
-    NGrpc::TGrpcStatus GRpcStatus_;
+    NYdbGrpc::TGrpcStatus GRpcStatus_;
     std::string Endpoint_;
 };
 
@@ -150,7 +150,7 @@ class TResult
 public:
     TResult(
             TResponse&& response,
-            NGrpc::TGrpcStatus&& status,
+            NYdbGrpc::TGrpcStatus&& status,
             TResponseCb<TResponse>&& userCb,
             TGRpcConnectionsImpl* connections,
             std::shared_ptr<IQueueClientContext> context,
@@ -169,7 +169,7 @@ public:
 
 private:
     TResponse Response_;
-    NGrpc::TGrpcStatus GRpcStatus_;
+    NYdbGrpc::TGrpcStatus GRpcStatus_;
     const std::string Endpoint_;
     std::multimap<TStringType, TStringType> Metadata_;
 };

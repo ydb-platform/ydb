@@ -15,6 +15,7 @@ SRCS(
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp
@@ -35,12 +36,13 @@ SRCS(
     utils.cpp
     write_meta.cpp
     microseconds_sliding_window.cpp
+    dread_cache_service/caching_service.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid.h)
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
     ydb/core/base
@@ -65,5 +67,6 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    dread_cache_service/ut
     ut/slow
 )

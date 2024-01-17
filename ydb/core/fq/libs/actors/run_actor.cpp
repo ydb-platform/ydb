@@ -70,10 +70,10 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/yson/node/node_io.h>
 
@@ -183,64 +183,68 @@ public:
     }
 
     void Bootstrap() {
-        TProgramFactory progFactory(false, FunctionRegistry, NextUniqueId, DataProvidersInit, "yq");
-        progFactory.SetModules(ModuleResolver);
-        progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry, nullptr));
-        progFactory.SetGatewaysConfig(&GatewaysConfig);
+        try {
+            TProgramFactory progFactory(false, FunctionRegistry, NextUniqueId, DataProvidersInit, "yq");
+            progFactory.SetModules(ModuleResolver);
+            progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry, nullptr));
+            progFactory.SetGatewaysConfig(&GatewaysConfig);
 
-        Program = progFactory.Create("-stdin-", Sql, SessionId);
-        Program->EnableResultPosition();
+            Program = progFactory.Create("-stdin-", Sql, SessionId);
+            Program->EnableResultPosition();
 
-        // parse phase
-        {
-            if (!Program->ParseSql(SqlSettings)) {
-                SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
+            // parse phase
+            {
+                if (!Program->ParseSql(SqlSettings)) {
+                    SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
+                    return;
+                }
+
+                if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
+                    SendStatusAndDie(TProgram::TStatus::Ok);
+                    return;
+                }
+            }
+
+            // compile phase
+            {
+                if (!Program->Compile("")) {
+                    SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
+                    return;
+                }
+
+                if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
+                    SendStatusAndDie(TProgram::TStatus::Ok);
+                    return;
+                }
+            }
+
+            Compiled = true;
+
+            // next phases can be async: optimize, validate, run
+            TProgram::TFutureStatus futureStatus;
+            switch (ExecuteMode) {
+            case FederatedQuery::ExecuteMode::EXPLAIN:
+                futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
+                break;
+            case FederatedQuery::ExecuteMode::VALIDATE:
+                futureStatus = Program->ValidateAsync("");
+                break;
+            case FederatedQuery::ExecuteMode::RUN:
+                futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
+                break;
+            default:
+                SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
                 return;
             }
 
-            if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
-                SendStatusAndDie(TProgram::TStatus::Ok);
-                return;
-            }
+            futureStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
+                actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
+            });
+
+            Become(&TProgramRunnerActor::StateFunc);
+        } catch (...) {
+            SendStatusAndDie(TProgram::TStatus::Error, CurrentExceptionMessage());
         }
-
-        // compile phase
-        {
-            if (!Program->Compile("")) {
-                SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
-                return;
-            }
-
-            if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
-                SendStatusAndDie(TProgram::TStatus::Ok);
-                return;
-            }
-        }
-
-        Compiled = true;
-
-        // next phases can be async: optimize, validate, run
-        TProgram::TFutureStatus futureStatus;
-        switch (ExecuteMode) {
-        case FederatedQuery::ExecuteMode::EXPLAIN:
-            futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
-            break;
-        case FederatedQuery::ExecuteMode::VALIDATE:
-            futureStatus = Program->ValidateAsync("");
-            break;
-        case FederatedQuery::ExecuteMode::RUN:
-            futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
-            break;
-        default:
-            SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
-            return;
-        }
-
-        futureStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
-            actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
-        });
-
-        Become(&TProgramRunnerActor::StateFunc);
     }
 
     void SendStatusAndDie(NYql::TProgram::TStatus status, const TString& message = "") {
@@ -1070,6 +1074,14 @@ private:
             i64 Min;
             i64 Max;
             i64 Sum;
+            void AssignStats(const TStatisticsNode& other) {
+                Name  = other.Name;
+                Avg   = other.Avg;
+                Count = other.Count;
+                Min   = other.Min;
+                Max   = other.Max;
+                Sum   = other.Sum;
+            }
             void Write(NYson::TYsonWriter& writer) {
                 writer.OnBeginMap();
                 if (Children.empty()) {
@@ -1149,6 +1161,18 @@ private:
             node->Avg = metric.GetAvg();
             node->Max = metric.GetMax();
             node->Min = metric.GetMin();
+        }
+
+        //
+        // Copy Ingress/Egress to top level
+        // TODO: move all TaskRunner::Stage=Total stats to top level???
+        //
+        auto& stageTotalNode = statistics.Children["TaskRunner"].Children["Stage=Total"];
+        if (const auto& it = stageTotalNode.Children.find("IngressBytes"); it != stageTotalNode.Children.end()) {
+            statistics.Children["IngressBytes"].AssignStats(it->second);
+        }
+        if (const auto& it = stageTotalNode.Children.find("EgressBytes"); it != stageTotalNode.Children.end()) {
+            statistics.Children["EgressBytes"].AssignStats(it->second);
         }
 
         NYson::TYsonWriter writer(&out);
@@ -1890,9 +1914,8 @@ private:
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
-        AddClustersFromConnections(YqConnections,
-            Params.Config.GetCommon().GetUseBearerForYdb(),
-            Params.Config.GetCommon().GetObjectStorageEndpoint(),
+        AddClustersFromConnections(Params.Config.GetCommon(),
+            YqConnections,
             monitoringEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,

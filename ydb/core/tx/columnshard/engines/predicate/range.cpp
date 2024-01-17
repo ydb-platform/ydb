@@ -1,5 +1,5 @@
 #include "range.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
 
@@ -40,7 +40,7 @@ NKikimr::NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const arrow::Datum& d
 }
 
 bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo& indexInfo) const {
-    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetIndexKey())) {
+    if (auto from = PredicateFrom.ExtractKey(indexInfo.GetPrimaryKey())) {
         const auto& portionEnd = info.IndexKeyEnd();
         const int commonSize = std::min(from->Size(), portionEnd.Size());
         if (std::is_gt(from->ComparePartNotNull(portionEnd, commonSize))) {
@@ -48,7 +48,7 @@ bool TPKRangeFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInfo
         }
     }
 
-    if (auto to = PredicateTo.ExtractKey(indexInfo.GetIndexKey())) {
+    if (auto to = PredicateTo.ExtractKey(indexInfo.GetPrimaryKey())) {
         const auto& portionStart = info.IndexKeyStart();
         const int commonSize = std::min(to->Size(), portionStart.Size());
         if (std::is_lt(to->ComparePartNotNull(portionStart, commonSize))) {

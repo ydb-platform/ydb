@@ -323,6 +323,143 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         }
     }
 
+    inline static TSourceIdInfo MakeExplicitSourceIdInfo(ui64 offset, const TMaybe<THeartbeat>& heartbeat = Nothing()) {
+        auto info = TSourceIdInfo(0, offset, TInstant::Now());
+
+        info.Explicit = true;
+        if (heartbeat) {
+            info.LastHeartbeat = heartbeat;
+        }
+
+        return info;
+    }
+
+    inline static THeartbeat MakeHeartbeat(ui64 step) {
+        return THeartbeat{
+            .Version = TRowVersion(step, 0),
+            .Data = "",
+        };
+    }
+
+    Y_UNIT_TEST(HeartbeatEmitter) {
+        TSourceIdStorage storage;
+        ui64 offset = 0;
+
+        // initial info w/o heartbeats
+        for (ui64 i = 1; i <= 2; ++i) {
+            storage.RegisterSourceId(TestSourceId(i), MakeExplicitSourceIdInfo(++offset));
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(1));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(2));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(1));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(1).Version);
+            }
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(3));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(2).Version);
+            }
+        }
+
+        // one heartbeat
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(+offset, MakeHeartbeat(4)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(3));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(3).Version);
+            }
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(5));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(4).Version);
+            }
+        }
+
+        // two different heartbeats
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(5)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(5));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(5).Version);
+            }
+        }
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(7));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(6).Version);
+            }
+        }
+
+        // two same heartbeats
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfo(++offset, MakeHeartbeat(5)));
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(6));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(6));
+            {
+                const auto heartbeat = emitter.CanEmit();
+                UNIT_ASSERT(heartbeat.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(heartbeat->Version, MakeHeartbeat(6).Version);
+            }
+        }
+
+        // can't roll back
+        {
+            THeartbeatEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeHeartbeat(4));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeHeartbeat(4));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+        }
+    }
+
 } // TSourceIdTests
 
 } // namespace NKikimr::NPQ

@@ -59,6 +59,7 @@ namespace NKikimrConfig {
     class TDomainsConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
+    class TS3ProxyResolverConfig;
 }
 
 namespace NKikimrNetClassifier {
@@ -201,6 +202,7 @@ struct TAppData {
     std::unique_ptr<NKikimrConfig::TDomainsConfig> DomainsConfigPtr;
     std::unique_ptr<NKikimrConfig::TBootstrap> BootstrapConfigPtr;
     std::unique_ptr<NKikimrConfig::TAwsCompatibilityConfig> AwsCompatibilityConfigPtr;
+    std::unique_ptr<NKikimrConfig::TS3ProxyResolverConfig> S3ProxyResolverConfigPtr;
     std::unique_ptr<NKikimrSharedCache::TSharedCacheConfig> SharedCacheConfigPtr;
 
     NKikimrStream::TStreamingConfig& StreamingConfig;
@@ -223,6 +225,7 @@ struct TAppData {
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
+    NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;
@@ -277,9 +280,22 @@ struct TAppData {
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {
     Y_DEBUG_ABORT_UNLESS(actorSystem);
-    TAppData * const x = actorSystem->AppData<TAppData>();
+    TAppData* const x = actorSystem->AppData<TAppData>();
     Y_DEBUG_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
     return x;
+}
+
+inline bool HasAppData() {
+    return !!NActors::TlsActivationContext;
+}
+
+inline TAppData& AppDataVerified() {
+    Y_ABORT_UNLESS(HasAppData());
+    auto& actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+    Y_ABORT_UNLESS(actorSystem);
+    TAppData* const x = actorSystem->AppData<TAppData>();
+    Y_ABORT_UNLESS(x && x->Magic == TAppData::MagicTag);
+    return *x;
 }
 
 inline TAppData* AppData() {

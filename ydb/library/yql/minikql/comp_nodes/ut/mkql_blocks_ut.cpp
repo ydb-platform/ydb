@@ -746,7 +746,7 @@ Y_UNIT_TEST(Udf) {
     UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
 
     arrow::compute::ExecContext execContext;
-    const size_t blockSize = 100000;
+    const size_t blockSize = 10000;
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
         arrow::Int32Builder builder1(execContext.memory_pool());

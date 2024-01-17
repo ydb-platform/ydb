@@ -6,8 +6,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>

@@ -10,6 +10,7 @@
 #include <aws/core/SDKConfig.h>
 #include <aws/core/utils/memory/AWSMemory.h>
 #include <aws/core/utils/memory/MemorySystemInterface.h>
+#include <aws/crt/StlAllocator.h>
 
 #include <memory>
 #include <cstdlib>
@@ -17,54 +18,8 @@
 namespace Aws
 {
 #ifdef USE_AWS_MEMORY_MANAGEMENT
-    /**
-     * Std allocator interface that is used for all STL types in the event that Custom Memory Management is being used.
-     */  
-    template <typename T>
-    class Allocator : public std::allocator<T>
-    {
-    public:
 
-        typedef std::allocator<T> Base;
-
-        Allocator() throw() :
-            Base()
-        {}
-
-        Allocator(const Allocator<T>& a) throw() :
-            Base(a)
-        {}
-
-        template <class U>
-        Allocator(const Allocator<U>& a) throw() :
-            Base(a)
-        {}
-
-        ~Allocator() throw() {}
-
-        typedef std::size_t size_type;
-
-        template<typename U>
-        struct rebind
-        {
-            typedef Allocator<U> other;
-        };
-
-        typename Base::pointer allocate(size_type n, const void *hint = nullptr)
-        {
-            AWS_UNREFERENCED_PARAM(hint);
-
-            return reinterpret_cast<typename Base::pointer>(Malloc("AWSSTL", n * sizeof(T)));
-        }
-
-        void deallocate(typename Base::pointer p, size_type n)
-        {
-            AWS_UNREFERENCED_PARAM(n);
-
-            Free(p);
-        }
-
-    };
+    template< typename T > using Allocator = Aws::Crt::StlAllocator<T>;
 
 #ifdef __ANDROID__
 #if _GLIBCXX_FULLY_DYNAMIC_STRING == 0
@@ -80,7 +35,7 @@ namespace Aws
 #endif // __ANDROID__
 
 #else
-    
+
     template< typename T > using Allocator = std::allocator<T>;
 
 #endif // USE_AWS_MEMORY_MANAGEMENT

@@ -175,7 +175,7 @@ class BaseTenant(abc.ABC):
         if node_index is None:
             return sum(self.get_task_count(n, query_id) for n in self.kikimr_cluster.nodes)
         else:
-            result = self.get_sensors(node_index, "yq").find_sensor({"query_id": query_id, "Stage": "Total", "sensor": "TaskCount"})
+            result = self.get_sensors(node_index, "yq").find_sensor({"query_id": query_id, "Stage": "Total", "sensor": "Tasks"})
             return result if result is not None else 0
 
     def get_actor_count(self, node_index, activity):

@@ -16,9 +16,11 @@ on:
         default: "relwithdebinfo"
         description: "Build preset"
         options:
+          - debug
           - relwithdebinfo
           - release-asan
           - release-tsan
+          - release-msan
       test_size:
         type: choice
         default: "small,medium,large"
@@ -82,6 +84,9 @@ on:
         type: string
         default: 8
         description: "link threads count"
+      put_build_results_to_cache:
+        type: boolean
+        default: true
 
 jobs:
   provide-runner:
@@ -131,7 +136,6 @@ jobs:
       - provide-runner
       - prepare-vm
     with:
-      runner_kind: self-hosted
       runner_label: ${{ needs.provide-runner.outputs.label }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}
@@ -141,6 +145,7 @@ jobs:
       test_type: ${{ inputs.test_type }}
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
+      put_build_results_to_cache: ${{ inputs.put_build_results_to_cache || true }}
     secrets: inherit
 
   release-runner:

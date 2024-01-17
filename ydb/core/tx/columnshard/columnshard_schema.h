@@ -206,14 +206,17 @@ struct Schema : NIceDb::Schema {
         struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
-        struct BlobId : Column<6, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
         struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
         struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
 
+        struct BlobRangeOffset: Column<11, NScheme::NTypeIds::Uint64> {};
+        struct BlobRangeSize: Column<12, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Committed, PlanStep, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion>;
+        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion, BlobRangeOffset, BlobRangeSize>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -389,23 +392,23 @@ struct Schema : NIceDb::Schema {
 
     static void SaveSchemaPresetVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 id, const TRowVersion& version,
+            ui64 id, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(serialized));
     }
 
-    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) {
+    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const NOlap::TSnapshot& dropVersion) {
         db.Table<SchemaPresetInfo>().Key(id).Update(
-            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.Step),
-            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.TxId));
+            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.GetPlanStep()),
+            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.GetTxId()));
     }
 
-    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) {
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete();
+    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const NOlap::TSnapshot& version) {
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
     static void EraseSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
@@ -421,12 +424,12 @@ struct Schema : NIceDb::Schema {
 
     static void SaveTableVersionInfo(
             NIceDb::TNiceDb& db,
-            ui64 pathId, const TRowVersion& version,
+            ui64 pathId, const NOlap::TSnapshot& version,
             const NKikimrTxColumnShard::TTableVersionInfo& info)
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Update(
+        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
 
@@ -438,8 +441,8 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
 
-    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const TRowVersion& version) {
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Delete();
+    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const NOlap::TSnapshot& version) {
+        db.Table<TableVersionInfo>().Key(pathId, version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
     static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
@@ -465,6 +468,8 @@ struct Schema : NIceDb::Schema {
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
         db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Update(
             NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
+            NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
+            NIceDb::TUpdate<InsertTable::BlobRangeSize>(data.GetBlobRange().Size),
             NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
             NIceDb::TUpdate<InsertTable::SchemaVersion>(data.GetSchemaVersion())
         );
@@ -505,13 +510,13 @@ struct Schema : NIceDb::Schema {
 
     // IndexColumns activities
 
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+    static void IndexColumns_Write(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
         auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
         auto rowProto = row.GetMeta().SerializeToProto();
         if (proto) {
             *rowProto.MutablePortionMeta() = std::move(*proto);
         }
-        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
                 NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
                 NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
@@ -523,24 +528,24 @@ struct Schema : NIceDb::Schema {
             );
     }
 
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.GetDeprecatedGranuleId(), row.ColumnId,
+    static void IndexColumns_Erase(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 
-    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
+    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector,
         const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback);
 
     // IndexCounters
 
-    static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 index, ui32 counterId, ui64 value) {
-        db.Table<IndexCounters>().Key(index, counterId).Update(
+    static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 counterId, ui64 value) {
+        db.Table<IndexCounters>().Key(0, counterId).Update(
             NIceDb::TUpdate<IndexCounters::ValueUI64>(value)
         );
     }
 
-    static bool IndexCounters_Load(NIceDb::TNiceDb& db, ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) {
-        auto rowset = db.Table<IndexCounters>().Prefix(index).Select();
+    static bool IndexCounters_Load(NIceDb::TNiceDb& db, const std::function<void(ui32 id, ui64 value)>& callback) {
+        auto rowset = db.Table<IndexCounters>().Prefix(0).Select();
         if (!rowset.IsReady())
             return false;
 

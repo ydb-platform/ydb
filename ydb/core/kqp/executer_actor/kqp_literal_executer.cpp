@@ -117,7 +117,6 @@ public:
     }
 
     void ExecuteLiteralImpl() {
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::LiteralExecuterPrepareTasks, LiteralExecuterSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         if (Stats) {
             Stats->StartTs = TInstant::Now();
         }
@@ -166,12 +165,6 @@ public:
             }
         });
 
-        if (prepareTasksSpan) {
-            prepareTasksSpan.EndOk();
-        }
-
-        NWilson::TSpan runTasksSpan(TWilsonKqp::LiteralExecuterRunTasks, LiteralExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
         RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->Alloc, &Request.TxAlloc->TypeEnv);
@@ -184,10 +177,6 @@ public:
             if (TerminateIfTimeout()) {
                 return;
             }
-        }
-
-        if (runTasksSpan) {
-            runTasksSpan.End();
         }
 
         Finalize();
@@ -297,9 +286,7 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        if (LiteralExecuterSpan) {
-            LiteralExecuterSpan.EndOk();
-        }
+        LiteralExecuterSpan.EndOk();
         CleanupCtx();
         LOG_D("Execution is complete, results: " << ResponseEv->ResultsSize());
     }
@@ -377,9 +364,7 @@ private:
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
-        if (LiteralExecuterSpan) {
-            LiteralExecuterSpan.EndError(response.DebugString());
-        }
+        LiteralExecuterSpan.EndError(response.DebugString());
 
         CleanupCtx();
         UpdateCounters();

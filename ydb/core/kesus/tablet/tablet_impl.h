@@ -14,8 +14,8 @@
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/scheduler_cookie.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/scheduler_cookie.h>
 
 #include <util/generic/hash.h>
 

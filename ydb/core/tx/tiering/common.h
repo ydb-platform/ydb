@@ -3,7 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 

@@ -1,9 +1,9 @@
 #include "sync_http_mon.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/probes.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/probes.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>

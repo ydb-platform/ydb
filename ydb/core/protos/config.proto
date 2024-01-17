@@ -1,5 +1,5 @@
 import "google/protobuf/descriptor.proto";
-import "library/cpp/actors/protos/interconnect.proto";
+import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
@@ -51,11 +51,16 @@ message TActorSystemConfig {
         HYBRID = 3;
     }
 
+    enum EActorSystemProfile {
+        DEFAULT = 1;
+        LOW_CPU_CONSUMPTION = 2;
+        LOW_LATENCY = 3;
+    }
+
     message TExecutor {
         enum EType {
             BASIC = 1;
             IO = 2;
-            UNITED = 3;
         };
 
         optional EType Type = 1;
@@ -68,17 +73,9 @@ message TActorSystemConfig {
         optional uint32 EventsPerMailbox = 8;
         optional uint32 RealtimePriority = 9;
 
-        // Actorsystem 2.0: cpu sharing by different pools with preemption
-        optional uint32 Concurrency = 10; // Limits simultaneously running mailboxes of UNITED pool
-        optional uint32 Weight = 11; // Weight of UNITED pool in cpu-local scheduler (default value is NActors::DefPoolWeight)
-
-        // Actorsystem 1.5: cpu balancing between pools
+        // Actorsystem 1.4
         optional uint32 MinThreads = 12; // Lower balancing bound, should be at least 1, and not greater than `Threads`
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
-        optional uint32 BalancingPriority = 14; // Priority of pool to obtain cpu due to balancing (higher is better)
-        optional uint64 ToleratedLatencyUs = 15; // p100-latency threshold indicating that more cpus are required by pool
-
-        // Actorsystem 1.4
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
     }
@@ -109,22 +106,6 @@ message TActorSystemConfig {
     optional uint32 EventsPerMailbox = 9;
     optional uint32 SelfPingInterval = 10; // in microseconds
 
-    message TUnitedWorkers {
-        optional uint32 CpuCount = 1; // Total CPUs running united workers (TExecutor.Threads analog), should be set to zero to use actorsystem 1.5, and >0 for actorsystem 2.0
-        optional uint64 SpinThresholdUs = 2; // Limit for active spinning in case all pools became idle
-        optional uint64 PoolLimitUs = 3; // Soft limit on pool execution
-        optional uint64 EventLimitUs = 4; // Hard limit on last event execution exceeding pool limit
-        optional uint64 LimitPrecisionUs = 5; // Maximum delay of timer on limit excess (delay needed to avoid settimer syscall on every pool switch)
-        optional uint64 FastWorkerPriority = 6; // Real-time priority of workers not exceeding hard limits
-        optional uint64 IdleWorkerPriority = 7; // Real-time priority of standby workers waiting for hard preemption on timers (should be greater than FastWorkerPriority)
-        optional TAffinity Affinity = 8; // Cpu set for workers (every worker has affinity for exactly one cpu)
-        optional bool NoRealtime = 9; // Do not use RT-priority for worker threads
-        optional bool NoAffinity = 10; // Do not use affinity for worker threads
-        optional uint64 BalancerPeriodUs = 11; // Time between balancer steps (see default in NActors::TBalancerConfig)
-    }
-
-    optional TUnitedWorkers UnitedWorkers = 11;
-
     optional bool UseAutoConfig = 12;
 
     // Used only with UseAutoConfig;
@@ -132,6 +113,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
 
     optional bool MonitorStuckActors = 15;
+    optional EActorSystemProfile ActorSystemProfile = 16;
 }
 
 message TStaticNameserviceConfig {
@@ -745,6 +727,25 @@ message THttpProxyConfig {
     optional string JwtFile = 10;
 }
 
+message TS3ProxyResolverConfig {
+    message THttpResolverConfig {
+        // resolve proxy host to connect to that endpoint using this url
+        optional string ResolveUrl = 1;
+        // use resolved proxy through these ports
+        optional uint32 HttpPort = 2;
+        optional uint32 HttpsPort = 3;
+    }
+
+    message TEndpoint {
+        // S3 endpoint
+        optional string Endpoint = 1;
+        oneof Resolver {
+            THttpResolverConfig HttpResolver = 2;
+        }
+    }
+
+    repeated TEndpoint Endpoints = 1;
+}
 
 message TSqsConfig {
     optional bool EnableSqs = 5;
@@ -1024,6 +1025,7 @@ message TQueryServiceConfig {
     optional uint64 ScriptResultsTtlDefaultSeconds = 3 [default = 2592000];  // default = 1 month; 0 = infinity
     optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
     optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
+    repeated string HostnamePatterns = 13; // List of hostname regexps for external data sources; disabled if empty
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
@@ -1032,6 +1034,7 @@ message TQueryServiceConfig {
     optional bool MdbTransformHost = 10;
     optional NYql.TGenericGatewayConfig Generic = 11;
     optional TFinalizeScriptServiceConfig FinalizeScriptServiceConfig = 12;
+    optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
 }
 
 // Config describes immediate controls and allows
@@ -1320,6 +1323,12 @@ message THiveConfig {
         HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
     }
 
+    enum EHiveChannelBalanceStrategy {
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
     enum EHiveNodeSelectStrategy {
         HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
         HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
@@ -1381,9 +1390,9 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 5000]; // milliseconds
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 30000]; // milliseconds, time to wait for known nodes on cluster restart
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
-    optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
+    optional double MaxWarmUpPeriod = 52 [default = 600.0]; // seconds
     optional bool WarmUpEnabled = 55 [default = true];
     optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
@@ -1397,6 +1406,8 @@ message THiveConfig {
     optional double MinCounterScatterToBalance = 65 [default = 0.02];
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
 }
 
 message TColumnShardConfig {
@@ -1415,6 +1426,13 @@ message TColumnShardConfig {
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
     optional bool DisabledOnSchemeShard = 2 [default = true];
+    optional bool SkipOldGranules = 3 [default = true];
+    optional bool IndexationEnabled = 4 [default = true];
+    optional bool CompactionEnabled = 5 [default = true];
+    optional bool TTLEnabled = 6 [default = true];
+    optional bool WritingEnabled = 7 [default = true];
+    optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -1508,10 +1526,33 @@ message TCompactionConfig {
 }
 
 message TTracingConfig {
+    message TAuthConfig {
+        message TTvm {
+            optional string Host = 1;
+            optional uint32 Port = 2;
+
+            required uint32 SelfTvmId = 3;
+            required uint32 TracingTvmId = 4;
+
+            optional string DiskCacheDir = 5;
+
+            oneof Secret {
+                string PlainTextSecret = 6;
+                string SecretFile = 7;
+                string SecretEnvironmentVariable = 8;
+            }
+        }
+
+        oneof Method {
+            TTvm Tvm = 1;
+        }
+    }
+
     optional string Host = 1;
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
+    optional TAuthConfig AuthConfig = 5;
 }
 
 message TFailureInjectionConfig {
@@ -1660,6 +1701,8 @@ message TAppConfig {
     optional TConveyorConfig CompConveyorConfig = 72;
     optional TQueryServiceConfig QueryServiceConfig = 73;
     optional TConveyorConfig InsertConveyorConfig = 74;
+    optional bool AllowEditYamlInUi = 75;
+    optional TS3ProxyResolverConfig S3ProxyResolverConfig = 76;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

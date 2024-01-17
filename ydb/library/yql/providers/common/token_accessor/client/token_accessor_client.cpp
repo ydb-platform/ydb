@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.pb.h>
 #include <ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.grpc.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/atomic/bool.h>
 #include <library/cpp/threading/future/core/future.h>
 
@@ -21,8 +21,8 @@ private:
     class TImpl : public std::enable_shared_from_this<TImpl> {
     public:
         TImpl(
-            std::shared_ptr<NGrpc::TGRpcClientLow> client,
-            std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
             const TString& serviceAccountId,
             const TString& serviceAccountIdSignature,
             const TDuration& refreshPeriod,
@@ -52,7 +52,7 @@ private:
             }
             std::weak_ptr<const TImpl> weakSelf = shared_from_this();
             // hold context until reply
-            auto cb = [weakSelf, resultPromise, sync, context](NGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
+            auto cb = [weakSelf, resultPromise, sync, context](NYdbGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
                 if (auto self = weakSelf.lock()) {
                     self->ProcessResponse(std::move(status), std::move(result), sync);
                 }
@@ -101,7 +101,7 @@ private:
         }
 
     private:
-        void ProcessResponse(NGrpc::TGrpcStatus&& status, GetTokenResponse&& result, bool sync) const {
+        void ProcessResponse(NYdbGrpc::TGrpcStatus&& status, GetTokenResponse&& result, bool sync) const {
             if (!status.Ok()) {
                 with_lock(Lock) {
                     --Infly;
@@ -126,8 +126,8 @@ private:
         }
 
     private:
-        const std::shared_ptr<NGrpc::TGRpcClientLow> Client;
-        const std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> Connection;
+        const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client;
+        const std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> Connection;
         mutable TString Ticket;
         mutable TInstant NextTicketUpdate;
         const TString ServiceAccountId;
@@ -144,8 +144,8 @@ private:
 
 public:
     TTokenAccessorCredentialsProvider(
-        std::shared_ptr<NGrpc::TGRpcClientLow> client,
-        std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+        std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+        std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
         const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const TDuration& refreshPeriod,
@@ -184,19 +184,19 @@ std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvid
     const TDuration& requestTimeout
 )
 {
-    auto client = std::make_unique<NGrpc::TGRpcClientLow>();
-    NGrpc::TGRpcClientConfig grpcConf;
+    auto client = std::make_unique<NYdbGrpc::TGRpcClientLow>();
+    NYdbGrpc::TGRpcClientConfig grpcConf;
     grpcConf.Locator = tokenAccessorEndpoint;
     grpcConf.EnableSsl = useSsl;
     grpcConf.SslCredentials.pem_root_certs = sslCaCert;
-    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
+    std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
 
     return CreateTokenAccessorCredentialsProvider(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
 }
 
 std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvider(
-    std::shared_ptr<NGrpc::TGRpcClientLow> client,
-    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+    std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>> connection,
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod,

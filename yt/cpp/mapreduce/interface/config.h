@@ -54,6 +54,21 @@ DEFINE_ENUM(EUploadDeduplicationMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Enum describing possible versions of table writer implemetation.
+enum class ETableWriterVersion
+{
+    /// Allow library to choose version of writer.
+    Auto,
+
+    /// Stable but slower version of writer.
+    V1,
+
+    /// Unstable but faster version of writer (going to be default in the future).
+    V2,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TConfig
     : public TThrRefBase
 {
@@ -176,6 +191,9 @@ struct TConfig
     // Framing settings
     // (cf. https://ytsaurus.tech/docs/en/user-guide/proxy/http-reference#framing).
     THashSet<TString> CommandsWithFraming;
+
+    /// Which implemetation of table writer to use.
+    ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

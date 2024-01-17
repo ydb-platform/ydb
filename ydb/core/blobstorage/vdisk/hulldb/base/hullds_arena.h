@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <util/thread/lfstack.h>
 #include <util/system/filemap.h>

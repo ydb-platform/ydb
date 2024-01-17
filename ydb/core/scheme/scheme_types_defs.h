@@ -2,7 +2,7 @@
 
 #include "scheme_type_id.h"
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 

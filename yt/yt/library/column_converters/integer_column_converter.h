@@ -8,9 +8,15 @@ namespace NYT::NColumnConverters {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateInt64ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema);
+IColumnConverterPtr CreateInt64ColumnConverter(
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset);
 
-std::unique_ptr<IColumnConverter> CreateUint64ColumnConverter(int columnIndex, const NTableClient::TColumnSchema& columnSchema);
+std::unique_ptr<IColumnConverter> CreateUint64ColumnConverter(
+    int columnId,
+    const NTableClient::TColumnSchema& columnSchema,
+    int columnOffset);
 
 ////////////////////////////////////////////////////////////////////////////////
 

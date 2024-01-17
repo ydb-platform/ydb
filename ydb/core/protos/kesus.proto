@@ -5,7 +5,7 @@ package NKikimrKesus;
 option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";

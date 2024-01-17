@@ -127,21 +127,21 @@ std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TTxAllocatorState::Get
     auto& internalBinding = paramBinding.GetInternalBinding();
     switch (internalBinding.GetType()) {
         case NKqpProto::TKqpPhyInternalBinding::PARAM_NOW:
-            return {TypeEnv.GetUi64(), TUnboxedValuePod(ui64(GetCachedNow()))};
+            return {TypeEnv.GetUi64Lazy(), TUnboxedValuePod(ui64(GetCachedNow()))};
         case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATE: {
             ui32 date = GetCachedDate();
             YQL_ENSURE(date <= Max<ui32>());
-            return {TypeEnv.GetUi32(), TUnboxedValuePod(ui32(date))};
+            return {TypeEnv.GetUi32Lazy(), TUnboxedValuePod(ui32(date))};
         }
         case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATETIME: {
             ui64 datetime = GetCachedDatetime();
             YQL_ENSURE(datetime <= Max<ui32>());
-            return {TypeEnv.GetUi32(), TUnboxedValuePod(ui32(datetime))};
+            return {TypeEnv.GetUi32Lazy(), TUnboxedValuePod(ui32(datetime))};
         }
         case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_TIMESTAMP:
-            return {TypeEnv.GetUi64(), TUnboxedValuePod(ui64(GetCachedTimestamp()))};
+            return {TypeEnv.GetUi64Lazy(), TUnboxedValuePod(ui64(GetCachedTimestamp()))};
         case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER:
-            return {TypeEnv.GetUi64(), TUnboxedValuePod(ui64(GetCachedRandom<ui64>()))};
+            return {TypeEnv.GetUi64Lazy(), TUnboxedValuePod(ui64(GetCachedRandom<ui64>()))};
         case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM:
             return {NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
                 TUnboxedValuePod(double(GetCachedRandom<double>()))};
@@ -309,6 +309,7 @@ bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type,
 
 bool TQueryData::AddTypedValueParam(const TString& name, const Ydb::TypedValue& param) {
     auto guard = TypeEnv().BindAllocator();
+    const TBindTerminator bind(this);
     auto [typeFromProto, value] = ImportValueFromProto(
         param.type(), param.value(), TypeEnv(), AllocState->HolderFactory);
     return AddUVParam(name, typeFromProto, value);
@@ -475,7 +476,6 @@ void TQueryData::Clear() {
     {
         auto g = TypeEnv().BindAllocator();
         Params.clear();
-        
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
 
@@ -491,6 +491,18 @@ void TQueryData::Clear() {
 
         AllocState->Reset();
     }
+}
+
+void TQueryData::Terminate(const char* message) const {
+    TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
+    TString fullMessage = TStringBuilder() <<
+        "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
+    AllocState->HolderFactory.CleanupModulesOnTerminate();
+    if (std::current_exception()) {
+        throw;
+    }
+
+    ythrow yexception() << fullMessage;
 }
 
 } // namespace NKikimr::NKqp

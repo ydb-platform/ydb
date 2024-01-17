@@ -5,9 +5,9 @@
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/interconnect/events_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 
 namespace NFq {
 
@@ -92,13 +92,15 @@ struct TEvCheckpointStorage {
 
     struct TEvSetCheckpointPendingCommitStatusRequest
         : NActors::TEventLocal<TEvSetCheckpointPendingCommitStatusRequest, EvSetCheckpointStatusPendingCommitRequest> {
-        TEvSetCheckpointPendingCommitStatusRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId)
+        TEvSetCheckpointPendingCommitStatusRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes)
             : CoordinatorId(std::move(coordinatorId))
-            , CheckpointId(std::move(checkpointId)) {
+            , CheckpointId(std::move(checkpointId))
+            , StateSizeBytes(stateSizeBytes) {
         }
 
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
+        ui64 StateSizeBytes;
     };
 
     struct TEvSetCheckpointPendingCommitStatusResponse
@@ -114,13 +116,15 @@ struct TEvCheckpointStorage {
 
     struct TEvCompleteCheckpointRequest
         : NActors::TEventLocal<TEvCompleteCheckpointRequest, EvCompleteCheckpointRequest> {
-        TEvCompleteCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId)
+        TEvCompleteCheckpointRequest(TCoordinatorId coordinatorId, TCheckpointId checkpointId, ui64 stateSizeBytes)
             : CoordinatorId(std::move(coordinatorId))
-            , CheckpointId(std::move(checkpointId)) {
+            , CheckpointId(std::move(checkpointId))
+            , StateSizeBytes(stateSizeBytes) {
         }
 
         TCoordinatorId CoordinatorId;
         TCheckpointId CheckpointId;
+        ui64 StateSizeBytes;
     };
 
     struct TEvCompleteCheckpointResponse

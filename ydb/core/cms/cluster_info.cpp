@@ -5,8 +5,8 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
@@ -793,6 +793,18 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
     }
 
     return locks;
+}
+
+void TClusterInfo::SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers) {
+    for (auto node : NodePtrs(hostName)) {
+        node->Markers.insert(markers.begin(), markers.end());
+    }
+}
+
+void TClusterInfo::ResetHostMarkers(const TString &hostName) {
+    for (auto node : NodePtrs(hostName)) {
+        node->Markers.clear();
+    }
 }
 
 void TClusterInfo::ApplyDowntimes(const TDowntimes &downtimes)

@@ -104,5 +104,18 @@ using WString = std::basic_string< wchar_t, std::char_traits< wchar_t >, Aws::Al
 
 } // namespace Aws
 
+#ifdef USE_AWS_MEMORY_MANAGEMENT
+#include <aws/crt/StringUtils.h>
 
-
+/* Inject hash method for an Aws::String with a custom allocator to workaround original C++ defect:
+ * "hash support for std::basic_string with customized allocators was not enabled"
+ * see LWG 3705: https://en.cppreference.com/w/cpp/string/basic_string/hash */
+namespace std
+{
+    template<>
+    struct hash<Aws::String>
+    {
+        size_t operator()(const Aws::String& t) const { return Aws::Crt::HashString(t.c_str()); }
+    };
+}
+#endif

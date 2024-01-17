@@ -10,19 +10,12 @@ namespace NYT {
 //! Will crash otherwise
 template <CScalable<double> TValue, class TRandomGenerator>
     requires std::is_invocable_r<double, TRandomGenerator>::value
-constexpr inline TValue ApplyJitter(TValue average, double jitter, const TRandomGenerator& randomGenerator)
-{
-    YT_VERIFY(jitter >= 0 && jitter <= 1);
-
-    double rnd = randomGenerator();
-
-    YT_VERIFY(std::abs(rnd) <= 1);
-
-    double multiplier = static_cast<double>(1) + jitter * rnd;
-
-    return average * multiplier;
-}
+constexpr inline TValue ApplyJitter(TValue average, double jitter, const TRandomGenerator& randomGenerator);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define JITTER_INL_H_
+#include "jitter-inl.h"
+#undef JITTER_INL_H_

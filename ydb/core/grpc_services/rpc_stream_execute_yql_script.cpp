@@ -66,9 +66,9 @@ private:
     static std::function<TEvStreamExecuteYqlScriptRequest::TFinishWrapper(std::function<void()>&&)>
     GetFinishWrapper(std::shared_ptr<std::atomic_bool> flag) {
         return [flag](std::function<void()>&& cb) {
-            return [cb = std::move(cb), flag](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+            return [cb = std::move(cb), flag](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
                 Y_ASSERT(future.HasValue());
-                if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL || flag->load()) {
+                if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL || flag->load()) {
                     cb();
                 }
             };

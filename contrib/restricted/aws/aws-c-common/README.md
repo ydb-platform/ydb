@@ -2,8 +2,6 @@
 
 
 [![GitHub](https://img.shields.io/github/license/awslabs/aws-c-common.svg)](https://github.com/awslabs/aws-c-common/blob/main/LICENSE)
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/awslabs/aws-c-common.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/awslabs/aws-c-common/context:cpp)
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/awslabs/aws-c-common.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/awslabs/aws-c-common/alerts/)
 
 Core c99 package for AWS SDK for C. Includes cross-platform primitives, configuration, data structures, and error handling.
 
@@ -192,14 +190,19 @@ Example:
 * Don't typedef enums. It breaks forward declaration ability.
 * typedef function definitions for use as function pointers as values and suffixed with _fn.
 
-Example:
+    Do this:
 
-    typedef int(fn_name_fn)(void *);
+        typedef int(fn_name_fn)(void *);
 
-Not:
+    Not this:
 
-    typedef int(*fn_name_fn)(void *);
-
+        typedef int(*fn_name_fn)(void *);
+        
+* If a callback may be async, then always have it be async.
+  Callbacks that are sometimes async and sometimes sync are hard to code around and lead to bugs
+  (see [this blog post](https://blog.ometer.com/2011/07/24/callbacks-synchronous-and-asynchronous/)).
+  Unfortunately many callbacks in this codebase currently violate this rule,
+  so be careful. But do not add any more.
 * Every source and header file must have a copyright header (The standard AWS one for apache 2).
 * Use standard include guards (e.g. #IFNDEF HEADER_NAME #define HEADER_NAME etc...).
 * Include order should be:
@@ -235,24 +238,24 @@ definition. This mainly applies to header files. Obviously, if you are writing a
 platform, you have more liberty on this.
 * When checking more than one error condition, check and log each condition separately with a unique message.
 
-Example:
+    Do this:
+    
+        if (options->callback == NULL) {
+            AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - callback is null");
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        }
 
-    if (options->callback == NULL) {
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - callback is null");
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-    }
+        if (options->allocator == NULL) {
+            AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - allocator is null");
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        }
 
-    if (options->allocator == NULL) {
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - allocator is null");
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-    }
-
-Not:
-
-    if (options->callback == NULL || options->allocator == NULL) {
-        AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null");
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-    }
+    Not this:
+    
+        if (options->callback == NULL || options->allocator == NULL) {
+            AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null");
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        }
 
 ## CBMC
 

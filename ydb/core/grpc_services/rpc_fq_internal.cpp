@@ -6,7 +6,7 @@
 #include <ydb/core/fq/libs/actors/proxy_private.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/core/grpc_services/base/base.h>
 

@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const {
-    auto loader = SchemaInfo->GetColumnLoader(SchemaInfo->GetFieldByColumnIdVerified(Record.ColumnId)->name());
+    auto loader = SchemaInfo->GetColumnLoaderVerified(Record.ColumnId);
     auto rb = NArrow::TStatusValidator::GetValid(loader->Apply(Data));
 
     auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(rb, Data, splitSizes);
@@ -52,11 +52,12 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     Y_ABORT_UNLESS(CurrentPortionRecords < Context.GetPortionRowsCountLimit());
     Y_ABORT_UNLESS(startIndex + length <= a->length());
     ui32 i = startIndex;
+    const ui32 packedRecordSize = Context.GetColumnStat() ? Context.GetColumnStat()->GetPackedRecordSize() : 0;
     for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
-        NArrow::Append(*Builder, *a, i, &recordSize);
+        AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))("a", a->ToString())("a_type", a->type()->ToString())("builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
-        PredictedPackedBytes += Context.GetColumnStat().GetPackedRecordSize();
+        PredictedPackedBytes += packedRecordSize ? packedRecordSize : (recordSize / 2);
         if (++CurrentPortionRecords == Context.GetPortionRowsCountLimit()) {
             FlushBuffer();
             ++i;
@@ -69,14 +70,17 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     return startIndex + length - i;
 }
 
-void TColumnPortion::FlushBuffer() {
+bool TColumnPortion::FlushBuffer() {
     if (Builder->length()) {
         auto newArrayChunk = NArrow::TStatusValidator::GetValid(Builder->Finish());
-        Chunks.emplace_back(std::make_shared<TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetField()), newArrayChunk, Context.GetColumnId(), Context.GetSchemaInfo()));
+        Chunks.emplace_back(std::make_shared<TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetResultField()), newArrayChunk, Context.GetColumnId(), Context.GetSchemaInfo()));
         Builder = Context.MakeBuilder();
         CurrentChunkRawSize = 0;
         PredictedPackedBytes = 0;
         PackedSize += Chunks.back()->GetPackedSize();
+        return true;
+    } else {
+        return false;
     }
 }
 

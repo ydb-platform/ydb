@@ -110,12 +110,12 @@ private:
 
         auto state = requestBaseCtx->GetAuthState();
 
-        if (state.State == NGrpc::TAuthState::AS_FAIL) {
+        if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
             return;
         }
 
-        if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) {
+        if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
@@ -171,8 +171,8 @@ void TGRpcRequestProxySimple::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev
 
 bool TGRpcRequestProxySimple::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NGrpc::TAuthState::AS_OK ||
-           state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
+    return state.State == NYdbGrpc::TAuthState::AS_OK ||
+           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 

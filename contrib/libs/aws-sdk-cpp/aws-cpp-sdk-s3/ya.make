@@ -8,8 +8,13 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+    contrib/restricted/aws/aws-c-auth
     contrib/restricted/aws/aws-c-common
     contrib/restricted/aws/aws-c-event-stream
+    contrib/restricted/aws/aws-c-io
+    contrib/restricted/aws/aws-c-mqtt
+    contrib/restricted/aws/aws-c-sdkutils
+    contrib/restricted/aws/aws-crt-cpp
 )
 
 ADDINCL(
@@ -22,38 +27,52 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
+    -DAWS_AUTH_USE_IMPORT_EXPORT
     -DAWS_CAL_USE_IMPORT_EXPORT
     -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
     -DAWS_COMMON_USE_IMPORT_EXPORT
+    -DAWS_COMPRESSION_USE_IMPORT_EXPORT
+    -DAWS_CRT_CPP_USE_IMPORT_EXPORT
     -DAWS_EVENT_STREAM_USE_IMPORT_EXPORT
+    -DAWS_HTTP_USE_IMPORT_EXPORT
     -DAWS_IO_USE_IMPORT_EXPORT
+    -DAWS_MQTT_USE_IMPORT_EXPORT
+    -DAWS_MQTT_WITH_WEBSOCKETS
+    -DAWS_S3_USE_IMPORT_EXPORT
+    -DAWS_SDKUTILS_USE_IMPORT_EXPORT
     -DAWS_SDK_VERSION_MAJOR=1
-    -DAWS_SDK_VERSION_MINOR=8
-    -DAWS_SDK_VERSION_PATCH=186
+    -DAWS_SDK_VERSION_MINOR=11
+    -DAWS_SDK_VERSION_PATCH=37
+    -DAWS_TEST_REGION=US_EAST_1
     -DAWS_USE_EPOLL
+    -DENABLED_REQUEST_COMPRESSION
+    -DENABLED_ZLIB_REQUEST_COMPRESSION
     -DENABLE_CURL_CLIENT
     -DENABLE_OPENSSL_ENCRYPTION
     -DHAS_PATHCONF
     -DHAS_UMASK
-    -DS2N_ADX
-    -DS2N_BIKE_R3_AVX2
-    -DS2N_BIKE_R3_AVX512
-    -DS2N_BIKE_R3_PCLMUL
-    -DS2N_BIKE_R3_VPCLMUL
+    -DS2N_CLONE_SUPPORTED
     -DS2N_CPUID_AVAILABLE
     -DS2N_FALL_THROUGH_SUPPORTED
-    -DS2N_HAVE_EXECINFO
+    -DS2N_FEATURES_AVAILABLE
     -DS2N_KYBER512R3_AVX2_BMI2
-    -DS2N_SIKE_P434_R3_ASM
+    -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
+    -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
+    -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
+    -DS2N_MADVISE_SUPPORTED
+    -DS2N_PLATFORM_SUPPORTS_KTLS
+    -DS2N_STACKTRACE
     -DS2N___RESTRICT__SUPPORTED
 )
 
 SRCS(
-    source/S3ARN.cpp
     source/S3Client.cpp
-    source/S3Endpoint.cpp
+    source/S3ClientConfiguration.cpp
+    source/S3EndpointProvider.cpp
+    source/S3EndpointRules.cpp
     source/S3ErrorMarshaller.cpp
     source/S3Errors.cpp
+    source/S3Request.cpp
     source/model/AbortIncompleteMultipartUpload.cpp
     source/model/AbortMultipartUploadRequest.cpp
     source/model/AbortMultipartUploadResult.cpp
@@ -79,6 +98,9 @@ SRCS(
     source/model/CORSRule.cpp
     source/model/CSVInput.cpp
     source/model/CSVOutput.cpp
+    source/model/Checksum.cpp
+    source/model/ChecksumAlgorithm.cpp
+    source/model/ChecksumMode.cpp
     source/model/CloudFunctionConfiguration.cpp
     source/model/CommonPrefix.cpp
     source/model/CompleteMultipartUploadRequest.cpp
@@ -129,6 +151,7 @@ SRCS(
     source/model/Error.cpp
     source/model/ErrorDocument.cpp
     source/model/Event.cpp
+    source/model/EventBridgeConfiguration.cpp
     source/model/ExistingObjectReplication.cpp
     source/model/ExistingObjectReplicationStatus.cpp
     source/model/ExpirationStatus.cpp
@@ -178,6 +201,9 @@ SRCS(
     source/model/GetBucketWebsiteResult.cpp
     source/model/GetObjectAclRequest.cpp
     source/model/GetObjectAclResult.cpp
+    source/model/GetObjectAttributesParts.cpp
+    source/model/GetObjectAttributesRequest.cpp
+    source/model/GetObjectAttributesResult.cpp
     source/model/GetObjectLegalHoldRequest.cpp
     source/model/GetObjectLegalHoldResult.cpp
     source/model/GetObjectLockConfigurationRequest.cpp
@@ -262,6 +288,7 @@ SRCS(
     source/model/NotificationConfigurationDeprecated.cpp
     source/model/NotificationConfigurationFilter.cpp
     source/model/Object.cpp
+    source/model/ObjectAttributes.cpp
     source/model/ObjectCannedACL.cpp
     source/model/ObjectIdentifier.cpp
     source/model/ObjectLockConfiguration.cpp
@@ -273,6 +300,7 @@ SRCS(
     source/model/ObjectLockRetentionMode.cpp
     source/model/ObjectLockRule.cpp
     source/model/ObjectOwnership.cpp
+    source/model/ObjectPart.cpp
     source/model/ObjectStorageClass.cpp
     source/model/ObjectVersion.cpp
     source/model/ObjectVersionStorageClass.cpp

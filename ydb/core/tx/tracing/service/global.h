@@ -22,6 +22,7 @@ public:
     void Clean();
 
     std::shared_ptr<TTraceClient> GetClient(const TString& type, const TString& clientId, const TString& parentId);
+    std::shared_ptr<TTraceClient> GetLocalClient(const TString& type, const TString& clientId);
 };
 
 }

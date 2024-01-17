@@ -6,7 +6,6 @@ on:
       - 'stable-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '.github/**'
       - '*'
     types:
       - 'opened'
@@ -18,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check-running-allowed:
+    if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
     runs-on: ubuntu-latest
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result }}
@@ -26,18 +26,30 @@ jobs:
         id: check-ownership-membership
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+
+            console.log("okToTestLabel=%o", okToTestLabel !== undefined);
+
+            if (okToTestLabel !== undefined) {
+              return true;
+            }
+
             // This is used primarily in forks. Repository owner
             // should be allowed to run anything.
             const userLogin = context.payload.pull_request.user.login;
 
             // How to interpret membership status code:
-            // https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
-            const isOrgMember = async function () {
+            // https://docs.github.com/rest/collaborators/collaborators#check-if-a-user-is-a-repository-collaborator
+            const isRepoCollaborator = async function () {
               try {
-                const response = await github.rest.orgs.checkMembershipForUser({
-                  org: context.payload.organization.login,
+                const response = await github.rest.repos.checkCollaborator({
+                  owner: context.payload.repository.owner.login,
+                  repo: context.payload.repository.name,
                   username: userLogin,
                 });
                 return response.status == 204;
@@ -50,18 +62,16 @@ jobs:
             }
 
             if (context.payload.repository.owner.login == userLogin) {
+              console.log("You are the repository owner!");
               return true;
             }
 
-            if (await isOrgMember()) {
+            if (await isRepoCollaborator()) {
+              console.log("You are a collaborator!");
               return true;
             }
-
-            const labels = context.payload.pull_request.labels;
-            const okToTestLabel = labels.find(
-              label => label.name == 'ok-to-test'
-            );
-            return okToTestLabel !== undefined;
+            
+            return false;
       - name: comment-if-waiting-on-ok
         if: steps.check-ownership-membership.outputs.result == 'false' &&
             github.event.action == 'opened'
@@ -110,6 +120,6 @@ jobs:
       test_size: "small,medium"
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
-      runner_label: ya-make
-      cache_tests: true
+      runner_label: auto-provisioned
+      put_build_results_to_cache: true
     secrets: inherit

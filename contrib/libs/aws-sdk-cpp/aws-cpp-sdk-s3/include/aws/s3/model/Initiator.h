@@ -28,61 +28,61 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Initiator">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API Initiator
+  class Initiator
   {
   public:
-    Initiator();
-    Initiator(const Aws::Utils::Xml::XmlNode& xmlNode);
-    Initiator& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Initiator();
+    AWS_S3_API Initiator(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Initiator& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline const Aws::String& GetID() const{ return m_iD; }
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline void SetID(Aws::String&& value) { m_iDHasBeenSet = true; m_iD = std::move(value); }
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline void SetID(const char* value) { m_iDHasBeenSet = true; m_iD.assign(value); }
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline Initiator& WithID(const Aws::String& value) { SetID(value); return *this;}
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline Initiator& WithID(Aws::String&& value) { SetID(std::move(value)); return *this;}
 
     /**
-     * <p>If the principal is an AWS account, it provides the Canonical User ID. If the
-     * principal is an IAM User, it provides a user ARN value.</p>
+     * <p>If the principal is an Amazon Web Services account, it provides the Canonical
+     * User ID. If the principal is an IAM User, it provides a user ARN value.</p>
      */
     inline Initiator& WithID(const char* value) { SetID(value); return *this;}
 
@@ -130,10 +130,10 @@ namespace Model
   private:
 
     Aws::String m_iD;
-    bool m_iDHasBeenSet;
+    bool m_iDHasBeenSet = false;
 
     Aws::String m_displayName;
-    bool m_displayNameHasBeenSet;
+    bool m_displayNameHasBeenSet = false;
   };
 
 } // namespace Model

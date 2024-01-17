@@ -95,6 +95,10 @@ struct TDsProxyNodeMon : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus2;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus3more;
 
+    // wipe monitoring counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr PutStatusQueries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IncarnationChanges;
+
     TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes);
     void CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
             TDuration duration);

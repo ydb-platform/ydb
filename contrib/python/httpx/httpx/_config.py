@@ -1,7 +1,6 @@
 import logging
 import os
 import ssl
-import sys
 import typing
 from pathlib import Path
 
@@ -72,7 +71,7 @@ class SSLConfig:
         verify: VerifyTypes = True,
         trust_env: bool = True,
         http2: bool = False,
-    ):
+    ) -> None:
         self.cert = cert
         self.verify = verify
         self.trust_env = trust_env
@@ -132,11 +131,10 @@ class SSLConfig:
 
         # Signal to server support for PHA in TLS 1.3. Raises an
         # AttributeError if only read-only access is implemented.
-        if sys.version_info >= (3, 8):  # pragma: no cover
-            try:
-                context.post_handshake_auth = True
-            except AttributeError:  # pragma: no cover
-                pass
+        try:
+            context.post_handshake_auth = True
+        except AttributeError:  # pragma: no cover
+            pass
 
         # Disable using 'commonName' for SSLContext.check_hostname
         # when the 'subjectAltName' extension isn't available.
@@ -175,10 +173,9 @@ class SSLConfig:
             alpn_idents = ["http/1.1", "h2"] if self.http2 else ["http/1.1"]
             context.set_alpn_protocols(alpn_idents)
 
-        if sys.version_info >= (3, 8):  # pragma: no cover
-            keylogfile = os.environ.get("SSLKEYLOGFILE")
-            if keylogfile and self.trust_env:
-                context.keylog_filename = keylogfile
+        keylogfile = os.environ.get("SSLKEYLOGFILE")
+        if keylogfile and self.trust_env:
+            context.keylog_filename = keylogfile
 
         return context
 
@@ -221,7 +218,7 @@ class Timeout:
         read: typing.Union[None, float, UnsetType] = UNSET,
         write: typing.Union[None, float, UnsetType] = UNSET,
         pool: typing.Union[None, float, UnsetType] = UNSET,
-    ):
+    ) -> None:
         if isinstance(timeout, Timeout):
             # Passed as a single explicit Timeout.
             assert connect is UNSET
@@ -306,7 +303,7 @@ class Limits:
         max_connections: typing.Optional[int] = None,
         max_keepalive_connections: typing.Optional[int] = None,
         keepalive_expiry: typing.Optional[float] = 5.0,
-    ):
+    ) -> None:
         self.max_connections = max_connections
         self.max_keepalive_connections = max_keepalive_connections
         self.keepalive_expiry = keepalive_expiry
@@ -336,7 +333,7 @@ class Proxy:
         ssl_context: typing.Optional[ssl.SSLContext] = None,
         auth: typing.Optional[typing.Tuple[str, str]] = None,
         headers: typing.Optional[HeaderTypes] = None,
-    ):
+    ) -> None:
         url = URL(url)
         headers = Headers(headers)
 

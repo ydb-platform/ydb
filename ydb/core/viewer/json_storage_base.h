@@ -1,8 +1,8 @@
 #pragma once
 #include <unordered_map>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
@@ -356,7 +356,7 @@ public:
             if (storagePoolName.empty()) {
                 continue;
             }
-            if (FilterNodeIds.empty() || FilterNodeIds.contains(nodeId)) {
+            if (FilterNodeIds.empty() || FilterNodeIds.contains(info.GetNodeId())) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
                 TString groupId(ToString(info.GetGroupID()));
                 if (FilterGroupIds.empty() || BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
@@ -406,36 +406,6 @@ public:
 
     TList<NKikimrWhiteboard::TPDiskStateInfo> PDisksAppended;
     TList<NKikimrWhiteboard::TVDiskStateInfo> VDisksAppended;
-
-    bool CheckGroupFilters(const TString& groupId, const TString& poolName) {
-        if (!EffectiveFilterGroupIds.empty() && !EffectiveFilterGroupIds.contains(groupId)) {
-            return false;
-        }
-        switch (With) {
-            case EWith::MissingDisks:
-                if (BSGroupWithMissingDisks.count(groupId) == 0) {
-                    return false;
-                }
-                break;
-            case EWith::SpaceProblems:
-                if (BSGroupWithSpaceProblems.count(groupId) == 0) {
-                    return false;
-                }
-                break;
-            case EWith::Everything:
-                break;
-        }
-        if (Filter) {
-            if (poolName.Contains(Filter)) {
-                return true;
-            }
-            if (groupId.Contains(Filter)) {
-                return true;
-            }
-            return false;
-        }
-        return true;
-    }
 
     bool CheckAdditionalNodesInfoNeeded() {
         if (NeedAdditionalNodesRequests) {

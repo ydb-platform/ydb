@@ -13,7 +13,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
@@ -188,6 +188,7 @@ private:
 
 
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
+        bool enableSpilling = Settings->SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != TDqSettings::ESpillingEngine::Disable;
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,
@@ -195,12 +196,14 @@ private:
             Counters,
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
             computeActorType,
-            StatsMode));
+            StatsMode,
+            enableSpilling));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);
+        allocateRequest->Record.SetEnableSpilling(enableSpilling);
         if (enableComputeActor) {
             ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
         }
@@ -242,8 +245,8 @@ private:
         Timeout = tasks.size() == 1
             ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
             : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-        
-        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: " 
+
+        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeouts are set to: "
             << ToString(Timeout) << " (global), "
             << ToString(WorkersAllocationFailTimeout) << " (workers allocation fail), "
             << ToString(WorkersAllocationWarnTimeout) << " (workers allocation warn) ";

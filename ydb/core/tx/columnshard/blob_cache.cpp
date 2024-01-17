@@ -5,8 +5,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_pipe.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/cache/cache.h>
 
 #include <util/string/vector.h>

@@ -15,7 +15,7 @@ target_link_libraries(providers-dq-metrics PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   providers-solomon-async_io
 )
 target_sources(providers-dq-metrics PRIVATE

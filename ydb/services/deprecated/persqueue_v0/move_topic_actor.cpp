@@ -55,7 +55,7 @@ bool ComparePQDescriptions(NKikimrSchemeOp::TPersQueueGroupDescription first,
 #undef RESET_DOUBLE
 #undef RESET_DOUBLE_OPT
 
-TMoveTopicActor::TMoveTopicActor(NGrpc::IRequestContextBase* request)
+TMoveTopicActor::TMoveTopicActor(NYdbGrpc::IRequestContextBase* request)
     : TxPending(E_UNDEFINED)
     , RequestCtx(request)
 {

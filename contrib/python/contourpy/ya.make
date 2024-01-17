@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.1.1)
+VERSION(1.2.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -51,8 +51,13 @@ PY_SRCS(
     contourpy/__init__.py
     contourpy/_contourpy.pyi
     contourpy/_version.py
+    contourpy/array.py
     contourpy/chunk.py
+    contourpy/convert.py
+    contourpy/dechunk.py
     contourpy/enum_util.py
+    contourpy/typecheck.py
+    contourpy/types.py
     contourpy/util/__init__.py
     contourpy/util/_build_config.py
     contourpy/util/_build_config.pyi

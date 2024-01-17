@@ -3,7 +3,7 @@
 #include "world.h"
 #include "events.h"
 #include <util/system/type_name.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>

@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 4
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 2
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -52,11 +62,17 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_1: MIN(item.URL)}",
+                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_1: MIN(item.URL,state._yql_agg_1)}",
                                                                         "GroupBy": "item.SearchPhrase",
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "InternalOperatorId": 1
+                                                                            }
+                                                                        ],
                                                                         "Name": "Aggregate"
                                                                     },
                                                                     {
+                                                                        "Inputs": [],
                                                                         "Name": "TableFullScan",
                                                                         "ReadColumns": [
                                                                             "SearchPhrase",
@@ -95,7 +111,8 @@
                                                                                                     "Id": 106
                                                                                                 }
                                                                                             ],
-                                                                                            "Id": 2
+                                                                                            "FunctionType": 2,
+                                                                                            "KernelIdx": 0
                                                                                         }
                                                                                     }
                                                                                 },
@@ -134,30 +151,14 @@
                                                                                                 }
                                                                                             ],
                                                                                             "FunctionType": 2,
-                                                                                            "Id": 9,
-                                                                                            "KernelIdx": 0
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
-                                                                                    "Assign": {
-                                                                                        "Column": {
-                                                                                            "Id": 110
-                                                                                        },
-                                                                                        "Function": {
-                                                                                            "Arguments": [
-                                                                                                {
-                                                                                                    "Id": 109
-                                                                                                }
-                                                                                            ],
-                                                                                            "Id": 18
+                                                                                            "KernelIdx": 1
                                                                                         }
                                                                                     }
                                                                                 },
                                                                                 {
                                                                                     "Filter": {
                                                                                         "Predicate": {
-                                                                                            "Id": 110
+                                                                                            "Id": 109
                                                                                         }
                                                                                     }
                                                                                 },
@@ -174,7 +175,7 @@
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 3
+                                                                            "Version": 4
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }

@@ -20,7 +20,7 @@ target_compile_options(core-quoter-public PRIVATE
 target_link_libraries(core-quoter-public PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-library-time_series_vec
   tools-enum_parser-enum_serialization_runtime
 )

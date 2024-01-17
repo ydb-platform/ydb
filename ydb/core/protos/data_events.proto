@@ -1,0 +1,123 @@
+import "ydb/library/actors/protos/actors.proto";
+import "ydb/core/protos/query_stats.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+package NKikimrDataEvents;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TLock {
+    optional fixed64 LockId = 1;
+    optional fixed64 DataShard = 2;
+    optional uint32 Generation = 3;
+    optional uint64 Counter = 4;
+    optional fixed64 SchemeShard = 5;
+    optional uint64 PathId = 6;
+    optional bool HasWrites = 7;
+}
+
+message TKqpLocks {
+    repeated TLock Locks = 1;
+    repeated uint64 SendingShards = 2;   // empty on Rollback
+    repeated uint64 ReceivingShards = 3; // empty on Rollback
+
+    enum ELocksOp {
+        Unspecified = 0;
+        reserved 1; // Validate op is deprecated
+        Commit = 2; // Validate locks, commit buffered changes and erase locks
+        Rollback = 3; // Rollback buffered changes and erase locks
+    }
+    optional ELocksOp Op = 4;
+}
+
+message TTableId {
+    optional uint64 OwnerId = 1;
+    optional uint64 TableId = 2;
+    optional uint64 SchemaVersion = 3;
+}
+
+message TTabletInfo {
+    optional fixed64 TabletId = 1;
+    optional uint32 Generation = 2;
+    optional uint64 Step = 3;
+    optional NActorsProto.TActorId ActorId = 4;
+    optional bool IsFollower = 5;
+}
+
+enum EDataFormat {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_CELLVEC = 1;
+    FORMAT_ARROW = 2;
+}
+
+message TEvWrite {
+    enum ETxMode {
+        MODE_UNSPECIFIED = 0;
+        MODE_PREPARE = 1;
+        MODE_VOLATILE_PREPARE  = 2;
+        MODE_IMMEDIATE  = 3;
+    }
+
+    message TOperation {
+        enum EOperationType {
+            OPERATION_UNSPECIFIED = 0;
+            OPERATION_INSERT = 1;
+            OPERATION_DELETE = 2;
+            OPERATION_UPDATE = 3;
+            OPERATION_UPSERT = 4;
+            OPERATION_REPLACE = 5;
+        }
+
+        optional EOperationType Type = 1;
+        optional TTableId TableId = 2;
+        repeated uint32 ColumnIds = 3 [packed = true];
+        optional uint64 PayloadIndex = 4;
+        optional EDataFormat PayloadFormat = 5;
+    }
+
+    // Transaction operations
+    repeated TOperation Operations = 1;
+
+    // Transactions params
+    optional uint64 TxId = 2;
+    optional ETxMode TxMode = 3;
+    optional uint64 LockTxId = 4;
+    optional uint32 LockNodeId = 5;
+    optional TKqpLocks Locks = 6;
+
+    // Other params
+    optional uint64 OverloadSubscribe = 7;
+}
+
+message TEvWriteResult {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_PREPARED = 1;
+        STATUS_COMPLETED = 2;
+        STATUS_ABORTED = 3;
+        STATUS_INTERNAL_ERROR = 4;
+        STATUS_OVERLOADED = 5;
+        STATUS_CANCELLED = 6;        
+        STATUS_BAD_REQUEST = 7;
+    }
+
+    // Status
+    optional EStatus Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+
+    // Transactions params
+    optional uint64 Origin = 3;
+    optional uint64 TxId = 4;
+    optional uint64 MinStep = 5;
+    optional uint64 MaxStep = 6;
+    repeated fixed64 DomainCoordinators = 7;
+    optional uint64 Step = 8;
+    optional uint64 OrderId = 9;
+    repeated TLock TxLocks = 10;
+    optional TTabletInfo TabletInfo = 11;
+
+    // Other params
+    optional uint64 OverloadSubscribed = 12;
+
+    // Statistics
+    optional NKikimrQueryStats.TTxStats TxStats = 13;
+}

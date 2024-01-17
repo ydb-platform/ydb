@@ -550,7 +550,7 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
     LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK,
         "PDiskId# %" PRIu32 " Error reading log with offset %" PRIu64,
         (ui32)PDisk->PDiskId, offsetRead);
-        
+
     ReplyError();
 }
 

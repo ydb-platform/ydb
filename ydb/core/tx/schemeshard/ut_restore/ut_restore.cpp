@@ -729,6 +729,54 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
+    Y_UNIT_TEST(ExportImportPg) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "pgint4" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UploadRows(runtime, "/MyRoot/Table", 0, {1}, {2}, {55555});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldCountWrittenBytesAndRows) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -799,15 +847,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestCreateTable(runtime, ++txId, "/MyRoot", scheme);
         env.TestWaitNotification(runtime, txId);
 
-        ui32 total = 0;
-        ui32 overloads = 0;
+        ui32 requests = 0;
+        ui32 responses = 0;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse) {
-                ++total;
-                const auto& record = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record;
-                overloads += ui32(record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            }
-
+            requests += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsRequest);
+            responses += ui32(ev->GetTypeRewrite() == TEvDataShard::EvS3UploadRowsResponse);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
@@ -817,12 +861,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         const auto data = GenerateTestData("", 1000);
         const ui32 batchSize = 32;
         RestoreNoWait(runtime, ++txId, portManager.GetPort(), s3Mock, {data}, batchSize);
-
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT(overloads > 0);
 
         const ui32 expected = data.Data.size() / batchSize + ui32(bool(data.Data.size() % batchSize));
-        UNIT_ASSERT_VALUES_EQUAL(expected, total - overloads);
+        UNIT_ASSERT(requests > expected);
+        UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
         NKqp::CompareYson(data.YsonStr, content);
@@ -1557,9 +1600,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
-            ? expectedStatus
-            : Ydb::StatusIds::SUCCESS;
+        auto initialStatus = Ydb::StatusIds::SUCCESS;
+        switch (expectedStatus) {
+        case Ydb::StatusIds::BAD_REQUEST:
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            initialStatus = expectedStatus;
+            break;
+        default:
+            break;
+        }
+
         TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, initialStatus);
         env.TestWaitNotification(runtime, id, schemeshardId);
 
@@ -2234,6 +2284,42 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnNonUniqDestinationPaths) {
+        TTestBasicRuntime runtime;
+
+        auto unusedTestData = THashMap<TString, TString>();
+        Run(runtime, std::move(unusedTestData), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+              items {
+                source_prefix: "b"
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnInvalidPath) {
+        TTestBasicRuntime runtime;
+
+        auto unusedTestData = THashMap<TString, TString>();
+        Run(runtime, std::move(unusedTestData), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "a"
+                destination_path: "/InvalidRoot/Table"
+              }
+            }
+        )", Ydb::StatusIds::BAD_REQUEST);
     }
 
     void CancelShouldSucceed(TDelayFunc delayFunc) {

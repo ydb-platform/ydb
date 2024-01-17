@@ -13,7 +13,7 @@ target_link_libraries(services-bg_tasks-ds_table PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-library-accessor
-  cpp-actors-core
+  library-actors-core
   api-protos
   services-bg_tasks-abstract
   services-metadata-initializer

@@ -32,11 +32,14 @@ using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
-    mutable THashMap<ui32, TColumnFeatures> ColumnFeatures;
-    mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
+    THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     TIndexInfo(const TString& name, ui32 id);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
+    void BuildSchemaWithSpecials();
+    void BuildArrowSchema();
+    void InitializeCaches();
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
@@ -49,11 +52,16 @@ public:
     };
 
     TString DebugString() const {
-        return TStringBuilder() << "("
+        TStringBuilder sb;
+        sb << "("
             << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
             << ")";
+        for (auto&& i : ColumnFeatures) {
+            sb << GetColumnName(i.first) << ":" << i.second.DebugString() << ";";
+        }
+        return sb;
     }
 
     /// Appends the special columns to the batch.
@@ -83,7 +91,6 @@ public:
     }
 
 public:
-
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy", 0);
         return result;
@@ -101,10 +108,12 @@ public:
         return result;
     }
 
+    std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
-    std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnId(const std::string& name) const;
@@ -121,7 +130,7 @@ public:
     std::vector<TNameTypeInfo> GetColumns(const std::vector<ui32>& ids) const;
 
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
-    std::vector<TNameTypeInfo> GetPrimaryKey() const {
+    std::vector<TNameTypeInfo> GetPrimaryKeyColumns() const {
         return GetColumns(KeyColumns);
     }
 
@@ -134,10 +143,8 @@ public:
     // Sorting key: could be less or greater then traditional PK
     // It could be empty for append-only tables. It could be greater then PK for better columns compression.
     // If sorting key includes uniqueness key as a prefix we are able to use MergeSort for REPLACE.
-    const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return SortingKey; }
-    const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return ReplaceKey; }
-    const std::shared_ptr<arrow::Schema>& GetExtendedKey() const { return ExtendedKey; }
-    const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return IndexKey; }
+    const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return PrimaryKey; }
+    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const { return PrimaryKey; }
 
     /// Initializes sorting, replace, index and extended keys.
     void SetAllKeys();
@@ -156,7 +163,8 @@ public:
 
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<TString>& columnNames) const;
-    std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
+    std::shared_ptr<arrow::Field> ArrowColumnFieldOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> ArrowColumnFieldVerified(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> SpecialColumnField(const ui32 columnId) const;
 
     const THashSet<TString>& GetRequiredColumns() const {
@@ -170,11 +178,8 @@ public:
     bool AllowTtlOverColumn(const TString& name) const;
 
     /// Returns whether the sorting keys defined.
-    bool IsSorted() const { return SortingKey.get(); }
+    bool IsSorted() const { return true; }
     bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
-
-     /// Returns whether the replace keys defined.
-    bool IsReplacing() const { return ReplaceKey.get(); }
 
     std::shared_ptr<NArrow::TSortDescription> SortDescription() const;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
@@ -185,7 +190,12 @@ public:
     }
 
     static const std::vector<ui32>& GetSpecialColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::vector<ui32> result = {(ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID};
+        return result;
+    }
+
+    static const std::set<ui32>& GetSpecialColumnIdsSet() {
+        static const std::set<ui32> result(GetSpecialColumnIds().begin(), GetSpecialColumnIds().end());
         return result;
     }
 
@@ -193,16 +203,16 @@ public:
         return Version;
     }
 
+    bool CheckCompatible(const TIndexInfo& other) const;
+
 private:
     ui32 Id;
     ui64 Version = 0;
     TString Name;
-    mutable std::shared_ptr<arrow::Schema> Schema;
-    mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
-    std::shared_ptr<arrow::Schema> SortingKey;
-    std::shared_ptr<arrow::Schema> ReplaceKey;
+    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow::Schema> SchemaWithSpecials;
+    std::shared_ptr<arrow::Schema> PrimaryKey;
     std::shared_ptr<arrow::Schema> ExtendedKey; // Extend PK with snapshot columns to allow old shapshot reads
-    std::shared_ptr<arrow::Schema> IndexKey;
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     std::optional<NArrow::TCompression> DefaultCompression;

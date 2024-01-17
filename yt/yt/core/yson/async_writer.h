@@ -9,7 +9,7 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAsyncYsonWriter
+class TAsyncYsonWriter final
     : public IAsyncYsonConsumer
     , private TNonCopyable
 {

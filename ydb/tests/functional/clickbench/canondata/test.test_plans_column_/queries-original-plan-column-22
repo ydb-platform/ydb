@@ -18,6 +18,11 @@
                                 "Node Type": "Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 10
+                                            }
+                                        ],
                                         "Limit": "10",
                                         "Name": "Limit"
                                     }
@@ -33,6 +38,11 @@
                                                 "Node Type": "TopSort",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 8
+                                                            }
+                                                        ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
                                                         "TopSortBy": "argument.Count0"
@@ -49,6 +59,14 @@
                                                                 "Node Type": "Union",
                                                                 "Operators": [
                                                                     {
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 6
+                                                                            },
+                                                                            {
+                                                                                "ExternalPlanNodeId": 4
+                                                                            }
+                                                                        ],
                                                                         "Name": "Union"
                                                                     }
                                                                 ],
@@ -66,11 +84,17 @@
                                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0),_yql_agg_2: MIN(item.URL),_yql_agg_3: MIN(item.Title)}",
+                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1),_yql_agg_2: MIN(item.URL,state._yql_agg_2),_yql_agg_3: MIN(item.Title,state._yql_agg_3)}",
                                                                                         "GroupBy": "item.SearchPhrase",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     },
                                                                                     {
+                                                                                        "Inputs": [],
                                                                                         "Name": "TableFullScan",
                                                                                         "ReadColumns": [
                                                                                             "SearchPhrase",
@@ -111,7 +135,8 @@
                                                                                                                     "Id": 106
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 2
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -150,8 +175,7 @@
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "Id": 9,
-                                                                                                            "KernelIdx": 0
+                                                                                                            "KernelIdx": 1
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -160,13 +184,8 @@
                                                                                                         "Column": {
                                                                                                             "Id": 110
                                                                                                         },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 109
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 18
+                                                                                                        "Constant": {
+                                                                                                            "Bytes": ".google."
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -175,8 +194,17 @@
                                                                                                         "Column": {
                                                                                                             "Id": 111
                                                                                                         },
-                                                                                                        "Constant": {
-                                                                                                            "Bytes": ".google."
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 14
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Id": 110
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 2
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -188,15 +216,11 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
-                                                                                                                    "Id": 14
-                                                                                                                },
-                                                                                                                {
                                                                                                                     "Id": 111
                                                                                                                 }
                                                                                                             ],
                                                                                                             "FunctionType": 2,
-                                                                                                            "Id": 9,
-                                                                                                            "KernelIdx": 1
+                                                                                                            "KernelIdx": 3
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -208,50 +232,21 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
+                                                                                                                    "Id": 109
+                                                                                                                },
+                                                                                                                {
                                                                                                                     "Id": 112
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 18
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 114
-                                                                                                        },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 113
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 10
-                                                                                                        }
-                                                                                                    }
-                                                                                                },
-                                                                                                {
-                                                                                                    "Assign": {
-                                                                                                        "Column": {
-                                                                                                            "Id": 115
-                                                                                                        },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 110
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Id": 114
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 11
+                                                                                                            "FunctionType": 2,
+                                                                                                            "KernelIdx": 4
                                                                                                         }
                                                                                                     }
                                                                                                 },
                                                                                                 {
                                                                                                     "Filter": {
                                                                                                         "Predicate": {
-                                                                                                            "Id": 115
+                                                                                                            "Id": 113
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -274,7 +269,7 @@
                                                                                                     }
                                                                                                 }
                                                                                             ],
-                                                                                            "Version": 3
+                                                                                            "Version": 4
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -300,6 +295,11 @@
                                                                                     {
                                                                                         "Aggregation": "{_yql_agg_1: Inc(state._yql_agg_1)}",
                                                                                         "GroupBy": "item.SearchPhrase",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "ExternalPlanNodeId": 2
+                                                                                            }
+                                                                                        ],
                                                                                         "Name": "Aggregate"
                                                                                     }
                                                                                 ],
@@ -320,9 +320,15 @@
                                                                                                     {
                                                                                                         "Aggregation": "state",
                                                                                                         "GroupBy": "",
+                                                                                                        "Inputs": [
+                                                                                                            {
+                                                                                                                "InternalOperatorId": 1
+                                                                                                            }
+                                                                                                        ],
                                                                                                         "Name": "Aggregate"
                                                                                                     },
                                                                                                     {
+                                                                                                        "Inputs": [],
                                                                                                         "Name": "TableFullScan",
                                                                                                         "ReadColumns": [
                                                                                                             "SearchPhrase",
@@ -363,7 +369,8 @@
                                                                                                                                     "Id": 106
                                                                                                                                 }
                                                                                                                             ],
-                                                                                                                            "Id": 2
+                                                                                                                            "FunctionType": 2,
+                                                                                                                            "KernelIdx": 0
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -402,8 +409,7 @@
                                                                                                                                 }
                                                                                                                             ],
                                                                                                                             "FunctionType": 2,
-                                                                                                                            "Id": 9,
-                                                                                                                            "KernelIdx": 0
+                                                                                                                            "KernelIdx": 1
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -412,13 +418,8 @@
                                                                                                                         "Column": {
                                                                                                                             "Id": 110
                                                                                                                         },
-                                                                                                                        "Function": {
-                                                                                                                            "Arguments": [
-                                                                                                                                {
-                                                                                                                                    "Id": 109
-                                                                                                                                }
-                                                                                                                            ],
-                                                                                                                            "Id": 18
+                                                                                                                        "Constant": {
+                                                                                                                            "Bytes": ".google."
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -427,8 +428,17 @@
                                                                                                                         "Column": {
                                                                                                                             "Id": 111
                                                                                                                         },
-                                                                                                                        "Constant": {
-                                                                                                                            "Bytes": ".google."
+                                                                                                                        "Function": {
+                                                                                                                            "Arguments": [
+                                                                                                                                {
+                                                                                                                                    "Id": 14
+                                                                                                                                },
+                                                                                                                                {
+                                                                                                                                    "Id": 110
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                            "FunctionType": 2,
+                                                                                                                            "KernelIdx": 2
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -440,15 +450,11 @@
                                                                                                                         "Function": {
                                                                                                                             "Arguments": [
                                                                                                                                 {
-                                                                                                                                    "Id": 14
-                                                                                                                                },
-                                                                                                                                {
                                                                                                                                     "Id": 111
                                                                                                                                 }
                                                                                                                             ],
                                                                                                                             "FunctionType": 2,
-                                                                                                                            "Id": 9,
-                                                                                                                            "KernelIdx": 1
+                                                                                                                            "KernelIdx": 3
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -460,50 +466,21 @@
                                                                                                                         "Function": {
                                                                                                                             "Arguments": [
                                                                                                                                 {
+                                                                                                                                    "Id": 109
+                                                                                                                                },
+                                                                                                                                {
                                                                                                                                     "Id": 112
                                                                                                                                 }
                                                                                                                             ],
-                                                                                                                            "Id": 18
-                                                                                                                        }
-                                                                                                                    }
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Assign": {
-                                                                                                                        "Column": {
-                                                                                                                            "Id": 114
-                                                                                                                        },
-                                                                                                                        "Function": {
-                                                                                                                            "Arguments": [
-                                                                                                                                {
-                                                                                                                                    "Id": 113
-                                                                                                                                }
-                                                                                                                            ],
-                                                                                                                            "Id": 10
-                                                                                                                        }
-                                                                                                                    }
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Assign": {
-                                                                                                                        "Column": {
-                                                                                                                            "Id": 115
-                                                                                                                        },
-                                                                                                                        "Function": {
-                                                                                                                            "Arguments": [
-                                                                                                                                {
-                                                                                                                                    "Id": 110
-                                                                                                                                },
-                                                                                                                                {
-                                                                                                                                    "Id": 114
-                                                                                                                                }
-                                                                                                                            ],
-                                                                                                                            "Id": 11
+                                                                                                                            "FunctionType": 2,
+                                                                                                                            "KernelIdx": 4
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
                                                                                                                 {
                                                                                                                     "Filter": {
                                                                                                                         "Predicate": {
-                                                                                                                            "Id": 115
+                                                                                                                            "Id": 113
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -526,7 +503,7 @@
                                                                                                                     }
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Version": 3
+                                                                                                            "Version": 4
                                                                                                         },
                                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                                     }

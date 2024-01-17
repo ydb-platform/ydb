@@ -1,8 +1,8 @@
 #include "grpc_endpoint.h"
 
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>

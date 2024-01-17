@@ -1151,7 +1151,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     };
 
     struct TInjectLocks {
-        NKikimrTxDataShard::TKqpLocks_ELocksOp Op = NKikimrTxDataShard::TKqpLocks::Commit;
+        NKikimrDataEvents::TKqpLocks::ELocksOp Op = NKikimrDataEvents::TKqpLocks::Commit;
         TVector<TLockInfo> Locks;
 
         TInjectLocks& AddLocks(const TVector<TLockInfo>& locks) {
@@ -1809,7 +1809,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         for (ui32 columnId : columns) {
             record.AddColumns(columnId);
         }
-        record.SetResultFormat(NKikimrTxDataShard::CELLVEC);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
         return request;
     }
 
@@ -2617,6 +2617,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto locks2 = observer.LastLocks;
         observer.Inject = {};
 
+        // Note: disable volatile transactions, since this test verifies lock
+        // freezing and volatile transactions work without them.
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
         // Commit changes in tx 123
         observer.BlockReadSets = true;
         observer.InjectClearTasks = true;
@@ -2636,6 +2640,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
+
+        // Restore volatile transactions back to default
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         auto writeFuture = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22)
@@ -2762,6 +2769,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto locks4 = observer.LastLocks;
         observer.Inject = {};
 
+        // Note: disable volatile transactions, since reads to keys are blocked
+        // until readsets arrive, and this test relies on tx cross blocking,
+        // which doesn't happen with volatile transactions.
+        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+
         // Commit changes in tx 123 (we expect locks to be ready for sending)
         observer.BlockReadSets = true;
         //observer.InjectClearTasks = true;
@@ -2780,6 +2792,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         UNIT_ASSERT(!observer.BlockedReadSets.empty());
         //observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
+
+        // Restore volatile transactions back to default
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Commit changes in tx 234 (we expect it to be blocked and broken by 123)
         observer.BlockReadSets = true;
@@ -3500,7 +3515,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "<empty>");
         observer.InjectClearTasks = false;
         observer.InjectLocks.reset();
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         SimulateSleep(server, TDuration::Seconds(1));
 
@@ -3573,7 +3588,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                 )", volatileSessionId, "", true),
             "/Root");
         SimulateSleep(runtime, TDuration::Seconds(1));
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Should be 2 expectations + 2 commit decisions
         UNIT_ASSERT(!upsertResult.HasValue());

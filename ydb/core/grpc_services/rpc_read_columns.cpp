@@ -382,7 +382,7 @@ private:
         size_t rowsExtracted = 0;
         bool skippedBeforeMinKey = false;
 
-        if (ev->Get()->GetDataFormat() == NKikimrTxDataShard::ARROW) {
+        if (ev->Get()->GetDataFormat() == NKikimrDataEvents::FORMAT_ARROW) {
             return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Arrow format not supported yet", ctx);
         }
 

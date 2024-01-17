@@ -12,8 +12,7 @@ namespace NYT::NElection {
 using TEpochId = TGuid;
 using TPeerPriority = std::pair<i64, i64>;
 
-using TPeerId = int;
-constexpr TPeerId InvalidPeerId = -1;
+constexpr int InvalidPeerId = -1;
 
 using TCellId = TGuid;
 extern const TCellId NullCellId;

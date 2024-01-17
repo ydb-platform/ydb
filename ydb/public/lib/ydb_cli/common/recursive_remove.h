@@ -32,4 +32,13 @@ TStatus RemoveDirectoryRecursive(
     bool removeSelf = true,
     bool createProgressBar = true);
 
+TStatus RemovePathRecursive(
+    NScheme::TSchemeClient& schemeClient,
+    NTable::TTableClient& tableClient,
+    NTopic::TTopicClient& topicClient,
+    const TString& path,
+    ERecursiveRemovePrompt prompt,
+    const NScheme::TRemoveDirectorySettings& settings = {},
+    bool createProgressBar = true);
+
 }

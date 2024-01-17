@@ -149,10 +149,10 @@ TTaskCounters AggregateQueryStatsByStage(TTaskCounters& queryStat, const THashMa
         auto taskCount = tasks.size();
         if (collectFull) {
             aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner",
-                {{"Stage", stageId}}, "TaskCount"), taskCount);
+                {{"Stage", stageId}}, "Tasks"), taskCount);
         }
         aggregatedQueryStat.AddCounter(queryStat.GetCounterName("TaskRunner",
-            {{"Stage", "Total"}}, "TaskCount"), taskCount);
+            {{"Stage", "Total"}}, "Tasks"), taskCount);
     }
     for (const auto& [stageId, channels] : stage2Input) {
         auto channelCount = channels.size();

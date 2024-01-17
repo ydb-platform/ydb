@@ -9,7 +9,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NKqp {
 
@@ -232,6 +232,27 @@ public:
         return false;
     }
 
+    void OnNewExecutor(bool isLiteral) {
+        if (!isLiteral)
+            ++ExecutorId;
+    }
+
+    void AcceptIncomingSnapshot(IKqpGateway::TKqpSnapshot& snapshot) {
+        // it's be possible that the executor will not be send a valid snapshot
+        // because it makes only commit/rollback operation with the locks.
+        if (SnapshotHandle.Snapshot.IsValid() && snapshot.IsValid()) {
+            YQL_ENSURE(SnapshotHandle.Snapshot == snapshot, "detected unexpected snapshot switch in tx, ["
+                << SnapshotHandle.Snapshot.Step << "," << SnapshotHandle.Snapshot.TxId << "] vs ["
+                << snapshot.Step << "," << snapshot.TxId << "].");
+        }
+
+        if (ExecutorId == 1) {
+            if (snapshot.IsValid() && !SnapshotHandle.Snapshot.IsValid()) {
+                SnapshotHandle.Snapshot = snapshot;
+            }
+        }
+    }
+
     bool CanDeferEffects() const {
         if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             YQL_ENSURE(EnableImmediateEffects);
@@ -255,6 +276,7 @@ public:
     TInstant BeginQueryTime;
     TDuration QueriesDuration;
     ui32 QueriesCount = 0;
+    ui32 ExecutorId = 0;
 
     TKqpTxLocks Locks;
 

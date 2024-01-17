@@ -187,6 +187,7 @@ bool TParallelFileInputState::NextValue() {
         {
             std::lock_guard lock(InnerState_->Lock);
             if (!InnerState_->Error.IsOK()) {
+                Cerr << "YT RPC Reader exception:\n";
                 InnerState_->Error.ThrowOnError();
             }
             if (InnerState_->Results.empty()) {

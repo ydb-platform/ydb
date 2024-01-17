@@ -15,18 +15,34 @@ class IDbWrapper;
 class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;
+    THashMap<TUnifiedBlobId, ui32> BlobLinks;
+
+    void AddBlobLink(const TUnifiedBlobId& blobId) {
+        ++BlobLinks[blobId];
+    }
+
+    bool RemoveBlobLink(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
 public:
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
 
     bool AddInserted(TInsertedData&& data, const bool load) {
+        if (load) {
+            AddBlobLink(data.GetBlobRange().BlobId);
+        }
         return Summary.AddInserted(std::move(data), load);
     }
     bool AddAborted(TInsertedData&& data, const bool load) {
+        if (load) {
+            AddBlobLink(data.GetBlobRange().BlobId);
+        }
         return Summary.AddAborted(std::move(data), load);
     }
     bool AddCommitted(TInsertedData&& data, const bool load) {
+        if (load) {
+            AddBlobLink(data.GetBlobRange().BlobId);
+        }
         const ui64 pathId = data.PathId;
         return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
     }
@@ -56,8 +72,8 @@ public:
     void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
-    void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
-    void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
+    void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
 private:

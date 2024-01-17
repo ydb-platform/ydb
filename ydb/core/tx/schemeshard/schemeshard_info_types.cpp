@@ -51,6 +51,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     NKikimrSchemeOp::TTableDescription& op,
     const NScheme::TTypeRegistry& typeRegistry,
     const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+    bool pgTypesEnabled,
     TString& errStr, const THashSet<TString>& localSequences)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
@@ -162,6 +163,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 auto* typeDesc = NPg::TypeDescFromPgTypeName(typeName);
                 if (!typeDesc) {
                     errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
+                    return nullptr;
+                }
+                if (!pgTypesEnabled) {
+                    errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
                 typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
@@ -1470,6 +1475,35 @@ void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartition
             Aggregated.TxCompleteLag = Max(Aggregated.TxCompleteLag, ps.second.TxCompleteLag);
         }
     }
+}
+
+void TAggregatedStats::UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
+    if (!TableStats.contains(pathId)) {
+        TableStats[pathId] = newStats;
+        return;
+    }
+
+    TPartitionStats& oldStats = TableStats[pathId];
+
+    if (newStats.SeqNo <= oldStats.SeqNo) {
+        // Ignore outdated message
+        return;
+    }
+
+    if (newStats.SeqNo.Generation > oldStats.SeqNo.Generation) {
+        // Reset incremental counter baselines if tablet has restarted
+        oldStats.ImmediateTxCompleted = 0;
+        oldStats.PlannedTxCompleted = 0;
+        oldStats.TxRejectedByOverload = 0;
+        oldStats.TxRejectedBySpace = 0;
+        oldStats.RowUpdates = 0;
+        oldStats.RowDeletes = 0;
+        oldStats.RowReads = 0;
+        oldStats.RangeReads = 0;
+        oldStats.RangeReadRows = 0;
+    }
+    TableStats[pathId].RowCount += (newStats.RowCount - oldStats.RowCount);
+    TableStats[pathId].DataSize += (newStats.DataSize - oldStats.DataSize);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

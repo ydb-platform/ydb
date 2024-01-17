@@ -6,6 +6,7 @@
 #pragma once
 #include <aws/s3/S3_EXPORTS.h>
 #include <aws/core/utils/memory/stl/AWSVector.h>
+#include <aws/s3/model/EventBridgeConfiguration.h>
 #include <aws/s3/model/TopicConfiguration.h>
 #include <aws/s3/model/QueueConfiguration.h>
 #include <aws/s3/model/LambdaFunctionConfiguration.h>
@@ -34,12 +35,12 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/NotificationConfiguration">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API GetBucketNotificationConfigurationResult
+  class GetBucketNotificationConfigurationResult
   {
   public:
-    GetBucketNotificationConfigurationResult();
-    GetBucketNotificationConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetBucketNotificationConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketNotificationConfigurationResult();
+    AWS_S3_API GetBucketNotificationConfigurationResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetBucketNotificationConfigurationResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
@@ -129,46 +130,72 @@ namespace Model
 
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline const Aws::Vector<LambdaFunctionConfiguration>& GetLambdaFunctionConfigurations() const{ return m_lambdaFunctionConfigurations; }
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline void SetLambdaFunctionConfigurations(const Aws::Vector<LambdaFunctionConfiguration>& value) { m_lambdaFunctionConfigurations = value; }
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline void SetLambdaFunctionConfigurations(Aws::Vector<LambdaFunctionConfiguration>&& value) { m_lambdaFunctionConfigurations = std::move(value); }
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline GetBucketNotificationConfigurationResult& WithLambdaFunctionConfigurations(const Aws::Vector<LambdaFunctionConfiguration>& value) { SetLambdaFunctionConfigurations(value); return *this;}
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline GetBucketNotificationConfigurationResult& WithLambdaFunctionConfigurations(Aws::Vector<LambdaFunctionConfiguration>&& value) { SetLambdaFunctionConfigurations(std::move(value)); return *this;}
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline GetBucketNotificationConfigurationResult& AddLambdaFunctionConfigurations(const LambdaFunctionConfiguration& value) { m_lambdaFunctionConfigurations.push_back(value); return *this; }
 
     /**
-     * <p>Describes the AWS Lambda functions to invoke and the events for which to
-     * invoke them.</p>
+     * <p>Describes the Lambda functions to invoke and the events for which to invoke
+     * them.</p>
      */
     inline GetBucketNotificationConfigurationResult& AddLambdaFunctionConfigurations(LambdaFunctionConfiguration&& value) { m_lambdaFunctionConfigurations.push_back(std::move(value)); return *this; }
+
+
+    /**
+     * <p>Enables delivery of events to Amazon EventBridge.</p>
+     */
+    inline const EventBridgeConfiguration& GetEventBridgeConfiguration() const{ return m_eventBridgeConfiguration; }
+
+    /**
+     * <p>Enables delivery of events to Amazon EventBridge.</p>
+     */
+    inline void SetEventBridgeConfiguration(const EventBridgeConfiguration& value) { m_eventBridgeConfiguration = value; }
+
+    /**
+     * <p>Enables delivery of events to Amazon EventBridge.</p>
+     */
+    inline void SetEventBridgeConfiguration(EventBridgeConfiguration&& value) { m_eventBridgeConfiguration = std::move(value); }
+
+    /**
+     * <p>Enables delivery of events to Amazon EventBridge.</p>
+     */
+    inline GetBucketNotificationConfigurationResult& WithEventBridgeConfiguration(const EventBridgeConfiguration& value) { SetEventBridgeConfiguration(value); return *this;}
+
+    /**
+     * <p>Enables delivery of events to Amazon EventBridge.</p>
+     */
+    inline GetBucketNotificationConfigurationResult& WithEventBridgeConfiguration(EventBridgeConfiguration&& value) { SetEventBridgeConfiguration(std::move(value)); return *this;}
 
   private:
 
@@ -177,6 +204,8 @@ namespace Model
     Aws::Vector<QueueConfiguration> m_queueConfigurations;
 
     Aws::Vector<LambdaFunctionConfiguration> m_lambdaFunctionConfigurations;
+
+    EventBridgeConfiguration m_eventBridgeConfiguration;
   };
 
 } // namespace Model

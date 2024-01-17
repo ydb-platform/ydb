@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Put_Mirror3of4) {
-        CountingEventsTest("put", 115, TBlobStorageGroupType::ErasureMirror3of4, 114);
+        CountingEventsTest("put", 116, TBlobStorageGroupType::ErasureMirror3of4, 114);
     }
 
     Y_UNIT_TEST(Put_Mirror3dc) {

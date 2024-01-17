@@ -124,6 +124,11 @@ public:
         }
     }
 
+    int GetInflightRequestCount() override
+    {
+        return 0;
+    }
+
     DEFINE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 private:
     TString Address_;

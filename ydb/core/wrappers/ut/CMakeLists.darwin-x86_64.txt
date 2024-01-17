@@ -20,7 +20,7 @@ target_link_libraries(ydb-core-wrappers-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-wrappers
-  cpp-actors-core
+  library-actors-core
   cpp-digest-md5
   cpp-testing-unittest
   ydb-core-protos

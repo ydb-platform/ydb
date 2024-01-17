@@ -8,6 +8,7 @@ namespace NKikimr::NTable::NPage {
     class TBtreeIndexNodeWriter {
         using THeader = TBtreeIndexNode::THeader;
         using TIsNullBitmap = TBtreeIndexNode::TIsNullBitmap;
+        using TShortChild = TBtreeIndexNode::TShortChild;
         using TChild = TBtreeIndexNode::TChild;
 
     public:
@@ -17,20 +18,26 @@ namespace NKikimr::NTable::NPage {
             , GroupInfo(Scheme->GetLayout(groupId))
         {
             if (GroupId.IsMain()) {
-                FixedKeySize = Max<ui8>();
+                // TODO: some main groups without nulls and var-sized cells also may use fixed format
+                FixedKeySize = TBtreeIndexNode::THeader::MaxFixedKeySize;
             } else {
                 FixedKeySize = 0;
                 for (TPos pos : xrange(GroupInfo.KeyTypes.size())) {
                     Y_ABORT_UNLESS(GroupInfo.ColsKeyIdx[pos].IsFixed);
                     FixedKeySize += GroupInfo.ColsKeyIdx[pos].FixedSize;
                 }
-                Y_ABORT_UNLESS(FixedKeySize < Max<ui8>(), "KeysSize is out of bounds");
+                Y_ABORT_UNLESS(FixedKeySize < TBtreeIndexNode::THeader::MaxFixedKeySize, "FixedKeySize is out of bounds");
             }
         }
 
         bool IsFixedFormat() const noexcept
         {
-            return FixedKeySize != Max<ui8>();
+            return FixedKeySize != TBtreeIndexNode::THeader::MaxFixedKeySize;
+        }
+
+        bool IsShortChildFormat() const noexcept
+        {
+            return !GroupId.IsMain();
         }
 
         void AddKey(TCellsRef cells) {
@@ -43,6 +50,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         void AddChild(TChild child) {
+            Y_ABORT_UNLESS(child.ErasedRowCount == 0 || !IsShortChildFormat(), "Short format can't have ErasedRowCount");
             Children.push_back(child);
         }
 
@@ -95,6 +103,7 @@ namespace NKikimr::NTable::NPage {
             header.KeysCount = Keys.size();
             Y_ABORT_UNLESS(KeysSize < Max<TPgSize>(), "KeysSize is out of bounds");
             header.KeysSize = KeysSize;
+            header.IsShortChildFormat = IsShortChildFormat();
             header.FixedKeySize = FixedKeySize;
 
             if (!IsFixedFormat()) {
@@ -118,7 +127,10 @@ namespace NKikimr::NTable::NPage {
             Keys.clear();
             KeysSize = 0;
 
-            PlaceVector(Children);
+            for (auto &child : Children) {
+                PlaceChild(child);
+            }
+            Children.clear();
 
             Y_ABORT_UNLESS(Ptr == End);
             NSan::CheckMemIsInitialized(buf.data(), buf.size());
@@ -137,7 +149,7 @@ namespace NKikimr::NTable::NPage {
                 sizeof(TLabel) + sizeof(THeader) +
                 (IsFixedFormat() ? 0 : sizeof(TRecordsEntry) * keysCount) +
                 keysSize +
-                sizeof(TChild) * (keysCount + 1);
+                (IsShortChildFormat() ? sizeof(TShortChild) : sizeof(TChild)) * (keysCount + 1);
         }
 
         size_t GetKeysCount() const {
@@ -145,7 +157,10 @@ namespace NKikimr::NTable::NPage {
         }
 
         TPgSize CalcKeySizeWithMeta(TCellsRef cells) const noexcept {
-            return sizeof(TRecordsEntry) + CalcKeySize(cells) + sizeof(TChild);
+            return 
+                sizeof(TRecordsEntry) + 
+                CalcKeySize(cells) + 
+                (IsShortChildFormat() ? sizeof(TShortChild) : sizeof(TChild));
         }
 
     private:
@@ -231,12 +246,13 @@ namespace NKikimr::NTable::NPage {
             std::copy(data.data(), data.data() + data.size(), Advance(data.size()));
         }
 
-        template<typename T>
-        void PlaceVector(TVector<T> &vector) noexcept
+        void PlaceChild(const TChild& child) noexcept
         {
-            auto *dst = reinterpret_cast<T*>(Advance(sizeof(T)*vector.size()));
-            std::copy(vector.begin(), vector.end(), dst);
-            vector.clear();
+            if (IsShortChildFormat()) {
+                Place<TShortChild>() = TShortChild{child.PageId, child.RowCount, child.DataSize};
+            } else {
+                Place<TChild>() = child;
+            }
         }
 
         template<typename T>
@@ -277,6 +293,7 @@ namespace NKikimr::NTable::NPage {
 
     class TBtreeIndexBuilder {
     public:
+        using TShortChild = TBtreeIndexNode::TShortChild;
         using TChild = TBtreeIndexNode::TChild;
 
     private:
@@ -357,17 +374,22 @@ namespace NKikimr::NTable::NPage {
             Levels[0].PushKey(Writer.SerializeKey(cells));
         }
 
+        void AddShortChild(TShortChild child) {
+            AddChild(TChild{child.PageId, child.RowCount, child.DataSize, 0});
+        }
+
         void AddChild(TChild child) {
             // aggregate in order to perform search by row id from any leaf node
-            child.Count = (ChildrenCount += child.Count);
-            child.ErasedCount = (ChildrenErasedCount += child.ErasedCount);
-            child.DataSize = (ChildrenSize += child.DataSize);
+            child.RowCount = (ChildRowCount += child.RowCount);
+            child.DataSize = (ChildSize += child.DataSize);
+            child.ErasedRowCount = (ChildErasedRowCount += child.ErasedRowCount);
 
             Levels[0].PushChild(child);
         }
 
         std::optional<TBtreeIndexMeta> Flush(IPageWriter &pager, bool last) {
-            for (size_t levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
+            Y_ABORT_UNLESS(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
+            for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
                 if (last && !Levels[levelIndex].GetKeysCount()) {
                     Y_ABORT_UNLESS(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
                     return TBtreeIndexMeta{ Levels[levelIndex].PopChild(), levelIndex, IndexSize };
@@ -387,13 +409,13 @@ namespace NKikimr::NTable::NPage {
             IndexSize = 0;
             Writer.Reset();
             Levels = { TLevel() };
-            ChildrenCount = 0;
-            ChildrenErasedCount = 0;
-            ChildrenSize = 0;
+            ChildRowCount = 0;
+            ChildErasedRowCount = 0;
+            ChildSize = 0;
         }
 
     private:
-        bool TryFlush(size_t levelIndex, IPageWriter &pager, bool last) {
+        bool TryFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
             if (!last && Levels[levelIndex].GetKeysCount() <= 2 * NodeKeysMax) {
                 // Note: node should meet both NodeKeysMin and NodeSize restrictions for split
 
@@ -441,7 +463,7 @@ namespace NKikimr::NTable::NPage {
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
             }
-            Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.Count, lastChild.ErasedCount, lastChild.DataSize});
+            Levels[levelIndex + 1].PushChild(TChild{pageId, lastChild.RowCount, lastChild.DataSize, lastChild.ErasedRowCount});
             if (!last) {
                 Levels[levelIndex + 1].PushKey(Levels[levelIndex].PopKey());
             }
@@ -476,9 +498,9 @@ namespace NKikimr::NTable::NPage {
         const ui32 NodeKeysMin;
         const ui32 NodeKeysMax;
 
-        TRowId ChildrenCount = 0;
-        TRowId ChildrenErasedCount = 0;
-        ui64 ChildrenSize = 0;
+        TRowId ChildRowCount = 0;
+        TRowId ChildErasedRowCount = 0;
+        ui64 ChildSize = 0;
     };
 
 }

@@ -15,6 +15,7 @@ struct TStockWorkloadParams : public TWorkloadParams {
     unsigned int MinPartitions = 0;
     unsigned int Limit = 0;
     bool PartitionsByLoad = true;
+    bool EnableCdc = false;
 };
 
 class TStockWorkloadGenerator : public IWorkloadQueryGenerator {

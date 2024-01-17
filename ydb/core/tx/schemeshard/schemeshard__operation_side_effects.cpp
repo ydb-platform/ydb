@@ -456,6 +456,9 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (const auto& auditSettings = subDomain->GetAuditSettings()) {
                 message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
             }
+            if (const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode()) {
+                message->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
+            }
             hasChanges = true;
         }
 
@@ -520,6 +523,11 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
                                << " on tss: " << tenantLink.TenantStatisticsAggregator
                                << " on gss: " << subDomain->GetTenantStatisticsAggregatorID());
             }
+        }
+
+        if (!tenantLink.TenantGraphShard && subDomain->GetTenantGraphShardID()) {
+            message->SetTenantGraphShard(ui64(subDomain->GetTenantGraphShardID()));
+            hasChanges = true;
         }
 
         if (!hasChanges) {

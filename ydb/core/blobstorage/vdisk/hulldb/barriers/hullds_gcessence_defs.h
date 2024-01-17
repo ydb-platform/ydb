@@ -3,7 +3,7 @@
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
-#include <library/cpp/actors/util/named_tuple.h>
+#include <ydb/library/actors/util/named_tuple.h>
 
 namespace NKikimr {
     namespace NGc {

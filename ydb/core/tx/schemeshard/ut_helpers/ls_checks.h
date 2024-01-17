@@ -36,6 +36,7 @@ namespace NLs {
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
     TCheckFunc TopicReservedStorage(ui64 expected);
     TCheckFunc TopicAccountSize(ui64 expected);
+    TCheckFunc TopicAccountSizeGE(ui64 expected);
     TCheckFunc TopicUsedReserveSize(ui64 expected);
     TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc ShardsInsideDomain(ui64 count);
@@ -87,6 +88,7 @@ namespace NLs {
     void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
                             NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -148,7 +150,9 @@ namespace NLs {
 
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
-
+    TCheckFunc SharedHive(ui64 sharedHiveId);
+    TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
+    
     template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
         check(result);

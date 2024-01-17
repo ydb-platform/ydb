@@ -23,6 +23,14 @@ bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TStri
     THashSet<TString> keyColumns(desc.GetKeyColumnNames().begin(), desc.GetKeyColumnNames().end());
 
     for (const auto& column : desc.GetColumns()) {
+        const auto& type = column.GetType();
+        if (type == "Uuid") {
+            if (!AppData()->FeatureFlags.GetEnableUuidAsPrimaryKey() && keyColumns.contains(column.GetName())) {
+                errMsg = TStringBuilder() << "Uuid as primary key is forbiden by configuration: " << column.GetName();
+                return false;
+            }
+        }
+
         if (column.GetNotNull()) {
             bool isPrimaryKey = keyColumns.contains(column.GetName());
 
@@ -92,7 +100,6 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
 
     return true;
 }
-
 
 bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
@@ -556,7 +563,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr, LocalSequences);
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, context.SS->EnableTablePgTypes, errStr, LocalSequences);
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;

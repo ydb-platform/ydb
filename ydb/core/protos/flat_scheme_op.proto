@@ -13,6 +13,7 @@ import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
+import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 
@@ -84,7 +85,7 @@ message TColumnDescription {
     optional string FamilyName = 6; // set Family by name (0 - "default")
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
-        NKikimrMiniKQL.TResult DefaultFromLiteral = 10; // Literal default value
+        Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
     }
     optional bool NotNull = 8;
 }
@@ -222,6 +223,8 @@ message TCompactionPolicy {
     optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset];
     optional TShardPolicy ShardPolicy = 21;
     optional bool KeepEraseMarkers = 22;
+    optional uint32 MinBTreeIndexNodeSize = 23 [default = 7168];
+    optional uint32 MinBTreeIndexNodeKeys = 24 [default = 6];
 
     repeated TGenerationPolicy Generation = 10;
 }
@@ -607,10 +610,11 @@ message TColumnTableSharding {
             // A simple hash modulo number of shards
             HASH_FUNCTION_MODULO_N = 0;
             HASH_FUNCTION_CLOUD_LOGS = 1;
+            HASH_FUNCTION_CONSISTENCY_64 = 2;
         }
 
         // Hash function used for mapping column values to a column shard
-        optional EHashFunction Function = 1;
+        optional EHashFunction Function = 1 [default = HASH_FUNCTION_MODULO_N];
 
         // A list of columns used for hashing, must not be empty
         repeated string Columns = 2;
@@ -686,6 +690,7 @@ message TLoginModifyUser {
 
 message TLoginRemoveUser {
     optional string User = 1;
+    optional bool MissingOk = 2;
 }
 
 message TLoginCreateGroup {
@@ -702,8 +707,14 @@ message TLoginRemoveGroupMembership {
     optional string Member = 2;
 }
 
+message TLoginRenameGroup {
+    optional string Group = 1;
+    optional string NewName = 2;
+}
+
 message TLoginRemoveGroup {
     optional string Group = 1;
+    optional bool MissingOk = 2;
 }
 
 message TAlterLogin {
@@ -715,6 +726,7 @@ message TAlterLogin {
         TLoginAddGroupMembership AddGroupMembership = 5;
         TLoginRemoveGroupMembership RemoveGroupMembership = 6;
         TLoginRemoveGroup RemoveGroup = 7;
+        TLoginRenameGroup RenameGroup = 8;
     }
 }
 
@@ -1376,6 +1388,11 @@ enum EOperationType {
     ESchemeOpAlterExternalDataSource = 91;
 
     ESchemeOpCreateColumnBuild = 92;
+
+    // View
+    ESchemeOpCreateView = 93;
+    ESchemeOpAlterView = 94;
+    ESchemeOpDropView = 95;
 }
 
 message TApplyIf {
@@ -1496,6 +1513,8 @@ message TModifyScheme {
     optional bool SuccessOnNotExist = 62;
 
     optional bool FailedOnAlreadyExists = 63 [default = true];
+
+    optional TViewDescription CreateView = 64;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands
@@ -1553,6 +1572,7 @@ enum EPathType {
     EPathTypeBlobDepot = 17;
     EPathTypeExternalTable = 18;
     EPathTypeExternalDataSource = 19;
+    EPathTypeView = 20;
 }
 
 enum EPathSubType {
@@ -1606,6 +1626,7 @@ message TPathVersion {
     optional uint64 BlobDepotVersion = 26;
     optional uint64 ExternalTableVersion = 27;
     optional uint64 ExternalDataSourceVersion = 28;
+    optional uint64 ViewVersion = 29;
 }
 
 // Describes single path
@@ -1693,6 +1714,7 @@ message TPathDescription {
     optional TBlobDepotDescription BlobDepotDescription = 26;
     optional TExternalTableDescription ExternalTableDescription = 27;
     optional TExternalDataSourceDescription ExternalDataSourceDescription = 28;
+    optional TViewDescription ViewDescription = 29;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -1767,6 +1789,7 @@ message TMdbBasic {
 message TAws {
     optional string AwsAccessKeyIdSecretName = 1;
     optional string AwsSecretAccessKeySecretName = 2;
+    optional string AwsRegion = 3;
 }
 
 message TBasic {
@@ -1805,4 +1828,11 @@ message TExternalDataSourceDescription {
     optional string Installation = 6;
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
+}
+
+message TViewDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional string QueryText = 4;
 }

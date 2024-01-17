@@ -3,9 +3,9 @@
 
 #include <ydb/core/protos/grpc.grpc.pb.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
@@ -55,7 +55,7 @@ public:
 
 //! Implements interaction Kikimr via gRPC protocol.
 class TGRpcService
-    : public NGrpc::TGrpcServiceBase<NKikimrClient::TGRpcServer>
+    : public NYdbGrpc::TGrpcServiceBase<NKikimrClient::TGRpcServer>
 {
 public:
     TGRpcService();
@@ -64,8 +64,8 @@ public:
         DynamicNodeAuthorizationParams = dynamicNodeAuthorizationParams;
     }
 
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
 
     NThreading::TFuture<void> Prepare(NActors::TActorSystem* system, const NActors::TActorId& pqMeta, const NActors::TActorId& msgBusProxy, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
     void Start();
@@ -97,7 +97,7 @@ private:
 
     std::function<void()> InitCb_;
     // In flight request management.
-    NGrpc::TGlobalLimiter* Limiter_ = nullptr;
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 
     TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
 };

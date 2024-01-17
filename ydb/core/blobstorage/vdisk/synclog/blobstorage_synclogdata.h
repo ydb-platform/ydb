@@ -12,7 +12,7 @@
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/base/blobstorage.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>

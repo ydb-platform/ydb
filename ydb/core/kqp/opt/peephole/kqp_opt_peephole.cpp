@@ -174,13 +174,53 @@ private:
     TKikimrConfiguration::TPtr Config;
 };
 
+class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeFinalTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {}), Config(config)
+    {
+#define HNDL(name) "KqpPeepholeFinal-"#name, Hndl(&TKqpPeepholeFinalTransformer::name)
+        AddHandler(0, &TCoWideCombiner::Match, HNDL(SetCombinerMemoryLimit));
+#undef HNDL
+    }
+private:
+    TMaybeNode<TExprBase> SetCombinerMemoryLimit(TExprBase node, TExprContext& ctx) {
+        if (const auto limit = node.Ref().Child(TCoWideCombiner::idx_MemLimit); limit->IsAtom("0")) {
+            if (const auto limitSetting = Config->_KqpYqlCombinerMemoryLimit.Get(); limitSetting && *limitSetting) {
+                return ctx.ChangeChild(node.Ref(), TCoWideCombiner::idx_MemLimit, ctx.RenameNode(*limit, ToString(-i64(*limitSetting))));
+            }
+        }
+        return node;
+    }
+
+    const TKikimrConfiguration::TPtr Config;
+};
+
+struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config)
+        : Config(config)
+    {}
+
+    void AfterCreate(TTransformationPipeline*) const override {}
+
+    void AfterTypeAnnotation(TTransformationPipeline* pipeline) const override {
+        pipeline->Add(new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeFinal");
+    }
+
+    void AfterOptimize(TTransformationPipeline*) const override {}
+private:
+    const TKikimrConfiguration::TPtr Config;
+};
+
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
     IGraphTransformer& typeAnnTransformer, TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
     bool allowNonDeterministicFunctions, bool withFinalStageRules)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &kqpPeephole;
+    peepholeSettings.FinalConfig = &kqpPeepholeFinal;
     peepholeSettings.WithFinalStageRules = withFinalStageRules;
     peepholeSettings.WithNonDeterministicRules = false;
 

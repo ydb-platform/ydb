@@ -1,8 +1,8 @@
 #pragma once
 #include "defs.h"
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 #include <ydb/core/fq/libs/events/event_ids.h>
@@ -168,6 +168,9 @@ struct TKikimrEvents : TEvents {
         ES_STATISTICS,
         ES_LDAP_AUTH_PROVIDER,
         ES_DB_METADATA_CACHE,
+        ES_TABLE_CREATOR,
+        ES_PQ_PARTITION_CHOOSER,
+        ES_GRAPH,
     };
 };
 

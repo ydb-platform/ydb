@@ -15,8 +15,10 @@ TExprBase KqpBuildUpdateIndexStages(TExprBase node, TExprContext& ctx, const TKq
     auto update = node.Cast<TKqlUpdateRowsIndex>();
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, update.Table().Path());
 
-    auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::UpdateOn, update.Input(), update.Columns(),
-        table, update.Settings(), update.Pos(), ctx);
+    TCoAtomList empty = Build<TCoAtomList>(ctx, node.Pos()).Done();
+
+    auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::UpdateOn, update.Input(),
+        update.Columns(), update.ReturningColumns(), empty, table, update.Settings(), update.Pos(), ctx);
 
     if (!effects) {
         return node;

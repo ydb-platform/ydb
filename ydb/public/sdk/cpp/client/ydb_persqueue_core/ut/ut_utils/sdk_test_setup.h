@@ -124,7 +124,7 @@ public:
         return grpcServer;
     }
 
-    NGrpc::TServerOptions& GetGrpcServerOptions() {
+    NYdbGrpc::TServerOptions& GetGrpcServerOptions() {
         return Server.GrpcServerOptions;
     }
 

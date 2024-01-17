@@ -3,9 +3,9 @@ import os
 import tarfile
 import xml.etree.ElementTree as etree
 
-FLAT_DIRS_REPO_TEMPLATE='flatDir {{ dirs {dirs} }}\n'
-MAVEN_REPO_TEMPLATE='maven {{ url "{repo}" }}\n'
-KEYSTORE_TEMLATE='signingConfigs {{ debug {{ storeFile file("{keystore}") }} }}\n'
+FLAT_DIRS_REPO_TEMPLATE = 'flatDir {{ dirs {dirs} }}\n'
+MAVEN_REPO_TEMPLATE = 'maven {{ url "{repo}" }}\n'
+KEYSTORE_TEMLATE = 'signingConfigs {{ debug {{ storeFile file("{keystore}") }} }}\n'
 
 TEST_APK_TEMPLATE = """\
 ext.jniLibsDirs = [
@@ -119,9 +119,9 @@ def gen_build_script(args):
     bundles_dirs = set(args.flat_repos)
     for bundle in args.bundles:
         dir_name, base_name = os.path.split(bundle)
-        assert(len(dir_name) > 0 and len(base_name) > 0)
+        assert len(dir_name) > 0 and len(base_name) > 0
         name, ext = os.path.splitext(base_name)
-        assert(len(name) > 0 and ext == '.aar')
+        assert len(name) > 0 and ext == '.aar'
         bundles_dirs.add(dir_name)
         bundles.append('com.yandex:{}@aar'.format(name))
 
@@ -184,9 +184,11 @@ if __name__ == '__main__':
         f.write(content)
 
     with open(args.gradle_properties, 'w') as f:
-        f.write('''android.enableJetifier=true
+        f.write(
+            '''android.enableJetifier=true
         android.useAndroidX=true
-        org.gradle.jvmargs=-Xmx8192m -XX:MaxPermSize=512m''')
+        org.gradle.jvmargs=-Xmx8192m -XX:MaxPermSize=512m'''
+        )
 
     if args.bundle_name:
         with open(args.settings_gradle, 'w') as f:

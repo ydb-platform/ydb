@@ -18,11 +18,11 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -270,11 +270,10 @@ private:
         YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
         TString name;
         std::map<TString, TString> labels;
-        static const TString SourceLabel = "Source";
-        static const TString SinkLabel = "Sink";
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
+                auto taskLevelCounter = labels.size() == 1 && labels.contains("Stage") && labels["Stage"] == "Total"; 
                 *group->GetCounter(name) = v.Sum;
                 if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
@@ -284,17 +283,17 @@ private:
                     } else if (name == "CpuTimeUs") {
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
-                    } else if (name == "IngressBytes") {
-                        if (labels.count(SourceLabel)) publicCounterName = "query.input_bytes";
+                    } else if (name == "IngressBytes" && taskLevelCounter) {
+                        publicCounterName = "query.input_bytes";
                         isDeriv = true;
-                    } else if (name == "EgressBytes") {
-                        if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
+                    } else if (name == "EgressBytes" && taskLevelCounter) {
+                        publicCounterName = "query.output_bytes";
                         isDeriv = true;
-                    } else if (name == "OutputRows") {
-                        if (labels.count(SourceLabel)) publicCounterName = "query.source_input_records";
+                    } else if (name == "IngressRows" && taskLevelCounter) {
+                        publicCounterName = "query.source_input_records";
                         isDeriv = true;
-                    } else if (name == "InputRows") {
-                        if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records";
+                    } else if (name == "EgressRows" && taskLevelCounter) {
+                        publicCounterName = "query.sink_output_records";
                         isDeriv = true;
                     } else if (name == "TaskCount") {
                         publicCounterName = "query.running_tasks";
@@ -369,30 +368,32 @@ private:
         ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(SourceCpuTimeUs)
-        // ADD_COUNTER(FirstRowTimeMs)
-        // ADD_COUNTER(FinishTimeMs)
+
+        ADD_COUNTER(IngressRows)
+        ADD_COUNTER(IngressBytes)
+        ADD_COUNTER(EgressRows)
+        ADD_COUNTER(EgressBytes)
         ADD_COUNTER(InputRows)
         ADD_COUNTER(InputBytes)
         ADD_COUNTER(OutputRows)
         ADD_COUNTER(OutputBytes)
-        // ADD_COUNTER(StartTimeMs)
+        ADD_COUNTER(ResultRows)
+        ADD_COUNTER(ResultBytes)
 
+        ADD_COUNTER(StartTimeMs)
+        ADD_COUNTER(FinishTimeMs)
         ADD_COUNTER(WaitInputTimeUs)
         ADD_COUNTER(WaitOutputTimeUs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
 
-        for (const auto& ingress : s.GetIngress()) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Ingress" + ingress.GetName() + "Bytes"), ingress.GetBytes());
-        }
-
-        for (const auto& egress : s.GetEgress()) {
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Egress" + egress.GetName() + "Bytes"), egress.GetBytes());
-        }
-
         if (auto v = x.GetMkqlMaxMemoryUsage()) {
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);
+        }
+
+        if (auto v = x.GetDurationUs()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "DurationUs"), v);
         }
 
         for (const auto& stat : s.GetMkqlStats()) {
@@ -441,8 +442,7 @@ private:
 
         for (const auto& stats : s.GetSources()) {
             auto labels = commonLabels;
-            labels["Source"] = ToString(stats.GetInputIndex());
-            labels["Name"] = stats.GetIngressName();
+            labels["Source"] = stats.GetIngressName();
             TaskStat.AddAsyncStats(stats.GetIngress(), labels, "Ingress");
             TaskStat.AddAsyncStats(stats.GetPush(),  labels, "Push");
             TaskStat.AddAsyncStats(stats.GetPop(), labels, "Pop");

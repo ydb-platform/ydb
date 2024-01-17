@@ -4,15 +4,19 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
+#include <yt/yt/library/tvm/service/tvm_service.h>
+
 #include <yt/yt/core/rpc/grpc/channel.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/serialize.h>
+
 #include <yt/yt/core/utilex/random.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 #include <util/string/cast.h>
 #include <util/string/reverse.h>
@@ -27,11 +31,14 @@ using namespace NRpc;
 using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NYTree;
+using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static const NLogging::TLogger Logger{"Jaeger"};
 static const NProfiling::TProfiler Profiler{"/tracing"};
+static const TString ServiceTicketMetadataName = "x-ya-service-ticket";
+static const TString TracingServiceAlias = "tracing";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +92,9 @@ void TJaegerTracerConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("enable_pid_tag", &TThis::EnablePidTag)
         .Default(false);
+
+    registrar.Parameter("tvm_service", &TThis::TvmService)
+        .Optional();
 }
 
 TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDynamicConfigPtr& dynamicConfig) const
@@ -108,6 +118,7 @@ TJaegerTracerConfigPtr TJaegerTracerConfig::ApplyDynamic(const TJaegerTracerDyna
     config->ServiceName = ServiceName;
     config->ProcessTags = ProcessTags;
     config->EnablePidTag = EnablePidTag;
+    config->TvmService = TvmService;
 
     config->Postprocess();
     return config;
@@ -278,7 +289,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
         batches.push_back(BatchQueue_[batchCount].second);
     }
 
-    return std::make_tuple(batches, batchCount, spanCount);
+    return std::tuple(batches, batchCount, spanCount);
 }
 
 TJaegerChannelManager::TJaegerChannelManager()
@@ -287,8 +298,12 @@ TJaegerChannelManager::TJaegerChannelManager()
     , RpcTimeout_()
 { }
 
-TJaegerChannelManager::TJaegerChannelManager(const TIntrusivePtr<TJaegerTracerConfig>& config, const TString& endpoint)
-    : Endpoint_(endpoint)
+TJaegerChannelManager::TJaegerChannelManager(
+    const TJaegerTracerConfigPtr& config,
+    const TString& endpoint,
+    const ITvmServicePtr& tvmService)
+    : TvmService_(tvmService)
+    , Endpoint_(endpoint)
     , ReopenTime_(TInstant::Now() + config->ReconnectPeriod + RandomDuration(config->ReconnectPeriod))
     , RpcTimeout_(config->RpcTimeout)
     , PushedBytes_(Profiler.WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
@@ -311,6 +326,12 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
         auto req = proxy.PostSpans();
         req->SetEnableLegacyRpcCodecs(false);
         req->set_batch(MergeRefsToString(batches));
+
+        if (TvmService_) {
+            auto* ticketExt = req->Header().MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
+            ticketExt->mutable_entries()->insert(
+                {ServiceTicketMetadataName, TvmService_->GetServiceTicket(TracingServiceAlias)});
+        }
 
         YT_LOG_DEBUG("Sending spans (SpanCount: %v, PayloadSize: %v, Endpoint: %v)",
             spanCount,
@@ -359,6 +380,7 @@ TJaegerTracer::TJaegerTracer(
         BIND(&TJaegerTracer::Flush, MakeStrong(this)),
         config->FlushPeriod))
     , Config_(config)
+    , TvmService_(config->TvmService ? CreateTvmService(config->TvmService) : nullptr)
 {
     Profiler.AddFuncGauge("/enabled", MakeStrong(this), [this] {
         return Config_.Acquire()->IsEnabled();
@@ -530,6 +552,7 @@ void TJaegerTracer::Flush()
     DequeueAll(config);
 
     if (TInstant::Now() - LastSuccessfulFlushTime_ > config->QueueStallTimeout) {
+        YT_LOG_DEBUG("Queue stall timeout expired (QueueStallTimeout: %v)", config->QueueStallTimeout);
         DropFullQueue();
     }
 
@@ -551,6 +574,14 @@ void TJaegerTracer::Flush()
 
     std::stack<TString> toRemove;
     auto keys = ExtractKeys(BatchInfo_);
+
+    if (keys.empty()) {
+        YT_LOG_DEBUG("Span batch info is empty");
+        LastSuccessfulFlushTime_ = flushStartTime;
+        NotifyEmptyQueue();
+        return;
+    }
+
     for (const auto& endpoint : keys) {
         auto [batches, batchCount, spanCount] = PeekQueue(config, endpoint);
         if (batchCount <= 0) {
@@ -558,18 +589,19 @@ void TJaegerTracer::Flush()
                 toRemove.push(endpoint);
             }
             YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
+            LastSuccessfulFlushTime_ = flushStartTime;
             continue;
         }
 
         auto it = CollectorChannels_.find(endpoint);
         if (it == CollectorChannels_.end()) {
-            it = CollectorChannels_.insert({endpoint, TJaegerChannelManager(config, endpoint)}).first;
+            it = CollectorChannels_.emplace(endpoint, TJaegerChannelManager(config, endpoint, TvmService_)).first;
         }
 
         auto& channel = it->second;
 
         if (channel.NeedsReopen(flushStartTime)) {
-            channel = TJaegerChannelManager(config, endpoint);
+            channel = TJaegerChannelManager(config, endpoint, TvmService_);
         }
 
         if (channel.Push(batches, spanCount)) {

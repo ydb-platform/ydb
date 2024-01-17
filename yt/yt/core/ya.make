@@ -32,6 +32,7 @@ SRCS(
     compression/brotli.cpp
     compression/bzip2.cpp
     compression/codec.cpp
+    compression/dictionary_codec.cpp
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
@@ -188,6 +189,7 @@ SRCS(
     rpc/message.cpp
     rpc/message_format.cpp
     rpc/null_channel.cpp
+    rpc/peer_discovery.cpp
     rpc/per_user_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
@@ -228,6 +230,7 @@ SRCS(
     yson/async_consumer.cpp
     yson/async_writer.cpp
     yson/attribute_consumer.cpp
+    yson/config.cpp
     yson/consumer.cpp
     yson/forwarding_consumer.cpp
     yson/lexer.cpp
@@ -324,7 +327,7 @@ PEERDIR(
     library/cpp/ytalloc/api
 
     yt/yt/build
-    
+
     yt/yt/core/misc/isa_crc64
 
     yt/yt_proto/yt/core

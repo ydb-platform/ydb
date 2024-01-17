@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcYdbLongTxService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef ADD_REQUEST
@@ -16,7 +16,7 @@ void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, REQ, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::LongTx::REQ##Request, Ydb::LongTx::REQ##Response, TGRpcYdbLongTxService>>   \
         (this, &Service_, CQ_,                                                                                  \
-            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                           \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                     new TGrpcRequestOperationCall<Ydb::LongTx::REQ##Request, Ydb::LongTx::REQ##Response>        \
@@ -28,7 +28,6 @@ void TGRpcYdbLongTxService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(CommitTx, CommitTransaction, DoLongTxCommitRPC)
     ADD_REQUEST(RollbackTx, RollbackTransaction, DoLongTxRollbackRPC)
     ADD_REQUEST(Write, Write, DoLongTxWriteRPC)
-    ADD_REQUEST(Read, Read, DoLongTxReadRPC)
 #undef ADD_REQUEST
 }
 

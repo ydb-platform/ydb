@@ -91,6 +91,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::ExternalTable;
     case ::Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE:
         return ESchemeEntryType::ExternalDataSource;
+    case ::Ydb::Scheme::Entry::VIEW:
+        return ESchemeEntryType::View;
     default:
         return ESchemeEntryType::Unknown;
     }

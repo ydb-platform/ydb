@@ -223,6 +223,7 @@ protected:
 
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
+    virtual void OnWeightUpdated(i64 weightDelta);
 
     //! Returns true if resurrection is supported. Note that the function must always returns the same value.
     virtual bool IsResurrectionSupported() const;
@@ -464,6 +465,7 @@ protected:
 
     void OnAdded(const TValuePtr& value) override;
     void OnRemoved(const TValuePtr& value) override;
+    void OnWeightUpdated(i64 weightChanged) override;
 
 private:
     const IMemoryUsageTrackerPtr MemoryTracker_;

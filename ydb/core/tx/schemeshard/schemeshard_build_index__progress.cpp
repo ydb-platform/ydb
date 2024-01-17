@@ -97,6 +97,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
             col->SetType(NScheme::TypeName(typeInfo, typeMod));
             col->SetName(colInfo.ColumnName);
+            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
         }
 
     } else {

@@ -140,8 +140,8 @@ public:
         return Gateway->OpenSession(sessionId, username);
     }
 
-    void CloseSession(const TString& sessionId) {
-        return Gateway->CloseSession(sessionId);
+    NThreading::TFuture<void> CloseSession(const TString& sessionId) {
+        return Gateway->CloseSessionAsync(sessionId);
     }
 
     NThreading::TFuture<IDqGateway::TResult>
@@ -220,7 +220,7 @@ public:
         return Impl->OpenSession(sessionId, username);
     }
 
-    void CloseSession(const TString& sessionId) override {
+    NThreading::TFuture<void> CloseSessionAsync(const TString& sessionId) override {
         return Impl->CloseSession(sessionId);
     }
 

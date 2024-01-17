@@ -23,7 +23,7 @@
     <script language="javascript" type="text/javascript" src="cms/validators.js"></script>
     <script language="javascript" type="text/javascript" src="cms/cms.js"></script>
     <script data-main="cms/main" src="cms/ext/require.min.js"></script>
-    <script language="javascript" type="text/javascript"  src="../../cms/ext/monaco-editor/vs/loader.js"></script>
+    <script language="javascript" type="text/javascript"  src="cms/ext/monaco-editor/vs/loader.js?v=0.27.0.2"></script>
     <style type="text/css">
       .table-nonfluid { width: auto; }
       .narrow-line50 {line-height: 50%}
@@ -305,8 +305,8 @@
                 </h5>
               </div>
               <div id="yaml-collapse-one" class="collapse show" aria-labelledby="yaml-heading-one">
-                <div class="card-body">
-                    <form style="flex:1 1 auto; margin-bottom: 0px;">
+                <div class="card-body clearfix">
+                    <form style="flex:1 1 auto;">
                       <div class="yaml-sticky-btn-wrap link-yaml-config yaml-btn-4" id="link-yaml-config" title="copy to resolver">
                           <div class="yaml-sticky-btn"></div>
                       </div>
@@ -321,6 +321,8 @@
                       </div>
                       <div id="main-editor-container"></div>
                     </form>
+                    <button type="button" class="btn btn-success float-right disabled" id="yaml-apply-button"
+                            title="Set config field 'allow_edit_yaml_in_ui' to 'true' to enable this button">Apply</button>
                 </div>
               </div>
             </div>

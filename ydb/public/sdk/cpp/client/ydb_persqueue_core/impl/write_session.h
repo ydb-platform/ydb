@@ -96,9 +96,7 @@ private:
     void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
     void HandleClosed(const TSessionClosedEvent&);
 
-    TAdaptiveLock Lock;
-    std::queue<TContinuationToken> ContinueTokens;
-    bool Closed = false;
+    std::atomic_bool Closed = false;
 };
 
 

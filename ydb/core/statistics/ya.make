@@ -1,5 +1,10 @@
 LIBRARY()
 
+OWNER(
+    monster
+    g:kikimr
+)
+
 SRCS(
     events.h
     stat_service.h
@@ -8,7 +13,7 @@ SRCS(
 
 PEERDIR(
     util
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/protos
     ydb/core/scheme
 )

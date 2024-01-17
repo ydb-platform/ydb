@@ -13,7 +13,7 @@ target_link_libraries(core-testlib-actors PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-testlib
+  library-actors-testlib
   cpp-testing-unittest
   ydb-core-base
   ydb-core-mon

@@ -314,6 +314,24 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 #endif
 }
 
+bool IsUserspaceThread(size_t tid)
+{
+#ifdef __linux__
+    TFileInput file(Format("/proc/%v/stat", tid));
+    auto statFields = SplitString(file.ReadLine(), " ");
+    constexpr int StartStackIndex = 27;
+    if (statFields.size() < StartStackIndex) {
+        return false;
+    }
+    // This is just a heuristic.
+    auto startStack = FromString<ui64>(statFields[StartStackIndex]);
+    return startStack != 0;
+#else
+    Y_UNUSED(tid);
+    return false;
+#endif
+}
+
 void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_
@@ -741,14 +759,14 @@ void SetUid(int uid)
 #ifdef _linux_
     const auto* passwd = getpwuid(uid);
     int gid = (passwd && errno == 0)
-      ? passwd->pw_gid
-      : uid; // fallback value.
+        ? passwd->pw_gid
+        : uid; // fallback value.
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-                << TErrorAttribute("uid", uid)
-                << TErrorAttribute("gid", gid)
-                << TError::FromSystem();
+            << TErrorAttribute("uid", uid)
+            << TErrorAttribute("gid", gid)
+            << TError::FromSystem();
     }
 
     if (setresuid(uid, uid, uid) != 0) {

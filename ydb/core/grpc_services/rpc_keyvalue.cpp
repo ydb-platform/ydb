@@ -513,7 +513,7 @@ protected:
         req->UserToken = UserToken;
         req->DatabaseName = self->Request_->GetDatabaseName().GetOrElse("");
         auto ev = new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release());
-        self->Send(MakeSchemeCacheID(), ev);
+        self->Send(MakeSchemeCacheID(), ev, 0, 0, self->Span_.GetTraceId());
     }
 
     bool OnNavigateKeySetResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, ui32 access) {
@@ -818,7 +818,7 @@ protected:
         auto &rec = *this->GetProtoRequest();
         CopyProtobuf(rec, &req->Record);
         req->Record.set_tablet_id(KVTabletId);
-        NTabletPipe::SendData(this->SelfId(), KVPipeClient, req.release(), 0);
+        NTabletPipe::SendData(this->SelfId(), KVPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
     }
 
     void Handle(typename TKVRequest::TResponse::TPtr &ev) {

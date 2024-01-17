@@ -1,6 +1,6 @@
 #include "flat_part_dump.h"
 #include "flat_part_iface.h"
-#include "flat_part_index_iter.h"
+#include "flat_part_index_iter_iface.h"
 #include "flat_page_data.h"
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
@@ -52,10 +52,10 @@ namespace {
         BTreeIndex(part);
 
         if (depth > 2) {
-            auto index = TPartIndexIt(&part, Env, { });
+            auto index = CreateIndexIter(&part, Env, { });
             
             for (ssize_t i = 0; ; i++) {
-                auto ready = i == 0 ? index.Seek(0) : index.Next();
+                auto ready = i == 0 ? index->Seek(0) : index->Next();
                 if (ready != EReady::Data) {
                     if (ready == EReady::Page) {
                         Out << " | -- the rest of the index rows aren't loaded" << Endl;
@@ -65,7 +65,7 @@ namespace {
 
                 Out << Endl;
 
-                DataPage(part, index.GetPageId());
+                DataPage(part, index->GetPageId());
             }
         }
     }
@@ -99,23 +99,31 @@ namespace {
 
     void TDump::Index(const TPart &part, ui32 depth) noexcept
     {
+        if (!part.IndexPages.Groups) {
+            return;
+        }
+
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
-        auto index = TPartIndexIt(&part, Env, { });
-        auto label = index.TryGetLabel();
+        auto indexPageId = part.IndexPages.Groups[0];
+        auto indexPage = Env->TryGetPage(&part, indexPageId);
 
-        if (label) {
+        if (!indexPage) {
             Out
-                << " + Index{" << (ui16)label->Type << " rev "
-                << label->Format << ", " << label->Size << "b}"
+                << " + Index{unload}"
                 << Endl
                 << " |  Page     Row    Bytes  (";
-        } else {
-            Out
-                << " + Index{unknown}"
-                << Endl
-                << " |  Page     Row    Bytes  (";
+            return;
         }
+        
+        auto index = NPage::TIndex(*indexPage);
+        auto label = index.Label();
+
+        Out
+            << " + Index{" << (ui16)label.Type << " rev "
+            << label.Format << ", " << label.Size << "b}"
+            << " " << index->Count << " rec" << Endl
+            << " |  Page     Row    Bytes  (";
 
         for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) {
             Out << (off ? ", " : "");
@@ -125,24 +133,18 @@ namespace {
 
         Out << ")" << Endl;
 
-        for (ssize_t i = 0; ; i++) {
+        for (auto iter = index->Begin(); iter; iter++) {
             key.clear();
 
-            if (depth < 2 && i >= 10) {
-                Out << " | -- skipped the rest entries, depth level " << depth << Endl;
+            if (depth < 2 && iter.Off() >= 10) {
+                Out
+                    << " | -- skipped " << index->Count - iter.Off()
+                    << " entries, depth level " << depth << Endl;
+
                 break;
             }
 
-            // prints without LastKeyRecord, but it seems ok for now
-            auto ready = i == 0 ? index.Seek(0) : index.Next();
-            if (ready != EReady::Data) {
-                if (ready == EReady::Page) {
-                    Out << " | -- the rest of the index rows aren't loaded" << Endl;
-                }
-                break;
-            }
-
-            auto record = index.GetRecord();
+            auto record = iter.GetRecord();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 key.push_back(record->Cell(info));
 
@@ -166,7 +168,7 @@ namespace {
     {
         if (part.IndexPages.BTreeGroups) {
             auto meta = part.IndexPages.BTreeGroups.front();
-            if (meta.LevelsCount) {
+            if (meta.LevelCount) {
                 BTreeIndexNode(part, meta);
             } else {
                 Out
@@ -327,7 +329,7 @@ namespace {
             Out << intend << " | > ";
 
             key.clear();
-            auto cells = node.GetKeyCells(i, part.Scheme->Groups[0].ColsKeyIdx);
+            auto cells = node.GetKeyCellsIter(i, part.Scheme->Groups[0].ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
                 Y_UNUSED(pos);
                 key.push_back(cells.Next());

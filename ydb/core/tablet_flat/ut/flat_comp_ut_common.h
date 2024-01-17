@@ -169,6 +169,8 @@ public:
         auto* policy = scheme.GetTableInfo(params->Table)->CompactionPolicy.Get();
 
         NPage::TConf conf(params->IsFinal, policy->MinDataPageSize);
+        conf.Group(0).BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
+        conf.Group(0).BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
         conf.UnderlayMask = params->UnderlayMask.Get();
         conf.SplitKeys = params->SplitKeys.Get();
         conf.Group(0).Codec = family->Codec;

@@ -28,5 +28,5 @@ long DefaultRetryStrategy::CalculateDelayBeforeNextRetry(const AWSError<CoreErro
         return 0;
     }
 
-    return (1 << attemptedRetries) * m_scaleFactor;
+    return (1UL << attemptedRetries) * m_scaleFactor;
 }

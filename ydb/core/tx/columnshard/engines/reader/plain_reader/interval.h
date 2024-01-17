@@ -14,23 +14,22 @@ protected:
     YDB_READONLY(bool, IncludeFinish, true);
     YDB_READONLY(bool, IncludeStart, false);
     YDB_READONLY(ui32, IntervalIdx, 0);
+    bool IsExclusiveIntervalFlag = false;
 public:
-    bool IsExclusiveInterval(const ui32 sourcesCount) const {
-        return IsExclusiveInterval(sourcesCount, IncludeStart, IncludeFinish);
-    }
-
-    static bool IsExclusiveInterval(const ui32 sourcesCount, const bool includeStart, const bool includeFinish) {
-        return includeFinish && includeStart && sourcesCount == 1;
-    }
-
     TMergingContext(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const bool includeFinish, const bool includeStart)
+        const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
         : Start(start)
         , Finish(finish)
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
-        , IntervalIdx(intervalIdx) {
+        , IntervalIdx(intervalIdx)
+        , IsExclusiveIntervalFlag(isExclusiveInterval)
+    {
 
+    }
+
+    bool IsExclusiveInterval() const {
+        return IsExclusiveIntervalFlag;
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -39,6 +38,7 @@ public:
         result.InsertValue("idx", IntervalIdx);
         result.InsertValue("finish", Finish.DebugJson());
         result.InsertValue("include_finish", IncludeFinish);
+        result.InsertValue("exclusive", IsExclusiveIntervalFlag);
         return result;
     }
 
@@ -68,16 +68,12 @@ private:
         return result;
     }
 
-    bool IsSourcesReady() {
-        for (auto&& [_, s] : Sources) {
-            if (!s->IsDataReady()) {
-                return false;
-            }
-        }
-        return true;
-    }
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     const ui32 IntervalIdx;
+    TAtomicCounter ReadySourcesCount = 0;
+    TAtomicCounter ReadyGuards = 0;
+    ui32 WaitSourcesCount = 0;
+    void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
 
@@ -110,13 +106,11 @@ public:
         return result;
     }
 
-    void OnInitResourcesGuard(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard);
     void OnSourceFetchStageReady(const ui32 sourceIdx);
-    void OnSourceFilterStageReady(const ui32 sourceIdx);
 
     TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-        const bool includeFinish, const bool includeStart);
+        const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
 };
 
 }

@@ -14,6 +14,7 @@ NActors::IActor* CreateComputeActor(
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    NDqProto::EDqStatsMode statsMode);
+    NDqProto::EDqStatsMode statsMode,
+    bool enableSpilling);
 
 } // namespace NYql

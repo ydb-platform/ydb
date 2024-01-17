@@ -8,7 +8,7 @@
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/persqueue/events/internal.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 
 namespace NKikimr {

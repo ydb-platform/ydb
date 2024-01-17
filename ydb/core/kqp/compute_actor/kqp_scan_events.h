@@ -8,8 +8,8 @@
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
@@ -39,30 +39,29 @@ struct TEvScanExchange {
 
     class TEvSendData: public NActors::TEventLocal<TEvSendData, EvSendData> {
     private:
-        YDB_ACCESSOR_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
         YDB_ACCESSOR_DEF(TVector<TOwnedCellVec>, Rows);
-        YDB_ACCESSOR(ui64, TabletId, 0);
+        YDB_READONLY(ui64, TabletId, 0);
+        YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
     public:
-        TEvSendData(TEvKqpCompute::TEvScanData& msg, const ui64 tabletId)
-            : TabletId(tabletId) {
-            switch (msg.GetDataFormat()) {
-                case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
-                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
-                    Rows = std::move(msg.Rows);
-                    Y_ABORT_UNLESS(Rows.size());
-                    break;
-                case NKikimrTxDataShard::EScanDataFormat::ARROW:
-                    ArrowBatch = msg.ArrowBatch;
-                    Y_ABORT_UNLESS(ArrowBatch);
-                    Y_ABORT_UNLESS(ArrowBatch->num_rows());
-                    break;
-            }
-
+        ui32 GetRowsCount() const {
+            return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(std::shared_ptr<arrow::RecordBatch> arrowBatch, const ui64 tabletId)
+        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId)
             : ArrowBatch(arrowBatch)
-            , TabletId(tabletId) {
+            , TabletId(tabletId)
+        {
+            Y_ABORT_UNLESS(ArrowBatch);
+            Y_ABORT_UNLESS(ArrowBatch->num_rows());
+        }
+
+        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes)
+            : ArrowBatch(arrowBatch)
+            , TabletId(tabletId)
+            , DataIndexes(std::move(dataIndexes))
+        {
+            Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 

@@ -3,11 +3,11 @@
 #include "factories.h"
 #include "service_initializer.h"
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log_settings.h>
-#include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/actors/util/should_continue.h>
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log_settings.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/util/should_continue.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/scheme_types/scheme_types.h>
@@ -53,7 +53,7 @@ protected:
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
-    TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers;
+    TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>> GRpcServers;
 
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;

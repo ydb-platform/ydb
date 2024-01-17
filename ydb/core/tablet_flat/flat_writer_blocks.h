@@ -4,9 +4,7 @@
 #include "flat_sausage_packet.h"
 #include "flat_sausage_writer.h"
 #include "flat_sausage_solid.h"
-#include "flat_part_iface.h"
 #include "flat_part_loader.h"
-#include "util_basics.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -19,10 +17,11 @@ namespace NWriter {
         using TPageId = NTable::NPage::TPageId;
         using TCache = TPrivatePageCache::TInfo;
 
-        TBlocks(ICone *cone, ui8 channel, ECache cache, ui32 block)
+        TBlocks(ICone *cone, ui8 channel, ECache cache, ui32 block, bool stickyFlatIndex)
             : Cone(cone)
             , Channel(channel)
             , Cache(cache)
+            , StickyFlatIndex(stickyFlatIndex)
             , Writer(Cone->CookieRange(1), Channel, block)
         {
 
@@ -62,10 +61,10 @@ namespace NWriter {
             for (auto &glob : Writer.Grab())
                 Cone->Put(std::move(glob));
 
-            // Note: for now we mark index pages sticky after we load them
-            if (NTable::TLoader::NeedIn(type) || type == EPage::Index) {
+            // Note: we mark flat index pages sticky after we load them
+            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == EPage::Index) {
                 Sticky.emplace_back(pageId, std::move(raw));
-            } else if (bool(Cache) && (type == EPage::DataPage)) {
+            } else if (bool(Cache) && (type == EPage::DataPage || type == EPage::BTreeIndex)) {
                 Regular.emplace_back(pageId, std::move(raw));
             }
 
@@ -106,6 +105,7 @@ namespace NWriter {
         ICone * const Cone = nullptr;
         const ui8 Channel = Max<ui8>();
         const ECache Cache = ECache::None;
+        const bool StickyFlatIndex;
 
         NPageCollection::TWriter Writer;
         TVector<NPageCollection::TLoadedPage> Regular;

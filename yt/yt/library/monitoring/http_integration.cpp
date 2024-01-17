@@ -23,6 +23,8 @@
 #include <yt/yt/core/http/helpers.h>
 #include <yt/yt/core/http/server.h>
 
+#include <yt/yt/core/bus/tcp/dispatcher.h>
+
 #include <yt/yt/core/misc/ref_counted_tracker_statistics_producer.h>
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
@@ -78,6 +80,10 @@ void Initialize(
         *orchidRoot,
         "/monitoring",
         CreateVirtualNode((*monitoringManager)->GetService()));
+    SetNodeByYPath(
+        *orchidRoot,
+        "/tcp_dispatcher",
+        CreateVirtualNode(NYT::NBus::TTcpDispatcher::Get()->GetOrchidService()));
 
 #ifdef _linux_
     auto buildInfo = NYTProf::TBuildInfo::GetDefault();

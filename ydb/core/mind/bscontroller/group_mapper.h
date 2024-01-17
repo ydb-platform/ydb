@@ -15,11 +15,31 @@ namespace NKikimr {
             THolder<TImpl> Impl;
 
         public:
-            using TGroupDefinition = TVector<TVector<TVector<TPDiskId>>>; // Realm/Domain/Disk
+            template<class T>
+            using TGroupDefinitionBase = TVector<TVector<TVector<T>>>; // Realm/Domain/Disk
+            using TGroupDefinition = TGroupDefinitionBase<TPDiskId>;
             using TForbiddenPDisks = std::unordered_set<TPDiskId, THash<TPDiskId>>;
 
-            template<typename T>
-            static void Traverse(const TGroupDefinition& group, T&& callback) {
+            struct TTargetDiskConstraints {
+                std::optional<ui32> NodeId = std::nullopt;
+            };
+            using TGroupConstraintsDefinition = TGroupDefinitionBase<TTargetDiskConstraints>;
+
+            static void MergeTargetDiskConstraints(const TTargetDiskConstraints& from, TTargetDiskConstraints& to) {
+                if (from.NodeId.has_value()) {
+                    to.NodeId = from.NodeId;
+                }
+            }
+            template<class T>
+            static void MergeTargetDiskConstraints(const TVector<T>& from, TVector<T>& to) {
+                Y_VERIFY_S(from.size() == to.size(), "Could not merge constraints with different sizes");
+                for (ui32 i = 0; i < from.size(); ++i) {
+                    MergeTargetDiskConstraints(from[i], to[i]);
+                }
+            }
+
+            template<typename T, typename F>
+            static void Traverse(const TGroupDefinitionBase<T>& group, F&& callback) {
                 for (ui32 failRealmIdx = 0; failRealmIdx != group.size(); ++failRealmIdx) {
                     const auto& realm = group[failRealmIdx];
                     for (ui32 failDomainIdx = 0; failDomainIdx != realm.size(); ++failDomainIdx) {
@@ -77,6 +97,8 @@ namespace NKikimr {
             // failRealmBeginDxLevel, failRealmEndDxLevel, and then by finding possible options to meet requirements
             // (1) and (2). That is, prefix gives us unique domains in which we can find realms to operate, while
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
+            bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
+                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
                 TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
 

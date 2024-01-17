@@ -11,7 +11,8 @@
 #include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h> //interface
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> //new interface
+
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
@@ -29,40 +30,6 @@ namespace NYql::NDq {
 
 
 using namespace NYql::NNodes;
-
-
-/**
- * Join column is a struct that records the relation label and 
- * attribute name, used in join conditions
-*/
-struct TJoinColumn {
-    TString RelName;
-    TString AttributeName;
-
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName), 
-        AttributeName(attributeName) {}
-
-    bool operator == (const TJoinColumn& other) const {
-        return RelName == other.RelName && AttributeName == other.AttributeName;
-    }
-
-    struct HashFunction
-    {
-        size_t operator()(const TJoinColumn& c) const
-        {
-            return THash<TString>{}(c.RelName) ^ THash<TString>{}(c.AttributeName);
-        }
-    };
-};
-
-bool operator < (const TJoinColumn& c1, const TJoinColumn& c2) {
-    if (c1.RelName < c2.RelName){
-        return true;
-    } else if (c1.RelName == c2.RelName) {
-        return c1.AttributeName < c2.AttributeName;
-    }
-    return false;
-}
 
 /**
  * Edge structure records an edge in a Join graph. 
@@ -126,102 +93,6 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
 }
 
 /**
- * OptimizerNodes are the internal representations of operators inside the
- * Cost-based optimizer. Currently we only support RelOptimizerNode - a node that
- * is an input relation to the equi-join, and JoinOptimizerNode - an inner join 
- * that connects two sets of relations.
-*/
-enum EOptimizerNodeKind: ui32
-{
-    RelNodeType,
-    JoinNodeType
-};
-
-/**
- * BaseOptimizerNode is a base class for the internal optimizer nodes
- * It records a pointer to statistics and records the current cost of the
- * operator tree, rooted at this node
-*/
-struct IBaseOptimizerNode {
-    EOptimizerNodeKind Kind;
-    std::shared_ptr<TOptimizerStatistics> Stats;
-
-    IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
-    IBaseOptimizerNode(EOptimizerNodeKind k, std::shared_ptr<TOptimizerStatistics> s) : 
-        Kind(k), Stats(s) {}
-
-    virtual void Print(std::stringstream& stream, int ntabs=0)=0;
-};
-
-/**
- * RelOptimizerNode adds a label to base class
- * This is the label assinged to the input by equi-Join
-*/
-struct TRelOptimizerNode : public IBaseOptimizerNode {
-    TString Label;
-
-    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) : 
-        IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
-    virtual ~TRelOptimizerNode() {}
-
-    virtual void Print(std::stringstream& stream, int ntabs=0) {
-        for (int i = 0; i < ntabs; i++){
-            stream << "\t";
-        }
-        stream << "Rel: " << Label << "\n";
-
-        for (int i = 0; i < ntabs; i++){
-            stream << "\t";
-        }
-        stream << *Stats << "\n";
-    }
-};
-
-/**
- * JoinOptimizerNode records the left and right arguments of the join
- * as well as the set of join conditions.
- * It also has methods to compute the statistics and cost of a join,
- * based on pre-computed costs and statistics of the children.
-*/
-struct TJoinOptimizerNode : public IBaseOptimizerNode {
-    std::shared_ptr<IBaseOptimizerNode> LeftArg;
-    std::shared_ptr<IBaseOptimizerNode> RightArg;
-    std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
-
-    TJoinOptimizerNode(std::shared_ptr<IBaseOptimizerNode> left, std::shared_ptr<IBaseOptimizerNode> right, 
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions) : 
-        IBaseOptimizerNode(JoinNodeType), LeftArg(left), RightArg(right), JoinConditions(joinConditions) {}
-    virtual ~TJoinOptimizerNode() {}
-
-    /**
-     * Print out the join tree, rooted at this node
-    */
-    virtual void Print(std::stringstream& stream, int ntabs=0) {
-        for (int i = 0; i < ntabs; i++){
-            stream << "\t";
-        }
-
-        stream << "Join: ";
-        for (auto c : JoinConditions){
-            stream << c.first.RelName << "." << c.first.AttributeName 
-                << "=" << c.second.RelName << "." 
-                << c.second.AttributeName << ", ";
-        }
-        stream << "\n";
-
-        for (int i = 0; i < ntabs; i++){
-            stream << "\t";
-        }
-
-        stream << *Stats << "\n";
-
-        LeftArg->Print(stream, ntabs+1);
-        RightArg->Print(stream, ntabs+1);
-    }
-};
-
-
-/**
  * Create a new join and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
@@ -229,8 +100,8 @@ std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode>
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
     EJoinImplType joinImpl) {
 
-    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions);
-    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinImpl));
+    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, EJoinKind::InnerJoin);
+    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinImpl));
     return res;
 }
 
@@ -279,6 +150,18 @@ struct TGraph {
         ScopeMapping[scope] = nodeId;
         RevScopeMapping[nodeId] = scope;
     }
+
+     // Add a node to a graph with a vector of rel label
+    void AddNode(int nodeId, const TVector<TString>& scopes){
+        NNodes = nodeId + 1;
+        TString revScope;
+        for (auto s: scopes ) {
+            ScopeMapping[s] = nodeId;
+            revScope += s + ",";
+        }
+        RevScopeMapping[nodeId] = revScope;
+    }
+
 
     // Add an edge to the graph, if the edge is already in the graph 
     // (we check both directions), no action is taken. Otherwise we
@@ -426,13 +309,16 @@ class TDPccpSolver {
 public:
 
     // Construct the DPccp solver based on the join graph and data about input relations
-    TDPccpSolver(TGraph<N>& g, TVector<std::shared_ptr<TRelOptimizerNode>> rels): 
+    TDPccpSolver(TGraph<N>& g, TVector<std::shared_ptr<IBaseOptimizerNode>> rels): 
         Graph(g), Rels(rels) {
         NNodes = g.NNodes;
     }
 
     // Run DPccp algorithm and produce the join tree in CBO's internal representation
     std::shared_ptr<TJoinOptimizerNode> Solve();
+
+    // Calculate the size of a dynamic programming table with a budget
+    ui32 CountCC(ui32 budget);
 
 private:
 
@@ -455,7 +341,7 @@ private:
     TGraph<N>& Graph;
 
     // List of input relations to DPccp
-    TVector<std::shared_ptr<TRelOptimizerNode>> Rels;
+    TVector<std::shared_ptr<IBaseOptimizerNode>> Rels;
     
     // Emit connected subgraph
     void EmitCsg(const std::bitset<N>&, int=0);
@@ -480,6 +366,9 @@ private:
     // Create an exclusion set that contains all the nodes of the bitset that are smaller or equal to
     // the provided integer
     std::bitset<N> MakeB(const std::bitset<N>&,int);
+
+    // Count the size of the dynamic programming table recursively
+    ui32 CountCCRec(const std::bitset<N>&, const std::bitset<N>&, ui32, ui32);
 };
 
 // Print tabs
@@ -760,6 +649,58 @@ template <int N> std::bitset<N> TDPccpSolver<N>::NextBitset(const std::bitset<N>
 }
 
 /**
+ * Count the number of items in the DP table of DPcpp
+*/
+template <int N> ui32 TDPccpSolver<N>::CountCC(ui32 budget) {
+    std::bitset<N> allNodes;
+    allNodes.set();
+    ui32 cost = 0;
+
+    for (int i = NNodes - 1; i >= 0; i--) {
+        cost += 1;
+        if (cost > budget) {
+            return cost;
+        }
+        std::bitset<N> S;
+        S.set(i);
+        std::bitset<N> X = MakeB(allNodes,i);
+        cost = CountCCRec(S,X,cost,budget);
+    }
+
+    return cost;
+}
+
+/**
+ * Recursively count the nuber of items in the DP table of DPccp
+*/
+template <int N> ui32 TDPccpSolver<N>::CountCCRec(const std::bitset<N>& S, const std::bitset<N>& X, ui32 cost, ui32 budget) {
+    std::bitset<N> Ns = Neighbors(S, X);
+
+    if (Ns==std::bitset<N>()) {
+        return cost;
+    }
+
+    std::bitset<N> prev;
+    std::bitset<N> next;
+
+    while(true) {
+        next = NextBitset(prev, Ns);
+        cost += 1;
+        if (cost > budget) {
+            return cost;
+        }
+        cost = CountCCRec(S | next, X | Ns, cost, budget);
+        if (next==Ns) {
+            break;
+        }
+        prev = next;
+    }
+
+    return cost;
+}
+
+
+/**
  * Build a join tree that will replace the original join tree in equiJoin
  * TODO: Add join implementations here
 */
@@ -806,7 +747,7 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
 
     // Build the final output
     return Build<TCoEquiJoinTuple>(ctx,equiJoin.Pos())
-        .Type(BuildAtom("Inner",equiJoin.Pos(),ctx))
+        .Type(BuildAtom(ConvertToJoinString(reorderResult->JoinType),equiJoin.Pos(),ctx))
         .LeftScope(leftArg)
         .RightScope(rightArg)
         .LeftKeys()
@@ -873,17 +814,234 @@ bool DqCollectJoinRelationsWithStats(
 }
 
 /**
+ * Convert JoinTuple from AST into an internal representation of a optimizer plan
+ * This procedure also hooks up rels with statistics to the leaf nodes of the plan
+ * Statistics for join nodes are not computed
+*/
+std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(const TCoEquiJoinTuple& joinTuple, 
+    const TVector<std::shared_ptr<TRelOptimizerNode>>& rels) {
+
+    std::shared_ptr<IBaseOptimizerNode> left;
+    std::shared_ptr<IBaseOptimizerNode> right;
+
+
+    if (joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
+        left = ConvertToJoinTree(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), rels);
+    }
+    else {
+        auto scope = joinTuple.LeftScope().Cast<TCoAtom>().StringValue();
+        auto it = find_if(rels.begin(), rels.end(), [scope] (const std::shared_ptr<TRelOptimizerNode>& n) {
+            return scope == n->Label;
+        } );
+        left = *it;
+    }
+
+    if (joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
+        right = ConvertToJoinTree(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), rels);
+    }
+    else {
+        auto scope = joinTuple.RightScope().Cast<TCoAtom>().StringValue();
+        auto it = find_if(rels.begin(), rels.end(), [scope] (const std::shared_ptr<TRelOptimizerNode>& n) {
+            return scope == n->Label;
+        } );
+        right =  *it;
+    }
+
+    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConds;
+    size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
+    for (size_t i = 0; i < joinKeysCount; ++i) {
+        size_t keyIndex = i * 2;
+
+        auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
+        auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+        auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
+        auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
+
+        joinConds.insert( std::make_pair( TJoinColumn(leftScope, leftColumn), 
+            TJoinColumn(rightScope, rightColumn)));
+    }
+
+    return std::make_shared<TJoinOptimizerNode>(left,right,joinConds,ConvertToJoinKind(joinTuple.Type().StringValue()));
+}
+
+/**
+ * Extract all non orderable joins from a plan is a post-order traversal order
+*/
+void ExtractNonOrderables(std::shared_ptr<TJoinOptimizerNode> joinTree, 
+    TVector<std::shared_ptr<TJoinOptimizerNode>>& result) {
+
+        if (joinTree->LeftArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+            auto left = static_pointer_cast<TJoinOptimizerNode>(joinTree->LeftArg);
+            ExtractNonOrderables(left, result);
+        }
+        if (joinTree->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+            auto right = static_pointer_cast<TJoinOptimizerNode>(joinTree->RightArg);
+            ExtractNonOrderables(right, result);
+        }
+        if (!joinTree->IsReorderable)
+        {
+            result.emplace_back(joinTree);
+        }
+}
+
+/**
+ * Extract relations and join conditions from an optimizer plan
+ * If we hit a non-orderable join type in recursion, we don't recurse into it and
+ * add it as a relation
+*/
+void ExtractRelsAndJoinConditions(const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+    TVector<std::shared_ptr<IBaseOptimizerNode>> & rels, 
+    std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions) {
+        if (!joinTree->IsReorderable){
+            rels.emplace_back( joinTree );
+            return;
+        }
+
+        for (auto c : joinTree->JoinConditions) {
+            joinConditions.insert(c);
+        }
+
+        if (joinTree->LeftArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+            ExtractRelsAndJoinConditions(static_pointer_cast<TJoinOptimizerNode>(joinTree->LeftArg), rels, joinConditions);
+        }
+        else {
+            rels.emplace_back(joinTree->LeftArg);
+        }
+
+        if (joinTree->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+            ExtractRelsAndJoinConditions(static_pointer_cast<TJoinOptimizerNode>(joinTree->RightArg), rels, joinConditions);
+        }
+        else {
+            rels.emplace_back(joinTree->RightArg);
+        }
+    }
+
+/**
+ * Recursively computes statistics for a join tree
+*/
+void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join) {
+    if (join->LeftArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+        ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->LeftArg));
+    }
+    if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+        ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg));
+    }
+    join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin));
+}
+
+/**
+ * Optimize a subtree of a plan with DPccp
+ * The root of the subtree that needs to be optimizer needs to be reorderable, otherwise we will
+ * only update the statistics for it and return it unchanged
+*/
+std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinOptimizerNode>& joinTree, ui32 maxDPccpDPTableSize) {
+    if (!joinTree->IsReorderable) {
+        joinTree->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*joinTree->LeftArg->Stats, *joinTree->RightArg->Stats, joinTree->JoinConditions, EJoinImplType::DictJoin));
+        return joinTree;
+    }
+
+    TGraph<64> joinGraph;
+    TVector<std::shared_ptr<IBaseOptimizerNode>> rels;
+    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
+
+    ExtractRelsAndJoinConditions(joinTree, rels, joinConditions);
+
+    for (size_t i = 0; i < rels.size(); i++) {
+        joinGraph.AddNode(i, rels[i]->Labels());
+    }
+
+    // Check if we have more rels than DPccp can handle (64)
+    // If that's the case - don't optimize the plan and just return it with
+    // computed statistics
+    if (rels.size() >= 64) {
+        ComputeStatistics(joinTree);
+        return joinTree;
+    }
+
+    for (auto cond : joinConditions ) {
+        int fromNode = joinGraph.FindNode(cond.first.RelName);
+        int toNode = joinGraph.FindNode(cond.second.RelName);
+        joinGraph.AddEdge(TEdge(fromNode, toNode, cond));
+    }
+
+     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Initial join graph:\n";
+        joinGraph.PrintGraph(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
+
+    // make a transitive closure of the graph and reorder the graph via BFS
+    joinGraph.ComputeTransitiveClosure(joinConditions);
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Join graph after transitive closure:\n";
+        joinGraph.PrintGraph(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
+
+    TDPccpSolver<64> solver(joinGraph,rels);
+
+    // Check that the dynamic table of DPccp is not too big
+    // If it is, just compute the statistics for the join tree and return it
+    if (solver.CountCC(maxDPccpDPTableSize) >= maxDPccpDPTableSize) {
+        ComputeStatistics(joinTree);
+        return joinTree;
+    }
+
+    // feed the graph to DPccp algorithm
+    std::shared_ptr<TJoinOptimizerNode> result = solver.Solve();
+
+    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
+        std::stringstream str;
+        str << "Join tree after cost based optimization:\n";
+        result->Print(str);
+        YQL_CLOG(TRACE, CoreDq) << str.str();
+    }
+
+    return result;
+}
+
+class TOptimizerNativeNew: public IOptimizerNew {
+public:
+    TOptimizerNativeNew(const ui32 maxDPccpDPTableSize)
+        : MaxDPccpDPTableSize(maxDPccpDPTableSize) { }
+
+    std::shared_ptr<TJoinOptimizerNode>  JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override {
+        // Traverse the join tree and generate a list of non-orderable joins in a post-order
+        TVector<std::shared_ptr<TJoinOptimizerNode>> nonOrderables;
+        ExtractNonOrderables(joinTree, nonOrderables);
+
+        // For all non-orderable joins, optimize the children
+        for( auto join : nonOrderables ) {
+            if (join->LeftArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+                join->LeftArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->LeftArg), MaxDPccpDPTableSize);
+            }
+            if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
+                join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), MaxDPccpDPTableSize);
+            }  
+            join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin));
+        }
+
+        // Optimize the root
+        return OptimizeSubtree(joinTree, MaxDPccpDPTableSize);
+    }
+
+    const ui32 MaxDPccpDPTableSize;
+};
+
+/**
  * Main routine that checks:
  * 1. Do we have an equiJoin
  * 2. Is the cost already computed
- * 3. FIX: Are all joins InnerJoins
- * 4. Are all the costs of equiJoin inputs computed?
+ * 3. Are all the costs of equiJoin inputs computed?
  * 
- * Then it extracts join conditions from the join tree, constructs a join graph and
- * optimizes it with the DPccp algorithm
+ * Then it optimizes the join tree by iterating over all non-orderable nodes and optimizing their children,
+ * and finally optimizes the root of the tree
 */
 TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, 
-    bool ruleEnabled) {
+    bool ruleEnabled, ui32 maxDPccpDPTableSize) {
 
     if (!ruleEnabled) {
         return node;
@@ -897,10 +1055,6 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
 
     if (typesCtx.StatisticsMap.contains(equiJoin.Raw())) {
 
-        return node;
-    }
-
-    if (! HasOnlyOneJoinType(*equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr(), "Inner")) {
         return node;
     }
 
@@ -919,54 +1073,17 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
 
-    std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
 
-    // EquiJoin argument n-2 is the actual join tree, represented as TCoEquiJoinTuple
-    ComputeJoinConditions(equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>(), joinConditions);
+    // Generate an initial tree
+    auto joinTree = ConvertToJoinTree(joinTuple,rels);
 
-    // construct a graph out of join conditions
-    TGraph<64> joinGraph;
-    for (size_t i = 0; i < rels.size(); i++) {
-        joinGraph.AddNode(i, rels[i]->Label);
-    }
-
-    for (auto cond : joinConditions ) {
-        int fromNode = joinGraph.FindNode(cond.first.RelName);
-        int toNode = joinGraph.FindNode(cond.second.RelName);
-        joinGraph.AddEdge(TEdge(fromNode, toNode, cond));
-    }
-
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
-        std::stringstream str;
-        str << "Initial join graph:\n";
-        joinGraph.PrintGraph(str);
-        YQL_CLOG(TRACE, CoreDq) << str.str();
-    }
-
-    // make a transitive closure of the graph and reorder the graph via BFS
-    joinGraph.ComputeTransitiveClosure(joinConditions);
-
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
-        std::stringstream str;
-        str << "Join graph after transitive closure:\n";
-        joinGraph.PrintGraph(str);
-        YQL_CLOG(TRACE, CoreDq) << str.str();
-    }
-
-    // feed the graph to DPccp algorithm
-    TDPccpSolver<64> solver(joinGraph,rels);
-    std::shared_ptr<TJoinOptimizerNode> result = solver.Solve();
-
-    if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE)) {
-        std::stringstream str;
-        str << "Join tree after cost based optimization:\n";
-        result->Print(str);
-        YQL_CLOG(TRACE, CoreDq) << str.str();
-    }
+    auto opt = TOptimizerNativeNew(maxDPccpDPTableSize);
+    joinTree = opt.JoinSearch(joinTree);
 
     // rewrite the join tree and record the output statistics
-    TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, result);
-    typesCtx.StatisticsMap[ res.Raw() ] = result->Stats;
+    TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
+    typesCtx.StatisticsMap[ res.Raw() ] = joinTree->Stats;
     return res;
 }
 
@@ -1052,7 +1169,7 @@ private:
         }
 
         for (size_t i = 0; i < Rels.size(); i++) {
-            JoinGraph.AddNode(i, Rels[i]->Label);
+            JoinGraph.AddNode(i, Rels[i]->Labels());
         }
 
         for (const auto& clazz : Input.EqClasses) {
@@ -1089,7 +1206,7 @@ private:
     TInput Input;
     const std::function<void(const TString&)> Log;
 
-    TVector<std::shared_ptr<TRelOptimizerNode>> Rels;
+    TVector<std::shared_ptr<IBaseOptimizerNode>> Rels;
     TGraph<64> JoinGraph;
 };
 

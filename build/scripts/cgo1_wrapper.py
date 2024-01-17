@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 
-CGO1_SUFFIX='.cgo1.go'
+CGO1_SUFFIX = '.cgo1.go'
 
 
 def call(cmd, cwd, env=None):

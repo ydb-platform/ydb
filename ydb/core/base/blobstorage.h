@@ -14,10 +14,10 @@
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 #include <library/cpp/lwtrace/shuttle.h>
-#include <library/cpp/actors/util/rope.h>
-#include <library/cpp/actors/util/shared_data_rope_backend.h>
+#include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/util/shared_data_rope_backend.h>
 
 #include <util/stream/str.h>
 #include <util/generic/xrange.h>
@@ -706,6 +706,7 @@ struct TEvBlobStorage {
         EvWriteMetadata,
         EvPermitGarbageCollection,
         EvReplInvoke,
+        EvStartBalancing,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

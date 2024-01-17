@@ -5,16 +5,17 @@
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/http/http.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/http/http.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -129,7 +130,7 @@ public:
     TS3FileWriteActor(
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
-        NYdb::TCredentialsProviderPtr credProvider,
+        TS3Credentials crdentials,
         const TString& key,
         const TString& url,
         const std::string_view& compression,
@@ -138,7 +139,7 @@ public:
         const TString& token)
         : TxId(txId)
         , Gateway(std::move(gateway))
-        , CredProvider(std::move(credProvider))
+        , Credentials(std::move(crdentials))
         , RetryPolicy(retryPolicy)
         , ActorSystem(TActivationContext::ActorSystem())
         , Key(key)
@@ -154,13 +155,14 @@ public:
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
+        auto authInfo = Credentials.GetAuthInfo();
         if (DirtyWrite && Parts->IsSealed() && Parts->Size() <= 1) {
             Become(&TS3FileWriteActor::SinglepartWorkingStateFunc);
             const size_t size = Max<size_t>(Parts->Volume(), 1);
             InFlight += size;
             SentSize += size;
             Gateway->Upload(Url,
-                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
                 Parts->Pop(),
                 std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, size, std::placeholders::_1),
                 true,
@@ -168,7 +170,7 @@ public:
         } else {
             Become(&TS3FileWriteActor::MultipartInitialStateFunc);
             Gateway->Upload(Url + "?uploads",
-                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
                 0,
                 std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1),
                 false,
@@ -184,6 +186,7 @@ public:
 
     void PassAway() override {
         if (InFlight || !Parts->Empty()) {
+            AbortMultipartUpload();
             LOG_W("TS3FileWriteActor", "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", Sealed: " << Parts->IsSealed() << ", request id: [" << RequestId << "]");
         } else {
             LOG_D("TS3FileWriteActor", "PassAway: request id: [" << RequestId << "]");
@@ -313,6 +316,14 @@ private:
         }
     }
 
+    static void OnMultipartUploadAbort(TActorSystem* actorSystem, TActorId selfId, const TTxId& TxId, const TString& requestId, IHTTPGateway::TResult&& result) {
+        if (!result.Issues) {
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor: " << selfId << ", TxId: " << TxId << ". " << "Multipart upload aborted, request id: [" << requestId << "]");
+        } else {
+            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor: " << selfId << ", TxId: " << TxId << ". " << "Failed to abort multipart upload, request id: [" << requestId << "], issues: " << result.Issues.ToString());
+        }
+    }
+
     static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
         if (!result.Issues) {
             if (result.Content.HttpResponseCode >= 300) {
@@ -356,8 +367,9 @@ private:
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
+            auto authInfo = Credentials.GetAuthInfo();
             Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
-                IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo()),
+                IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
                 std::move(part),
                 std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, RequestId, std::placeholders::_1),
                 true,
@@ -383,12 +395,29 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
+        auto authInfo = Credentials.GetAuthInfo();
         Gateway->Upload(Url + "?uploadId=" + UploadId,
-            IHTTPGateway::MakeYcHeaders(RequestId, CredProvider->GetAuthInfo(), "application/xml"),
+            IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             xml,
             std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, RequestId, SentSize, std::placeholders::_1),
             false,
             RetryPolicy);
+    }
+
+    void AbortMultipartUpload() {
+        // Try to abort multipart upload in case of unexpected termination.
+        // In case of error just logs warning.
+
+        if (!UploadId) {
+            return;
+        }
+
+        auto authInfo = Credentials.GetAuthInfo();
+        Gateway->Delete(Url + "?uploadId=" + UploadId,
+            IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
+            std::bind(&TS3FileWriteActor::OnMultipartUploadAbort, ActorSystem, SelfId(), TxId, RequestId, std::placeholders::_1),
+            RetryPolicy);
+        UploadId.clear();
     }
 
     size_t InFlight = 0ULL;
@@ -396,7 +425,7 @@ private:
 
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;
-    const NYdb::TCredentialsProviderPtr CredProvider;
+    const TS3Credentials Credentials;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     TActorSystem* const ActorSystem;
@@ -421,7 +450,7 @@ public:
         const TTxId& txId,
         const TString& prefix,
         IHTTPGateway::TPtr gateway,
-        NYdb::TCredentialsProviderPtr credProvider,
+        TS3Credentials&& credentials,
         IRandomProvider* randomProvider,
         const TString& url,
         const TString& path,
@@ -435,7 +464,7 @@ public:
         bool dirtyWrite,
         const TString& token)
         : Gateway(std::move(gateway))
-        , CredProvider(std::move(credProvider))
+        , Credentials(std::move(credentials))
         , RandomProvider(randomProvider)
         , RetryPolicy(retryPolicy)
         , OutputIndex(outputIndex)
@@ -519,7 +548,7 @@ private:
             auto fileWrite = std::make_unique<TS3FileWriteActor>(
                 TxId,
                 Gateway,
-                CredProvider,
+                Credentials,
                 key,
                 UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension, true),
                 Compression,
@@ -611,7 +640,7 @@ private:
     }
 
     const IHTTPGateway::TPtr Gateway;
-    const NYdb::TCredentialsProviderPtr CredProvider;
+    const TS3Credentials Credentials;
     IRandomProvider* RandomProvider;
     TIntrusivePtr<IRandomProvider> DefaultRandomProvider;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -655,14 +684,13 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto actor = new TS3WriteActor(
         outputIndex,
         statsLevel,
         txId,
         prefix,
         std::move(gateway),
-        credentialsProviderFactory->CreateProvider(),
+        TS3Credentials(credentialsFactory, token),
         randomProvider, params.GetUrl(),
         params.GetPath(),
         params.GetExtension(),

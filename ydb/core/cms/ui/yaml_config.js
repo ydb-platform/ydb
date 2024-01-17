@@ -156,19 +156,81 @@ class YamlConfigState {
     constructor() {
         this.fetchInterval = 5000;
         this.url = 'cms/api/console/yamlconfig';
-        this.resolveUrl = 'cms/api/console/resolveyamlconfig'
-        this.resolveAllUrl = 'cms/api/console/resolveallyamlconfig'
+        this.readOnlyUrl = 'cms/api/console/readonly';
+        this.resolveUrl = 'cms/api/console/resolveyamlconfig';
+        this.resolveAllUrl = 'cms/api/console/resolveallyamlconfig';
         this.removeVolatileUrl = 'cms/api/console/removevolatileyamlconfig';
-        this.applyUrl = 'cms/api/console/configurevolatileyamlconfig';
+        this.applyUrl = 'cms/api/console/configureyamlconfig';
+        this.applyVolatileUrl = 'cms/api/console/configurevolatileyamlconfig';
+        this.readOnly = true;
         this.maxVolatileId = -1;
         this.volatileConfigs = [];
         this.codeMirrors = [];
         this.initTab();
     }
 
+    changeReadOnlyState(state) {
+        if (this.readOnly == state)
+            return;
+
+        this.readOnly = state;
+        var btn = $('#yaml-apply-button');
+
+        if (this.readOnly) {
+            btn.addClass("disabled");
+            btn.prop("onclick", null).off("click");
+            btn.attr("title", "Set config field 'allow_edit_yaml_in_ui' to 'true' to enable this button");
+        } else {
+            btn.removeClass("disabled");
+            btn.removeAttr("title");
+            var self = this;
+            btn.on('click', function(event) {
+                event.preventDefault();
+                showAck("Apply new config?", " ", "Yes", "No", self.setConfig.bind(self));
+            });
+        }
+
+        if (this.codeMirror) {
+            this.codeMirror.updateOptions({ readOnly: this.readOnly });
+        }
+    }
+
+    setConfig() {
+        var cmd = {
+            Request: {
+                config: this.codeMirror.getValue(),
+            },
+        };
+
+        $.post(this.applyUrl, JSON.stringify(cmd))
+         .done(this.onSetConfig.bind(this, true))
+         .fail(this.onSetConfig.bind(this, false));
+    }
+
+    onSetConfig(success, data) {
+        if (success) {
+            // ok, do nothing
+        } else {
+            var message = "";
+            if (data.hasOwnProperty('responseJSON')) {
+                message = data.responseJSON.issues;
+            } else {
+                message = data.responseText;
+            }
+            showToast("Error", "Can't set config\n" + message, 15000);
+        }
+    }
+
     loadYaml() {
         clearTimeout(this.loadYamlTimeout);
         $.get(this.url).done(this.onYamlLoaded.bind(this, true)).fail(this.onYamlLoaded.bind(this, false));
+        $.get(this.readOnlyUrl).done(this.onReadOnlyLoaded.bind(this, true)).fail(this.onReadOnlyLoaded.bind(this, false));
+    }
+
+    onReadOnlyLoaded(success, data) {
+        if (success && data.hasOwnProperty('ReadOnly')) {
+            this.changeReadOnlyState(data.ReadOnly);
+        }
     }
 
     onYamlLoaded(success, data) {
@@ -264,7 +326,7 @@ class YamlConfigState {
             },
         };
 
-        $.post(this.applyUrl, JSON.stringify(cmd))
+        $.post(this.applyVolatileUrl, JSON.stringify(cmd))
          .done(this.onVolatileConfigChanged.bind(this, true))
          .fail(this.onVolatileConfigChanged.bind(this, false));
 
@@ -348,7 +410,7 @@ class YamlConfigState {
 
     initTab() {
         var self = this;
-        this.codeMirror = createEditor($("#main-editor-container").get(0), true, 1068);
+        this.codeMirror = createEditor($("#main-editor-container").get(0), this.readOnly, 1068);
         this.config = "";
         this.codeMirror.setValue(this.config);
 

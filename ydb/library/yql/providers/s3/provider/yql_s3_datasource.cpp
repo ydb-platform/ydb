@@ -1,14 +1,15 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -36,12 +37,21 @@ public:
         if (!settings.Url.EndsWith("/")) {
             settings.Url += "/";
         }
-        auto signReference = properties.Value("serviceAccountIdSignatureReference", "");
-        if (signReference) {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference, properties.Value("serviceAccountIdSignature", ""));
-        } else {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+        auto authMethod = properties.Value("authMethod", "");
+        if (authMethod == "SERVICE_ACCOUNT") {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+            return;
         }
+
+        if (authMethod == "AWS") {
+            NS3::TAwsParams params;
+            params.SetAwsAccessKey(properties.Value("awsAccessKeyId", ""));
+            params.SetAwsRegion(properties.Value("awsRegion", ""));
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(params.SerializeAsString(), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
+            return;
+        }
+
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
     }
 
     TStringBuf GetName() const override {

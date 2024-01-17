@@ -59,15 +59,22 @@ public:
 
     //! Called when a request with a given mutation #id is finished and a #response is ready.
     /*
-     *  The latter #response is pushed to every subscriber waiting for the future
-     *  previously returned by #TryBeginRequest. Additionally, if #remember is true,
-     *  #response is remembered and returned by future calls to #TryBeginRequest.
+     *  If #remember is true, the latter #response is remembered and returned by
+     *  future calls to #TryBeginRequest.
+     *  Additionally, a call to the returned function object will push #response
+     *  to every subscriber waiting for the future previously returned by
+     *  #TryBeginRequest. Such a call must be done, or the subscribers will get
+     *  a 'promise abandoned' error.
+     *  NB: the returned function object may be null if there weren't any
+     *  requests associated with #mutationId (or if response keeper isn't started).
      */
-    virtual void EndRequest(TMutationId id, TSharedRefArray response, bool remember = true) = 0;
+    [[nodiscard]]
+    virtual std::function<void()> EndRequest(TMutationId id, TSharedRefArray response, bool remember = true) = 0;
 
     //! Similar to its non-error counterpart but also accepts errors.
     //! Note that these are never remembered and are just propagated to the listeners.
-    virtual void EndRequest(TMutationId id, TErrorOr<TSharedRefArray> responseOrError, bool remember = true) = 0;
+    [[nodiscard]]
+    virtual std::function<void()> EndRequest(TMutationId id, TErrorOr<TSharedRefArray> responseOrError, bool remember = true) = 0;
 
     //! Forgets all pending requests, which were previously registered via #TryBeginRequest.
     virtual void CancelPendingRequests(const TError& error) = 0;

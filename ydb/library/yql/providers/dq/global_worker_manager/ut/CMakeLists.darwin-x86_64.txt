@@ -20,7 +20,7 @@ target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   providers-dq-global_worker_manager
-  cpp-actors-testlib
+  library-actors-testlib
   udf-service-stub
   yql-sql-pg_dummy
   dq-actors-yt

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.16.1)
+VERSION(2.17.2)
 
 LICENSE(BSD-3-Clause)
 
@@ -158,9 +158,13 @@ PY_SRCS(
     pygments/lexers/jmespath.py
     pygments/lexers/jslt.py
     pygments/lexers/jsonnet.py
+    pygments/lexers/jsx.py
     pygments/lexers/julia.py
     pygments/lexers/jvm.py
     pygments/lexers/kuin.py
+    pygments/lexers/kusto.py
+    pygments/lexers/ldap.py
+    pygments/lexers/lean.py
     pygments/lexers/lilypond.py
     pygments/lexers/lisp.py
     pygments/lexers/macaulay2.py
@@ -200,6 +204,7 @@ PY_SRCS(
     pygments/lexers/procfile.py
     pygments/lexers/prolog.py
     pygments/lexers/promql.py
+    pygments/lexers/prql.py
     pygments/lexers/ptx.py
     pygments/lexers/python.py
     pygments/lexers/q.py
@@ -259,6 +264,8 @@ PY_SRCS(
     pygments/lexers/varnish.py
     pygments/lexers/verification.py
     pygments/lexers/verifpal.py
+    pygments/lexers/vip.py
+    pygments/lexers/vyper.py
     pygments/lexers/web.py
     pygments/lexers/webassembly.py
     pygments/lexers/webidl.py
@@ -279,6 +286,7 @@ PY_SRCS(
     pygments/sphinxext.py
     pygments/style.py
     pygments/styles/__init__.py
+    pygments/styles/_mapping.py
     pygments/styles/abap.py
     pygments/styles/algol.py
     pygments/styles/algol_nu.py

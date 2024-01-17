@@ -15,7 +15,7 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/set.h>
 
@@ -89,6 +89,7 @@ private:
             FFunc(TEvConsole::EvAlterTenantRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvIsYamlReadOnlyRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetAllMetadataRequest, ForwardToConfigsManager);

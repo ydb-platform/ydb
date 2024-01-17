@@ -3,6 +3,7 @@
 #include <util/generic/buffer.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
+#include <util/str_stl.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -252,5 +253,34 @@ TString GetTxKey(ui64 txId)
     return Sprintf("tx_%" PRIu64, txId);
 }
 
+
+struct TReadSessionKey {
+    TString SessionId;
+    ui64 PartitionSessionId = 0;
+    bool operator ==(const TReadSessionKey& rhs) const {
+        return SessionId == rhs.SessionId && PartitionSessionId == rhs.PartitionSessionId;
+    }
+};
+
+struct TDirectReadKey {
+    TString SessionId;
+    ui64 PartitionSessionId = 0;
+    ui64 ReadId = 0;
+    bool operator ==(const TDirectReadKey& rhs) const {
+        return SessionId == rhs.SessionId && PartitionSessionId == rhs.PartitionSessionId && ReadId == rhs.ReadId;
+    }
+};
+
 }// NPQ
 }// NKikimr
+
+template <>
+struct THash<NKikimr::NPQ::TReadSessionKey> {
+public:
+    inline size_t operator()(const NKikimr::NPQ::TReadSessionKey& key) const {
+        size_t res = 0;
+        res += THash<TString>()(key.SessionId);
+        res += THash<ui64>()(key.PartitionSessionId);
+        return res;
+    }
+};

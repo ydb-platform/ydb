@@ -12,6 +12,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
     switch (kind) {
     case EExecutionUnitKind::CheckDataTx:
         return CreateCheckDataTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CheckWrite:
+        return CreateCheckWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckSchemeTx:
         return CreateCheckSchemeTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckSnapshotTx:
@@ -34,6 +36,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateBuildAndWaitDependenciesUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinishPropose:
         return CreateFinishProposeUnit(dataShard, pipeline);
+    case EExecutionUnitKind::FinishProposeWrite:
+        return CreateFinishProposeWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::CompletedOperations:
         return CreateCompletedOperationsUnit(dataShard, pipeline);
     case EExecutionUnitKind::WaitForPlan:
@@ -44,6 +48,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateLoadTxDetailsUnit(dataShard, pipeline);
     case EExecutionUnitKind::FinalizeDataTxPlan:
         return CreateFinalizeDataTxPlanUnit(dataShard, pipeline);
+    case EExecutionUnitKind::FinalizeWriteTxPlan:
+        return CreateFinalizeWriteTxPlanUnit(dataShard, pipeline);
     case EExecutionUnitKind::ProtectSchemeEchoes:
         return CreateProtectSchemeEchoesUnit(dataShard, pipeline);
     case EExecutionUnitKind::BuildDataTxOutRS:
@@ -132,6 +138,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCheckReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteRead:
         return CreateReadUnit(dataShard, pipeline);
+    case EExecutionUnitKind::ExecuteWrite:
+        return CreateWriteUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

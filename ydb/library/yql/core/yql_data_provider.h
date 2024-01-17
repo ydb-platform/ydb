@@ -57,6 +57,9 @@ public:
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
+    // returns false if provider schemas aren't supported
+    virtual bool WriteSchemaHeader(NYson::TYsonWriter& writer) = 0;
+    virtual void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) = 0;
 };
 
 class ITrackableNodeProcessor {
@@ -87,7 +90,8 @@ public:
 
     enum class EResultFormat {
         Yson,
-        Custom
+        Custom,
+        Skiff
     };
 
     // settings for result data provider
@@ -232,9 +236,13 @@ struct TDataProviderInfo {
 
     std::function<bool()> HasActiveProcesses;
 
+    // COMPAT(gritukan): Remove it after Arcadia migration.
     std::function<void(const TString& sessionId)> CloseSession;
-
     std::function<void(const TString& sessionId)> CleanupSession;
+
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CloseSessionAsync;
+
+    std::function<NThreading::TFuture<void>(const TString& sessionId)> CleanupSessionAsync;
 
     std::function<TString(const TString& url, const TString& alias)> TokenResolver;
 };

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

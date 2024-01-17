@@ -12,8 +12,8 @@ target_link_libraries(core-base-services INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-protos
-  cpp-actors-interconnect
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-protos
+  library-actors-interconnect
+  library-actors-helpers
 )

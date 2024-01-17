@@ -5,7 +5,7 @@
 #include "restore.h"
 #include "modification.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -66,7 +66,7 @@ protected:
 public:
     TModificationActorImpl(NInternal::TTableRecord&& patch,
         IAlterController::TPtr controller,
-        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const typename IObjectOperationsManager<TObject>::TPtr& manager,
         const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
@@ -75,7 +75,7 @@ public:
     }
 
     TModificationActorImpl(const NInternal::TTableRecord& patch, IAlterController::TPtr controller,
-        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const typename IObjectOperationsManager<TObject>::TPtr& manager,
         const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
@@ -84,7 +84,7 @@ public:
     }
 
     TModificationActorImpl(std::vector<NInternal::TTableRecord>&& patches, IAlterController::TPtr controller,
-        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const typename IObjectOperationsManager<TObject>::TPtr& manager,
         const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
@@ -94,7 +94,7 @@ public:
     }
 
     TModificationActorImpl(const std::vector<NInternal::TTableRecord>& patches, IAlterController::TPtr controller,
-        typename IObjectOperationsManager<TObject>::TPtr manager,
+        const typename IObjectOperationsManager<TObject>::TPtr& manager,
         const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)

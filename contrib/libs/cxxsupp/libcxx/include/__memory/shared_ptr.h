@@ -20,6 +20,7 @@
 #include <__memory/allocation_guard.h>
 #include <__memory/allocator.h>
 #include <__memory/allocator_traits.h>
+#include <__memory/auto_ptr.h>
 #include <__memory/compressed_pair.h>
 #include <__memory/construct_at.h>
 #include <__memory/pointer_traits.h>
@@ -34,13 +35,10 @@
 #include <stdexcept>
 #include <type_traits>
 #include <typeinfo>
-#if !defined(_LIBCPP_HAS_NO_THREADS) // !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
+#if !defined(_LIBCPP_HAS_NO_ATOMIC_HEADER)
 #  include <atomic>
 #endif
 
-#if _LIBCPP_STD_VER <= 14 || defined(_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
-#   include <__memory/auto_ptr.h>
-#endif
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -102,7 +100,6 @@ _ValueType __libcpp_acquire_load(_ValueType const* __value) {
 #endif
 }
 
-#ifndef _LIBCPP_COMPILER_MSVC
 template <class _Tp>
 inline _LIBCPP_INLINE_VISIBILITY _Tp
 __libcpp_atomic_refcount_increment(_Tp& __t) _NOEXCEPT
@@ -124,7 +121,6 @@ __libcpp_atomic_refcount_decrement(_Tp& __t) _NOEXCEPT
     return __t -= 1;
 #endif
 }
-#endif
 
 class _LIBCPP_EXCEPTION_ABI bad_weak_ptr
     : public std::exception
@@ -1685,19 +1681,10 @@ template <class _Tp> struct owner_less;
 #endif
 
 
-_LIBCPP_SUPPRESS_DEPRECATED_PUSH
 template <class _Tp>
 struct _LIBCPP_TEMPLATE_VIS owner_less<shared_ptr<_Tp> >
-#if !defined(_LIBCPP_ABI_NO_BINDER_BASES)
-    : binary_function<shared_ptr<_Tp>, shared_ptr<_Tp>, bool>
-#endif
+    : __binary_function<shared_ptr<_Tp>, shared_ptr<_Tp>, bool>
 {
-_LIBCPP_SUPPRESS_DEPRECATED_POP
-#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_BINDER_TYPEDEFS)
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef bool result_type;
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef shared_ptr<_Tp> first_argument_type;
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef shared_ptr<_Tp> second_argument_type;
-#endif
     _LIBCPP_INLINE_VISIBILITY
     bool operator()(shared_ptr<_Tp> const& __x, shared_ptr<_Tp> const& __y) const _NOEXCEPT
         {return __x.owner_before(__y);}
@@ -1709,19 +1696,10 @@ _LIBCPP_SUPPRESS_DEPRECATED_POP
         {return __x.owner_before(__y);}
 };
 
-_LIBCPP_SUPPRESS_DEPRECATED_PUSH
 template <class _Tp>
 struct _LIBCPP_TEMPLATE_VIS owner_less<weak_ptr<_Tp> >
-#if !defined(_LIBCPP_ABI_NO_BINDER_BASES)
-    : binary_function<weak_ptr<_Tp>, weak_ptr<_Tp>, bool>
-#endif
+    : __binary_function<weak_ptr<_Tp>, weak_ptr<_Tp>, bool>
 {
-_LIBCPP_SUPPRESS_DEPRECATED_POP
-#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_BINDER_TYPEDEFS)
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef bool result_type;
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef weak_ptr<_Tp> first_argument_type;
-    _LIBCPP_DEPRECATED_IN_CXX17 typedef weak_ptr<_Tp> second_argument_type;
-#endif
     _LIBCPP_INLINE_VISIBILITY
     bool operator()(  weak_ptr<_Tp> const& __x,   weak_ptr<_Tp> const& __y) const _NOEXCEPT
         {return __x.owner_before(__y);}

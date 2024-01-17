@@ -32,6 +32,10 @@ WriteGetObjectResponseRequest::WriteGetObjectResponseRequest() :
     m_contentLength(0),
     m_contentLengthHasBeenSet(false),
     m_contentRangeHasBeenSet(false),
+    m_checksumCRC32HasBeenSet(false),
+    m_checksumCRC32CHasBeenSet(false),
+    m_checksumSHA1HasBeenSet(false),
+    m_checksumSHA256HasBeenSet(false),
     m_deleteMarker(false),
     m_deleteMarkerHasBeenSet(false),
     m_eTagHasBeenSet(false),
@@ -180,6 +184,34 @@ Aws::Http::HeaderValueCollection WriteGetObjectResponseRequest::GetRequestSpecif
     ss.str("");
   }
 
+  if(m_checksumCRC32HasBeenSet)
+  {
+    ss << m_checksumCRC32;
+    headers.emplace("x-amz-fwd-header-x-amz-checksum-crc32",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumCRC32CHasBeenSet)
+  {
+    ss << m_checksumCRC32C;
+    headers.emplace("x-amz-fwd-header-x-amz-checksum-crc32c",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumSHA1HasBeenSet)
+  {
+    ss << m_checksumSHA1;
+    headers.emplace("x-amz-fwd-header-x-amz-checksum-sha1",  ss.str());
+    ss.str("");
+  }
+
+  if(m_checksumSHA256HasBeenSet)
+  {
+    ss << m_checksumSHA256;
+    headers.emplace("x-amz-fwd-header-x-amz-checksum-sha256",  ss.str());
+    ss.str("");
+  }
+
   if(m_deleteMarkerHasBeenSet)
   {
     ss << std::boolalpha << m_deleteMarker;
@@ -196,7 +228,7 @@ Aws::Http::HeaderValueCollection WriteGetObjectResponseRequest::GetRequestSpecif
 
   if(m_expiresHasBeenSet)
   {
-    headers.emplace("x-amz-fwd-header-expires", m_expires.ToGmtString(DateFormat::RFC822));
+    headers.emplace("x-amz-fwd-header-expires", m_expires.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_expirationHasBeenSet)
@@ -208,7 +240,7 @@ Aws::Http::HeaderValueCollection WriteGetObjectResponseRequest::GetRequestSpecif
 
   if(m_lastModifiedHasBeenSet)
   {
-    headers.emplace("x-amz-fwd-header-last-modified", m_lastModified.ToGmtString(DateFormat::RFC822));
+    headers.emplace("x-amz-fwd-header-last-modified", m_lastModified.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_missingMetaHasBeenSet)
@@ -240,7 +272,7 @@ Aws::Http::HeaderValueCollection WriteGetObjectResponseRequest::GetRequestSpecif
 
   if(m_objectLockRetainUntilDateHasBeenSet)
   {
-    headers.emplace("x-amz-fwd-header-x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::ISO_8601));
+    headers.emplace("x-amz-fwd-header-x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(Aws::Utils::DateFormat::ISO_8601));
   }
 
   if(m_partsCountHasBeenSet)
@@ -321,4 +353,12 @@ Aws::Http::HeaderValueCollection WriteGetObjectResponseRequest::GetRequestSpecif
 
   return headers;
 
+}
+
+WriteGetObjectResponseRequest::EndpointParameters WriteGetObjectResponseRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Static context parameters
+    parameters.emplace_back(Aws::String("UseObjectLambdaEndpoint"), true, Aws::Endpoint::EndpointParameter::ParameterOrigin::STATIC_CONTEXT);
+    return parameters;
 }

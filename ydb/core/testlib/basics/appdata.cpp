@@ -57,6 +57,7 @@ namespace NKikimr {
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
+        app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->FeatureFlags = FeatureFlags;
 
         // This is a special setting active in test runtime only

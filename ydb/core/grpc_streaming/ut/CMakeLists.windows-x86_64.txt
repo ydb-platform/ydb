@@ -21,7 +21,7 @@ target_link_libraries(ydb-core-grpc_streaming-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-grpc_streaming
-  cpp-grpc-client
+  library-grpc-client
   grpc_streaming-ut-grpc
   core-testlib-default
 )

@@ -2,9 +2,9 @@
 
 #include "kqp_worker_common.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
-#include <library/cpp/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -14,6 +14,8 @@
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
+
+#include <ydb/library/actors/core/monotonic_provider.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
@@ -33,7 +35,7 @@ public:
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        NWilson::TTraceId&& traceId, const TString& sessionId)
+        const TString& sessionId, TMonotonic startedAt)
         : QueryId(queryId)
         , Database(database)
         , Cluster(cluster)
@@ -46,6 +48,7 @@ public:
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
+        , StartedAt(startedAt)
     {
         RequestEv.reset(ev->Release().Release());
 
@@ -59,7 +62,7 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
-            TWilsonKqp::KqpSession, std::move(traceId),
+            TWilsonKqp::KqpSession, std::move(RequestEv->GetWilsonTraceId()),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
@@ -98,6 +101,7 @@ public:
     NKqpProto::TKqpStatsQuery Stats;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NActors::TMonotonic StartedAt;
 
     THashMap<NKikimr::TTableId, ui64> TableVersions;
 
@@ -118,6 +122,8 @@ public:
     TKqpTempTablesState::TConstPtr TempTablesState;
 
     TString ReplayMessage;
+
+    NYql::TIssues Issues;
 
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
@@ -437,6 +443,10 @@ public:
 
     bool GetCollectDiagnostics() {
         return RequestEv->GetCollectDiagnostics();
+    }
+
+    TDuration GetProgressStatsPeriod() {
+        return RequestEv->GetProgressStatsPeriod();
     }
 
     //// Topic ops ////

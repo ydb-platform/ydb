@@ -10,7 +10,7 @@ ADDINCL(
     yt/yt/library/numeric/serialize
 )
 
-INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
+INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
     yt/yt/library/numeric/serialize

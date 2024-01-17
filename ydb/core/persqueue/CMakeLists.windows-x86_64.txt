@@ -8,6 +8,7 @@
 
 add_subdirectory(codecs)
 add_subdirectory(config)
+add_subdirectory(dread_cache_service)
 add_subdirectory(events)
 add_subdirectory(partition_key_range)
 add_subdirectory(ut)
@@ -24,7 +25,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
+  library-actors-core
   cpp-html-pcdata
   library-cpp-json
   ydb-core-base
@@ -57,6 +58,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_init.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_sourcemanager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/partition.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp
@@ -77,6 +79,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/microseconds_sliding_window.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/dread_cache_service/caching_service.cpp
 )
 generate_enum_serilization(ydb-core-persqueue
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.h

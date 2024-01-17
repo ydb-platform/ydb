@@ -15,7 +15,7 @@ target_link_libraries(yql-dq-transform PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   dq-integration-transform
   minikql-computation-llvm
   library-yql-utils

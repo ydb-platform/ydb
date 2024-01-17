@@ -349,12 +349,20 @@ namespace NKikimr {
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
-                BlobsToReplicatePtr = std::move(UnreplicatedBlobsPtr);
-                UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr, std::make_shared<TBlobIdQueue>());
+
+#ifndef NDEBUG
+                Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->size() == UnreplicatedBlobRecords.size(),
+                    "BlobsToReplicatePtr->size# " << BlobsToReplicatePtr->size()
+                    << " UnreplicatedBlobRecords.size# " << UnreplicatedBlobRecords.size());
+                for (const TLogoBlobID& id : *BlobsToReplicatePtr) {
+                    Y_DEBUG_ABORT_UNLESS(UnreplicatedBlobRecords.contains(id));
+                }
+#endif
+
                 if (BlobsToReplicatePtr->empty()) {
                     // no more blobs to replicate -- consider replication finished
                     finished = true;
-                    Y_DEBUG_ABORT_UNLESS(UnreplicatedBlobRecords.empty());
                     for (const auto& donor : std::exchange(DonorQueue, {})) {
                         if (donor) {
                             DropDonor(*donor);
@@ -478,8 +486,7 @@ namespace NKikimr {
             const TInstant timeAtEnd = last->End;
 
             if (workAtBegin < workAtEnd || timeAtEnd < timeAtBegin) {
-                Y_DEBUG_ABORT_UNLESS(false);
-                return {};
+                return {}; // can't evaluate
             }
 
             const double workPerSecond = (workAtBegin - workAtEnd) / (timeAtEnd - timeAtBegin).SecondsFloat();

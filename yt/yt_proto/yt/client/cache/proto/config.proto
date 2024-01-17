@@ -27,12 +27,20 @@ message TConfig
     optional uint32 DefaultPingPeriod = 10;
     optional uint32 ModifyRowsBatchCapacity = 11;
 
+    optional ECompressionCodec RequestCodec = 17 [default = None];
     optional ECompressionCodec ResponseCodec = 12 [default = None];
+    // Should set EnableLegacyRpcCodecs=False, to enable RequestCodec & ResponseCodec: https://nda.ya.ru/t/iXCfYZjS6yNEwg
+    optional bool EnableLegacyRpcCodecs = 20;
 
     optional bool EnableRetries = 13;
     optional uint32 RetryBackoffTime = 14;
     optional uint32 RetryAttempts = 15;
     optional uint32 RetryTimeout = 16;
+
+    repeated string ProxyAddresses = 18;
+    optional bool EnableProxyDiscovery = 19;
+    optional bool EnablePowerOfTwoChoicesStrategy = 21;
+    optional bool EnableSelectQueryTracingTag = 22;
 }
 
 message TClustersConfig

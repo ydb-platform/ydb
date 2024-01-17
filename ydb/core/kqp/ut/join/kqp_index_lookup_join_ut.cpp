@@ -90,6 +90,7 @@ Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -412,6 +413,40 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
             [[104]];
             [[105]]
         ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(SimpleLeftOnlyJoin, StreamLookup) {
+    Test(
+        R"(
+        SELECT l.Key, l.Fk, l.Value
+        FROM `/Root/Left` AS l
+        LEFT ONLY JOIN `/Root/Right` AS r
+            ON l.Fk = r.Key
+        ORDER BY l.Key
+    )",
+    R"([
+        [[4];[104];["Value2"]];
+        [[5];[105];["Value3"]];
+        [[6];#;["Value6"]];
+        [[7];#;["Value7"]]
+    ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
+    Test(
+        R"(
+        SELECT l.Value
+        FROM `/Root/Left` AS l
+        LEFT ONLY JOIN `/Root/Right` AS r
+            ON l.Fk = r.Key
+        ORDER BY l.Value
+    )",
+    R"([
+        [["Value2"]];
+        [["Value3"]];
+        [["Value6"]];
+        [["Value7"]]
+    ])", 3, StreamLookup);
 }
 
 void CreateSimpleTableWithKeyType(TSession session, const TString& columnType) {

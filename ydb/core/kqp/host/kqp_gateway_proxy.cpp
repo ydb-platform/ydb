@@ -1,8 +1,11 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/grpc_services/table_settings.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 
 namespace NKikimr::NKqp {
 
@@ -397,9 +400,11 @@ bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
 class TKqpGatewayProxy : public IKikimrGateway {
 public:
     TKqpGatewayProxy(const TIntrusivePtr<IKqpGateway>& gateway,
-        const TIntrusivePtr<TKikimrSessionContext>& sessionCtx)
+        const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
+        TActorSystem* actorSystem)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
+        , ActorSystem(actorSystem)
     {
         YQL_ENSURE(Gateway);
     }
@@ -425,6 +430,10 @@ public:
         Gateway->SetToken(cluster, token);
     }
 
+    bool GetDatabaseForLoginOperation(TString& database) {
+        return NSchemeHelpers::SetDatabaseForLoginOperation(database, GetDomainLoginOnly(), GetDomainName(), GetDatabase());
+    }
+
     TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) override {
         return Gateway->ListPath(cluster, path);
     }
@@ -440,7 +449,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         TString error;
-        if (!SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, createDir)) {
+        if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, createDir)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
 
@@ -569,7 +578,7 @@ public:
     }
 
     TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>&, ui64 flags)
+        const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
@@ -610,7 +619,7 @@ public:
         auto profilesFuture = Gateway->GetTableProfiles();
         auto sessionCtx = SessionCtx;
         profilesFuture.Subscribe(
-            [tablePromise, sessionCtx, alterReq = std::move(req)](
+            [tablePromise, sessionCtx, alterReq = std::move(req), buildSettings = std::move(buildSettings)](
                 const TFuture<IKqpGateway::TKqpTableProfilesResult> &future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -624,17 +633,27 @@ public:
                 auto &phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-                auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+
+
                 const TPathId invalidPathId;
                 Ydb::StatusIds::StatusCode code;
                 TString error;
-                if (!BuildAlterTableModifyScheme(&alterReq, alter, profilesResult.Profiles, invalidPathId, code, error)) {
+                if (!BuildAlterTableModifyScheme(&alterReq, &modifyScheme, profilesResult.Profiles, invalidPathId, code, error)) {
                     IKqpGateway::TGenericResult errResult;
                     errResult.AddIssue(NYql::TIssue(error));
                     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                     tablePromise.SetValue(errResult);
                     return;
                 }
+
+                if (buildSettings.has_column_build_operation()) {
+                    buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
+                    phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
+                } else {
+                    phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
+                }
+
                 TGenericResult result;
                 result.SetSuccess();
                 tablePromise.SetValue(result);
@@ -650,7 +669,7 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags) override
+        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -673,7 +692,7 @@ public:
             }
         }
 
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags);
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
         if (IsPrepare())
             return prepareFuture;
 
@@ -719,7 +738,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         TString error;
-        if (!SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+        if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
 
@@ -774,47 +793,425 @@ public:
     TFuture<TGenericResult> ModifyPermissions(const TString& cluster,
         const TModifyPermissionsSettings& settings) override
     {
-        FORWARD_ENSURE_NO_PREPARE(ModifyPermissions, cluster, settings);
+        CHECK_PREPARED_DDL(ModifyPermissions);
+
+        if (IsPrepare()) {
+            auto modifyPermissionsPromise = NewPromise<TGenericResult>();
+
+            if (settings.Permissions.empty() && !settings.IsPermissionsClear) {
+                return MakeFuture(ResultFromError<TGenericResult>("No permissions names for modify permissions"));
+            }
+
+            if (settings.Paths.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No paths for modify permissions"));
+            }
+
+            if (settings.Roles.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No roles for modify permissions"));
+            }
+
+            NACLib::TDiffACL acl;
+            switch (settings.Action) {
+                case NYql::TModifyPermissionsSettings::EAction::Grant: {
+                    for (const auto& sid : settings.Roles) {
+                        for (const auto& permission : settings.Permissions) {
+                            TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                            acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                        }
+                    }
+                    break;
+                }
+                case NYql::TModifyPermissionsSettings::EAction::Revoke: {
+                    if (settings.IsPermissionsClear) {
+                        for (const auto& sid : settings.Roles) {
+                            acl.ClearAccessForSid(sid);
+                        }
+                    } else {
+                        for (const auto& sid : settings.Roles) {
+                            for (const auto& permission : settings.Permissions) {
+                                TACLAttrs aclAttrs = ConvertYdbPermissionNameToACLAttrs(permission);
+                                acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, sid, aclAttrs.InheritanceType);
+                            }
+                        }
+                    }
+                    break;
+                }
+                default: {
+                    return MakeFuture(ResultFromError<TGenericResult>("Unknown permission action"));
+                }
+            }
+
+            const auto serializedDiffAcl = acl.SerializeAsString();
+
+            TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
+            pathPairs.reserve(settings.Paths.size());
+            for (const auto& path : settings.Paths) {
+                pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
+            }
+
+            for (const auto& path : pathPairs) {
+                const auto& [dirname, basename] = path.second;
+
+                NKikimrSchemeOp::TModifyScheme schemeTx;
+                schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+                schemeTx.SetWorkingDir(dirname);
+                schemeTx.MutableModifyACL()->SetName(basename);
+                schemeTx.MutableModifyACL()->SetDiffACL(serializedDiffAcl);
+
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+            }
+
+            TGenericResult result;
+            result.SetSuccess();
+            modifyPermissionsPromise.SetValue(result);
+            return modifyPermissionsPromise;
+        } else {
+            return Gateway->ModifyPermissions(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(CreateUser, cluster, settings);
+        CHECK_PREPARED_DDL(CreateUser);
+
+        if (IsPrepare()) {
+            auto createUserPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
+            createUser.SetUser(settings.UserName);
+            if (settings.Password) {
+                createUser.SetPassword(settings.Password);
+            }
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableCreateUser()->Swap(&schemeTx);
+
+            TGenericResult result;
+            result.SetSuccess();
+            createUserPromise.SetValue(result);
+            return createUserPromise.GetFuture();
+        } else {
+            return Gateway->CreateUser(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(AlterUser, cluster, settings);
+        CHECK_PREPARED_DDL(AlterUser);
+
+        if (IsPrepare()) {
+            auto alterUserPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& alterUser = *schemeTx.MutableAlterLogin()->MutableModifyUser();
+            alterUser.SetUser(settings.UserName);
+            if (settings.Password) {
+                alterUser.SetPassword(settings.Password);
+            }
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableAlterUser()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            alterUserPromise.SetValue(result);
+            return alterUserPromise.GetFuture();
+        } else {
+            return Gateway->AlterUser(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(DropUser, cluster, settings);
+        CHECK_PREPARED_DDL(DropUser);
+
+        if (IsPrepare()) {
+            auto dropUserPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
+            dropUser.SetUser(settings.UserName);
+            dropUser.SetMissingOk(settings.MissingOk);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableAlterUser()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            dropUserPromise.SetValue(result);
+            return dropUserPromise.GetFuture();
+        } else {
+            return Gateway->DropUser(cluster, settings);
+        }
+    }
+
+    struct TRemoveLastPhyTxHelper {
+        TRemoveLastPhyTxHelper() = default;
+
+        ~TRemoveLastPhyTxHelper() {
+            if (Query) {
+                Query->MutableTransactions()->RemoveLast();
+            }
+        }
+
+        NKqpProto::TKqpPhyTx& Capture(NKqpProto::TKqpPhyQuery* query) {
+            Query = query;
+            return *Query->AddTransactions();
+        }
+
+        void Forget() {
+            Query = nullptr;
+        }
+    private:
+        NKqpProto::TKqpPhyQuery* Query = nullptr;
+    };
+
+    template <class TSettings>
+    TGenericResult PrepareObjectOperation(const TString& cluster, const TSettings& settings,
+        NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus (NMetadata::NModifications::IOperationsManager::* prepareMethod)(NKqpProto::TKqpSchemeOperation&, const TSettings&, const NMetadata::IClassBehaviour::TPtr&, const NMetadata::NModifications::IOperationsManager::TExternalModificationContext&) const)
+    {
+        TRemoveLastPhyTxHelper phyTxRemover;
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return ResultFromError<TGenericResult>("Invalid cluster: " + cluster);
+            }
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return ResultFromError<TGenericResult>("Couldn't get domain name");
+            }
+
+            NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TPtr(NMetadata::IClassBehaviour::TFactory::Construct(settings.GetTypeId())));
+            if (!cBehaviour) {
+                return ResultFromError<TGenericResult>(TStringBuilder() << "Incorrect object type: \"" << settings.GetTypeId() << "\"");
+            }
+
+            if (!cBehaviour->GetOperationsManager()) {
+                return ResultFromError<TGenericResult>(TStringBuilder() << "Object type \"" << settings.GetTypeId() << "\" does not have manager for operations");
+            }
+
+            NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
+            context.SetDatabase(SessionCtx->GetDatabase());
+            context.SetActorSystem(ActorSystem);
+            if (SessionCtx->GetUserToken()) {
+                context.SetUserToken(*SessionCtx->GetUserToken());
+            }
+
+            auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            phyTx.MutableSchemeOperation()->SetObjectType(settings.GetTypeId());
+
+            NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus prepareStatus =
+                (cBehaviour->GetOperationsManager().get()->*prepareMethod)(
+                    *phyTx.MutableSchemeOperation(), settings, cBehaviour, context);
+
+            TGenericResult result;
+            if (prepareStatus.Ok()) {
+                result.SetSuccess();
+                phyTxRemover.Forget();
+            } else {
+                result.AddIssue(NYql::TIssue(prepareStatus.GetErrorMessage()));
+                result.SetStatus(prepareStatus.GetStatus());
+            }
+            return result;
+        } catch (const std::exception& e) {
+            return ResultFromException<TGenericResult>(e);
+        }
     }
 
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(UpsertObject, cluster, settings);
+        CHECK_PREPARED_DDL(UpsertObject);
+
+        if (IsPrepare()) {
+            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
+        } else {
+            return Gateway->UpsertObject(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(CreateObject, cluster, settings);
+        CHECK_PREPARED_DDL(CreateObject);
+
+        if (IsPrepare()) {
+            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
+        } else {
+            return Gateway->CreateObject(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> AlterObject(const TString& cluster, const TAlterObjectSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(AlterObject, cluster, settings);
+        CHECK_PREPARED_DDL(AlterObject);
+
+        if (IsPrepare()) {
+            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareAlterObjectSchemeOperation));
+        } else {
+            return Gateway->AlterObject(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(DropObject, cluster, settings);
+        CHECK_PREPARED_DDL(DropObject);
+
+        if (IsPrepare()) {
+            return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareDropObjectSchemeOperation));
+        } else {
+            return Gateway->DropObject(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(CreateGroup, cluster, settings);
+        CHECK_PREPARED_DDL(CreateGroup);
+
+        if (IsPrepare()) {
+            auto createGroupPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& createGroup = *schemeTx.MutableAlterLogin()->MutableCreateGroup();
+            createGroup.SetGroup(settings.GroupName);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableCreateGroup()->Swap(&schemeTx);
+
+            if (settings.Roles.size()) {
+                AddUsersToGroup(database, settings.GroupName, settings.Roles, NYql::TAlterGroupSettings::EAction::AddRoles);
+            }
+
+            TGenericResult result;
+            result.SetSuccess();
+            createGroupPromise.SetValue(result);
+            return createGroupPromise.GetFuture();
+        } else {
+            return Gateway->CreateGroup(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(AlterGroup, cluster, settings);
+        CHECK_PREPARED_DDL(UpdateGroup);
+
+        if (IsPrepare()) {
+            auto alterGroupPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            if (!settings.Roles.size()) {
+                return MakeFuture(ResultFromError<TGenericResult>("No roles given for AlterGroup request"));
+            }
+
+            AddUsersToGroup(database, settings.GroupName, settings.Roles, settings.Action);
+
+            TGenericResult result;
+            result.SetSuccess();
+            alterGroupPromise.SetValue(result);
+            return alterGroupPromise.GetFuture();
+        } else {
+            return Gateway->AlterGroup(cluster, settings);
+        }
+    }
+
+    TFuture<TGenericResult> RenameGroup(const TString& cluster, TRenameGroupSettings& settings) override {
+        CHECK_PREPARED_DDL(RenameGroup);
+
+        if (IsPrepare()) {
+            auto renameGroupPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& renameGroup = *schemeTx.MutableAlterLogin()->MutableRenameGroup();
+            renameGroup.SetGroup(settings.GroupName);
+            renameGroup.SetNewName(settings.NewName);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableRenameGroup()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            renameGroupPromise.SetValue(result);
+            return renameGroupPromise.GetFuture();
+        } else {
+            return Gateway->RenameGroup(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) override {
-        FORWARD_ENSURE_NO_PREPARE(DropGroup, cluster, settings);
+        CHECK_PREPARED_DDL(DropGroup);
+
+        if (IsPrepare()) {
+            auto dropGroupPromise = NewPromise<TGenericResult>();
+
+            TString database;
+            if (!GetDatabaseForLoginOperation(database)) {
+                return MakeFuture(ResultFromError<TGenericResult>("Couldn't get domain name"));
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+            auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
+            dropGroup.SetGroup(settings.GroupName);
+            dropGroup.SetMissingOk(settings.MissingOk);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableAlterUser()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            dropGroupPromise.SetValue(result);
+            return dropGroupPromise.GetFuture();
+        } else {
+            return Gateway->DropGroup(cluster, settings);
+        }
     }
 
     TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) override {
@@ -846,9 +1243,41 @@ public:
     }
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings,
-        bool createDir) override
+        bool createDir, bool existingOk) override
     {
-        FORWARD_ENSURE_NO_PREPARE(CreateExternalTable, cluster, settings, createDir);
+        CHECK_PREPARED_DDL(CreateExternalTable);
+
+        if (IsPrepare()) {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.ExternalTable, GetDatabase(), pathPair, error, createDir)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            TRemoveLastPhyTxHelper phyTxRemover;
+            auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableCreateExternalTable();
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
+
+            NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            TGenericResult result;
+            result.SetSuccess();
+            phyTxRemover.Forget();
+            return MakeFuture(result);
+        } else {
+            return Gateway->CreateExternalTable(cluster, settings, createDir, existingOk);
+        }
     }
 
     TFuture<TGenericResult> AlterExternalTable(const TString& cluster,
@@ -858,9 +1287,43 @@ public:
     }
 
     TFuture<TGenericResult> DropExternalTable(const TString& cluster,
-        const TDropExternalTableSettings& settings) override
+        const TDropExternalTableSettings& settings,
+        bool missingOk) override
     {
-        FORWARD_ENSURE_NO_PREPARE(DropExternalTable, cluster, settings);
+        CHECK_PREPARED_DDL(DropExternalTable);
+
+        if (IsPrepare()) {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.ExternalTable, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            TRemoveLastPhyTxHelper phyTxRemover;
+            auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableDropExternalTable();
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalTable);
+            schemeTx.SetSuccessOnNotExist(missingOk);
+
+            NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
+            drop.SetName(pathPair.second);
+
+            TGenericResult result;
+            result.SetSuccess();
+            phyTxRemover.Forget();
+            return MakeFuture(result);
+        } else {
+            return Gateway->DropExternalTable(cluster, settings, missingOk);
+        }
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
@@ -890,9 +1353,47 @@ private:
         return Gateway->GetDatabase();
     }
 
+    bool GetDomainLoginOnly() {
+        return Gateway->GetDomainLoginOnly();
+    }
+
+    TMaybe<TString> GetDomainName() {
+        return Gateway->GetDomainName();
+    }
+
+    void AddUsersToGroup(const TString& database, const TString& group, const std::vector<TString>& roles, const NYql::TAlterGroupSettings::EAction& action) {
+        for (const auto& role : roles) {
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(database);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            switch (action) {
+                case NYql::TAlterGroupSettings::EAction::AddRoles: {
+                    auto& alterGroup = *schemeTx.MutableAlterLogin()->MutableAddGroupMembership();
+                    alterGroup.SetGroup(group);
+                    alterGroup.SetMember(role);
+                    phyTx.MutableSchemeOperation()->MutableAddGroupMembership()->Swap(&schemeTx);
+                    break;
+                }
+                case NYql::TAlterGroupSettings::EAction::RemoveRoles: {
+                    auto& alterGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroupMembership();
+                    alterGroup.SetGroup(group);
+                    alterGroup.SetMember(role);
+                    phyTx.MutableSchemeOperation()->MutableRemoveGroupMembership()->Swap(&schemeTx);
+                    break;
+                }
+            }
+        }
+    }
+
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TActorSystem* ActorSystem = nullptr;
 };
 
 #undef FORWARD_ENSURE_NO_PREPARE
@@ -901,9 +1402,9 @@ private:
 } // namespace
 
 TIntrusivePtr<IKikimrGateway> CreateKqpGatewayProxy(const TIntrusivePtr<IKqpGateway>& gateway,
-    const TIntrusivePtr<TKikimrSessionContext>& sessionCtx)
+    const TIntrusivePtr<TKikimrSessionContext>& sessionCtx, TActorSystem* actorSystem)
 {
-    return MakeIntrusive<TKqpGatewayProxy>(gateway, sessionCtx);
+    return MakeIntrusive<TKqpGatewayProxy>(gateway, sessionCtx, actorSystem);
 }
 
 } // namespace NKikimr::NKqp

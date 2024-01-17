@@ -135,6 +135,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
+    static void SaveDiagnosticsToFile(const TString& diagnostics);
 
     bool PrintAst = false;
     TString QueryType;

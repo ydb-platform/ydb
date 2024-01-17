@@ -98,7 +98,9 @@ def main():
                     file_src = os.path.normpath(os.path.join(root, f))
                     assert file_src.startswith(source_root)
                     file_dst = os.path.join(dst, os.path.relpath(root, abs_docs_dir), f)
-                    copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=file_src[len(source_root):])
+                    copy_file(
+                        file_src, file_dst, overwrite=is_overwrite_existing, orig_path=file_src[len(source_root) :]
+                    )
 
     if args.src_dirs:
         for item in args.src_dirs:
@@ -122,8 +124,8 @@ def main():
             for f in item[2:]:
                 file_src = os.path.normpath(f)
                 assert file_src.startswith(root)
-                rel_path = file_src[len(root):] if is_from_source_root else None
-                file_dst = os.path.join(dst, file_src[len(src_dir):])
+                rel_path = file_src[len(root) :] if is_from_source_root else None
+                file_dst = os.path.join(dst, file_src[len(src_dir) :])
                 copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=rel_path)
 
     if args.bin_dir:
@@ -139,7 +141,7 @@ def main():
         for file_src in args.bin_dir[2:]:
             assert os.path.isfile(file_src)
             assert file_src.startswith(bin_dir)
-            file_dst = os.path.join(dst, file_src[len(bin_dir):])
+            file_dst = os.path.join(dst, file_src[len(bin_dir) :])
             copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=None)
 
     for src in args.files:
@@ -148,10 +150,10 @@ def main():
         rel_path = file_src
         orig_path = None
         if file_src.startswith(source_root):
-            rel_path = file_src[len(source_root):]
+            rel_path = file_src[len(source_root) :]
             orig_path = rel_path
         elif file_src.startswith(build_root):
-            rel_path = file_src[len(build_root):]
+            rel_path = file_src[len(build_root) :]
         else:
             raise Exception('Unexpected file path [{}].'.format(file_src))
         assert not os.path.isabs(rel_path)

@@ -6,7 +6,7 @@
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>

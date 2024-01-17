@@ -78,7 +78,7 @@ protected:
         TResOrPullBase resOrPull(input);
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(resOrPull.Ref());
-        YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
+        YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson || fillSettings.Format == IDataProvider::EResultFormat::Skiff);
 
         auto data = resOrPull.Input();
         if (auto maybePull = resOrPull.Maybe<TPull>()) {
@@ -135,7 +135,7 @@ protected:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec<true>(optimizedInput, optimizedInput, State_, hasNonDeterministicFunctions, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedInput, optimizedInput, State_, hasNonDeterministicFunctions, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
             return SyncStatus(status);
         }
 

@@ -15,7 +15,7 @@ target_link_libraries(cli_utils PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-deprecated-enum_codegen
-  cpp-grpc-client
+  library-grpc-client
   cpp-protobuf-json
   library-cpp-yson
   ydb-core-actorlib_impl
@@ -65,7 +65,6 @@ target_sources(cli_utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_stress.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_load.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_minikql_compile_and_exec.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_mb_trace.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_cache_append.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_initroot.cpp
 )

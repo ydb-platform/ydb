@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
     template <typename TEvent>
     TEvent ReadTopicAsync(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
         const auto* event = std::get_if<TEvent>(&ev->Get()->Result);
-        UNIT_ASSERT(event);
+        UNIT_ASSERT_C(event, "Unexpected event: " << ev->Get()->Result.index());
 
         return *event;
     }
@@ -759,8 +759,31 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         return ReadTopicAsync<TEvent>(ev);
     }
 
+    using TReadSessionEvent = NYdb::NTopic::TReadSessionEvent;
+
+    template <typename Env>
+    TReadSessionEvent::TDataReceivedEvent ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
+        while (true) {
+            auto ev = env.template Send<TEvYdbProxy::TEvReadTopicResponse>(reader,
+                new TEvYdbProxy::TEvReadTopicRequest());
+            UNIT_ASSERT(ev);
+
+            switch (ev->Get()->Result.index()) {
+            case 0:
+                return ReadTopicAsync<TReadSessionEvent::TDataReceivedEvent>(ev);
+            case 5: // TPartitionSessionClosedEvent
+                env.SendAsync(reader, new TEvents::TEvPoison());
+                reader = CreateTopicReader(env, topicPath);
+                ReadTopic<TReadSessionEvent::TStartPartitionSessionEvent>(env, reader).Confirm();
+                break;
+            default:
+                UNIT_ASSERT_C(false, "Unexpected event: " << ev->Get()->Result.index());
+                break;
+            }
+        }
+    }
+
     Y_UNIT_TEST(ReadTopic) {
-        using TReadSessionEvent = NYdb::NTopic::TReadSessionEvent;
         TEnv env;
 
         // create topic
@@ -782,7 +805,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
         {
             ReadTopic<TReadSessionEvent::TStartPartitionSessionEvent>(env, reader).Confirm();
 
-            auto data = ReadTopic<TReadSessionEvent::TDataReceivedEvent>(env, reader);
+            auto data = ReadTopicData(env, reader, "/Root/topic");
             UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().at(0).GetData(), "message-1");
             data.Commit();
@@ -838,7 +861,7 @@ Y_UNIT_TEST_SUITE(YdbProxyTests) {
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-2"));
         {
-            auto data = ReadTopic<TReadSessionEvent::TDataReceivedEvent>(env, newReader);
+            auto data = ReadTopicData(env, newReader, "/Root/topic");
             UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(data.GetMessages().at(0).GetData(), "message-2");
             data.Commit();

@@ -3,9 +3,9 @@
 LIBRARY()
 
 LICENSE(
+    GPL-2.0-only WITH Linux-syscall-note AND
     LGPL-2.0-or-later AND
-    LGPL-2.1-only AND
-    Linux-syscall-note-in-syscall-glue
+    LGPL-2.1-only
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

@@ -5,7 +5,7 @@
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/util/concurrent_rw_hash.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr {
 namespace NGRpcService {

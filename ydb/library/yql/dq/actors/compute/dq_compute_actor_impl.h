@@ -24,8 +24,8 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -256,7 +256,7 @@ protected:
     }
 
     STFUNC(BaseStateFuncBody) {
-        MetricsReporter.ReportEvent(ev->GetTypeRewrite());
+        MetricsReporter.ReportEvent(ev->GetTypeRewrite(), ev);
 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
@@ -426,7 +426,7 @@ protected:
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
             // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
-            ContinueExecute();
+            ContinueExecute(EResumeSource::CAPendingInput);
             return;
         }
 
@@ -442,7 +442,7 @@ protected:
             }
             if (!pollSent) {
                 if (ProcessOutputsState.DataWasSent) {
-                    ContinueExecute();
+                    ContinueExecute(EResumeSource::CADataSent);
                 }
                 return;
             }
@@ -451,7 +451,7 @@ protected:
         if (status == ERunStatus::PendingOutput) {
             if (ProcessOutputsState.DataWasSent) {
                 // we have sent some data, so we have space in output channel(s)
-                ContinueExecute();
+                ContinueExecute(EResumeSource::CAPendingOutput);
             }
             return;
         }
@@ -629,7 +629,6 @@ protected:
             TaskRunner->GetAllocatorPtr()->InvalidateMemInfo();
             TaskRunner->GetAllocatorPtr()->DisableStrictAllocationCheck();
         }
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
     }
@@ -649,10 +648,10 @@ protected:
         return std::move(log);
     }
 
-    void ContinueExecute() {
+    void ContinueExecute(EResumeSource source = EResumeSource::Default) {
         if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
-            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution());
+            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
     }
 
@@ -694,7 +693,7 @@ public:
             Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
         }
 
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATakeInput);
     }
 
     void PeerFinished(ui64 channelId) override {
@@ -718,8 +717,8 @@ public:
         DoExecute();
     }
 
-    void ResumeExecution() override {
-        ContinueExecute();
+    void ResumeExecution(EResumeSource source) override {
+        ContinueExecute(source);
     }
 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
@@ -734,12 +733,12 @@ public:
 
     void OnSinkFinished(ui64 outputIndex) override {
         SinksMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CASinkFinished);
     }
 
     void OnTransformFinished(ui64 outputIndex) override {
         OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CATransformFinished);
     }
 
 protected:
@@ -876,7 +875,7 @@ protected:
     void Start() override {
         Running = true;
         State = NDqProto::COMPUTE_STATE_EXECUTING;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CAStart);
     }
 
     void Stop() override {
@@ -1573,10 +1572,9 @@ protected:
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
-            const ui64 i = inputIndex; // Crutch for clang
             const auto& settings = Task.GetSourceSettings();
             Y_ABORT_UNLESS(settings.empty() || inputIndex < settings.size());
-            CA_LOG_D("Create source for input " << i << " " << inputDesc);
+            CA_LOG_D("Create source for input " << inputIndex << " " << inputDesc);
             try {
                 std::tie(source.AsyncInput, source.Actor) = AsyncIoFactory->CreateDqSource(
                     IDqAsyncIoFactory::TSourceArguments {
@@ -1594,7 +1592,8 @@ protected:
                         .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
-                        .Arena = Task.GetArena()
+                        .Arena = Task.GetArena(),
+                        .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -1607,8 +1606,7 @@ protected:
                 std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
                 Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& inputDesc = Task.GetInputs(inputIndex);
-                const ui64 i = inputIndex; // Crutch for clang
-                CA_LOG_D("Create transform for input " << i << " " << inputDesc.ShortDebugString());
+                CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
                 try {
                     std::tie(transform.AsyncInput, transform.Actor) = AsyncIoFactory->CreateDqInputTransform(
                         IDqAsyncIoFactory::TInputTransformArguments {
@@ -1624,7 +1622,8 @@ protected:
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
                             .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = TaskRunner->GetAllocatorPtr()
+                            .Alloc = TaskRunner->GetAllocatorPtr(),
+                            .TraceId = ComputeActorSpan.GetTraceId()
                         });
                 } catch (const std::exception& ex) {
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
@@ -1643,8 +1642,7 @@ protected:
                 std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
                 Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& outputDesc = Task.GetOutputs(outputIndex);
-                const ui64 i = outputIndex; // Crutch for clang
-                CA_LOG_D("Create transform for output " << i << " " << outputDesc.ShortDebugString());
+                CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
                 try {
                     std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
                         IDqAsyncIoFactory::TOutputTransformArguments {
@@ -1672,8 +1670,7 @@ protected:
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             Y_ABORT_UNLESS(outputDesc.HasSink());
             sink.Type = outputDesc.GetSink().GetType();
-            const ui64 i = outputIndex; // Crutch for clang
-            CA_LOG_D("Create sink for output " << i << " " << outputDesc);
+            CA_LOG_D("Create sink for output " << outputIndex << " " << outputDesc);
             try {
                 std::tie(sink.AsyncOutput, sink.Actor) = AsyncIoFactory->CreateDqSink(
                     IDqAsyncIoFactory::TSinkArguments {
@@ -1714,7 +1711,7 @@ protected:
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             Y_ABORT_UNLESS(info.AsyncInput);
             bool finished = false;
-            const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, freeSpace);
+            const i64 space = info.AsyncInput->GetAsyncInputData(batch, watermark, finished, std::min(freeSpace, RuntimeSettings.AsyncInputPushLimit));
             CA_LOG_T("Poll async input " << inputIndex
                 << ". Buffer free space: " << freeSpace
                 << ", read from async input: " << space << " bytes, "
@@ -1724,7 +1721,7 @@ protected:
                 // If we have read some data, we must run such reading again
                 // to process the case when async input notified us about new data
                 // but we haven't read all of it.
-                ContinueExecute();
+                ContinueExecute(EResumeSource::CAPollAsync);
             }
 
             MetricsReporter.ReportAsyncInputData(inputIndex, batch.RowCount(), space, watermark);
@@ -1743,7 +1740,7 @@ protected:
             AsyncInputPush(std::move(batch), info, space, finished);
         } else {
             CA_LOG_T("Skip polling async input[" << inputIndex << "]: no free space: " << freeSpace);
-            ContinueExecute(); // If there is no free space in buffer, => we have something to process
+            ContinueExecute(EResumeSource::CAPollAsyncNoSpace); // If there is no free space in buffer, => we have something to process
         }
     }
 
@@ -1772,7 +1769,7 @@ protected:
             SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
         }
         CpuTimeSpent += cpuTimeDelta;
-        ContinueExecute();
+        ContinueExecute(EResumeSource::CANewAsyncInput);
     }
 
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
@@ -1828,15 +1825,13 @@ protected:
     bool AllAsyncOutputsFinished() const {
         for (const auto& [outputIndex, sinkInfo] : SinksMap) {
             if (!sinkInfo.FinishIsAcknowledged) {
-                ui64 index = outputIndex; // Crutch for logging through lambda.
-                CA_LOG_D("Waiting finish of sink[" << index << "]");
+                CA_LOG_D("Waiting finish of sink[" << outputIndex << "]");
                 return false;
             }
         }
         for (const auto& [outputIndex, transformInfo] : OutputTransformsMap) {
             if (!transformInfo.FinishIsAcknowledged) {
-                ui64 index = outputIndex; // Crutch for logging through lambda.
-                CA_LOG_D("Waiting finish of transform[" << index << "]");
+                CA_LOG_D("Waiting finish of transform[" << outputIndex << "]");
                 return false;
             }
         }
@@ -2019,64 +2014,87 @@ public:
             }
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
-            THashMap<TString, TDqAsyncStats> ingressStats;
-            THashMap<TString, TDqAsyncStats> egressStats;
-            TDqAsyncStats pushStats;
+            ui64 ingressBytes = 0;
+            ui64 ingressRows = 0;
+            auto startTimeMs = protoTask->GetStartTimeMs();
 
             if (RuntimeSettings.CollectFull()) {
                 // in full/profile mode enumerate existing protos
                 for (auto& protoSource : *protoTask->MutableSources()) {
-                    if (auto* sourceInfoPtr = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
+                    auto inputIndex = protoSource.GetInputIndex();
+                    if (auto* sourceInfoPtr = SourcesMap.FindPtr(inputIndex)) {
                         auto& sourceInfo = *sourceInfoPtr;
                         protoSource.SetIngressName(sourceInfo.Type);
-                        FillAsyncStats(*protoSource.MutableIngress(), sourceInfo.AsyncInput->GetIngressStats());
-                        ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
+                        const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
+                        FillAsyncStats(*protoSource.MutableIngress(), ingressStats);
+                        ingressBytes += ingressStats.Bytes;
+                        // ingress rows are usually not reported, so we count rows in task runner input
+                        ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
+                        if (ingressStats.FirstMessageTs) {
+                            auto firstMessageMs = ingressStats.FirstMessageTs.MilliSeconds();
+                            if (!startTimeMs || startTimeMs > firstMessageMs) {
+                                startTimeMs = firstMessageMs;
+                            }
+                        }
                     }
                 }
             } else {
                 // in basic mode enum sources directly
                 for (auto& [inputIndex, sourceInfo] : SourcesMap) {
-                    ingressStats[sourceInfo.Type].MergeData(sourceInfo.AsyncInput->GetIngressStats());
+                    const auto& ingressStats = sourceInfo.AsyncInput->GetIngressStats();
+                    ingressBytes += ingressStats.Bytes;
+                    // ingress rows are usually not reported, so we count rows in task runner input
+                    ingressRows += ingressStats.Rows ? ingressStats.Rows : taskStats->Sources.at(inputIndex)->GetPopStats().Rows;
                 }
-            };
+            }
+
+            if (!startTimeMs) {
+                startTimeMs = taskStats->StartTs.MilliSeconds();
+            }
+            protoTask->SetStartTimeMs(startTimeMs);
+            protoTask->SetIngressBytes(ingressBytes);
+            protoTask->SetIngressRows(ingressRows);
+
+            ui64 egressBytes = 0;
+            ui64 egressRows = 0;
+            auto finishTimeMs = protoTask->GetFinishTimeMs();
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sink = GetSink(outputIndex, sinkInfo)) {
+                    const auto& egressStats = sinkInfo.AsyncOutput->GetEgressStats();
+                    const auto& pushStats = sink->GetPushStats();
                     if (RuntimeSettings.CollectFull()) {
+                        const auto& popStats = sink->GetPopStats();
                         auto& protoSink = *protoTask->AddSinks();
                         protoSink.SetOutputIndex(outputIndex);
                         protoSink.SetEgressName(sinkInfo.Type);
-                        FillAsyncStats(*protoSink.MutablePush(), sink->GetPushStats());
-                        FillAsyncStats(*protoSink.MutablePop(), sink->GetPopStats());
-                        FillAsyncStats(*protoSink.MutableEgress(), sinkInfo.AsyncOutput->GetEgressStats());
-                        protoSink.SetMaxMemoryUsage(sink->GetPopStats().MaxMemoryUsage);
+                        FillAsyncStats(*protoSink.MutablePush(), pushStats);
+                        FillAsyncStats(*protoSink.MutablePop(), popStats);
+                        FillAsyncStats(*protoSink.MutableEgress(), egressStats);
+                        protoSink.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
                         protoSink.SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
+                        if (egressStats.LastMessageTs) {
+                            auto lastMessageMs = egressStats.LastMessageTs.MilliSeconds();
+                            if (!finishTimeMs || finishTimeMs > lastMessageMs) {
+                                finishTimeMs = lastMessageMs;
+                            }
+                        }
                     }
-                    egressStats[sinkInfo.Type].MergeData(sinkInfo.AsyncOutput->GetEgressStats());
-                    pushStats.MergeData(sink->GetPushStats());
+                    egressBytes += egressStats.Bytes;
+                    // egress rows are usually not reported, so we count rows in task runner output
+                    egressRows += egressStats.Rows ? egressStats.Rows : pushStats.Rows;
                     // p.s. sink == sinkInfo.Buffer
                 }
             }
 
-            for (auto& [name, stats] : ingressStats) {
-                auto& protoIngress = *protoTask->AddIngress();
-                protoIngress.SetName(name);
-                protoIngress.SetBytes(stats.Bytes);
-                protoIngress.SetRows(stats.Rows);
-                protoIngress.SetChunks(stats.Chunks);
-                protoIngress.SetSplits(stats.Splits);
+            protoTask->SetFinishTimeMs(finishTimeMs);
+            protoTask->SetEgressBytes(egressBytes);
+            protoTask->SetEgressRows(egressRows);
+
+            if (startTimeMs && finishTimeMs > startTimeMs) {
+                // we may loose precision here a little bit ... rework sometimes
+                dst->SetDurationUs((finishTimeMs - startTimeMs) * 1'000);
             }
-            for (auto& [name, stats] : egressStats) {
-                auto& protoEgress = *protoTask->AddEgress();
-                protoEgress.SetName(name);
-                protoEgress.SetBytes(stats.Bytes);
-                protoEgress.SetRows(stats.Rows);
-                protoEgress.SetChunks(stats.Chunks);
-                protoEgress.SetSplits(stats.Splits);
-            }
-            // add egress to output channel stats
-            protoTask->SetOutputRows(protoTask->GetOutputRows() + pushStats.Rows);
-            protoTask->SetOutputBytes(protoTask->GetOutputBytes() + pushStats.Bytes);
 
             for (auto& [inputIndex, transformInfo] : InputTransformsMap) {
                 auto* transform = GetInputTransform(inputIndex, transformInfo);

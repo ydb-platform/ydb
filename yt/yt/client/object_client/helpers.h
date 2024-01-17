@@ -69,7 +69,7 @@ bool IsCollocationType(EObjectType type);
 //! Checks if the given type is a medium.
 bool IsMediumType(EObjectType type);
 
-//! Checks if the given type is a cypress (i.e. master, simple) transaction.
+//! Checks if the given type is a Cypress (i.e. master, simple) transaction.
 bool IsCypressTransactionType(EObjectType type);
 
 //! Checks if the given type is a system transaction.

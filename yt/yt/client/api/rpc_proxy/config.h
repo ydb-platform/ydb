@@ -31,6 +31,7 @@ public:
     std::optional<std::vector<TString>> ProxyAddresses;
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<TString> ProxyUnixDomainSocket;
+    bool EnableProxyDiscovery;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 
@@ -69,6 +70,12 @@ public:
     i64 ModifyRowsBatchCapacity;
 
     NObjectClient::TCellTag ClockClusterTag;
+
+    //! Path in Cypress with UDFs.
+    std::optional<NYPath::TYPath> UdfRegistryPath;
+
+    //! If |true| select query will be added to tracing tags of SelectRows span.
+    bool EnableSelectQueryTracingTag;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 

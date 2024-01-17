@@ -71,7 +71,7 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
             ++inputIdx;
             continue;
         }
-        originalIndexes.emplace_back(inputIdx);
+        originalIndexes.emplace_back(inputIdx++);
 
         auto request = apiServiceProxy.ReadTable();
         client->InitStreamingRequest(*request);
@@ -87,7 +87,8 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
             request->set_arrow_fallback_rowset_format(NYT::NApi::NRpcProxy::NProto::ERowsetFormat::RF_FORMAT);
         }
 
-        request->set_enable_row_index(true);
+        // TODO() Enable row indexes
+        request->set_enable_row_index(!isArrow);
         request->set_enable_table_index(true);
         // TODO() Enable range indexes
         request->set_enable_range_index(!isArrow);
@@ -116,7 +117,11 @@ std::unique_ptr<TSettingsHolder> CreateInputStreams(bool isArrow, const TString&
         }))));
     }
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
-    NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor)).ValueOrThrow().swap(rawInputs);
+    auto result = NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor));
+    if (!result.IsOK()) {
+        Cerr << "YT RPC Reader exception:\n";
+    }
+    result.ValueOrThrow().swap(rawInputs);
     return std::make_unique<TSettingsHolder>(std::move(connection), std::move(client), std::move(rawInputs), std::move(originalIndexes));
 }
 

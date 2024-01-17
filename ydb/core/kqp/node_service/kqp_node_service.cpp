@@ -17,9 +17,9 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/string/join.h>
 
@@ -440,7 +440,7 @@ private:
             }
 
             auto& taskOpts = dqTask.GetProgram().GetSettings();
-            auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+            auto limit = taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()
                 ? memoryLimits.MkqlHeavyProgramMemoryLimit
                 : memoryLimits.MkqlLightProgramMemoryLimit;
 

@@ -144,9 +144,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             FinishCalled = true;
 
             if (FullResultWriterID) {
-                NDqProto::TFullResultWriterWriteRequest requestRecord;
-                requestRecord.SetFinish(true);
-                TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(requestRecord)));
+                WriteQueue.emplace(TQueueItem::Final());
+                TryWriteToFullResultTable();
             } else {
                 DoFinish();
             }
@@ -213,6 +212,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (ev->Get()->Record.IssuesSize() == 0) {  // weird way used by writer to acknowledge it's death
                 DoFinish();
             } else {
+                WaitingAckFromFRW = false;
+                WriteQueue.clear();
                 Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }
@@ -343,6 +344,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (!src.Data.Payload.IsEmpty()) {
                 req->Record.MutableData()->SetPayloadId(req->AddPayload(std::move(src.Data.Payload)));
             }
+            req->Record.SetFinish(src.IsFinal);
 
             TBase::Send(FullResultWriterID, std::move(req));
         }
@@ -353,13 +355,21 @@ namespace NYql::NDqs::NExecutionHelpers {
                 : Data(std::move(data))
                 , MessageId(messageId)
                 , SentProcessedEvent(false)
+                , IsFinal(false)
             {
             }
 
-            //NDqProto::TFullResultWriterWriteRequest WriteRequest;
+            static TQueueItem Final() {
+                TQueueItem item({}, "FinalMessage");
+                item.SentProcessedEvent = true;
+                item.IsFinal = true;
+                return item;
+            }
+
             NDq::TDqSerializedBatch Data;
             const TString MessageId;
-            bool SentProcessedEvent;
+            bool SentProcessedEvent = false;
+            bool IsFinal = false;
         };
 
     protected:

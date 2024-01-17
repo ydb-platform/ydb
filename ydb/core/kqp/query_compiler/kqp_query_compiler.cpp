@@ -21,6 +21,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -365,7 +366,7 @@ void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool i
     }
 }
 
-void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto) {
+void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto, TExprContext& ctx) {
     auto maybeList = lookup.LookupKeys().Maybe<TCoIterator>().List();
     YQL_ENSURE(maybeList, "Expected iterator as lookup input, got: " << lookup.LookupKeys().Ref().Content());
 
@@ -397,7 +398,9 @@ void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& looku
             }
         }
     } else {
-        YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content());
+        auto brokenLookup =  KqpExprToPrettyString(lookup, ctx);
+        YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content()
+            << "lookup: " << brokenLookup);
     }
 }
 
@@ -417,11 +420,21 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
     return resultColNames;
 }
 
-void FillOlapProgram(const TCoLambda& process, const NKikimr::NMiniKQL::TType* miniKqlResultType,
+template <class T>
+void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx)
 {
+    if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
+        auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
+        if (!!groupByKeys) {
+            auto keysList = (TCoNameValueTuple(groupByKeys).Value().Cast<TCoAtomList>());
+            for (size_t i = 0; i < keysList.Size(); ++i) {
+                readProto.AddGroupByColumnNames(keysList.Item(i).StringValue());
+            }
+        }
+    }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(process, tableMeta, readProto, resultColNames, ctx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
 }
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
@@ -610,7 +623,7 @@ private:
                 FillTablesMap(lookupTable.Table(), lookupTable.Columns(), tablesMap);
                 FillTableId(lookupTable.Table(), *tableOp.MutableTable());
                 FillColumns(lookupTable.Columns(), *tableMeta, tableOp, true);
-                FillLookup(lookupTable, *tableOp.MutableLookup());
+                FillLookup(lookupTable, *tableOp.MutableLookup(), ctx);
             } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
                 auto upsertRows = maybeUpsertRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
@@ -656,7 +669,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges.Process(), miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
@@ -669,7 +682,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges.Process(), miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else {
@@ -1081,7 +1094,7 @@ private:
             const auto inputItemType = inputNodeType->Cast<TListExprType>()->GetItemType();
             sequencerProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
-            auto autoIncrementColumns = sequencer.AutoIncrementColumns();
+            auto autoIncrementColumns = sequencer.DefaultConstraintColumns();
             for(const auto& column : autoIncrementColumns) {
                 sequencerProto.AddAutoIncrementColumns(column.StringValue());
             }

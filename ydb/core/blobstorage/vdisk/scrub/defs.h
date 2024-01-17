@@ -11,4 +11,4 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/actors/core/actor_coroutine.h>
+#include <ydb/library/actors/core/actor_coroutine.h>

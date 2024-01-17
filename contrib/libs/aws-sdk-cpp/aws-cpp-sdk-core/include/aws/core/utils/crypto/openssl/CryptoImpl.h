@@ -39,7 +39,7 @@ namespace Aws
              * OpenSSL implementation for SecureRandomBytes.
              * Incidentally, this implementation is thread safe, though it is not
              * on other platforms. You should treat an instance of SecureRandomBytes
-             * as needed to be memory fenced if you will be using accross multiple threads
+             * as needed to be memory fenced if you will be using across multiple threads
              */
             class SecureRandomBytes_OpenSSLImpl : public SecureRandomBytes
             {
@@ -59,40 +59,59 @@ namespace Aws
             {
             public:
 
-                MD5OpenSSLImpl()
-                { }
+                MD5OpenSSLImpl();
 
-                virtual ~MD5OpenSSLImpl() = default;
+                virtual ~MD5OpenSSLImpl();
 
                 virtual HashResult Calculate(const Aws::String& str) override;
 
                 virtual HashResult Calculate(Aws::IStream& stream) override;
 
+                virtual void Update(unsigned char* buffer, size_t bufferSize) override;
+
+                virtual HashResult GetHash() override;
+
+            private:
+                EVP_MD_CTX *m_ctx;
             };
 
             class Sha1OpenSSLImpl : public Hash
             {
             public:
 
-                Sha1OpenSSLImpl() {}
-                virtual ~Sha1OpenSSLImpl() = default;
+                Sha1OpenSSLImpl();
+
+                virtual ~Sha1OpenSSLImpl();
 
                 virtual HashResult Calculate(const Aws::String& str) override;
 
                 virtual HashResult Calculate(Aws::IStream& stream) override;
+
+                virtual void Update(unsigned char* buffer, size_t bufferSize) override;
+
+                virtual HashResult GetHash() override;
+
+            private:
+                EVP_MD_CTX *m_ctx;
             };
 
             class Sha256OpenSSLImpl : public Hash
             {
             public:
-                Sha256OpenSSLImpl()
-                { }
+                Sha256OpenSSLImpl();
 
-                virtual ~Sha256OpenSSLImpl() = default;
+                virtual ~Sha256OpenSSLImpl();
 
                 virtual HashResult Calculate(const Aws::String& str) override;
 
                 virtual HashResult Calculate(Aws::IStream& stream) override;
+
+                virtual void Update(unsigned char* buffer, size_t bufferSize) override;
+
+                virtual HashResult GetHash() override;
+
+            private:
+                EVP_MD_CTX *m_ctx;
             };
 
             class Sha256HMACOpenSSLImpl : public HMAC
@@ -187,7 +206,7 @@ namespace Aws
                 void Cleanup();
 
                 /* openssl has bug finalize decryption of an empty string */
-                bool m_emptyPlaintext;
+                bool m_emptyPlaintext = false;
             };
 
             /**

@@ -49,8 +49,8 @@ std::pair<TTraceContextPtr, bool> TAsyncQueueTrace::StartSpan(i64 startIndex, co
 
     for (const auto& [queueIndex, client] : Blocked_) {
         // If startIndex > queueIndex, client is not blocked by this span.
-        if (queueIndex >= startIndex && client->AddAsyncChild(traceContext->GetTraceId())) {
-            sampled = true;
+        if (queueIndex >= startIndex && client->AddAsyncChild(traceContext->GetTraceId()) && !sampled) {
+            sampled = client->IsSampled();
         }
     }
 

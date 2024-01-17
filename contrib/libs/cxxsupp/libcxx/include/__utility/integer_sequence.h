@@ -43,17 +43,8 @@ using __make_integer_sequence _LIBCPP_NODEBUG = __make_integer_seq<integer_seque
 
 #else
 
-template <class _Tp, class _T> struct __integer_sequence_convert {
-    using type = integer_sequence<_Tp>;
-};
-
-template<class _Tp, class _Tp2, _Tp... _Values>
-struct __integer_sequence_convert<_Tp, __integer_sequence<_Tp2, _Values...>> {
-    using type = integer_sequence<_Tp, _Values...>;
-};
-
 template<typename _Tp, _Tp _Np> using __make_integer_sequence_unchecked _LIBCPP_NODEBUG =
-  typename __integer_sequence_convert<_Tp, typename __detail::__make<_Np>::type>::type;
+  typename __detail::__make<_Np>::type::template __convert<integer_sequence, _Tp>;
 
 template <class _Tp, _Tp _Ep>
 struct __make_integer_sequence_checked
@@ -61,16 +52,9 @@ struct __make_integer_sequence_checked
     static_assert(is_integral<_Tp>::value,
                   "std::make_integer_sequence can only be instantiated with an integral type" );
     static_assert(0 <= _Ep, "std::make_integer_sequence must have a non-negative sequence length");
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( push )
-#pragma warning ( disable : 4296 )
-#endif
     // Workaround GCC bug by preventing bad installations when 0 <= _Ep
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68929
     typedef _LIBCPP_NODEBUG __make_integer_sequence_unchecked<_Tp, 0 <= _Ep ? _Ep : 0> type;
-#ifdef _LIBCPP_COMPILER_MSVC
-#pragma warning ( pop )
-#endif
 };
 
 template <class _Tp, _Tp _Ep>

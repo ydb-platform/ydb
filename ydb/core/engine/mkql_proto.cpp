@@ -18,7 +18,8 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const TConstArrayRef<NScheme::TTypeInfo>& types,
                     bool allowCastFromString,
                     TVector<TCell>& key,
-                    TString& errStr)
+                    TString& errStr,
+                    TVector<TString>& memoryOwner)
 {
 
 #define CHECK_OR_RETURN_ERROR(cond, descr) \
@@ -157,15 +158,34 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             if (v.HasBytes()) {
                 c = TCell(v.GetBytes().data(), v.GetBytes().size());
             } else if (v.HasText()) {
-                auto typeDesc = types[i].GetTypeDesc();            
+                auto typeDesc = types[i].GetTypeDesc();
                 auto convert = NPg::PgNativeBinaryFromNativeText(v.GetText(), NPg::PgTypeIdFromTypeDesc(typeDesc));
                 if (convert.Error) {
                     CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), i));
                 } else {
-                    c = TCell(convert.Str.data(), convert.Str.size());
+                    auto &data = memoryOwner.emplace_back(convert.Str);
+                    c = TCell(data);
                 }
             } else {
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg in tuple at position %" PRIu32, i));
+            }
+            break;
+        }
+        case NScheme::NTypeIds::Uuid:
+        {
+            if (v.HasLow128()) {
+                if (!v.HasHi128()) {
+                    CHECK_OR_RETURN_ERROR(false, Sprintf("UUID has Low128 but not Hi128 at position: %" PRIu32, i));
+                }
+                auto &data = memoryOwner.emplace_back();
+                data.resize(NUuid::UUID_LEN);
+                NUuid::UuidHalfsToBytes(data.Detach(), data.size(), v.GetHi128(), v.GetLow128());
+                c = TCell(data);
+            } else if (v.HasBytes()) {
+                Y_ABORT_UNLESS(v.GetBytes().size() == NUuid::UUID_LEN);
+                c = TCell(v.GetBytes().data(), v.GetBytes().size());
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Uuid in tuple at position %" PRIu32, i));
             }
             break;
         }
@@ -271,12 +291,20 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         break;
 
     case NScheme::NTypeIds::Pg: {
-        auto convert = NPg::PgNativeTextFromNativeBinary(TString(c.Data(), c.Size()), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetTypeDesc());
         if (convert.Error) {
             errStr = *convert.Error;
             return false;
         }
         val.MutableOptional()->SetText(convert.Str);
+        break;
+    }
+
+    case NScheme::NTypeIds::Uuid: {
+        ui64 high = 0, low = 0;
+        NUuid::UuidBytesToHalfs(c.Data(), c.Size(), high, low);
+        val.MutableOptional()->SetHi128(high);
+        val.MutableOptional()->SetLow128(low);
         break;
     }
 

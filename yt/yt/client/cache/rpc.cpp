@@ -16,7 +16,7 @@ namespace NYT::NClient::NCache {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NCompression::ECodec GetResponseCodecFromProto(ECompressionCodec protoCodec)
+NCompression::ECodec GetCompressionCodecFromProto(ECompressionCodec protoCodec)
 {
     switch (protoCodec) {
         case ECompressionCodec::None:
@@ -42,8 +42,17 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (config.GetChannelPoolRebalanceIntervalSeconds() != 0) {
         connectionConfig->DynamicChannelPool->RandomPeerEvictionPeriod = TDuration::Seconds(config.GetChannelPoolRebalanceIntervalSeconds());
     }
+    if (config.HasEnablePowerOfTwoChoicesStrategy()) {
+        connectionConfig->DynamicChannelPool->EnablePowerOfTwoChoicesStrategy = config.GetEnablePowerOfTwoChoicesStrategy();
+    }
     if (config.GetModifyRowsBatchCapacity() != 0) {
         connectionConfig->ModifyRowsBatchCapacity = config.GetModifyRowsBatchCapacity();
+    }
+    if (config.HasEnableProxyDiscovery()) {
+        connectionConfig->EnableProxyDiscovery = config.GetEnableProxyDiscovery();
+    }
+    if (!config.GetProxyAddresses().empty()) {
+        connectionConfig->ProxyAddresses = std::vector<TString>(config.GetProxyAddresses().begin(), config.GetProxyAddresses().end());
     }
 
 #define SET_TIMEOUT_OPTION(name) \
@@ -58,9 +67,16 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
 
 #undef SET_TIMEOUT_OPTION
 
-    connectionConfig->ResponseCodec = GetResponseCodecFromProto(config.GetResponseCodec());
+    connectionConfig->RequestCodec = GetCompressionCodecFromProto(config.GetRequestCodec());
+    connectionConfig->ResponseCodec = GetCompressionCodecFromProto(config.GetResponseCodec());
     connectionConfig->EnableRetries = config.GetEnableRetries();
 
+    if (config.HasEnableLegacyRpcCodecs()) {
+        connectionConfig->EnableLegacyRpcCodecs = config.GetEnableLegacyRpcCodecs();
+    }
+    if (config.HasEnableSelectQueryTracingTag()) {
+        connectionConfig->EnableSelectQueryTracingTag = config.GetEnableSelectQueryTracingTag();
+    }
     if (config.HasRetryBackoffTime()) {
         connectionConfig->RetryingChannel->RetryBackoffTime = TDuration::MilliSeconds(config.GetRetryBackoffTime());
     }

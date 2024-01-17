@@ -1,6 +1,6 @@
 #include "task.h"
 #include "events.h"
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include "actor.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
@@ -105,9 +105,13 @@ ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, c
 
 TString ITask::DebugString() const {
     TStringBuilder sb;
-    sb << "finished_with_error=" << TaskFinishedWithError << ";"
-        << "errors=" << BlobErrorsCount << ";"
-        << "data=" << BlobsDataCount << ";"
+    if (TaskFinishedWithError) {
+        sb << "finished_with_error=" << TaskFinishedWithError << ";";
+    }
+    if (BlobErrorsCount) {
+        sb << "blob_errors=" << BlobErrorsCount << ";";
+    }
+    sb << "data=" << BlobsDataCount << ";"
         << "waiting=" << BlobsWaiting.size() << ";"
         << "additional_info=(" << DoDebugString() << ");"
         ;

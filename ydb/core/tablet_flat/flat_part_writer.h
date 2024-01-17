@@ -666,11 +666,11 @@ namespace NTable {
                     for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                         auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
                         m->SetRootPageId(meta.PageId);
-                        m->SetLevelsCount(meta.LevelsCount);
+                        m->SetLevelCount(meta.LevelCount);
                         m->SetIndexSize(meta.IndexSize);
                         m->SetDataSize(meta.DataSize);
-                        m->SetCount(meta.Count);
-                        m->SetErasedCount(meta.ErasedCount);
+                        m->SetRowCount(meta.RowCount);
+                        m->SetErasedRowCount(meta.ErasedRowCount);
                     }
                 }
 
@@ -796,11 +796,10 @@ namespace NTable {
                         g.BTreeIndex.AddKey(Key);
                     }
                     if (groupId.IsMain()) {
-                        g.BTreeIndex.AddChild({page, dataPage->Count, Current.BTreeIndexErased, raw.size()});
+                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeIndexErased});
                         Current.BTreeIndexErased = 0;
                     } else {
-                        // TODO: don't write erased for non-main groups
-                        g.BTreeIndex.AddChild({page, dataPage->Count, 0, raw.size()});
+                        g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
                     }
                     g.BTreeIndex.Flush(Pager, false);
                 }

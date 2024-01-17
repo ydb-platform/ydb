@@ -12,7 +12,7 @@ target_link_libraries(yql-utils-actor_system PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-library-services
   providers-common-metrics
   library-yql-utils

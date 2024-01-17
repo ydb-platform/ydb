@@ -1,8 +1,8 @@
 #pragma once
 #include <unordered_map>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
@@ -258,7 +258,7 @@ public:
         if (itSysInfo != SysInfo.end() && itSysInfo->second.SystemStateInfoSize() > 0) {
             const auto& sysState(itSysInfo->second.GetSystemStateInfo(0));
             if (Storage && With == EWith::SpaceProblems) {
-                if (sysState.GetMaxDiskUsage() < 0.85) {
+                if (!sysState.HasMaxDiskUsage() || sysState.GetMaxDiskUsage() < 0.85) {
                     return false;
                 }
             }
@@ -809,13 +809,13 @@ public:
         for (NKikimrViewer::TNodeInfo& nodeInfo : *result.MutableNodes()) {
             if (Storage) {
                 {
-                    auto cont(*nodeInfo.MutablePDisks());
+                    auto& cont(*nodeInfo.MutablePDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) -> bool {
                         return a.GetPath() < b.GetPath();
                     });
                 }
                 {
-                    auto cont(*nodeInfo.MutableVDisks());
+                    auto& cont(*nodeInfo.MutableVDisks());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) -> bool {
                         return VDiskIDFromVDiskID(a.GetVDiskId()) < VDiskIDFromVDiskID(b.GetVDiskId());
                     });
@@ -823,7 +823,7 @@ public:
             }
             if (Tablets) {
                 {
-                    auto cont(*nodeInfo.MutableTablets());
+                    auto& cont(*nodeInfo.MutableTablets());
                     std::sort(cont.begin(), cont.end(), [](const NKikimrViewer::TTabletStateInfo& a, const NKikimrViewer::TTabletStateInfo& b) -> bool {
                         return a.GetType() < b.GetType();
                     });

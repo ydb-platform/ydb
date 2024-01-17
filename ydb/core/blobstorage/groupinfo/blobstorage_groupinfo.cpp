@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <library/cpp/pop_count/popcount.h>
 
@@ -932,15 +932,15 @@ TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet) {
     TVector<TString> parts = SplitString(str, ":");
     if (parts.size() != 5) {
         return TVDiskID::InvalidId;
-    } 
+    }
 
     ui32 groupGeneration = 0;
 
-    if (!IsHexNumber(parts[0]) || !IsNumber(parts[2]) || !IsNumber(parts[3]) || !IsNumber(parts[4]) 
+    if (!IsHexNumber(parts[0]) || !IsNumber(parts[2]) || !IsNumber(parts[3]) || !IsNumber(parts[4])
         || !(IsNumber(parts[1]) || parts[1] == "_")) {
         return TVDiskID::InvalidId;
     }
-    
+
     if (parts[1] == "_") {
         if (isGenerationSet) {
             *isGenerationSet = false;
@@ -952,10 +952,10 @@ TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet) {
         groupGeneration = IntFromString<ui32, 10>(parts[1]);
     }
 
-    return TVDiskID(IntFromString<ui32, 16>(parts[0]), 
-        groupGeneration, 
-        IntFromString<ui8, 10>(parts[2]), 
-        IntFromString<ui8, 10>(parts[3]), 
+    return TVDiskID(IntFromString<ui32, 16>(parts[0]),
+        groupGeneration,
+        IntFromString<ui8, 10>(parts[2]),
+        IntFromString<ui8, 10>(parts[3]),
         IntFromString<ui8, 10>(parts[4]));
 }
 

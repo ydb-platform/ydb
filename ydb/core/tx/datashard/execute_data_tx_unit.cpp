@@ -71,8 +71,6 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         op->MvccReadWriteVersion.reset();
     }
 
-    TDataShardLocksDb locksDb(DataShard, txc);
-    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -100,6 +98,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         }
     }
 
+    TDataShardLocksDb locksDb(DataShard, txc);
+    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
+
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
@@ -114,7 +115,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     }
 
     // TODO: cancel tx in special execution unit.
-    if (tx->GetDataTx()->CheckCancelled())
+    if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
         engine->Cancel();
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();

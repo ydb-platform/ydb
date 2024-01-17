@@ -66,6 +66,27 @@ Y_UNIT_TEST_SUITE(DateTime) {
         UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:60"), NDatetime::TInvalidTimezone);
         UNIT_ASSERT_EXCEPTION(NDatetime::GetTimeZone("UTC+20:30:"), NDatetime::TInvalidTimezone);
     }
+    Y_UNIT_TEST(ParseOffset) {
+        int offset;
+        UNIT_ASSERT(!NDatetime::TryParseOffset("Unknown", offset));
+        UNIT_ASSERT(!NDatetime::TryParseOffset("+:", offset));
+        UNIT_ASSERT(!NDatetime::TryParseOffset("+24:01", offset));
+        UNIT_ASSERT(!NDatetime::TryParseOffset("+20:", offset));
+        UNIT_ASSERT(!NDatetime::TryParseOffset("+20:60", offset));
+        UNIT_ASSERT(!NDatetime::TryParseOffset("+20:30:", offset));
+        UNIT_ASSERT(NDatetime::TryParseOffset("+03", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, 10800);
+        UNIT_ASSERT(NDatetime::TryParseOffset("-10", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, -36000);
+        UNIT_ASSERT(NDatetime::TryParseOffset("+01:00", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, 3600);
+        UNIT_ASSERT(NDatetime::TryParseOffset("-11:30", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, -41400);
+        UNIT_ASSERT(NDatetime::TryParseOffset("+0130", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, 5400);
+        UNIT_ASSERT(NDatetime::TryParseOffset("-0200", offset));
+        UNIT_ASSERT_VALUES_EQUAL(offset, -7200);
+    }
     Y_UNIT_TEST(Format) {
         NDatetime::TTimeZone lax = NDatetime::GetTimeZone("America/Los_Angeles");
         NDatetime::TCivilSecond tp(2013, 1, 2, 3, 4, 5);

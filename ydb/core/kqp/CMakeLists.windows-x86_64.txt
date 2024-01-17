@@ -40,11 +40,11 @@ target_link_libraries(ydb-core-kqp INTERFACE
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  cpp-actors-core
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-helpers
   cpp-digest-md5
   cpp-string_utils-base64
-  cpp-actors-wilson
+  library-actors-wilson
   ydb-core-actorlib_impl
   ydb-core-base
   core-client-minikql_compile
@@ -90,11 +90,11 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  cpp-actors-core
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-helpers
   cpp-digest-md5
   cpp-string_utils-base64
-  cpp-actors-wilson
+  library-actors-wilson
   ydb-core-actorlib_impl
   ydb-core-base
   core-client-minikql_compile

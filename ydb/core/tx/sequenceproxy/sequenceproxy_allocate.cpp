@@ -5,7 +5,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/string/builder.h>
 
 #define TXLOG_LOG(priority, stream) \
@@ -142,6 +142,7 @@ namespace NSequenceProxy {
         auto& info = AllocateInFlight[cookie];
         info.Database = database;
         info.PathId = pathId;
+        Counters->SequenceShardAllocateCount->Collect(cache);
         Register(new TAllocateActor(SelfId(), cookie, tabletId, pathId, cache));
         return cookie;
     }

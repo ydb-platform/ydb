@@ -41,8 +41,20 @@ namespace Aws
                  */
                 Aws::Vector<unsigned char> EncodeAndSign(const Aws::Utils::Event::Message& msg);
             private:
-                aws_event_stream_message Encode(const Aws::Utils::Event::Message& msg);
-                aws_event_stream_message Sign(aws_event_stream_message* msg);
+                /**
+                 * Initialize C struct based on C++ object.
+                 * Returns true if successful.
+                 * A successfully initialized struct must be cleaned up when you're done with it.
+                 */
+                bool InitEncodedStruct(const Aws::Utils::Event::Message& msg, aws_event_stream_message* encoded);
+
+                /**
+                 * Initialize signed C struct based on unsigned C struct.
+                 * Returns true if successful.
+                 * A successfully initialized struct must be cleaned up when you're done with it.
+                 */
+                bool InitSignedStruct(const aws_event_stream_message* msg, aws_event_stream_message* signedmsg);
+
                 Aws::Client::AWSAuthSigner* m_signer;
                 Aws::String m_signatureSeed;
             };

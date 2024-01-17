@@ -55,7 +55,7 @@ def parse_args(argv):
             parsed.append(argv[i])
             if len(parsed) >= 3:
                 break
-    return parsed + [argv[i + 1:]]
+    return parsed + [argv[i + 1 :]]
 
 
 def just_do_it(argv):
@@ -74,9 +74,19 @@ def just_do_it(argv):
             classpath = get_classpath(javac_cmd)
             if classpath:
                 error_prone_tool = error_prone_tool + os.pathsep + classpath
-        cmd = [javac] + JAVA10_EXPORTS + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile'] + [(' '.join(['-Xplugin:ErrorProne'] + ERROR_PRONE_FLAGS))] + javac_cmd
+        cmd = (
+            [javac]
+            + JAVA10_EXPORTS
+            + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile']
+            + [(' '.join(['-Xplugin:ErrorProne'] + ERROR_PRONE_FLAGS))]
+            + javac_cmd
+        )
     else:
-        cmd = [java, '-Xbootclasspath/p:' + error_prone_tool, 'com.google.errorprone.ErrorProneCompiler'] + ERROR_PRONE_FLAGS + javac_cmd
+        cmd = (
+            [java, '-Xbootclasspath/p:' + error_prone_tool, 'com.google.errorprone.ErrorProneCompiler']
+            + ERROR_PRONE_FLAGS
+            + javac_cmd
+        )
     if platform.system() == 'Windows':
         sys.exit(subprocess.Popen(cmd).wait())
     else:

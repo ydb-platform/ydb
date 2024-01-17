@@ -188,7 +188,7 @@ namespace NKikimr {
 
         public:
             TImpl(const TGRpcClientConfig& config)
-                : Channel(NGrpc::CreateChannelInterface(config))
+                : Channel(NYdbGrpc::CreateChannelInterface(config))
                 , Stub(Channel)
                 , MaxInFlight(config.MaxInFlight)
             {

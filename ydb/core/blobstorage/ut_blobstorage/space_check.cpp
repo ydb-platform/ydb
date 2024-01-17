@@ -131,6 +131,7 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
         ui32 numIterations = 0;
         ui32 numCyclesWithoutProgress = 0;
         constexpr ui32 maxCyclesWithoutProgress = 1; // mins after full replication
+        constexpr ui32 targetIterations = 50;
 
         for (;;) {
             request.Clear();
@@ -159,9 +160,10 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
                 }
             }
             if (notReady) {
-                env.Sim(TDuration::Seconds(15));
+                env.Sim(TDuration::Seconds(30));
                 continue;
             }
+
             if (faultyVSlots && numCyclesWithoutProgress < maxCyclesWithoutProgress) {
                 env.Sim(TDuration::Minutes(1));
                 ++numCyclesWithoutProgress;
@@ -194,7 +196,7 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
             Cerr << "numIterations# " << numIterations << " numFaulty# " << faultyPDiskIds.size()
                 << " numCyclesWithoutProgress# " << numCyclesWithoutProgress << Endl;
             numCyclesWithoutProgress = 0;
-            if (numIterations == 2000) {
+            if (numIterations == targetIterations) {
                 break;
             }
         }

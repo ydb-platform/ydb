@@ -31,6 +31,7 @@
     action(TEvHive::TEvDeleteTabletReply,        NSchemeShard::TXTYPE_FREE_TABLET_RESULT)                \
     action(TEvHive::TEvDeleteOwnerTabletsReply,           NSchemeShard::TXTYPE_FREE_OWNER_TABLETS_RESULT)\
     action(TEvHive::TEvUpdateTabletsObjectReply, NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
+    action(TEvHive::TEvUpdateDomainReply,        NSchemeShard::TXTYPE_UPDATE_DOMAIN_REPLY)               \
 \
     action(TEvDataShard::TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT) \
     action(TEvDataShard::TEvSchemaChanged,       NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)          \
@@ -381,6 +382,14 @@ ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxSt
 // Drop
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropExternalDataSource(TOperationId id, TTxState::ETxState state);
+
+// View
+// Create
+ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropView(TOperationId id, TTxState::ETxState state);
 
 /// CDC
 // Create

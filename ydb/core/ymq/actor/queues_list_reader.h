@@ -4,7 +4,7 @@
 #include "log.h"
 #include "serviceid.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

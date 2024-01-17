@@ -11,7 +11,6 @@ SRCS(
     columnshard__progress_tx.cpp
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
-    columnshard__read.cpp
     columnshard__read_base.cpp
     columnshard__scan.cpp
     columnshard__index_scan.cpp
@@ -23,9 +22,9 @@ SRCS(
     columnshard_common.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
+    columnshard_view.cpp
     counters.cpp
     defs.cpp
-    read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
     tx_controller.cpp
@@ -35,7 +34,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/control
@@ -57,6 +56,7 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer/portion
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/tracing
     ydb/core/tx/long_tx_service/public
     ydb/core/util
     ydb/public/api/protos

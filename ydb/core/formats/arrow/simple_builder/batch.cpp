@@ -7,7 +7,7 @@ std::shared_ptr<arrow::RecordBatch> TRecordBatchConstructor::BuildBatch(const ui
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Builders) {
         columns.emplace_back(i->BuildArray(numRows));
-        fields.emplace_back(std::make_shared<arrow::Field>(i->GetFieldName(), columns.back()->type()));
+        fields.emplace_back(std::make_shared<arrow::Field>(i->GetFieldName(), columns.back()->type(), i->GetNullable()));
     }
     auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), numRows, columns);
     Y_ABORT_UNLESS(batch);

@@ -16,35 +16,35 @@ constexpr int AllCrashSignals = -1;
 class TSignalRegistry
 {
 public:
-    //! Flag enabling mechanism which protects multiple crash signal handlers from simultaneous
+    //! Enables a mechanism which protects multiple crash signal handlers from simultaneous
     //! execution.
     DEFINE_BYVAL_RW_PROPERTY(bool, EnableCrashSignalProtection, true);
 
-    //! Flag preventing us to override user custom signal handlers.
+    //! Prevents from overriding user custom signal handlers.
     DEFINE_BYVAL_RW_PROPERTY(bool, OverrideNonDefaultSignalHandlers, true);
 
+public:
 #ifdef _unix_
     using TSignalHandler = std::function<void(int, siginfo_t*, void*)>;
 #else
     using TSignalHandler = std::function<void(int)>;
 #endif
 
-public:
     static TSignalRegistry* Get();
 
-    //! Setup our handler that invokes registered callbacks in order.
+    //! Sets up our handler that invokes registered callbacks in order.
     //! Flags has same meaning as sa_flags in sigaction(2). Use this method if you need certain flags.
     //! By default any signal touched by PushCallback(...) will be set up with default flags.
     void SetupSignal(int signal, int flags = 0);
 
-    //! Add simple callback which should be called for signal. Different signatures are supported for convenience.
+    //! Adds a simple callback which should be called for signal. Different signatures are supported for convenience.
     void PushCallback(int signal, std::function<void(void)> callback);
 #ifdef _unix_
     void PushCallback(int signal, std::function<void(int)> callback);
 #endif
     void PushCallback(int signal, TSignalHandler callback);
 
-    //! Add default signal handler which is called after invoking our custom handlers.
+    //! Adds the default signal handler which is called after invoking our custom handlers.
     //! NB: this handler restores default signal handler as a side-effect. Use it only
     //! when default handler terminates the program.
     void PushDefaultSignalHandler(int signal);

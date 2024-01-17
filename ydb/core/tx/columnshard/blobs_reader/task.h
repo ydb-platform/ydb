@@ -77,6 +77,10 @@ public:
         return *ReadRangesCount;
     }
 
+    ui32 GetWaitingCount() const {
+        return BlobsWaiting.size();
+    }
+
     THashSet<TBlobRange> GetExpectedRanges() const {
         THashSet<TBlobRange> result;
         for (auto&& i : Agents) {

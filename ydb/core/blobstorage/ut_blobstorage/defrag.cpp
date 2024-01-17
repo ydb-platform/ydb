@@ -262,8 +262,8 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                         readMsg = ev->Release<NPDisk::TEvChunkReadResult>();
                         env.Runtime->Send(
                             new IEventHandle(
-                                *rewriterActorId, 
-                                ev->Sender, 
+                                *rewriterActorId,
+                                ev->Sender,
                                 messChunkReadResult(readMsg.Get())),
                             ev->Sender.NodeId());
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(CorruptedReadHandling) {
         TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
             return new NPDisk::TEvChunkReadResult(
-                NKikimrProto::EReplyStatus::CORRUPTED, 
+                NKikimrProto::EReplyStatus::CORRUPTED,
                 msg->ChunkIdx,
                 msg->Offset,
                 msg->Cookie,
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(GappedReadHandling) {
         TestReadErrorHandlingBase([] (const NPDisk::TEvChunkReadResult* msg) {
              NPDisk::TEvChunkReadResult* res = new NPDisk::TEvChunkReadResult(
-                NKikimrProto::EReplyStatus::OK, 
+                NKikimrProto::EReplyStatus::OK,
                 msg->ChunkIdx,
                 msg->Offset,
                 msg->Cookie,

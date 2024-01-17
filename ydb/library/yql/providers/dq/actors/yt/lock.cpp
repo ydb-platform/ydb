@@ -7,8 +7,8 @@
 #include <yt/yt/client/api/transaction.h>
 #include <yt/yt/core/ytree/public.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -85,10 +85,10 @@ private:
             auto* actorSystem = ctx.ExecutorThread.ActorSystem;
             auto selfId = SelfId();
             try {
-                Transaction->LockNode("#" + ToString(result.ValueOrThrow()), NYT::NCypressClient::ELockMode::Exclusive, options).As<void>()
+                YT_UNUSED_FUTURE(Transaction->LockNode("#" + ToString(result.ValueOrThrow()), NYT::NCypressClient::ELockMode::Exclusive, options).As<void>()
                     .Apply(BIND([actorSystem, selfId](const NYT::TErrorOr<void>& result) {
                         actorSystem->Send(selfId, new TEvSetNodeResponse(0, result));
-                    }));
+                    })));
             } catch (...) {
                 Finish(ctx);
             }
@@ -108,7 +108,7 @@ private:
     }
 
     void PassAway() override {
-        Transaction->Abort();
+        YT_UNUSED_FUTURE(Transaction->Abort());
         Transaction.Reset();
         Send(LockActorId, new TEvTick());
         IActor::PassAway();
@@ -248,13 +248,13 @@ private:
         try {
             auto* actorSystem = ctx.ExecutorThread.ActorSystem;
             auto selfId = SelfId();
-            Transaction->CreateNode(
+            YT_UNUSED_FUTURE(Transaction->CreateNode(
                 lockNode,
                 NYT::NObjectClient::EObjectType::StringNode,
                 NYT::NApi::TCreateNodeOptions())
                 .Apply(BIND([actorSystem, selfId](const NYT::TErrorOr<NYT::NCypressClient::TNodeId>& result) {
                     actorSystem->Send(selfId, new TEvCreateNodeResponse(0, result));
-                }));
+                })));
         } catch (...) {
             Finish(ctx);
         }

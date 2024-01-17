@@ -939,7 +939,7 @@ public:
         const TLog& log,
         std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> connectionFactory,
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
-        NGrpc::IQueueClientContextPtr clientContext,
+        NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
         ui64 partitionStreamIdStep
     )
@@ -1022,8 +1022,8 @@ private:
 
     bool HasCommitsInflightImpl() const;
 
-    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
-    void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NGrpc::IQueueClientContextPtr& connectContext);
+    void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
+    void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void DestroyAllPartitionStreamsImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Destroy all streams before setting new connection // Assumes that we're under lock.
 
     // Initing.
@@ -1036,7 +1036,7 @@ private:
     // Read/Write.
     void ReadFromProcessorImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage<UseMigrationProtocol>&& req); // Assumes that we're under lock.
-    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
 
     // Assumes that we're under lock.
     template<typename TMessage>
@@ -1160,10 +1160,10 @@ private:
     ui64 PartitionStreamIdStep;
     std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
-    NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
-    NGrpc::IQueueClientContextPtr ConnectContext;
-    NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr ConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
+    NYdbGrpc::IQueueClientContextPtr ConnectContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
     size_t ConnectionGeneration = 0;
     TAdaptiveLock Lock;
     typename IProcessor::TPtr Processor;
@@ -1293,7 +1293,7 @@ private:
     TAdaptiveLock Lock;
     std::shared_ptr<TReadSessionEventsQueue<true>> EventsQueue;
     THashMap<TString, TClusterSessionInfo> ClusterSessions; // Cluster name (in lower case) -> TClusterSessionInfo
-    NGrpc::IQueueClientContextPtr ClusterDiscoveryDelayContext;
+    NYdbGrpc::IQueueClientContextPtr ClusterDiscoveryDelayContext;
     IRetryPolicy::IRetryState::TPtr ClusterDiscoveryRetryState;
     bool DataReadingSuspended = false;
 

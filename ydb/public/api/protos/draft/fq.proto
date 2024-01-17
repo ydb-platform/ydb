@@ -118,7 +118,7 @@ message QueryContent {
     string name = 2 [(Ydb.length).le = 1024];
     Acl acl = 3;
     Limits limits = 4;
-    string text = 5 [(Ydb.length).le = 102400]; // The text of the query itself
+    string text = 5 [(Ydb.length).range = {min: 1, max: 102400}]; // The text of the query itself
     bool automatic = 6; // Is used for queries that are created by automatic systems (robots, jdbc driver, ...)
     string description = 7 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
     // Specified settings for query's executor

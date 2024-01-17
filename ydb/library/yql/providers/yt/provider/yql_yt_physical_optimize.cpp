@@ -89,8 +89,7 @@ public:
         AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
-        AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
-        AddHandler(0, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
+        AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
@@ -111,6 +110,7 @@ public:
         AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
         AddHandler(1, &TYtReduce::Match, HNDL(FuseReduce));
 
+        AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
         AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
         AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
         AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
@@ -3797,7 +3797,7 @@ private:
                     .Done();
                 break;
             case EYtSettingType::Skip:
-                res = Build<TCoMinus>(ctx, node.Pos())
+                res = Build<TCoSub>(ctx, node.Pos())
                     .Left<TCoMax>()
                         .Add(res)
                         .Add(s.Value().Cast())
@@ -5097,12 +5097,20 @@ private:
 
                 TSet<TStringBuf> memberSet;
                 if (HaveFieldsSubset(visitLambda->TailPtr(), visitLambda->Head().Head(), memberSet, *parentsMap)) {
-                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
-                    memberSet.insert(reduceBy.cbegin(), reduceBy.cend());
-                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
-                    memberSet.insert(sortBy.cbegin(), sortBy.cend());
-
                     auto itemType = visitLambda->Head().Head().GetTypeAnn()->Cast<TStructExprType>();
+                    auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);
+                    for (auto& col: reduceBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+                    auto sortBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::SortBy);
+                    for (auto& col: sortBy) {
+                        if (auto type = itemType->FindItemType(col)) {
+                            memberSet.insert(type->Cast<TItemExprType>()->GetName());
+                        }
+                    }
+
                     if (memberSet.size() < itemType->GetSize()) {
                         sectionFields.emplace_back(inputNum, std::move(memberSet));
                     }
@@ -5728,6 +5736,28 @@ private:
             .Done();
     }
 
+    TMaybeNode<TExprBase> EarlyMergeJoin(TExprBase node, TExprContext& ctx) const {
+        if (State_->Configuration->JoinMergeTablesLimit.Get()) {
+            auto equiJoin = node.Cast<TYtEquiJoin>();
+            const auto tree = ImportYtEquiJoin(equiJoin, ctx);
+            if (State_->Configuration->JoinMergeForce.Get() || tree->LinkSettings.ForceSortedMerge) {
+                const auto rewriteStatus = RewriteYtEquiJoinLeaves(equiJoin, *tree, State_, ctx);
+                switch (rewriteStatus.Level) {
+                    case TStatus::Repeat:
+                        return node;
+                    case TStatus::Error:
+                        return {};
+                    case TStatus::Ok:
+                        break;
+                    default:
+                        YQL_ENSURE(false, "Unexpected rewrite status");
+                }
+                return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+            }
+        }
+        return node;
+    }
+
     TMaybeNode<TExprBase> RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
         auto equiJoin = node.Cast<TYtEquiJoin>();
 
@@ -6120,35 +6150,6 @@ private:
             }
         }
         return TExprBase(res);
-    }
-
-    TMaybeNode<TExprBase> ZeroSample(TExprBase node, TExprContext& ctx) const {
-        auto op = node.Cast<TYtTransientOpBase>();
-
-        if (node.Ref().HasResult() && node.Ref().GetResult().Type() == TExprNode::World) {
-            return node;
-        }
-
-        bool hasUpdates = false;
-        TVector<TExprBase> updatedSections;
-        for (auto section: op.Input()) {
-            TMaybe<TSampleParams> sampling = NYql::GetSampleParams(section.Settings().Ref());
-            if (sampling && sampling->Percentage == 0.0) {
-                hasUpdates = true;
-                updatedSections.push_back(MakeEmptySection(section, op.DataSink(), true, State_, ctx));
-            } else {
-                updatedSections.push_back(section);
-            }
-        }
-
-        if (!hasUpdates) {
-            return node;
-        }
-
-        return ctx.ChangeChild(op.Ref(), TYtTransientOpBase::idx_Input,
-            Build<TYtSectionList>(ctx, op.Input().Pos())
-                .Add(updatedSections)
-                .Done().Ptr());
     }
 
     TMaybeNode<TExprBase> ReplaceStatWriteTable(TExprBase node, TExprContext& ctx) const {
@@ -6933,6 +6934,18 @@ private:
                         continue;
                     }
 
+                    if (NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+                        if (!AllOf(innerMergeSection.Paths(), [](const auto& path) {
+                            auto op = path.Table().template Maybe<TYtOutput>().Operation();
+                            return op && (op.template Maybe<TYtTouch>() || (op.Raw()->HasResult() && op.Raw()->GetResult().IsWorld()));
+                        })) {
+                            continue;
+                        }
+                    }
+                    if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+                        continue;
+                    }
+
                     const bool unordered = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
                     auto mergeOutRowSpec = TYqlRowSpecInfo(innerMerge.Output().Item(0).RowSpec());
                     if (innerMergeSection.Paths().Size() > 1) {
@@ -7459,6 +7472,12 @@ private:
         }
         if (NYql::HasNonEmptyKeyFilter(section)) {
             return node;
+        }
+        if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::KeepSorted)) {
+            auto op = path.Table().Maybe<TYtOutput>().Operation().Cast();
+            if (!(op.Ref().HasResult() && op.Ref().GetResult().Type() == TExprNode::World || op.Maybe<TYtTouch>())) {
+                return node;
+            }
         }
         TYtOutTableInfo outTableInfo(merge.Output().Item(0));
         if (!tableInfo->RowSpec->CompareSortness(*outTableInfo.RowSpec)) {

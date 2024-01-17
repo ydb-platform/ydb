@@ -4,6 +4,7 @@
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/sharding/unboxed_reader.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -31,7 +32,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
     THashMap<TString, TString> Sequences;
-    THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
+    THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
 
     TTableConstInfo() {}
     TTableConstInfo(const TString& path) : Path(path) {}
@@ -129,7 +130,7 @@ public:
     private:
         TIntrusivePtr<TTableConstInfo> TableConstInfo;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
-        THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
+        THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
 
     public:
         TTable() : TableConstInfo(MakeIntrusive<TTableConstInfo>()) {}

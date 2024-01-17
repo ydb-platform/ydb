@@ -23,6 +23,7 @@ from traitlets.config.loader import (
     ArgumentError,
     Config,
     ConfigFileNotFound,
+    DeferredConfigString,
     JSONFileConfigLoader,
     KVArgParseConfigLoader,
     PyFileConfigLoader,
@@ -96,7 +97,7 @@ else:
 IS_PYTHONW = sys.executable and sys.executable.endswith("pythonw.exe")
 
 T = t.TypeVar("T", bound=t.Callable[..., t.Any])
-AnyLogger = t.Union[logging.Logger, logging.LoggerAdapter]
+AnyLogger = t.Union[logging.Logger, "logging.LoggerAdapter[t.Any]"]
 StrDict = t.Dict[str, t.Any]
 ArgvType = t.Optional[t.List[str]]
 ClassesType = t.List[t.Type[Configurable]]
@@ -199,7 +200,7 @@ class Application(SingletonConfigurable):
     version: str | Unicode[str, str | bytes] = Unicode("0.0")
 
     # the argv used to initialize the application
-    argv = List()
+    argv: list[str] | List[str] = List()
 
     # Whether failing to load config files should prevent startup
     raise_config_file_errors = Bool(TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR)
@@ -241,7 +242,7 @@ class Application(SingletonConfigurable):
                 "console": {
                     "class": "logging.StreamHandler",
                     "formatter": "console",
-                    "level": logging.getLevelName(self.log_level),
+                    "level": logging.getLevelName(self.log_level),  # type:ignore[arg-type]
                     "stream": "ext://sys.stderr",
                 },
             },
@@ -278,7 +279,7 @@ class Application(SingletonConfigurable):
         # convert log level strings to ints
         log_level = self.log_level
         if isinstance(log_level, str):
-            self.log_level = getattr(logging, log_level)
+            self.log_level = t.cast(int, getattr(logging, log_level))
         self._configure_logging()
 
     @observe("log", type="default")
@@ -400,7 +401,7 @@ class Application(SingletonConfigurable):
     # this must be a dict of two-tuples,
     # the first element being the application class/import string
     # and the second being the help string for the subcommand
-    subcommands: dict[str, t.Any] | Dict = Dict()
+    subcommands: dict[str, t.Any] | Dict[str, t.Any] = Dict()
     # parse_command_line will initialize a subapp, if requested
     subapp = Instance("traitlets.config.application.Application", allow_none=True)
 
@@ -418,7 +419,7 @@ class Application(SingletonConfigurable):
         """,
     )
 
-    _loaded_config_files = List()
+    _loaded_config_files: List[str] = List()
 
     show_config = Bool(
         help="Instead of starting the Application, dump configuration to stdout"
@@ -713,12 +714,12 @@ class Application(SingletonConfigurable):
             self.subapp = subapp.instance(parent=self)
         elif callable(subapp):
             # or ask factory to create it...
-            self.subapp = subapp(self)  # type:ignore[call-arg]
+            self.subapp = subapp(self)
         else:
             raise AssertionError("Invalid mappings for subcommand '%s'!" % subc)
 
         # ... and finally initialize subapp.
-        self.subapp.initialize(argv)  # type:ignore[union-attr]
+        self.subapp.initialize(argv)
 
     def flatten_flags(self) -> tuple[dict[str, t.Any], dict[str, t.Any]]:
         """Flatten flags and aliases for loaders, so cl-args override as expected.
@@ -967,6 +968,29 @@ class Application(SingletonConfigurable):
             ):  # only add to list of loaded files if not previously loaded
                 self._loaded_config_files.append(fname)
         # add self.cli_config to preserve CLI config priority
+        new_config.merge(self.cli_config)
+        self.update_config(new_config)
+
+    @catch_config_error
+    def load_config_environ(self) -> None:
+        """Load config files by environment."""
+
+        PREFIX = self.name.upper()
+        new_config = Config()
+
+        self.log.debug('Looping through config variables with prefix "%s"', PREFIX)
+
+        for k, v in os.environ.items():
+            if k.startswith(PREFIX):
+                self.log.debug('Seeing environ "%s"="%s"', k, v)
+                # use __ instead of . as separator in env variable.
+                # Warning, case sensitive !
+                _, *path, key = k.split("__")
+                section = new_config
+                for p in path:
+                    section = section[p]
+                setattr(section, key, DeferredConfigString(v))
+
         new_config.merge(self.cli_config)
         self.update_config(new_config)
 

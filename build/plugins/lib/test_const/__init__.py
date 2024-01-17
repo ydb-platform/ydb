@@ -70,7 +70,9 @@ STYLE_TEST_TYPES = [
     "govet",
     "java.style",
     "ktlint",
-    "custom_lint",
+    "py2_flake8",
+    "flake8",
+    "black",
 ]
 
 REGULAR_TEST_TYPES = [
@@ -137,6 +139,7 @@ CLANG_COVERAGE_TEST_TYPES = (
     "coverage_extractor",
     "exectest",
     "gtest",
+    "go_test",
     # java tests might use shared libraries
     "java",
     "py2test",
@@ -447,7 +450,6 @@ class Status(object):
 
 
 class _Colors(object):
-
     _NAMES = [
         "blue",
         "cyan",
@@ -480,7 +482,6 @@ Colors = _Colors()
 
 
 class _Highlight(object):
-
     _MARKERS = {
         # special
         "RESET": "rst",

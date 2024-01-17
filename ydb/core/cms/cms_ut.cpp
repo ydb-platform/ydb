@@ -555,16 +555,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Done with permission-1.
         env.CheckDonePermission("user", pid1);
-        // Retry request-2 and get reject (conflict with request-1).
-        env.CheckRequest("user", rid2, false, TStatus::DISALLOW_TEMP);
-        // Get permission-2 for request-1.
-        auto rec4 = env.CheckRequest("user", rid1, false, TStatus::ALLOW_PARTIAL, 1);
+        // Retry request-2.
+        auto rec4 = env.CheckRequest("user", rid2, false, TStatus::ALLOW, 2);
         auto pid2 = rec4.GetPermissions(0).GetId();
+        auto pid3 = rec4.GetPermissions(1).GetId();
+        // Get permission-2 for request-1.
+        env.CheckRequest("user", rid1, false, TStatus::DISALLOW_TEMP);
 
-        // Get request-1 expecting 2 remaining actions.
+        // Get request-1 expecting 3 remaining actions.
         auto rec5 = env.CheckGetRequest("user", rid1);
         UNIT_ASSERT_VALUES_EQUAL(rec5.RequestsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec5.GetRequests(0).ActionsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rec5.GetRequests(0).ActionsSize(), 3);
 
         // Schedule request-3.
         auto rec6 = env.CheckPermissionRequest
@@ -575,30 +576,21 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Schedule request-4.
         auto rec7 = env.CheckPermissionRequest
             ("user1", true, false, true, true, TStatus::DISALLOW_TEMP,
-             MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000,
-                        env.PDiskName(1, 3)));
+             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         auto rid4 = rec7.GetRequestId();
 
         // List 2 requests of user1.
         env.CheckListRequests("user1", 2);
         // Reject request-1.
         env.CheckRejectRequest("user", rid1);
-        // Retry request-2 and get reject (conflict with permission-2).
-        env.CheckRequest("user", rid2, false, TStatus::DISALLOW_TEMP);
-        // Done with permission-2.
+        // Done with permissions 2 and 3.
         env.CheckDonePermission("user", pid2);
-        // Retry request-3 and get reject (conflict with request-2).
-        env.CheckRequest("user1", rid3, false, TStatus::DISALLOW_TEMP);
+        env.CheckDonePermission("user", pid3);
+        // Retry request-3.
+        auto rec8 = env.CheckRequest("user1", rid3, false, TStatus::ALLOW, 1);
+        auto pid4 = rec8.GetPermissions(0).GetId();
         // Retry request-4 and get reject (conflict with request-3).
         env.CheckRequest("user1", rid4, false, TStatus::DISALLOW_TEMP);
-        // List 1 request of user.
-        auto rec9 = env.CheckListRequests("user", 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec9.GetRequests(0).GetRequestId(), rid2);
-        // Reject request-3.
-        env.CheckRejectRequest("user1", rid3);
-        // Retry request-4.
-        auto rec8 = env.CheckRequest("user1", rid4, false, TStatus::ALLOW, 1);
-        auto pid3 = rec8.GetPermissions(0).GetId();
 
         // Restart CMS tablet.
         env.RestartCms();
@@ -606,17 +598,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Check there are no permissions for user.
         env.CheckListPermissions("user", 0);
         // Check permission of user1 is restored.
-        auto rec10 = env.CheckListPermissions("user1", 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec10.GetPermissions(0).GetId(), pid3);
-        // Check request for user is restored.
-        auto rec11 = env.CheckListRequests( "user", 1);
-        UNIT_ASSERT_VALUES_EQUAL(rec11.GetRequests(0).GetRequestId(), rid2);
-        // Check there are no requests for user1.
-        env.CheckListRequests("user1", 0);
-        // Retry request-2.
-        env.CheckRequest( "user", rid2, false, TStatus::ALLOW, 2);
+        auto rec9 = env.CheckListPermissions("user1", 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec9.GetPermissions(0).GetId(), pid4);
+        // Done with permissions-4.
+        env.CheckDonePermission("user1", pid4);
+        // Check request for user1 is restored.
+        env.CheckListRequests("user1", 1);
+        // Retry request-4.
+        auto rec10 = env.CheckRequest("user1", rid4, false, TStatus::ALLOW, 1);
+        auto pid5 = rec10.GetPermissions(0).GetId();
         // Check there are no requests for user.
-        env.CheckListRequests( "user", 0);
+        env.CheckListRequests("user1", 0);
     }
 
     Y_UNIT_TEST(WalleTasks)
@@ -664,27 +656,27 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleRemoveTask("task-5", TStatus::WRONG_REQUEST);
         // Check modified tasks list.
         env.CheckWalleListTasks("task-6", "in-process", env.GetNodeId(1));
-        // New task should be queued because of task-6.
-        env.CheckWalleCreateTask("task-8", "change-disk", false, TStatus::DISALLOW_TEMP,
+        // Lock node-0 for reboot, Task-6 scheduled, but permission was not issued.
+        env.CheckWalleCreateTask("task-8", "change-disk", false, TStatus::ALLOW,
                                  env.GetNodeId(0));
         // Check tasks list.
         env.CheckWalleListTasks(2);
-        // Task-8 still cannot be executed.
-        env.CheckWalleCheckTask("task-8", TStatus::DISALLOW_TEMP, env.GetNodeId(0));
-        // Task-6 is allowed now.
-        env.CheckWalleCheckTask("task-6", TStatus::ALLOW, env.GetNodeId(1));
+        // Task-6 still cannot be executed.
+        env.CheckWalleCheckTask("task-6", TStatus::DISALLOW_TEMP, env.GetNodeId(1));
 
         // Kill CMS tablet to check Wall-E tasks are preserved correctly.
         env.RestartCms();
 
         // Check tasks list.
         env.CheckWalleListTasks(2);
-        // Task-6 is allowed.
-        env.CheckWalleCheckTask("task-6", TStatus::ALLOW, env.GetNodeId(1));
-        // Task-8 is waiting.
-        env.CheckWalleCheckTask("task-8", TStatus::DISALLOW_TEMP, env.GetNodeId(0));
+        // Task-8 is allowed.
+        env.CheckWalleCheckTask("task-8", TStatus::ALLOW, env.GetNodeId(0));
+        // Task-6 is waiting.
+        env.CheckWalleCheckTask("task-6", TStatus::DISALLOW_TEMP, env.GetNodeId(1));
         // Remove task-8.
         env.CheckWalleRemoveTask("task-8");
+        // Task-6 now can be executed.
+        env.CheckWalleCheckTask("task-6", TStatus::ALLOW, env.GetNodeId(1));
         // Check modified tasks list.
         env.CheckWalleListTasks("task-6", "ok", env.GetNodeId(1));
         // Remove task-6.
@@ -1691,6 +1683,109 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
 
         env.DestroyDefaultCmsPipe();
+    }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailWhileSentinelIsDisabled)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ),
+            TStatus::ERROR
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnUnsupportedAction)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0), 60000000, env.PDiskName(0))
+            ),
+            TStatus::WRONG_REQUEST
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEvictionShouldFailOnMultipleActions)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithSentinel());
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000)
+            ),
+            TStatus::WRONG_REQUEST
+        );
+    }
+
+    Y_UNIT_TEST(VDisksEviction)
+    {
+        auto opts = TTestEnvOpts(8).WithSentinel();
+        TCmsTestEnv env(opts);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
+
+        // ok
+        auto request1 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP
+        );
+        // forbid another prepare request for same host
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::WRONG_REQUEST
+        );
+
+        // "move" vdisks
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        // prepared
+        auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckRejectRequest("user", request1.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
+
+        // allow immediately
+        auto request2 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::ALLOW
+        );
+        UNIT_ASSERT_VALUES_EQUAL(request2.PermissionsSize(), 1);
+
+        // check markers after restart
+        env.RestartCms();
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::WRONG_REQUEST
+        );
+
+        env.CheckRejectRequest("user", request2.GetRequestId(), false, TStatus::WRONG_REQUEST);
+        env.CheckDonePermission("user", request2.GetPermissions(0).GetId());
+
+        // restore vdisks
+        node.VDisksMoved = false;
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        // prepare
+        auto request3 = env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user").WithEvictVDisks(),
+                MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 600000000, "storage")
+            ),
+            TStatus::DISALLOW_TEMP
+        );
+
+        // reject until prepared
+        env.CheckRejectRequest("user", request3.GetRequestId());
     }
 }
 

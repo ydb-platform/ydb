@@ -26,19 +26,19 @@ namespace Model
    * <p>Optional configuration to replicate existing source bucket objects. For more
    * information, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-what-is-isnot-replicated.html#existing-object-replication">Replicating
-   * Existing Objects</a> in the <i>Amazon S3 Developer Guide</i>. </p><p><h3>See
+   * Existing Objects</a> in the <i>Amazon S3 User Guide</i>. </p><p><h3>See
    * Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ExistingObjectReplication">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API ExistingObjectReplication
+  class ExistingObjectReplication
   {
   public:
-    ExistingObjectReplication();
-    ExistingObjectReplication(const Aws::Utils::Xml::XmlNode& xmlNode);
-    ExistingObjectReplication& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ExistingObjectReplication();
+    AWS_S3_API ExistingObjectReplication(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API ExistingObjectReplication& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -74,7 +74,7 @@ namespace Model
   private:
 
     ExistingObjectReplicationStatus m_status;
-    bool m_statusHasBeenSet;
+    bool m_statusHasBeenSet = false;
   };
 
 } // namespace Model

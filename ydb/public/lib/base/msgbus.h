@@ -4,7 +4,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/messagebus/ybus.h>
 #include <library/cpp/messagebus/protobuf/ybusbuf.h>
 #include <library/cpp/messagebus/session_config.h>
@@ -40,8 +40,8 @@ enum {
     MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS_RESULT = 10424, // deprecated
     MTYPE_CLIENT_OLD_KEYVALUE = 10425, // deprecated
     MTYPE_CLIENT_KEYVALUE_RESPONSE = 10426, // deprecated
-    MTYPE_CLIENT_MESSAGE_BUS_TRACE = 10427,
-    MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS = 10428,
+    /*MTYPE_CLIENT_MESSAGE_BUS_TRACE*/ MTYPE_CLIENT_DEPRECATED_10427 = 10427,
+    /*MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS*/ MTYPE_CLIENT_DEPRECATED_10428 = 10428,
     MTYPE_CLIENT_TABLET_KILL_REQUEST = 10429,
     MTYPE_CLIENT_TABLET_STATE_REQUEST = 10430,
     MTYPE_CLIENT_LOCAL_MINIKQL = 10431,
@@ -116,8 +116,6 @@ struct TBusKeyValue : TBusMessage<TBusKeyValue, NKikimrClient::TKeyValueRequest,
 struct TBusOldKeyValue : TBusMessage<TBusOldKeyValue, NKikimrClient::TKeyValueRequest, MTYPE_CLIENT_OLD_KEYVALUE> {};
 struct TBusKeyValueResponse : TBusMessage<TBusKeyValueResponse, NKikimrClient::TKeyValueResponse, MTYPE_CLIENT_KEYVALUE_RESPONSE> {};
 struct TBusPersQueue : TBusMessage<TBusPersQueue, NKikimrClient::TPersQueueRequest, MTYPE_CLIENT_PERSQUEUE> {};
-struct TBusMessageBusTraceRequest : TBusMessage<TBusMessageBusTraceRequest, NKikimrClient::TMessageBusTraceRequest, MTYPE_CLIENT_MESSAGE_BUS_TRACE> {};
-struct TBusMessageBusTraceStatus : TBusMessage<TBusMessageBusTraceStatus, NKikimrClient::TMessageBusTraceStatus, MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS> {};
 struct TBusTabletKillRequest : TBusMessage<TBusTabletKillRequest, NKikimrClient::TTabletKillRequest, MTYPE_CLIENT_TABLET_KILL_REQUEST> {};
 struct TBusTabletStateRequest : TBusMessage<TBusTabletStateRequest, NKikimrClient::TTabletStateRequest, MTYPE_CLIENT_TABLET_STATE_REQUEST> {};
 struct TBusTabletCountersRequest : TBusMessage<TBusTabletCountersRequest, NKikimrClient::TTabletCountersRequest, MTYPE_CLIENT_TABLET_COUNTERS_REQUEST> {};
@@ -202,8 +200,6 @@ public:
         RegisterType(new TBusBSAdm);
         RegisterType(new TBusTypesRequest);
         RegisterType(new TBusTypesResponse);
-        RegisterType(new TBusMessageBusTraceRequest);
-        RegisterType(new TBusMessageBusTraceStatus);
         RegisterType(new TBusHiveCreateTablet);
         RegisterType(new TBusOldHiveCreateTablet);
         RegisterType(new TBusHiveCreateTabletResult);
@@ -265,12 +261,6 @@ class IPersQueueGetReadSessionsInfoWorkerFactory;
 IMessageBusServer* CreateMsgBusServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
-    ui32 bindPort = TProtocol::DefaultPort
-);
-IMessageBusServer* CreateMsgBusTracingServer(
-    NBus::TBusMessageQueue *queue,
-    const NBus::TBusServerSessionConfig &config,
-    const TString &tracePath,
     ui32 bindPort = TProtocol::DefaultPort
 );
 

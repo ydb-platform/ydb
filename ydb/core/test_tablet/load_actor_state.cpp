@@ -8,7 +8,12 @@ namespace NKikimr::NTestShard {
             (To, to));
 
         // some sanity checks
-        Y_ABORT_UNLESS(key.second.ConfirmedState == key.second.PendingState);
+        Y_VERIFY_S(key.second.ConfirmedState == key.second.PendingState, "key# " << key.first
+                << " ConfirmedState# " << key.second.ConfirmedState
+                << " PendingState# " << key.second.PendingState
+                << " from# " << from
+                << " to# " << to
+                << " Request# "<< bool(key.second.Request));
         Y_ABORT_UNLESS(key.second.ConfirmedState == from);
         Y_ABORT_UNLESS(!key.second.Request);
         Y_ABORT_UNLESS(from != to);
@@ -141,3 +146,8 @@ namespace NKikimr::NTestShard {
     }
 
 } // NKikimr::NTestShard
+
+template<>
+void Out<::NTestShard::TStateServer::EEntityState>(IOutputStream& s, ::NTestShard::TStateServer::EEntityState value) {
+    s << ::NTestShard::TStateServer::EEntityState_Name(value);
+}

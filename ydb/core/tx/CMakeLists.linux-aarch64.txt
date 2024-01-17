@@ -10,8 +10,8 @@ add_subdirectory(balance_coverage)
 add_subdirectory(columnshard)
 add_subdirectory(conveyor)
 add_subdirectory(coordinator)
+add_subdirectory(data_events)
 add_subdirectory(datashard)
-add_subdirectory(ev_write)
 add_subdirectory(long_tx_service)
 add_subdirectory(mediator)
 add_subdirectory(program)
@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-tx PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-base
   core-persqueue-config
   ydb-core-protos

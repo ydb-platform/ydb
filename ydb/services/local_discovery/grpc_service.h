@@ -1,11 +1,11 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
-#include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/grpc_services/base/base_service.h>
 #include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 
@@ -16,7 +16,7 @@ class IRequestOpCtx;
 class IFacilityProvider;
 
 class TGRpcLocalDiscoveryService
-    : public NGrpc::TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
+    : public NYdbGrpc::TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
 {
 public:
     TGRpcLocalDiscoveryService(const NKikimrConfig::TGRpcConfig& grpcConfig,
@@ -24,8 +24,8 @@ public:
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                     NActors::TActorId id);
 
-    void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
+    void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
 
     bool IncRequest();
     void DecRequest();
@@ -33,7 +33,7 @@ public:
     void SetDynamicNodeAuthParams(const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
     void DoListEndpointsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider);
 
     const NKikimrConfig::TGRpcConfig& GrpcConfig;
@@ -42,7 +42,7 @@ private:
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
-    NGrpc::TGlobalLimiter* Limiter_ = nullptr;
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 
     TDynamicNodeAuthorizationParams DynamicNodeAuthorizationParams = {};
     std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> NodeRegistrationRequest;

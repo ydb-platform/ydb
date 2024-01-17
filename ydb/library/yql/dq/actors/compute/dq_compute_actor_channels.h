@@ -2,12 +2,12 @@
 
 #include "dq_compute_actor.h"
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/log.h>
 #include <util/generic/noncopyable.h>
 
 namespace NYql::NDq {
@@ -66,7 +66,7 @@ public:
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
         virtual void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
-        virtual void ResumeExecution() = 0;
+        virtual void ResumeExecution(EResumeSource source) = 0;
 
         virtual ~ICallbacks() = default;
     };

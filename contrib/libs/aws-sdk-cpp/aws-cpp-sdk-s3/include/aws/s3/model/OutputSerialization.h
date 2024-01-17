@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/OutputSerialization">AWS
    * API Reference</a></p>
    */
-  class AWS_S3_API OutputSerialization
+  class OutputSerialization
   {
   public:
-    OutputSerialization();
-    OutputSerialization(const Aws::Utils::Xml::XmlNode& xmlNode);
-    OutputSerialization& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API OutputSerialization();
+    AWS_S3_API OutputSerialization(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API OutputSerialization& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -103,10 +103,10 @@ namespace Model
   private:
 
     CSVOutput m_cSV;
-    bool m_cSVHasBeenSet;
+    bool m_cSVHasBeenSet = false;
 
     JSONOutput m_jSON;
-    bool m_jSONHasBeenSet;
+    bool m_jSONHasBeenSet = false;
   };
 
 } // namespace Model

@@ -19,8 +19,8 @@ target_link_libraries(ydb-library-pdisk_io PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  cpp-actors-core
-  cpp-actors-wilson
+  library-actors-core
+  library-actors-wilson
   cpp-monlib-dynamic_counters
   ydb-core-debug
   library-pdisk_io-protos

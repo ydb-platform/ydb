@@ -1,5 +1,6 @@
 #include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/core/tablet_flat/flat_part_charge.h>
+#include <ydb/core/tablet_flat/flat_part_charge_range.h>
+#include <ydb/core/tablet_flat/flat_part_charge_create.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/tool.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -124,7 +125,7 @@ namespace {
 
             for (auto seq: xrange(Mass.Saved.Size())) {
                 /* ... but rows pack has 4 rows per each page, the first row in
-                    each pack is ommited and used as spacer between pages. */
+                    each pack is omitted and used as spacer between pages. */
 
                 if (seq % 4 > 0) {
                     if (history) {
@@ -160,8 +161,14 @@ namespace {
 
         void CheckByRows(TPageId row1, TPageId row2, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
         {
-            CheckPrechargeByRows(row1, row2, items, false, shouldPrecharge);
-            CheckPrechargeByRows(row1, row2, items, true, shouldPrecharge);
+            CheckPrechargeByRows(row1, row2, items, false, shouldPrecharge, false);
+            CheckPrechargeByRows(row1, row2, items, true, shouldPrecharge, false);
+        }
+
+        void CheckByRowsReverse(TPageId row1, TPageId row2, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
+        {
+            CheckPrechargeByRows(row1, row2, items, false, shouldPrecharge, true);
+            CheckPrechargeByRows(row1, row2, items, true, shouldPrecharge, true);
         }
 
         void CheckIndex(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge, TSet<TPageId> stickyIndex) const {
@@ -196,18 +203,16 @@ namespace {
             }
 
             bool ready = !reverse
-                ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
-                : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
+                ? ChargeRange(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
+                : ChargeRangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.ToLoad.empty(), ready, AssertMesage(fail));
+            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.ToLoad.empty(), ready, AssertMessage(fail));
 
             CheckPrecharged(env.Touched, shouldPrecharge, sticky, flags);
         }
 
-        void CheckPrechargeByRows(TPageId row1, TPageId row2, ui64 items, bool fail, TMap<TGroupId, TArr> shouldPrecharge) const
+        void CheckPrechargeByRows(TPageId row1, TPageId row2, ui64 items, bool fail, TMap<TGroupId, TArr> shouldPrecharge, bool reverse) const
         {
-            Y_ABORT_UNLESS(row1 <= row2 && row2 < 3 * 9);
-
             auto sticky = GetIndexPages();
             TTouchEnv env(fail, sticky);
 
@@ -224,10 +229,12 @@ namespace {
                 tags.push_back(c.Tag);
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                !fail,
-                TCharge(&env, *run.begin()->Part, tags, false).Do(row1, row2, keyDefaults, items, Max<ui64>()),
-                AssertMesage(fail));
+            auto charge = CreateCharge(&env, *run.begin()->Part, tags, false);
+            bool result = reverse
+                ? charge->DoReverse(row1, row2, keyDefaults, items, Max<ui64>())
+                : charge->Do(row1, row2, keyDefaults, items, Max<ui64>());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(!fail, result, AssertMessage(fail));
 
             CheckPrecharged(env.Touched, shouldPrecharge, sticky, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
         }
@@ -255,7 +262,7 @@ namespace {
                     wrap.Next().Is(key > upper ? EReady::Gone : EReady::Data);
                 }
 
-                // forcebly touch the next stop element that is greater than upper
+                // forcibly touch the next stop element that is greater than upper
                 // because instead of having |1 2 3| and stopping as soon as we see 2
                 // we may have |1*2 2*2 3*2| = |2 4 6| and be requested with upper = 5 (not 4)
                 if (key > upper) {
@@ -291,7 +298,7 @@ namespace {
                     wrap.Next().Is(key < upper || key == (ui32)-1 ? EReady::Gone : EReady::Data);
                 }
 
-                // forcebly touch the next stop element that is greater than upper
+                // forcibly touch the next stop element that is greater than upper
                 // because instead of having |1 2 3| and stopping as soon as we see 2
                 // we may have |1*2 2*2 3*2| = |2 4 6| and be requested with upper = 2 (not 4)
                 if (key < upper || key == (ui32)-1) {
@@ -357,21 +364,21 @@ namespace {
                         expectedValue.insert(absoluteId.Value(p.Page, p.Page));
                     }
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(expectedValue, actualValue, AssertMesage(groupId, flags));
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedValue, actualValue, AssertMessage(groupId, flags));
             }
         }
 
-        std::string AssertMesage(bool fail) const {
+        std::string AssertMessage(bool fail) const {
             return 
                 "Seq: " + std::to_string(CurrentStep()) + 
                 " Fail: " + (fail ? "Yes" : "No");
         }
-        std::string AssertMesage(TGroupId group) const {
+        std::string AssertMessage(TGroupId group) const {
             return 
                 "Seq: " + std::to_string(CurrentStep()) + 
                 " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
         }
-        std::string AssertMesage(TGroupId group, TPageIdFlags flags) const {
+        std::string AssertMessage(TGroupId group, TPageIdFlags flags) const {
             auto result = 
                 "Seq: " + std::to_string(CurrentStep()) + 
                 " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
@@ -603,7 +610,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             me.To(209).CheckByKeys(5, 13, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {1, 2, 3, 4_I}},
-                {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always neded
+                {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always needed
                 {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
             });
 
@@ -627,7 +634,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             me.To(213).CheckByKeys(6, 13, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {1, 2, 3, 4_I}},
-                {TGroupId{1}, {2_g, 3, 4}}, // pages 3, 4 are always neded
+                {TGroupId{1}, {2_g, 3, 4}}, // pages 3, 4 are always needed
                 {TGroupId{2}, {4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
             });
 
@@ -645,7 +652,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             me.To(216).CheckByKeys(7, 13, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {1, 2, 3, 4_I}},
-                {TGroupId{1}, {2_g, 3, 4}}, // pages 3, 4 are always neded
+                {TGroupId{1}, {2_g, 3, 4}}, // pages 3, 4 are always needed
                 {TGroupId{2}, {5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
             });
 
@@ -663,7 +670,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
             me.To(219).CheckByKeys(8, 13, 0, TMap<TGroupId, TArr>{
                 {TGroupId{0}, {1, 2, 3, 4_I}},
-                {TGroupId{1}, {3, 4}}, // pages 3, 4 are always neded
+                {TGroupId{1}, {3, 4}}, // pages 3, 4 are always needed
                 {TGroupId{2}, {6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
             });
 
@@ -746,13 +753,13 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         me.To(101).CheckByKeys(5, 13, 999, TMap<TGroupId, TArr>{
             {TGroupId{0}, {1, 2, 3, 4_I}},
-            {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always neded
+            {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always needed
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
         });
 
         me.To(102).CheckByKeys(5, 13, 7, TMap<TGroupId, TArr>{
             {TGroupId{0}, {1, 2, 3, 4_I}},
-            {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always neded
+            {TGroupId{1}, {1_g, 2_g, 3, 4}}, // pages 3, 4 are always needed
             {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8, 9_g}} // pages 6, 7, 8 are always needed
         });
 
@@ -770,8 +777,8 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         me.To(105).CheckByKeys(5, 13, 4, TMap<TGroupId, TArr>{
             {TGroupId{0}, {1, 2, 3_f, 4_f}},
-            {TGroupId{1}, {1_g, 2_g, 3, 4_f}}, // here we touh extra pages, but it's fine
-            {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8_f}} // here we touh extra pages, but it's fine
+            {TGroupId{1}, {1_g, 2_g, 3, 4_f}}, // here we touch extra pages, but it's fine
+            {TGroupId{2}, {3_g, 4_g, 5_g, 6, 7, 8_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(106).CheckByKeys(7, 13, 3, TMap<TGroupId, TArr>{
@@ -910,12 +917,12 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         me.To(200).CheckByKeysReverse(15, 3, 6, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2, 1, 0_f}},
-            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4_f, 3_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5, 4_f, 3_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(201).CheckByKeysReverse(15, 3, 5, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2, 1_f}},
-            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5_f, 4_f, 3_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5_f, 4_f, 3_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(202).CheckByKeysReverse(15, 5, 5, TMap<TGroupId, TArr>{
@@ -925,22 +932,22 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         me.To(203).CheckByKeysReverse(13, 3, 4, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2, 1}},
-            {TGroupId{2}, {9_g, 8, 7, 6, 5, 4_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {9_g, 8, 7, 6, 5, 4_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(204).CheckByKeysReverse(13, 3, 3, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2, 1_f}},
-            {TGroupId{2}, {9_g, 8, 7, 6, 5_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {9_g, 8, 7, 6, 5_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(205).CheckByKeysReverse(13, 3, 2, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2}},
-            {TGroupId{2}, {9_g, 8, 7, 6_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {9_g, 8, 7, 6_f}} // here we touch extra pages, but it's fine
         });
 
         me.To(206).CheckByKeysReverse(13, 3, 1, TMap<TGroupId, TArr>{
             {TGroupId{0}, {3, 2}},
-            {TGroupId{2}, {9_g, 8, 7_f}} // here we touh extra pages, but it's fine
+            {TGroupId{2}, {9_g, 8, 7_f}} // here we touch extra pages, but it's fine
         });
     }
 
@@ -1206,10 +1213,102 @@ Y_UNIT_TEST_SUITE(Charge) {
             {TGroupId{2}, {2, 3, 4, 5, 6}}
         });
 
-        me.To(107).CheckByRows(4, 8, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {1, 2}},
-            {TGroupId{1}, {2, 3, 4}},
-            {TGroupId{2}, {4, 5, 6, 7, 8}}
+        me.To(107).CheckByRows(3, 5, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {1}},
+            {TGroupId{1}, {1, 2}},
+            {TGroupId{2}, {3, 4, 5}}
+        });
+
+        me.To(200).CheckByRows(8, 7, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {2}},
+            {TGroupId{1}, {}},
+            {TGroupId{2}, {}}
+        });
+
+        me.To(201).CheckByRows(7, 1, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {2}},
+            {TGroupId{1}, {}},
+            {TGroupId{2}, {}}
+        });
+    }
+
+    Y_UNIT_TEST(ByRowsReverse)
+    {
+        TModel me(true);
+
+        /*
+        
+        row ids by pages:
+        group0 = ..|18 19 20|21 22 23|24 25 26|
+        group1 = ..|18 19|20 21|22 23|24 25|26|
+        group2 = ..|18|19|20|21|22|23|24|25|26|
+
+        */
+
+        me.To(100).CheckByRowsReverse(26, 26, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{1}, {13}},
+            {TGroupId{2}, {26}}
+        });
+
+        me.To(101).CheckByRowsReverse(26, 25, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{1}, {13, 12}},
+            {TGroupId{2}, {26, 25}}
+        });
+
+        me.To(102).CheckByRowsReverse(26, 24, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{1}, {13, 12}},
+            {TGroupId{2}, {26, 25, 24}}
+        });
+
+        me.To(103).CheckByRowsReverse(26, 23, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{1}, {13, 12, 11}},
+            {TGroupId{2}, {26, 25, 24, 23}}
+        });
+
+        me.To(104).CheckByRowsReverse(26, 22, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{1}, {13, 12, 11}},
+            {TGroupId{2}, {26, 25, 24, 23, 22}}
+        });
+
+        me.To(105).CheckByRowsReverse(25, 19, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7, 6}},
+            {TGroupId{1}, {12, 11, 10, 9}},
+            {TGroupId{2}, {25, 24, 23, 22, 21, 20, 19}}
+        });
+
+        me.To(106).CheckByRowsReverse(24, 20, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7, 6}},
+            {TGroupId{1}, {12, 11, 10}},
+            {TGroupId{2}, {24, 23, 22, 21, 20}}
+        });
+
+        me.To(107).CheckByRowsReverse(23, 21, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {7}},
+            {TGroupId{1}, {11, 10}},
+            {TGroupId{2}, {23, 22, 21}}
+        });
+
+        me.To(200).CheckByRowsReverse(8, 9, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {2}},
+            {TGroupId{1}, {}},
+            {TGroupId{2}, {}}
+        });
+
+        me.To(201).CheckByRowsReverse(9, 15, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {3}},
+            {TGroupId{1}, {}},
+            {TGroupId{2}, {}}
+        });
+
+        me.To(202).CheckByRowsReverse(100, 23, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{1}, {13, 12, 11}},
+            {TGroupId{2}, {26, 25, 24, 23}}
         });
     }
 
@@ -1228,34 +1327,86 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         // Precharge touches [row1 .. Min(row2, row1 + itemsLimit)] rows (1 extra row)
         
-        me.To(101).CheckByRows(1, 7, 6, TMap<TGroupId, TArr>{
+        me.To(100).CheckByRows(1, 7, 6, TMap<TGroupId, TArr>{
             {TGroupId{0}, {0, 1, 2}},
             {TGroupId{1}, {0, 1, 2, 3}},
             {TGroupId{2}, {1, 2, 3, 4, 5, 6, 7}}
         });
 
-        me.To(102).CheckByRows(1, 7, 5, TMap<TGroupId, TArr>{
+        me.To(101).CheckByRows(1, 7, 5, TMap<TGroupId, TArr>{
             {TGroupId{0}, {0, 1, 2}},
             {TGroupId{1}, {0, 1, 2, 3}},
             {TGroupId{2}, {1, 2, 3, 4, 5, 6}}
         });
 
-        me.To(103).CheckByRows(1, 7, 4, TMap<TGroupId, TArr>{
+        me.To(102).CheckByRows(1, 7, 4, TMap<TGroupId, TArr>{
             {TGroupId{0}, {0, 1}},
             {TGroupId{1}, {0, 1, 2}},
             {TGroupId{2}, {1, 2, 3, 4, 5}}
         });
 
-        me.To(104).CheckByRows(1, 7, 1, TMap<TGroupId, TArr>{
+        me.To(103).CheckByRows(1, 7, 1, TMap<TGroupId, TArr>{
             {TGroupId{0}, {0}},
             {TGroupId{1}, {0, 1}},
             {TGroupId{2}, {1, 2}}
         });
 
-        me.To(105).CheckByRows(3, 20, 5, TMap<TGroupId, TArr>{
+        me.To(104).CheckByRows(3, 20, 5, TMap<TGroupId, TArr>{
             {TGroupId{0}, {1, 2}},
             {TGroupId{1}, {1, 2, 3, 4}},
             {TGroupId{2}, {3, 4, 5, 6, 7, 8}}
+        });
+    }
+
+    Y_UNIT_TEST(ByRowsLimitsReverse)
+    {
+        TModel me(true);
+
+        /*
+        
+        row ids by pages:
+        group0 = ..|18 19 20|21 22 23|24 25 26|
+        group1 = ..|18 19|20 21|22 23|24 25|26|
+        group2 = ..|18|19|20|21|22|23|24|25|26|
+
+        */
+
+        // Precharge touches [Max(row2, row1 - itemsLimit) .. row1] rows (1 extra row)
+        
+        me.To(100).CheckByRowsReverse(25, 19, 6, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7, 6}},
+            {TGroupId{1}, {12, 11, 10, 9}},
+            {TGroupId{2}, {25, 24, 23, 22, 21, 20, 19}}
+        });
+
+        me.To(101).CheckByRowsReverse(25, 19, 5, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7, 6}},
+            {TGroupId{1}, {12, 11, 10}},
+            {TGroupId{2}, {25, 24, 23, 22, 21, 20}}
+        });
+
+        me.To(102).CheckByRowsReverse(25, 19, 4, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{1}, {12, 11, 10}},
+            {TGroupId{2}, {25, 24, 23, 22, 21}}
+        });
+
+        me.To(103).CheckByRowsReverse(25, 19, 1, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8}},
+            {TGroupId{1}, {12}},
+            {TGroupId{2}, {25, 24}}
+        });
+
+        me.To(104).CheckByRowsReverse(23, 3, 5, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {7, 6}},
+            {TGroupId{1}, {11, 10, 9}},
+            {TGroupId{2}, {23, 22, 21, 20, 19, 18}}
+        });
+
+        me.To(200).CheckByRowsReverse(100, 3, 5, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {8, 7}},
+            {TGroupId{1}, {13, 12, 11, 10}},
+            {TGroupId{2}, {26, 25, 24, 23, 22, 21}}
         });
     }
 }

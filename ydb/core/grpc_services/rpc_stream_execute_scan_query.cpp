@@ -15,7 +15,7 @@
 #include <ydb/core/protos/ydb_table_impl.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -227,6 +227,8 @@ private:
             nullptr
         );
 
+        ev->Record.MutableRequest()->SetCollectDiagnostics(req->Getcollect_full_diagnostics());
+
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
@@ -312,6 +314,8 @@ private:
                 if (reportPlan) {
                     response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                 }
+
+                response.mutable_result()->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
 
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());

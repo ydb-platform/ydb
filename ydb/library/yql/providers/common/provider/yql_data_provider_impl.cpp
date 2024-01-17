@@ -62,6 +62,16 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
+bool TPlanFormatterBase::WriteSchemaHeader(NYson::TYsonWriter& writer) {
+    Y_UNUSED(writer);
+    return false;
+}
+
+void TPlanFormatterBase::WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) {
+    Y_UNUSED(writer);
+    Y_UNUSED(type);
+}
+
 void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
     Y_UNUSED(node);
     usedNodeIds.clear();
@@ -333,6 +343,18 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
             auto cons = right.Cast().Input().Maybe<TCoCons>();
             if (cons) {
                 return cons.Cast().Input().Ptr();
+            }
+
+            if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                const auto& read = right.Cast().Input().Ref();
+                return ctx.Builder(node->Pos())
+                    .Callable("PgTableContent")
+                        .Add(0, read.Child(1)->TailPtr())
+                        .Add(1, read.ChildPtr(2))
+                        .Add(2, read.ChildPtr(3))
+                        .Add(3, read.ChildPtr(4))
+                    .Seal()
+                    .Build();
             }
         }
 

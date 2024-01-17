@@ -8,6 +8,7 @@ TIMEOUT(600)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/core/testlib/basics/default
 )
 

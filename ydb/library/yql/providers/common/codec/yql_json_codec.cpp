@@ -325,7 +325,7 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
     case TType::EKind::EmptyDict:
         YQL_ENSURE(json.IsArray(), "Unexpected json type (expected array, but got " << jsonType << ")");
         YQL_ENSURE(json.GetArray().size() == 0, "Expected empty array, but got array with " << json.GetArray().size() << " elements");
-        return holderFactory.GetEmptyContainer();
+        return holderFactory.GetEmptyContainerLazy();
     case TType::EKind::Tuple:
     {
         YQL_ENSURE(json.IsArray(), "Unexpected json type (expected array, but got " << jsonType << ")");

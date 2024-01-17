@@ -879,7 +879,7 @@ void TTcpConnection::OnEvent(EPollControl control)
         YT_ASSERT(Any(previousPendingControl & EPollControl::Running));
         if (Any(previousPendingControl & ~EPollControl::Running) && None(previousPendingControl & EPollControl::Shutdown)) {
             YT_LOG_TRACE("Retrying event processing for OnEvent (PendingControl: %v)", previousPendingControl);
-            Poller_->Retry(this, false);
+            Poller_->Retry(this);
         }
     }
 }
@@ -915,7 +915,7 @@ void TTcpConnection::OnSocketRead()
                 bytesToRead = std::min(bytesToRead, RemainingSslAckPacketBytes_);
             }
 
-            YT_LOG_TRACE("Reading from socket into decoder (BytesToRead: %v)",bytesToRead);
+            YT_LOG_TRACE("Reading from socket into decoder (BytesToRead: %v)", bytesToRead);
 
             size_t bytesRead;
             if (!ReadSocket(decoderChunk.Begin(), bytesToRead, &bytesRead)) {

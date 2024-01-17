@@ -9,32 +9,44 @@
 
 add_library(libs-aws-sdk-cpp-aws-cpp-sdk-core)
 target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
+  -DAWS_AUTH_USE_IMPORT_EXPORT
   -DAWS_CAL_USE_IMPORT_EXPORT
   -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
   -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
+  -DAWS_CRT_CPP_USE_IMPORT_EXPORT
   -DAWS_EVENT_STREAM_USE_IMPORT_EXPORT
+  -DAWS_HTTP_USE_IMPORT_EXPORT
   -DAWS_IO_USE_IMPORT_EXPORT
+  -DAWS_MQTT_USE_IMPORT_EXPORT
+  -DAWS_MQTT_WITH_WEBSOCKETS
+  -DAWS_S3_USE_IMPORT_EXPORT
+  -DAWS_SDKUTILS_USE_IMPORT_EXPORT
   -DAWS_SDK_VERSION_MAJOR=1
-  -DAWS_SDK_VERSION_MINOR=8
-  -DAWS_SDK_VERSION_PATCH=186
+  -DAWS_SDK_VERSION_MINOR=11
+  -DAWS_SDK_VERSION_PATCH=37
+  -DAWS_TEST_REGION=US_EAST_1
   -DAWS_USE_EPOLL
   -DCURL_HAS_H2
   -DCURL_HAS_TLS_PROXY
+  -DENABLED_REQUEST_COMPRESSION
+  -DENABLED_ZLIB_REQUEST_COMPRESSION
   -DENABLE_CURL_CLIENT
   -DENABLE_CURL_LOGGING
   -DENABLE_OPENSSL_ENCRYPTION
   -DHAS_PATHCONF
   -DHAS_UMASK
-  -DS2N_ADX
-  -DS2N_BIKE_R3_AVX2
-  -DS2N_BIKE_R3_AVX512
-  -DS2N_BIKE_R3_PCLMUL
-  -DS2N_BIKE_R3_VPCLMUL
+  -DS2N_CLONE_SUPPORTED
   -DS2N_CPUID_AVAILABLE
   -DS2N_FALL_THROUGH_SUPPORTED
-  -DS2N_HAVE_EXECINFO
+  -DS2N_FEATURES_AVAILABLE
   -DS2N_KYBER512R3_AVX2_BMI2
-  -DS2N_SIKE_P434_R3_ASM
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
+  -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
+  -DS2N_MADVISE_SUPPORTED
+  -DS2N_PLATFORM_SUPPORTS_KTLS
+  -DS2N_STACKTRACE
   -DS2N___RESTRICT__SUPPORTED
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -46,8 +58,17 @@ target_link_libraries(libs-aws-sdk-cpp-aws-cpp-sdk-core PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-curl
   contrib-libs-openssl
+  contrib-libs-zlib
+  restricted-aws-aws-c-auth
+  restricted-aws-aws-c-cal
   restricted-aws-aws-c-common
   restricted-aws-aws-c-event-stream
+  restricted-aws-aws-c-http
+  restricted-aws-aws-c-io
+  restricted-aws-aws-c-mqtt
+  restricted-aws-aws-c-sdkutils
+  restricted-aws-aws-checksums
+  restricted-aws-aws-crt-cpp
 )
 target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/AmazonSerializableWebServiceRequest.cpp
@@ -57,26 +78,52 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/Globals.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/Region.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/Version.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSAuthSigner.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSAuthSignerProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSCredentialsProviderChain.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/SSOCredentialsProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/bearer-token-provider/DefaultBearerTokenProviderChain.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/bearer-token-provider/SSOBearerTokenProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer-provider/BearerTokenAuthSignerProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer-provider/DefaultAuthSignerProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSAuthBearerSigner.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSAuthEventStreamV4Signer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSAuthSignerCommon.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSAuthSignerHelper.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSAuthV4Signer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/signer/AWSNullSigner.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSClient.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSErrorMarshaller.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSJsonClient.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSUrlPresigner.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSXmlClient.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AdaptiveRetryStrategy.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AsyncCallerContext.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/ClientConfiguration.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/CoreErrors.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/DefaultRetryStrategy.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/GenericClientConfiguration.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/RequestCompression.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/RetryStrategy.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/SpecifiedRetryableErrorsRetryStrategy.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/AWSProfileConfigLoader.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/AWSConfigFileProfileConfigLoader.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/AWSProfileConfigLoaderBase.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/ConfigAndCredentialsCacheManager.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/EC2InstanceProfileConfigLoader.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/config/defaults/ClientConfigurationDefaults.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/AWSEndpoint.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/AWSPartitions.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/BuiltInParameters.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/ClientContextParameters.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/DefaultEndpointProvider.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/EndpointProviderBase.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/endpoint/internal/AWSEndpointAttribute.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/external/cjson/cJSON.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/external/tinyxml2/tinyxml2.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/HttpClient.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/HttpClientFactory.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/HttpRequest.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/HttpResponse.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/HttpTypes.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/Scheme.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/http/URI.cpp
@@ -93,6 +140,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/DNS.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/DateTimeCommon.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/Directory.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/Document.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/EnumParseOverflowContainer.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/FileSystemUtils.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/GetTheLights.cpp
@@ -101,6 +149,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/TempFile.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/UUID.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/base64/Base64.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/CRC32.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/Cipher.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/ContentCryptoMaterial.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/ContentCryptoScheme.cpp
@@ -124,6 +173,8 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/event/EventStreamErrors.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/json/JsonSerializer.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/AWSLogging.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/CRTLogSystem.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/CRTLogging.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/ConsoleLogSystem.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/DefaultLogSystem.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/logging/FormattedLogSystem.cpp

@@ -16,7 +16,7 @@ add_library(ydb-core-mind)
 target_link_libraries(ydb-core-mind PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
   ydb-core-blobstorage

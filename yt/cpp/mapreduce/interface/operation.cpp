@@ -337,11 +337,7 @@ void TJobOperationPreparer::FinallyValidate() const
     TApiUsageError error;
     error << "Output table schemas are missing: ";
     for (auto i : illegallyMissingSchemaIndices) {
-        error << "no. " << i;
-        if (auto path = Context_.GetInputPath(i)) {
-            error << "(" << *path << ")";
-        }
-        error << "; ";
+        error << "no. " << i << " (" << Context_.GetOutputPath(i).GetOrElse("<unknown path>") << "); ";
     }
     ythrow std::move(error);
 }

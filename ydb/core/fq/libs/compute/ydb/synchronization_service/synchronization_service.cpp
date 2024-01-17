@@ -16,11 +16,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " << stream)
@@ -165,13 +165,13 @@ public:
 
     void Handle(const TEvControlPlaneStorage::TEvDescribeBindingResponse::TPtr& ev) {
         const auto& issues = ev.Get()->Get()->Issues;
-        if (issues) {
-            LOG_E("DescribeBindingResponse, scope = " << Scope << " (failed): " << issues.ToOneLineString());
-            ReplyErrorAndPassAway(issues, "Error getting a describe of binding at the synchronization stage");
-            return;
-        }
         const auto& result = ev->Get()->Result;
         const auto& id = result.binding().meta().id();
+        if (issues) {
+            LOG_E("DescribeBindingResponse, scope = " << Scope << " (failed): " << issues.ToOneLineString());
+            ReplyErrorAndPassAway(issues, TStringBuilder {} << "Error getting a description of a binding with id '" << id << "' at the synchronization stage");
+            return;
+        }
         LOG_I("Received binding: scope = " << Scope << " , id = " << id << ", type = " << static_cast<int>(result.binding().content().setting().binding_case()));
         Bindings[result.binding().meta().id()] = result.binding();
 
@@ -404,7 +404,8 @@ private:
                 TPermissions{},
                 CommonConfig,
                 Signer,
-                true
+                true,
+                connection.first
             ));
         }
         if (Connections.empty()) {
@@ -423,7 +424,11 @@ private:
             request.Get()->Get()->YDBClient = Client;
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {
-                ReplyErrorAndPassAway(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Can't find conection id = " << binding.second.content().connection_id()}});
+                NYql::TIssue issue {TStringBuilder {} 
+                    << "While synchronizing tables for binding with id '" << binding.first << "'"};
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(TStringBuilder{}
+                    << "Can't find connection with id '" << binding.second.content().connection_id() << "'"));
+                ReplyErrorAndPassAway(NYql::TIssues{issue});
                 return;
             }
             request.Get()->Get()->ConnectionContent = it->second.content();
@@ -434,7 +439,8 @@ private:
                 TDuration::Seconds(30),
                 Counters,
                 TPermissions{},
-                true
+                true,
+                binding.first
             ));
         }
 

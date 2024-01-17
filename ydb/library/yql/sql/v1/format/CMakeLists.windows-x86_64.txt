@@ -23,6 +23,7 @@ target_link_libraries(sql-v1-format PUBLIC
   yql-sql-settings
   sql-v1-lexer
   sql-v1-proto_parser
+  yql-core-sql_types
   cpp-protobuf-util
 )
 target_sources(sql-v1-format PRIVATE
@@ -38,6 +39,7 @@ target_link_libraries(sql-v1-format.global PUBLIC
   yql-sql-settings
   sql-v1-lexer
   sql-v1-proto_parser
+  yql-core-sql_types
   cpp-protobuf-util
 )
 target_sources(sql-v1-format.global PRIVATE

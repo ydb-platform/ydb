@@ -18,7 +18,7 @@ target_link_libraries(ydb-core-audit PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   library-cpp-json
   library-cpp-logger
   ydb-core-base
@@ -34,7 +34,7 @@ target_link_libraries(ydb-core-audit.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   library-cpp-json
   library-cpp-logger
   ydb-core-base

@@ -5,47 +5,39 @@
 
 #include <aws/common/environment.h>
 #include <aws/common/file.h>
+#include <aws/common/logging.h>
 #include <aws/common/string.h>
 #include <dirent.h>
 #include <errno.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 FILE *aws_fopen_safe(const struct aws_string *file_path, const struct aws_string *mode) {
-    return fopen(aws_string_c_str(file_path), aws_string_c_str(mode));
-}
-
-static int s_parse_and_raise_error(int errno_cpy) {
-    if (errno_cpy == 0) {
-        return AWS_OP_SUCCESS;
+    FILE *f = fopen(aws_string_c_str(file_path), aws_string_c_str(mode));
+    if (!f) {
+        int errno_cpy = errno; /* Always cache errno before potential side-effect */
+        aws_translate_and_raise_io_error(errno_cpy);
+        AWS_LOGF_ERROR(
+            AWS_LS_COMMON_IO,
+            "static: Failed to open file. path:'%s' mode:'%s' errno:%d aws-error:%d(%s)",
+            aws_string_c_str(file_path),
+            aws_string_c_str(mode),
+            errno_cpy,
+            aws_last_error(),
+            aws_error_name(aws_last_error()));
     }
-
-    if (errno_cpy == ENOENT || errno_cpy == ENOTDIR) {
-        return aws_raise_error(AWS_ERROR_FILE_INVALID_PATH);
-    }
-
-    if (errno_cpy == EMFILE || errno_cpy == ENFILE) {
-        return aws_raise_error(AWS_ERROR_MAX_FDS_EXCEEDED);
-    }
-
-    if (errno_cpy == EACCES) {
-        return aws_raise_error(AWS_ERROR_NO_PERMISSION);
-    }
-
-    if (errno_cpy == ENOTEMPTY) {
-        return aws_raise_error(AWS_ERROR_DIRECTORY_NOT_EMPTY);
-    }
-
-    return aws_raise_error(AWS_ERROR_UNKNOWN);
+    return f;
 }
 
 int aws_directory_create(const struct aws_string *dir_path) {
     int mkdir_ret = mkdir(aws_string_c_str(dir_path), S_IRWXU | S_IRWXG | S_IRWXO);
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
     /** nobody cares if it already existed. */
-    if (mkdir_ret != 0 && errno != EEXIST) {
-        return s_parse_and_raise_error(errno);
+    if (mkdir_ret != 0 && errno_value != EEXIST) {
+        return aws_translate_and_raise_io_error(errno_value);
     }
 
     return AWS_OP_SUCCESS;
@@ -101,24 +93,27 @@ int aws_directory_delete(const struct aws_string *dir_path, bool recursive) {
     }
 
     int error_code = rmdir(aws_string_c_str(dir_path));
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
-    return error_code == 0 ? AWS_OP_SUCCESS : s_parse_and_raise_error(errno);
+    return error_code == 0 ? AWS_OP_SUCCESS : aws_translate_and_raise_io_error(errno_value);
 }
 
 int aws_directory_or_file_move(const struct aws_string *from, const struct aws_string *to) {
     int error_code = rename(aws_string_c_str(from), aws_string_c_str(to));
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
-    return error_code == 0 ? AWS_OP_SUCCESS : s_parse_and_raise_error(errno);
+    return error_code == 0 ? AWS_OP_SUCCESS : aws_translate_and_raise_io_error(errno_value);
 }
 
 int aws_file_delete(const struct aws_string *file_path) {
     int error_code = unlink(aws_string_c_str(file_path));
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
-    if (!error_code || errno == ENOENT) {
+    if (!error_code || errno_value == ENOENT) {
         return AWS_OP_SUCCESS;
     }
 
-    return s_parse_and_raise_error(errno);
+    return aws_translate_and_raise_io_error(errno_value);
 }
 
 int aws_directory_traverse(
@@ -128,9 +123,10 @@ int aws_directory_traverse(
     aws_on_directory_entry *on_entry,
     void *user_data) {
     DIR *dir = opendir(aws_string_c_str(path));
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
     if (!dir) {
-        return s_parse_and_raise_error(errno);
+        return aws_translate_and_raise_io_error(errno_value);
     }
 
     struct aws_byte_cursor current_path = aws_byte_cursor_from_string(path);
@@ -227,13 +223,39 @@ AWS_STATIC_STRING_FROM_LITERAL(s_home_env_var, "HOME");
 
 struct aws_string *aws_get_home_directory(struct aws_allocator *allocator) {
 
-    /* ToDo: check getpwuid_r if environment check fails */
-    struct aws_string *home_env_var_value = NULL;
-    if (aws_get_environment_value(allocator, s_home_env_var, &home_env_var_value) == 0 && home_env_var_value != NULL) {
-        return home_env_var_value;
+    /* First, check "HOME" environment variable.
+     * If it's set, then return it, even if it's an empty string. */
+    struct aws_string *home_value = NULL;
+    aws_get_environment_value(allocator, s_home_env_var, &home_value);
+    if (home_value != NULL) {
+        return home_value;
     }
 
-    return NULL;
+    /* Next, check getpwuid_r().
+     * We need to allocate a tmp buffer to store the result strings,
+     * and the max possible size for this thing can be pretty big,
+     * so start with a reasonable allocation, and if that's not enough try something bigger. */
+    uid_t uid = getuid(); /* cannot fail */
+    struct passwd pwd;
+    struct passwd *result = NULL;
+    char *buf = NULL;
+    int status = ERANGE;
+    for (size_t bufsize = 1024; bufsize <= 16384 && status == ERANGE; bufsize *= 2) {
+        if (buf) {
+            aws_mem_release(allocator, buf);
+        }
+        buf = aws_mem_acquire(allocator, bufsize);
+        status = getpwuid_r(uid, &pwd, buf, bufsize, &result);
+    }
+
+    if (status == 0 && result != NULL && result->pw_dir != NULL) {
+        home_value = aws_string_new_from_c_str(allocator, result->pw_dir);
+    } else {
+        aws_raise_error(AWS_ERROR_GET_HOME_DIRECTORY_FAILED);
+    }
+
+    aws_mem_release(allocator, buf);
+    return home_value;
 }
 
 bool aws_path_exists(const struct aws_string *path) {
@@ -251,10 +273,11 @@ int aws_fseek(FILE *file, int64_t offset, int whence) {
         return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
     int result = fseek(file, offset, whence);
-#endif /* AWS_HAVE_POSIX_LFS */
+#endif                       /* AWS_HAVE_POSIX_LFS */
+    int errno_value = errno; /* Always cache errno before potential side-effect */
 
     if (result != 0) {
-        return aws_translate_and_raise_io_error(errno);
+        return aws_translate_and_raise_io_error(errno_value);
     }
 
     return AWS_OP_SUCCESS;
@@ -270,7 +293,8 @@ int aws_file_get_length(FILE *file, int64_t *length) {
     }
 
     if (fstat(fd, &file_stats)) {
-        return aws_translate_and_raise_io_error(errno);
+        int errno_value = errno; /* Always cache errno before potential side-effect */
+        return aws_translate_and_raise_io_error(errno_value);
     }
 
     *length = file_stats.st_size;

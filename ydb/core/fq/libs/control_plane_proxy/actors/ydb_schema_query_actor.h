@@ -2,7 +2,7 @@
 
 #include "counters.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/signer/signer.h>
@@ -27,7 +27,8 @@ NActors::IActor* MakeCreateConnectionActor(
     TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer,
-    bool withoutRollback = false);
+    bool withoutRollback = false,
+    TMaybe<TString> connectionId = Nothing());
 
 NActors::IActor* MakeModifyConnectionActor(
     const NActors::TActorId& proxyActorId,
@@ -52,7 +53,8 @@ NActors::IActor* MakeCreateBindingActor(
     TDuration requestTimeout,
     TCounters& counters,
     TPermissions permissions,
-    bool withoutRollback = false);
+    bool withoutRollback = false,
+    TMaybe<TString> bindingId = Nothing());
 
 NActors::IActor* MakeModifyBindingActor(
     const NActors::TActorId& proxyActorId,

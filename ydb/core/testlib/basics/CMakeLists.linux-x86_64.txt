@@ -16,7 +16,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-dnsresolver
+  library-actors-dnsresolver
   cpp-regex-pcre
   cpp-testing-unittest
   ydb-core-base

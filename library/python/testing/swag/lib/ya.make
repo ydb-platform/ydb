@@ -1,6 +1,7 @@
 PY23_LIBRARY()
 
 PEERDIR(
+    contrib/python/six
     contrib/python/protobuf
     library/python/testing/yatest_common
 )

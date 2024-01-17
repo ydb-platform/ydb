@@ -1,4 +1,4 @@
-#include <library/cpp/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <util/stream/output.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NYql {
 namespace NDq {

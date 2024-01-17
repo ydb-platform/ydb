@@ -6,7 +6,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NYdb;
-using namespace NGrpc;
+using namespace NYdbGrpc;
 using namespace NTestHelpers;
 
 Y_UNIT_TEST_SUITE(YdbQueryService) {
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(sessionId);
 
-        NGrpc::TGRpcClientLow clientLow;
+        NYdbGrpc::TGRpcClientLow clientLow;
         auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         CheckAttach(clientConfig, sessionId, Ydb::StatusIds::SESSION_BUSY, allDoneOk);
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(sessionId);
 
-        NGrpc::TGRpcClientLow clientLow;
+        NYdbGrpc::TGRpcClientLow clientLow;
         auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);

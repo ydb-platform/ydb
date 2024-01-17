@@ -981,7 +981,7 @@ Y_UNIT_TEST(TestMapAsObject) {
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapAsObject
 
-Y_UNIT_TEST(TestMapWTF) {
+Y_UNIT_TEST(TestMapUsingGeneratedAsJSON) {
     TMapType proto;
 
     auto& items = *proto.MutableItems();
@@ -995,7 +995,47 @@ Y_UNIT_TEST(TestMapWTF) {
     UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr));
 
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-} // TestMapWTF
+} // TestMapUsingGeneratedAsJSON
+
+Y_UNIT_TEST(TestMapDefaultValue) {
+    TMapType proto;
+
+    auto& items = *proto.MutableItems();
+    items["key1"] = "";
+
+    TString modelStr(R"_({"Items":{"key1":""}})_");
+
+    TStringStream jsonStr;
+
+    TProto2JsonConfig config;
+    config.MapAsObject = true;
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+
+    jsonStr.Clear();
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+} // TestMapDefaultValue
+
+Y_UNIT_TEST(TestMapDefaultMessageValue) {
+    TComplexMapType proto;
+
+    auto& map = *proto.MutableNested();
+    map["key1"];  // Creates an empty nested message
+
+    TString modelStr(R"_({"Nested":{"key1":{}}})_");
+
+    TStringStream jsonStr;
+
+    TProto2JsonConfig config;
+    config.MapAsObject = true;
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+
+    jsonStr.Clear();
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+} // TestMapDefaultMessageValue
 
 Y_UNIT_TEST(TestStringifyNumbers) {
 #define TEST_SINGLE(flag, field, value, expectString)                            \

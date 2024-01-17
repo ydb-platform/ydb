@@ -15,7 +15,7 @@ target_link_libraries(core-blobstorage-backpressure PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-  cpp-actors-core
+  library-actors-core
   cpp-containers-intrusive_rb_tree
   ydb-core-base
   core-blobstorage-groupinfo

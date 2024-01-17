@@ -15,7 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 
-static const bool ENABLE_SCHEMESHARD_LOG = true;
+bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
@@ -534,6 +534,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
+    app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
+    app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -746,13 +748,13 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitNotification(NActors::TTestActorR
     TestWaitNotification(runtime, ids, schemeshardId);
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> tabletIds) {
+void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> tabletIds, ui64 hive) {
     TActorId sender = runtime.AllocateEdgeActor();
 
     for (ui64 tabletId : tabletIds) {
         Cerr << "wait until " << tabletId << " is deleted" << Endl;
         auto ev = new TEvFakeHive::TEvSubscribeToTabletDeletion(tabletId);
-        ForwardToTablet(runtime, TTestTxConfig::Hive, sender, ev);
+        ForwardToTablet(runtime, hive, sender, ev);
     }
 
     TAutoPtr<IEventHandle> handle;
@@ -768,8 +770,8 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActo
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, ui64 tabletId) {
-    TestWaitTabletDeletion(runtime, TSet<ui64>{tabletId});
+void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActorRuntime &runtime, ui64 tabletId, ui64 hive) {
+    TestWaitTabletDeletion(runtime, TSet<ui64>{tabletId}, hive);
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<TShardIdx> shardIds) {
@@ -820,6 +822,22 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
     default:
         return nullptr;
     }
+}
+
+void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
+{   
+    auto record = DescribePath(runtime, path);
+    const auto& pathDescr = record.GetPathDescription();
+    const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());
+
+    const TActorId sender = runtime.AllocateEdgeActor();
+    auto ev = MakeHolder<TEvFakeHive::TEvRequestDomainInfo>(subdomainKey);
+    ForwardToTablet(runtime, hive, sender, ev.Release());
+
+    const auto event = runtime.GrabEdgeEvent<TEvFakeHive::TEvRequestDomainInfoReply>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL(event->Get()->DomainInfo.ServerlessComputeResourcesMode, serverlessComputeResourcesMode);
 }
 
 TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv::InitRoot(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes, const TString& owner) {

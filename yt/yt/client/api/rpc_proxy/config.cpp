@@ -37,6 +37,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("proxy_unix_domain_socket", &TThis::ProxyUnixDomainSocket)
         .Optional();
+    registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
+        .Default(true);
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();
@@ -107,6 +109,12 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("clock_cluster_tag", &TThis::ClockClusterTag)
         .Default(NObjectClient::InvalidCellTag);
 
+    registrar.Parameter("udf_registry_path", &TThis::UdfRegistryPath)
+        .Optional();
+
+    registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
             THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
@@ -116,6 +124,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
         }
         if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
             THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
+        }
+        if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
+            THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
         }
 
         if (!config->ClusterName && config->ClusterUrl) {

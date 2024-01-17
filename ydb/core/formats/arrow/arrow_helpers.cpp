@@ -7,6 +7,7 @@
 #include "serializer/batch_only.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
+#include "simple_arrays_cache.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/services/services.pb.h>
@@ -20,7 +21,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <memory>
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
@@ -131,10 +132,9 @@ std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::
     columns.reserve(schema->num_fields());
 
     for (auto& field : schema->fields()) {
-        auto result = arrow::MakeArrayOfNull(field->type(), rowsCount);
-        Y_VERIFY_OK(result.status());
-        columns.emplace_back(*result);
-        Y_ABORT_UNLESS(columns.back());
+        auto result = NArrow::TThreadSimpleArraysCache::GetNull(field->type(), rowsCount);
+        columns.emplace_back(result);
+        Y_ABORT_UNLESS(result);
     }
     return arrow::RecordBatch::Make(schema, 0, columns);
 }
@@ -188,7 +188,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr
     auto srcSchema = srcBatch->schema();
     for (auto& name : columnNames) {
         const int pos = srcSchema->GetFieldIndex(name);
-        AFL_VERIFY(pos >= 0)("field_name", name);
+        AFL_VERIFY(pos >= 0)("field_name", name)("names", JoinSeq(",", columnNames))("fields", JoinSeq(",", srcBatch->schema()->field_names()));
         fields.push_back(srcSchema->field(pos));
         columns.push_back(srcBatch->column(pos));
     }
@@ -363,7 +363,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 }
 
 // Check if the permutation doesn't reorder anything
-bool IsNoOp(const arrow::UInt64Array& permutation) {
+bool IsTrivial(const arrow::UInt64Array& permutation, const ui64 originalLength) {
+    if ((ui64)permutation.length() != originalLength) {
+        return false;
+    }
     for (i64 i = 0; i < permutation.length(); ++i) {
         if (permutation.Value(i) != (ui64)i) {
             return false;
@@ -376,7 +379,7 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
                                             const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
     Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
-    auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
+    auto res = IsTrivial(*permutation, batch->num_rows()) ? batch : arrow::compute::Take(batch, permutation);
     Y_ABORT_UNLESS(res.ok());
     return (*res).record_batch();
 }
@@ -781,11 +784,13 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
         Y_ABORT_UNLESS(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "duplicated column")("name", f->name());
                 return false;
             }
             fields.emplace_back(f);
         }
         if (i->num_rows() != batches.front()->num_rows()) {
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())("front", batches.front()->num_rows());
             return false;
         }
         for (auto&& c : i->columns()) {

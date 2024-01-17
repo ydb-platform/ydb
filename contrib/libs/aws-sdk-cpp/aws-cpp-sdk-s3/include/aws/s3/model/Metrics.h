@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Metrics">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API Metrics
+  class Metrics
   {
   public:
-    Metrics();
-    Metrics(const Aws::Utils::Xml::XmlNode& xmlNode);
-    Metrics& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Metrics();
+    AWS_S3_API Metrics(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API Metrics& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -109,10 +109,10 @@ namespace Model
   private:
 
     MetricsStatus m_status;
-    bool m_statusHasBeenSet;
+    bool m_statusHasBeenSet = false;
 
     ReplicationTimeValue m_eventThreshold;
-    bool m_eventThresholdHasBeenSet;
+    bool m_eventThresholdHasBeenSet = false;
   };
 
 } // namespace Model

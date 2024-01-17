@@ -94,7 +94,7 @@ def main():
         dst_file = os.path.join(dst_dir, f)
         if src_file == dst_file:
             continue
-        rel_path = src_file[len(root):] if is_from_source_root else None
+        rel_path = src_file[len(root) :] if is_from_source_root else None
         copy_file(src_file, dst_file, overwrite=is_overwrite_existing, orig_path=rel_path)
 
 

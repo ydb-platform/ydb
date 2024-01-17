@@ -5,6 +5,7 @@ RECURSE(
     dq
     function
     generic
+    pg
     pq
     result
     s3

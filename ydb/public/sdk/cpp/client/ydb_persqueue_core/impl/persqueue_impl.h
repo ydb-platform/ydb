@@ -203,7 +203,7 @@ public:
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 
-    NGrpc::IQueueClientContextPtr CreateContext() {
+    NYdbGrpc::IQueueClientContextPtr CreateContext() {
         return Connections_->CreateContext();
     }
 

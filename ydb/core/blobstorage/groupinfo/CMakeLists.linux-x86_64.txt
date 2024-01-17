@@ -13,7 +13,7 @@ target_link_libraries(core-blobstorage-groupinfo PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-digest-crc32c
   library-cpp-pop_count
   ydb-core-base

@@ -9,7 +9,7 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NConsole {
 

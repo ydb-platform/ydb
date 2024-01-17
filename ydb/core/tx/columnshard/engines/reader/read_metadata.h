@@ -30,7 +30,9 @@ struct TReadStats {
     ui64 IndexPortions{0};
     ui64 IndexBatches{0};
     ui64 CommittedBatches{0};
-    ui64 PortionsBytes{ 0 };
+    ui64 CommittedPortionsBytes = 0;
+    ui64 InsertedPortionsBytes = 0;
+    ui64 CompactedPortionsBytes = 0;
     ui64 DataFilterBytes{ 0 };
     ui64 DataAdditionalBytes{ 0 };
 
@@ -40,12 +42,16 @@ struct TReadStats {
 
     ui32 SelectedRows = 0;
 
-    TReadStats(ui32 indexNo)
+    TReadStats(ui32 indexNo = 0)
         : BeginTimestamp(TInstant::Now())
         , SelectedIndex(indexNo)
     {}
 
     void PrintToLog();
+
+    ui64 GetReadBytes() const {
+        return CompactedPortionsBytes + InsertedPortionsBytes + CompactedPortionsBytes;
+    }
 
     TDuration Duration() {
         return TInstant::Now() - BeginTimestamp;
@@ -60,7 +66,7 @@ private:
 public:
     TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const;
+    std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription) const;
     std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const;
 };
 
@@ -97,9 +103,7 @@ public:
     }
     virtual ~TReadMetadataBase() = default;
 
-    std::shared_ptr<NOlap::TPredicate> LessPredicate;
-    std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
-    ui64 Limit{0}; // TODO
+    ui64 Limit = 0;
 
     virtual void Dump(IOutputStream& out) const {
         out << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
@@ -110,7 +114,6 @@ public:
     bool IsDescSorted() const { return Sorting == ESorting::DESC; }
     bool IsSorted() const { return IsAscSorted() || IsDescSorted(); }
 
-    virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
     virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const = 0;
 
@@ -132,20 +135,25 @@ private:
     TVersionedIndex IndexVersions;
     TSnapshot Snapshot;
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
-    std::vector<ui32> AllColumns;
-    std::vector<ui32> ResultColumnsIds;
-    mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
-    mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
     std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<NOlap::TReadContext>& context) const;
 
-    const std::vector<ui32>& GetAllColumns() const {
-        return AllColumns;
+    bool HasProcessingColumnIds() const {
+        return GetProgram().HasProcessingColumnIds();
+    }
+
+    std::set<ui32> GetProcessingColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : GetProgram().GetProcessingColumns()) {
+            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnId(i));
+        }
+        return result;
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
@@ -164,10 +172,6 @@ public:
 
     bool Init(const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor, std::string& error);
 
-    ui64 GetSchemaColumnsCount() const {
-        return AllColumns.size();
-    }
-
     ISnapshotSchema::TPtr GetSnapshotSchema(const TSnapshot& version) const {
         if (version >= Snapshot){
             return ResultIndexSchema;
@@ -177,25 +181,13 @@ public:
 
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
-            if (!EmptyVersionSchemaCache) {
-                EmptyVersionSchemaCache = make_shared<TFilteredSnapshotSchema>(ResultIndexSchema, AllColumns);
-            }
-            return EmptyVersionSchemaCache;
+            return ResultIndexSchema;
         }
-        auto schemaOriginal = IndexVersions.GetSchema(*version);
-        auto it = SchemasByVersionCache.find(schemaOriginal->GetSnapshot());
-        if (it == SchemasByVersionCache.end()) {
-            it = SchemasByVersionCache.emplace(schemaOriginal->GetSnapshot(), make_shared<TFilteredSnapshotSchema>(schemaOriginal, AllColumns)).first;
-        }
-        return it->second;
+        return IndexVersions.GetSchema(*version);
     }
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return IndexVersions.GetSchema(version)->GetIndexInfo().ArrowSchema();
-    }
-
-    std::shared_ptr<arrow::Schema> GetResultSchema() const {
-        return ResultIndexSchema->GetIndexInfo().ArrowSchema(ResultColumnsIds);
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
@@ -222,29 +214,12 @@ public:
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
-    std::shared_ptr<arrow::Schema> GetSortingKey() const {
-        return ResultIndexSchema->GetIndexInfo().GetSortingKey();
-    }
-
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 
-    std::vector<TNameTypeInfo> GetResultYqlSchema() const override {
-        auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-        auto resultSchema = GetResultSchema();
-        Y_ABORT_UNLESS(resultSchema);
-        std::vector<NTable::TTag> columnIds;
-        columnIds.reserve(resultSchema->num_fields());
-        for (const auto& field: resultSchema->fields()) {
-            TString name = TStringBuilder() << field->name();
-            columnIds.emplace_back(indexInfo.GetColumnId(name));
-        }
-        return indexInfo.GetColumns(columnIds);
-    }
-
     std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
-        return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
+        return ResultIndexSchema->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
     size_t NumIndexedChunks() const {
@@ -260,8 +235,7 @@ public:
     std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const std::shared_ptr<NOlap::TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
-        out << "columns: " << GetSchemaColumnsCount()
-            << " index chunks: " << NumIndexedChunks()
+        out << " index chunks: " << NumIndexedChunks()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
@@ -281,20 +255,36 @@ public:
 struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadStatsMetadata> {
 private:
     using TBase = TReadMetadataBase;
+    TSnapshot RequestSnapshot;
+    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
 public:
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
     const ui64 TabletId;
     std::vector<ui32> ReadColumnIds;
     std::vector<ui32> ResultColumnIds;
-    THashMap<ui64, std::shared_ptr<NOlap::TColumnEngineStats>> IndexStats;
+    std::deque<std::shared_ptr<NOlap::TPortionInfo>> IndexPortions;
 
-    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram)
+    const TSnapshot& GetRequestSnapshot() const { return RequestSnapshot; }
+
+    std::optional<std::string> GetColumnNameDef(const ui32 columnId) const { 
+        if (!ResultIndexSchema) {
+            return {};
+        }
+        auto f = ResultIndexSchema->GetFieldByColumnId(columnId);
+        if (!f) {
+            return {};
+        }
+        return f->name();
+    }
+
+    explicit TReadStatsMetadata(ui64 tabletId, const ESorting sorting, const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
         : TBase(sorting, ssaProgram)
+        , RequestSnapshot(requestSnapshot)
+        , ResultIndexSchema(schema)
         , TabletId(tabletId)
-    {}
-
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const override;
+    {
+    }
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 

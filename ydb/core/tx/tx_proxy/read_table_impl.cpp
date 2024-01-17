@@ -12,11 +12,13 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/engine/mkql_proto.h>
 
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/stream/trace.h>
 
@@ -96,6 +98,7 @@ namespace {
             TVector<TString>& unresolvedKeys)
     {
         TVector<TCell> key;
+        TVector<TString> memoryOwner;
         if (proto.HasValue()) {
             if (!proto.HasType()) {
                 unresolvedKeys.push_back("No type was specified in the range key tuple");
@@ -105,7 +108,7 @@ namespace {
             auto& value = proto.GetValue();
             auto& type = proto.GetType();
             TString errStr;
-            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr);
+            bool res = NMiniKQL::CellsFromTuple(&type, value, keyTypes, true, key, errStr, memoryOwner);
             if (!res) {
                 unresolvedKeys.push_back("Failed to parse range key tuple: " + errStr);
                 return false;
@@ -853,6 +856,16 @@ private:
         ++TabletsToPrepare;
     }
 
+    void RaiseShardOverloaded(const NKikimrTxDataShard::TEvProposeTransactionResult& record, ui64 shardId) {
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, TStringBuilder()
+            << "Shard " << shardId << " is overloaded");
+        for (const auto& err : record.GetError()) {
+            issue.AddSubIssue(new NYql::TIssue(TStringBuilder()
+                << "[" << err.GetKind() << "] " << err.GetReason()));
+        }
+        IssueManager.RaiseIssue(std::move(issue));
+    }
+
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
@@ -973,6 +986,7 @@ private:
                 TxProxyMon->TxResultShardOverloaded->Inc();
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded;
                 code = NKikimrIssues::TStatusIds::OVERLOADED;
+                RaiseShardOverloaded(record, shardId);
                 break;
             case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:
                 TxProxyMon->TxResultExecError->Inc();
@@ -1070,7 +1084,7 @@ private:
 
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult& record) {
         for (const auto &er : record.GetError()) {
-            DatashardErrors << "[" << NKikimrTxDataShard::TError_EKind_Name(er.GetKind()) << "] " << er.GetReason() << Endl;
+            DatashardErrors << "[" << er.GetKind() << "] " << er.GetReason() << Endl;
         }
 
         ComplainingDatashards.push_back(record.GetOrigin());
@@ -1939,6 +1953,7 @@ private:
 
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded;
                 code = NKikimrIssues::TStatusIds::OVERLOADED;
+                RaiseShardOverloaded(record, state.ShardId);
                 break;
 
             case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:

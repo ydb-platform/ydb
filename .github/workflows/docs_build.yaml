@@ -7,19 +7,15 @@ on:
 
 jobs:
   build-docs:
+    concurrency:
+      group: docs-build-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Build
-        uses: diplodoc-platform/docs-build-action@v1
+        uses: diplodoc-platform/docs-build-action@v3
         with:
-          revision: "pr-${{ github.event.pull_request.number }}"
-          project-name: ${{ secrets.DOCS_PROJECT_NAME }}
-          src-root: ${{ vars.SRC_ROOT }}
-          storage-bucket: ${{ secrets.DOCS_AWS_BUCKET }}
-          storage-endpoint: ${{ vars.DOCS_AWS_ENDPOINT }}
-          storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
-          storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
-          storage-region: ${{ vars.DOCS_AWS_REGION }}
-          shared-storage-bucket: true
+          revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+          src-root: "./ydb/docs"

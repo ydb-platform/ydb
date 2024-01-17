@@ -41,7 +41,7 @@ void TFederatedDbObserverImpl::Start() {
 }
 
 void TFederatedDbObserverImpl::Stop() {
-    NGrpc::IQueueClientContextPtr ctx;
+    NYdbGrpc::IQueueClientContextPtr ctx;
     with_lock(Lock) {
         Stopping = true;
         ctx = std::exchange(FederationDiscoveryDelayContext, nullptr);

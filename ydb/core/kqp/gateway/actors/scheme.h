@@ -86,10 +86,17 @@ public:
                 {
                     LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
                         << ", TxId: " << response.GetTxId());
-                        
-                    TResult result;
-                    result.SetSuccess();
-                    Promise.SetValue(std::move(result));
+
+                    if (!response.GetIssues().empty()) {
+                        NYql::TIssues issues;
+                        NYql::IssuesFromMessage(response.GetIssues(), issues);
+                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::SUCCESS, "", issues));
+                    } else {
+                        TResult result;
+                        result.SetSuccess();
+                        Promise.SetValue(std::move(result));
+                    }
+
                     this->Die(ctx);
                     return;
                 }

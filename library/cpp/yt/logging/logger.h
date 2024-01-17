@@ -324,8 +324,8 @@ void LogStructuredEvent(
             break; \
         } \
         \
-        static thread_local i64 localByteCounter__; \
-        static thread_local ui8 localMessageCounter__; \
+        static YT_THREAD_LOCAL(i64) localByteCounter__; \
+        static YT_THREAD_LOCAL(ui8) localMessageCounter__; \
         \
         localByteCounter__ += message__.MessageRef.Size(); \
         if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \

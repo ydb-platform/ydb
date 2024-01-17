@@ -3,7 +3,7 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/console_config.pb.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <util/string/builder.h>
 

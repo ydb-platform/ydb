@@ -406,15 +406,18 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
             return NThreading::MakeFuture();
         };
 
-        info.CleanupSession = [ytState, gateway](const TString& sessionId) {
-            gateway->CleanupSession(IYtGateway::TCleanupSessionOptions(sessionId));
+        info.CleanupSessionAsync = [ytState, gateway](const TString& sessionId) {
+            return gateway->CleanupSession(IYtGateway::TCleanupSessionOptions(sessionId));
         };
 
-        info.CloseSession = [ytState, gateway](const TString& sessionId) {
-            gateway->CloseSession(IYtGateway::TCloseSessionOptions(sessionId));
-            // do manual cleanup; otherwise there may be dead nodes at program termination
-            // in setup with several providers
-            ytState->TablesData->CleanupCompiledSQL();
+        info.CloseSessionAsync = [ytState, gateway](const TString& sessionId) {
+            return gateway->CloseSession(IYtGateway::TCloseSessionOptions(sessionId)).Apply([ytState](const NThreading::TFuture<void>& future) {
+                // do manual cleanup; otherwise there may be dead nodes at program termination
+                // in setup with several providers
+                ytState->TablesData->CleanupCompiledSQL();
+
+                future.TryRethrow();
+            });
         };
 
         info.TokenResolver = [ytState, gateway](const TString& url, const TString& alias) -> TString {

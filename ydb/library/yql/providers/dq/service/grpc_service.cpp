@@ -21,11 +21,11 @@
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <library/cpp/grpc/server/grpc_counters.h>
+#include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/helpers/future_callback.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/helpers/future_callback.h>
 #include <library/cpp/build_info/build_info.h>
 #include <library/cpp/svnversion/svnversion.h>
 
@@ -40,9 +40,9 @@ namespace NYql::NDqs {
     using namespace NActors;
 
     namespace {
-        NGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
+        NYdbGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
             auto grpcCB = counters->GetSubgroup("rpc_name", name);
-            return MakeIntrusive<NGrpc::TCounterBlock>(
+            return MakeIntrusive<NYdbGrpc::TCounterBlock>(
                 grpcCB->GetCounter("total", true),
                 grpcCB->GetCounter("infly", true),
                 grpcCB->GetCounter("notOkReq", true),
@@ -62,7 +62,7 @@ namespace NYql::NDqs {
             static constexpr char RetryName[] = "OperationRetry";
 
             explicit TServiceProxyActor(
-                NGrpc::IRequestContextBase* ctx,
+                NYdbGrpc::IRequestContextBase* ctx,
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                 const TString& traceId, const TString& username)
                 : TSynchronizableRichActor<TServiceProxyActor<RequestType, ResponseType>>(&TServiceProxyActor::Handler)
@@ -116,9 +116,9 @@ namespace NYql::NDqs {
                 if (!CtxSubscribed) {
                     auto selfId = ctx.SelfID;
                     auto* actorSystem = ctx.ExecutorThread.ActorSystem;
-                    Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NGrpc::IRequestContextBase::TAsyncFinishResult& future) {
+                    Ctx->GetFinishFuture().Subscribe([selfId, actorSystem](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) {
                         Y_ABORT_UNLESS(future.HasValue());
-                        if (future.GetValue() == NGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
+                        if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
                             actorSystem->Send(selfId, new TEvents::TEvPoison());
                         }
                     });
@@ -161,7 +161,7 @@ namespace NYql::NDqs {
                             for (const auto& [k, v] : labels) {
                                 group = group->GetSubgroup(k, v);
                             }
-                            group->GetHistogram(name, ExponentialHistogram(10, 2, 50))->Collect(v.Sum);
+                            group->GetHistogram(name, ExponentialHistogram(10, 2, 50000))->Collect(v.Sum);
                         }
                     }
                 }
@@ -234,7 +234,7 @@ namespace NYql::NDqs {
             }
 
         private:
-            NGrpc::IRequestContextBase* Ctx;
+            NYdbGrpc::IRequestContextBase* Ctx;
             bool CtxSubscribed = false;
             ResponseType ResponseBuffer;
 
@@ -269,7 +269,7 @@ namespace NYql::NDqs {
         class TExecuteGraphProxyActor: public TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse> {
         public:
             using TBase = TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse>;
-            TExecuteGraphProxyActor(NGrpc::IRequestContextBase* ctx,
+            TExecuteGraphProxyActor(NYdbGrpc::IRequestContextBase* ctx,
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                 const TString& traceId, const TString& username,
                 const NActors::TActorId& graphExecutionEventsActorId)
@@ -404,7 +404,7 @@ namespace NYql::NDqs {
                     Request->GetDiscard(),
                     GraphExecutionEventsActorId).Release());
                 auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
-                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, "")).Release());
+                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYql::NCommon::TServiceCounters(Counters, nullptr, ""), TDuration::Seconds(5)).Release());
                 Send(executerId, MakeHolder<TEvGraphRequest>(
                     *Request,
                     controlId,
@@ -457,11 +457,11 @@ namespace NYql::NDqs {
 
 #define ADD_REQUEST(NAME, IN, OUT, ACTION)                              \
     do {                                                                \
-        MakeIntrusive<NGrpc::TGRpcRequest<Yql::DqsProto::IN, Yql::DqsProto::OUT, TDqsGrpcService>>( \
+        MakeIntrusive<NYdbGrpc::TGRpcRequest<Yql::DqsProto::IN, Yql::DqsProto::OUT, TDqsGrpcService>>( \
             this,                                                       \
             &Service_,                                                  \
             CQ,                                                         \
-            [this](NGrpc::IRequestContextBase* ctx) { ACTION  },        \
+            [this](NYdbGrpc::IRequestContextBase* ctx) { ACTION  },        \
             &Yql::DqsProto::DqService::AsyncService::Request##NAME,     \
             #NAME,                                                      \
             logger,                                                     \
@@ -469,7 +469,7 @@ namespace NYql::NDqs {
             ->Run();                                                    \
     } while (0)
 
-    void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
+    void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
         using namespace google::protobuf;
 
         CQ = cq;
@@ -813,7 +813,7 @@ namespace NYql::NDqs {
 */
     }
 
-    void TDqsGrpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+    void TDqsGrpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
         Limiter = limiter;
     }
 

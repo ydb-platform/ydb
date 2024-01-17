@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/actors/util/affinity.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <util/system/info.h>
 
 namespace {
@@ -256,6 +256,14 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetBatchExecutor(pools.BatchPoolId);
         config->SetIoExecutor(pools.IOPoolId);
         serviceExecutor->SetExecutorId(pools.ICPoolId);
+
+        if (!config->HasActorSystemProfile()) {
+            if (cpuCount <= 4) {
+                config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION);
+            } else {
+                config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_LATENCY);
+            }
+        }
 
         TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {

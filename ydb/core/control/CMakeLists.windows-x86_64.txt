@@ -12,7 +12,7 @@ add_library(ydb-core-control)
 target_link_libraries(ydb-core-control PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   cpp-monlib-dynamic_counters
   ydb-core-base
   ydb-core-mon

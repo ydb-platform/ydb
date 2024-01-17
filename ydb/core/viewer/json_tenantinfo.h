@@ -1,6 +1,6 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/subdomain.h>
@@ -615,9 +615,8 @@ public:
                         tenant.SetStorageGroups(storageGroups);
                         auto& ssdUsage = *tenant.AddStorageUsage();
                         ssdUsage.SetType(NKikimrViewer::TStorageUsage::SSD);
-                        if (storageAllocatedLimit > 0) {
-                            ssdUsage.SetUsage((float)storageAllocatedSize / storageAllocatedLimit);
-                        }
+                        ssdUsage.SetSize(storageAllocatedSize);
+                        ssdUsage.SetLimit(storageAllocatedLimit);
                         // TODO(andrew-rykov)
                         auto& hddUsage = *tenant.AddStorageUsage();
                         hddUsage.SetType(NKikimrViewer::TStorageUsage::HDD);

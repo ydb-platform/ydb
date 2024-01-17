@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
@@ -9,7 +9,7 @@
 namespace NYql::NConnector {
     template <typename TResponse>
     struct TResult {
-        NGrpc::TGrpcStatus Status;
+        NYdbGrpc::TGrpcStatus Status;
         std::optional<TResponse> Response;
     };
 
@@ -25,7 +25,7 @@ namespace NYql::NConnector {
     public:
         using TSelf = TStreamer;
 
-        using TStreamProcessorPtr = typename NGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
+        using TStreamProcessorPtr = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
         TStreamer(TStreamProcessorPtr streamProcessor)
             : StreamProcessor_(streamProcessor)
@@ -34,7 +34,7 @@ namespace NYql::NConnector {
 
         TAsyncResult<TResponse> ReadNext(std::shared_ptr<TSelf> self) {
             auto promise = NThreading::NewPromise<TResult<TResponse>>();
-            auto readCallback = [self = std::move(self), promise](NGrpc::TGrpcStatus&& status) mutable {
+            auto readCallback = [self = std::move(self), promise](NYdbGrpc::TGrpcStatus&& status) mutable {
                 if (!status.Ok()) {
                     promise.SetValue({std::move(status), std::nullopt});
                     self->Finished_ = true;
@@ -77,7 +77,7 @@ namespace NYql::NConnector {
 
     template <class TIterator>
     struct TIteratorResult {
-        NGrpc::TGrpcStatus Status;
+        NYdbGrpc::TGrpcStatus Status;
         typename TIterator::TPtr Iterator;
     };
 

@@ -4,7 +4,7 @@
 #include "flat_exec_broker.h"
 #include "util_fmt_line.h"
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

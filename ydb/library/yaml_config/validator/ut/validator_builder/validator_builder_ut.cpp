@@ -4,6 +4,8 @@
 
 #include <ydb/library/yaml_config/validator/validator_builder.h>
 
+namespace NKikimr {
+
 using namespace NYamlConfig::NValidator;
 
 Y_UNIT_TEST_SUITE(ValidatorBuilder) {
@@ -90,3 +92,5 @@ Y_UNIT_TEST_SUITE(ValidatorBuilder) {
         final_b.CanBe(b3);
     }
 }
+
+} // namespace NKikimr

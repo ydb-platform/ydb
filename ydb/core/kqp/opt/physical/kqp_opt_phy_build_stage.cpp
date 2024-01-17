@@ -514,7 +514,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
             .Build()
             .Table(sequencer.Table())
             .Columns(sequencer.Columns())
-            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .DefaultConstraintColumns(sequencer.DefaultConstraintColumns())
             .InputItemType(sequencer.InputItemType())
             .Done();
     } else if (sequencer.Input().Maybe<TDqCnUnionAll>()) {
@@ -524,7 +524,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
             .Output(output)
             .Table(sequencer.Table())
             .Columns(sequencer.Columns())
-            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .DefaultConstraintColumns(sequencer.DefaultConstraintColumns())
             .InputItemType(sequencer.InputItemType())
             .Done();
 
@@ -550,7 +550,7 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
         .Build().Done();
 }
 
-NYql::NNodes::TExprBase KqpRewriteLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx) {
 
     if (!node.Maybe<TDqStage>() || !kqpCtx.Config->EnableKqpDataQueryStreamLookup) {

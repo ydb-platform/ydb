@@ -7,7 +7,7 @@
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.h>
-#include <ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v0_proto_split/SQLParser.pb.main.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>

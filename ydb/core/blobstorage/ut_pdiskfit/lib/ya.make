@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/protos
+    ydb/library/actors/protos
     ydb/core/base
     ydb/core/blobstorage/pdisk
     ydb/library/pdisk_io

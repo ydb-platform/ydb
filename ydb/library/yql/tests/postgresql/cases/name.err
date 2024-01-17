@@ -1,0 +1,320 @@
+<sql-statement>
+--
+-- NAME
+-- all inputs are silently truncated at NAMEDATALEN-1 (63) characters
+--
+-- fixed-length by reference
+SELECT name 'name string' = name 'name string' AS "True";
+</sql-statement>
+<sql-statement>
+SELECT name 'name string' = name 'name string ' AS "False";
+</sql-statement>
+<sql-statement>
+--
+--
+--
+CREATE TABLE NAME_TBL(f1 name);
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('asdfghjkl;');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('343f%2a');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('d34aaasdf');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('');
+</sql-statement>
+<sql-statement>
+INSERT INTO NAME_TBL(f1) VALUES ('1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+</sql-statement>
+<sql-statement>
+SELECT * FROM NAME_TBL;
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 <> '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 = '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 < '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 <= '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 > '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 >= '1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGHIJKLMNOPQR';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 ~ '.*';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 !~ '.*';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 ~ '[0-9]';
+</sql-statement>
+<sql-statement>
+SELECT c.f1 FROM NAME_TBL c WHERE c.f1 ~ '.*asdf.*';
+</sql-statement>
+<sql-statement>
+DROP TABLE NAME_TBL;
+</sql-statement>
+<sql-statement>
+DO $$
+DECLARE r text[];
+BEGIN
+  r := parse_ident('Schemax.Tabley');
+  RAISE NOTICE '%', format('%I.%I', r[1], r[2]);
+  r := parse_ident('"SchemaX"."TableY"');
+  RAISE NOTICE '%', format('%I.%I', r[1], r[2]);
+END;
+$$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 263
+    	DO $$
+	^
+<sql-statement>
+SELECT parse_ident('foo.boo');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('foo.boo');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('foo.boo');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('foo.boo');
+	       ^
+<sql-statement>
+SELECT parse_ident('foo.boo[]'); -- should fail
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('foo.boo[]'); -- should fail
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('foo.boo[]'); -- should fail
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('foo.boo[]'); -- should fail
+	       ^
+<sql-statement>
+SELECT parse_ident('foo.boo[]', strict => false); -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT parse_ident('foo.boo[]', strict => false); -- ok
+	       ^
+<sql-statement>
+-- should fail
+SELECT parse_ident(' ');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- should fail
+	^
+        -stdin-:<main>:2:8: Error: At function: PgCall
+        	SELECT parse_ident(' ');
+	       ^
+            -stdin-:<main>:2:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident(' ');
+	       ^
+<sql-statement>
+SELECT parse_ident(' .aaa');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(' .aaa');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident(' .aaa');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident(' .aaa');
+	       ^
+<sql-statement>
+SELECT parse_ident(' aaa . ');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(' aaa . ');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident(' aaa . ');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident(' aaa . ');
+	       ^
+<sql-statement>
+SELECT parse_ident('aaa.a%b');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('aaa.a%b');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('aaa.a%b');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('aaa.a%b');
+	       ^
+<sql-statement>
+SELECT parse_ident(E'X\rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(E'X\rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident(E'X\rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident(E'X\rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+	       ^
+<sql-statement>
+SELECT length(a[1]), length(a[2]) from parse_ident('"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy') as a ;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 360
+    	SELECT length(a[1]), length(a[2]) from parse_ident('"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy') as a ;
+	       ^
+<sql-statement>
+SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (text)
+            	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"');
+	       ^
+<sql-statement>
+SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"')::name[];
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"')::name[];
+	^
+        -stdin-:<main>:1:91: Error: At function: PgCast
+        	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"')::name[];
+	                                                                                          ^
+            -stdin-:<main>:1:8: Error: At function: PgCall
+            	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"')::name[];
+	       ^
+                -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (text)
+                	SELECT parse_ident(' first . "  second  " ."   third   ". "  ' || repeat('x',66) || '"')::name[];
+	       ^
+<sql-statement>
+SELECT parse_ident(E'"c".X XXXX\002XXXXXX');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident(E'"c".X XXXX\002XXXXXX');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident(E'"c".X XXXX\002XXXXXX');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident(E'"c".X XXXX\002XXXXXX');
+	       ^
+<sql-statement>
+SELECT parse_ident('1020');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('1020');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('1020');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('1020');
+	       ^
+<sql-statement>
+SELECT parse_ident('10.20');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('10.20');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('10.20');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('10.20');
+	       ^
+<sql-statement>
+SELECT parse_ident('.');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('.');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('.');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('.');
+	       ^
+<sql-statement>
+SELECT parse_ident('.1020');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('.1020');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('.1020');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('.1020');
+	       ^
+<sql-statement>
+SELECT parse_ident('xxx.1020');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT parse_ident('xxx.1020');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT parse_ident('xxx.1020');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc parse_ident with given argument types: (unknown)
+            	SELECT parse_ident('xxx.1020');
+	       ^

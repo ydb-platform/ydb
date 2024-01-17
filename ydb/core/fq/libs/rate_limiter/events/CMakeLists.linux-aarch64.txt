@@ -12,7 +12,7 @@ target_link_libraries(libs-rate_limiter-events PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   fq-libs-events
 )
 target_sources(libs-rate_limiter-events PRIVATE

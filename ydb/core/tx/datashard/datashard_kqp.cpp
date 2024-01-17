@@ -98,7 +98,7 @@ NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerialize
 }
 
 NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
-    const TInputOpData::TInReadSets* inReadSets, const NKikimrTxDataShard::TKqpLocks&,
+    const TInputOpData::TInReadSets* inReadSets, const NKikimrDataEvents::TKqpLocks&,
     bool useGenericReadSets,
     NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
 {
@@ -211,40 +211,40 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
     return runStatus;
 }
 
-bool NeedValidateLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedValidateLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-bool NeedEraseLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedEraseLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-bool NeedCommitLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::Commit:
+        case NKikimrDataEvents::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Rollback:
-        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+        case NKikimrDataEvents::TKqpLocks::Rollback:
+        case NKikimrDataEvents::TKqpLocks::Unspecified:
             return false;
     }
 }
 
-TVector<TCell> MakeLockKey(const NKikimrTxDataShard::TLock& lockProto) {
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
     auto lockId = lockProto.GetLockId();
     auto lockDatashard = lockProto.GetDataShard();
     auto lockSchemeShard = lockProto.GetSchemeShard();
@@ -265,10 +265,10 @@ TVector<TCell> MakeLockKey(const NKikimrTxDataShard::TLock& lockProto) {
 }
 
 // returns list of broken locks
-TVector<NKikimrTxDataShard::TLock> ValidateLocks(const NKikimrTxDataShard::TKqpLocks& txLocks, TSysLocks& sysLocks,
+TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks,
     ui64 tabletId)
 {
-    TVector<NKikimrTxDataShard::TLock> brokenLocks;
+    TVector<NKikimrDataEvents::TLock> brokenLocks;
 
     if (!NeedValidateLocks(txLocks.GetOp())) {
         return {};
@@ -294,13 +294,13 @@ TVector<NKikimrTxDataShard::TLock> ValidateLocks(const NKikimrTxDataShard::TKqpL
     return brokenLocks;
 }
 
-bool SendLocks(const NKikimrTxDataShard::TKqpLocks& locks, ui64 shardId) {
+bool SendLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
     auto& sendingShards = locks.GetSendingShards();
     auto it = std::find(sendingShards.begin(), sendingShards.end(), shardId);
     return it != sendingShards.end();
 }
 
-bool ReceiveLocks(const NKikimrTxDataShard::TKqpLocks& locks, ui64 shardId) {
+bool ReceiveLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
     auto& receivingShards = locks.GetReceivingShards();
     auto it = std::find(receivingShards.begin(), receivingShards.end(), shardId);
     return it != receivingShards.end();
@@ -475,7 +475,7 @@ void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
     }
 }
 
-void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLocks& sysLocks, TEngineBay& engineBay) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TEngineBay& engineBay) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -503,14 +503,14 @@ void KqpSetTxLocksKeys(const NKikimrTxDataShard::TKqpLocks& locks, const TSysLoc
 }
 
 NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
+    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
 {
     return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ false);
 }
 
 THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
     ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
+    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
     const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
 {
     auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ true);
@@ -592,7 +592,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
     return result;
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrTxDataShard::TKqpLocks& kqpLocks,
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
     bool hasKqpLocks, bool useGenericReadSets,
     NKqp::TKqpTasksRunner& tasksRunner, TSysLocks& sysLocks, ui64 tabletId)
 {
@@ -949,7 +949,7 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
 }
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
-    const NKikimrTxDataShard::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
+    const NKikimrDataEvents::TKqpLocks& kqpLocks, const NKqp::TKqpTasksRunner& tasksRunner, ui64 tabletId)
 {
     for (auto& [taskId, task] : tasksRunner.GetTasks()) {
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
@@ -1108,6 +1108,10 @@ public:
     }
 
     NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */) const override {
+        return {};
+    }
+
+    NDq::IDqChannelStorage::TPtr CreateChannelStorage(ui64 /* channelId */, TActorSystem* /* actorSystem */, bool /*isConcurrent*/) const override {
         return {};
     }
 };

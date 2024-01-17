@@ -27,7 +27,6 @@ target_link_libraries(restricted-boost-atomic PUBLIC
   restricted-boost-config
   restricted-boost-predef
   restricted-boost-preprocessor
-  restricted-boost-static_assert
   restricted-boost-type_traits
   restricted-boost-winapi
 )

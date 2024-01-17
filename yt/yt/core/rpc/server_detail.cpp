@@ -88,6 +88,11 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
     TResponseHeader header;
     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
 
+    // COMPAT(danilalexeev): legacy RPC codecs
+    if (header.has_codec()) {
+        SetResponseBodySerializedWithCompression();
+    }
+
     if (header.has_error()) {
         Error_ = FromProto<TError>(header.error());
     }
@@ -181,8 +186,8 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
         header.set_format(RequestHeader_->response_format());
     }
 
-    // COMPAT(kiselyovp)
-    if (RequestHeader_->has_response_codec()) {
+    // COMPAT(danilalexeev)
+    if (IsResponseBodySerializedWithCompression()) {
         header.set_codec(static_cast<int>(ResponseCodec_));
     }
 
@@ -462,6 +467,16 @@ void TServiceContextBase::SetResponseCodec(NCompression::ECodec codec)
     ResponseCodec_ = codec;
 }
 
+bool TServiceContextBase::IsResponseBodySerializedWithCompression() const
+{
+    return ResponseBodySerializedWithCompression_;
+}
+
+void TServiceContextBase::SetResponseBodySerializedWithCompression()
+{
+    ResponseBodySerializedWithCompression_ = true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceContextWrapper::TServiceContextWrapper(IServiceContextPtr underlyingContext)
@@ -726,6 +741,16 @@ void TServiceContextWrapper::SetResponseCodec(NCompression::ECodec codec)
     UnderlyingContext_->SetResponseCodec(codec);
 }
 
+bool TServiceContextWrapper::IsResponseBodySerializedWithCompression() const
+{
+    return UnderlyingContext_->IsResponseBodySerializedWithCompression();
+}
+
+void TServiceContextWrapper::SetResponseBodySerializedWithCompression()
+{
+    UnderlyingContext_->SetResponseBodySerializedWithCompression();
+}
+
 const IServiceContextPtr& TServiceContextWrapper::GetUnderlyingContext() const
 {
     return UnderlyingContext_;
@@ -743,12 +768,12 @@ void TServerBase::RegisterService(IServicePtr service)
         auto guard = WriterGuard(ServicesLock_);
         auto& serviceMap = RealmIdToServiceMap_[serviceId.RealmId];
         YT_VERIFY(serviceMap.emplace(serviceId.ServiceName, service).second);
-        if (Config_) {
-            auto it = Config_->Services.find(serviceId.ServiceName);
-            if (it != Config_->Services.end()) {
-                service->Configure(Config_, it->second);
+        if (AppliedConfig_) {
+            auto it = AppliedConfig_->Services.find(serviceId.ServiceName);
+            if (it != AppliedConfig_->Services.end()) {
+                service->Configure(AppliedConfig_, it->second);
             } else {
-                service->Configure(Config_, nullptr);
+                service->Configure(AppliedConfig_, nullptr);
             }
         }
         DoRegisterService(service);
@@ -841,24 +866,52 @@ IServicePtr TServerBase::GetServiceOrThrow(const TServiceId& serviceId) const
     return serviceIt->second;
 }
 
-void TServerBase::Configure(TServerConfigPtr config)
+void TServerBase::ApplyConfig()
 {
-    auto guard = WriterGuard(ServicesLock_);
+    VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
 
-    // Future services will be configured appropriately.
-    Config_ = config;
+    auto newAppliedConfig = New<TServerConfig>();
+    newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
+    newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
+    newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->Services = StaticConfig_->Services;
+
+    for (const auto& [name, node] : DynamicConfig_->Services) {
+        newAppliedConfig->Services[name] = node;
+    }
+
+    AppliedConfig_ = newAppliedConfig;
 
     // Apply configuration to all existing services.
     for (const auto& [realmId, serviceMap] : RealmIdToServiceMap_) {
         for (const auto& [serviceName, service] : serviceMap) {
-            auto it = config->Services.find(serviceName);
-            if (it != config->Services.end()) {
-                service->Configure(config, it->second);
+            auto it = AppliedConfig_->Services.find(serviceName);
+            if (it != AppliedConfig_->Services.end()) {
+                service->Configure(AppliedConfig_, it->second);
             } else {
-                service->Configure(config, nullptr);
+                service->Configure(AppliedConfig_, nullptr);
             }
         }
     }
+}
+
+void TServerBase::Configure(const TServerConfigPtr& config)
+{
+    auto guard = WriterGuard(ServicesLock_);
+
+    // Future services will be configured appropriately.
+    StaticConfig_ = config;
+
+    ApplyConfig();
+}
+
+void TServerBase::OnDynamicConfigChanged(const TServerDynamicConfigPtr& config)
+{
+    auto guard = WriterGuard(ServicesLock_);
+
+    DynamicConfig_ = config;
+
+    ApplyConfig();
 }
 
 void TServerBase::Start()

@@ -43,7 +43,7 @@ def main():
             rel_dst = src
             for prefix in prefixes:
                 if src.startswith(prefix):
-                    rel_dst = src[len(prefix):]
+                    rel_dst = src[len(prefix) :]
                     break
         assert not os.path.isabs(rel_dst)
         dst = os.path.join(args.dest_dir, rel_dst)

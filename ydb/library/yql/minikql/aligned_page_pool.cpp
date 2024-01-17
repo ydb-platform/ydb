@@ -1,6 +1,6 @@
 #include "aligned_page_pool.h"
 #include "util/string/builder.h"
-#include <library/cpp/actors/util/intrinsics.h>
+#include <ydb/library/actors/util/intrinsics.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
@@ -200,7 +200,7 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
         Y_DEBUG_ABORT_UNLESS(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
                        "memory leak; Expected %ld, actual %ld (%ld page(s), %ld offloaded); allocator created at: %s",
                        TotalAllocated, FreePages.size() * POOL_PAGE_SIZE,
-                       FreePages.size(), OffloadedActiveBytes, GetInfo().data());
+                       FreePages.size(), OffloadedActiveBytes, GetDebugInfo().data());
         Y_DEBUG_ABORT_UNLESS(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
     }
 

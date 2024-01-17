@@ -46,13 +46,6 @@ template<class E> const E* end(initializer_list<E> il) noexcept; // constexpr in
 #include <__config>
 #include <cstddef>
 
-#if defined(_LIBCPP_COMPILER_MSVC) && !defined(__clang__)
-
-#include Y_MSVC_INCLUDE_NEXT(yvals.h)
-#include Y_MSVC_INCLUDE_NEXT(initializer_list)
-
-#else
-
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
 #endif
@@ -86,11 +79,6 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     _LIBCPP_CONSTEXPR_AFTER_CXX11
     initializer_list() _NOEXCEPT : __begin_(nullptr), __size_(0) {}
-
-    initializer_list(const initializer_list&) = default;
-    initializer_list(initializer_list&&) = default;
-    initializer_list& operator=(const initializer_list&) = delete;
-    initializer_list& operator=(initializer_list&&) = delete;
 
     _LIBCPP_INLINE_VISIBILITY
     _LIBCPP_CONSTEXPR_AFTER_CXX11
@@ -126,7 +114,5 @@ end(initializer_list<_Ep> __il) _NOEXCEPT
 #endif // !defined(_LIBCPP_CXX03_LANG)
 
 } // namespace std
-
-#endif // _LIBCPP_COMPILER_MSVC
 
 #endif // _LIBCPP_INITIALIZER_LIST

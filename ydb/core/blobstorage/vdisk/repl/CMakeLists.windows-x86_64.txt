@@ -12,7 +12,7 @@ add_library(blobstorage-vdisk-repl)
 target_link_libraries(blobstorage-vdisk-repl PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   monlib-service-pages
   ydb-core-base
   core-blobstorage-backpressure

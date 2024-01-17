@@ -14,8 +14,8 @@ target_compile_options(fq-libs-init PRIVATE
 target_link_libraries(fq-libs-init PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-http
+  library-actors-core
+  library-actors-http
   ydb-core-base
   fq-libs-actors
   fq-libs-audit

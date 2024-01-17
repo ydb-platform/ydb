@@ -13,7 +13,7 @@ target_link_libraries(formats-arrow-serializer PUBLIC
   yutil
   libs-apache-arrow
   formats-arrow-common
-  cpp-actors-core
+  library-actors-core
   ydb-core-protos
 )
 target_sources(formats-arrow-serializer PRIVATE

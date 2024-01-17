@@ -43,7 +43,7 @@ def main():
     SRCDIR_ARG = 3
     JSOURCES_DIR_ARG = 4
 
-    next_arg=FILE_ARG
+    next_arg = FILE_ARG
 
     for src in remaining_args:
         if next_arg == RESOURCES_DIR_ARG:

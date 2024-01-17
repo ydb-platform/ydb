@@ -6,6 +6,8 @@ SRCS(
     kqp_ut_common.h
     re2_udf.cpp
     string_udf.cpp
+    columnshard.cpp
+    datetime2_udf.cpp
 )
 
 PEERDIR(

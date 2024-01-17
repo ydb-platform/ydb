@@ -5,8 +5,9 @@ import os
 import time
 import copy
 import pytest
+import subprocess
 
-from hamcrest import assert_that, contains_inanyorder, not_none
+from hamcrest import assert_that, contains_inanyorder, not_none, not_, only_contains, is_in
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -42,7 +43,12 @@ CLUSTER_CONFIG = dict(
 
         'CMS': LogLevels.DEBUG,
         'CMS_TENANTS': LogLevels.DEBUG,
+        'DISCOVERY': LogLevels.TRACE,
+        'GRPC_SERVER': LogLevels.DEBUG
     },
+    enforce_user_token_requirement=True,
+    default_user_sid='user@builtin',
+    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes']
 )
 
 
@@ -469,3 +475,168 @@ def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
+
+
+def ydbcli_db_schema_exec(cluster, operation_proto):
+    endpoint = f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
+    args = [
+        cluster.nodes[1].binary_path,
+        f'--server=grpc://{endpoint}',
+        'db',
+        'schema',
+        'exec',
+        operation_proto,
+    ]
+    r = subprocess.run(args, capture_output=True)
+    assert r.returncode == 0, r.stderr.decode('utf-8')
+
+
+def alter_database_serverless_compute_resources_mode(cluster, database_path, serverless_compute_resources_mode):
+    alter_proto = r'''ModifyScheme {
+        OperationType: ESchemeOpAlterExtSubDomain
+        WorkingDir: "%s"
+        SubDomain {
+            Name: "%s"
+            ServerlessComputeResourcesMode: %s
+        }
+    }''' % (
+        os.path.dirname(database_path),
+        os.path.basename(database_path),
+        serverless_compute_resources_mode
+    )
+
+    ydbcli_db_schema_exec(cluster, alter_proto)
+
+
+def test_discovery_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+    def list_endpoints(database):
+        logger.debug("List endpoints of %s", database)
+
+        driver_config = ydb.DriverConfig(ydb_endpoint, database)
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(120)
+
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        result = resolver.resolve()
+        if result is not None:
+            return result.endpoints
+        return result
+
+    alter_database_serverless_compute_resources_mode(
+        ydb_cluster,
+        ydb_serverless_db_with_nodes,
+        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+    )
+    serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_nodes)
+    hostel_db_endpoints = list_endpoints(ydb_hostel_db)
+
+    assert_that(hostel_db_endpoints, not_none())
+    assert_that(serverless_db_shared_endpoints, not_none())
+    assert_that(serverless_db_shared_endpoints, contains_inanyorder(*hostel_db_endpoints))
+
+    alter_database_serverless_compute_resources_mode(
+        ydb_cluster,
+        ydb_serverless_db_with_nodes,
+        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+    )
+    serverless_db_dedicated_endpoints = list_endpoints(ydb_serverless_db_with_nodes)
+
+    assert_that(serverless_db_dedicated_endpoints, not_none())
+    assert_that(serverless_db_dedicated_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
+
+
+def test_create_table_using_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+    alter_database_serverless_compute_resources_mode(
+        ydb_cluster,
+        ydb_serverless_db_with_nodes,
+        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+    )
+
+    database = ydb_serverless_db_with_nodes
+    driver_config = ydb.DriverConfig(ydb_endpoint, database)
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    dir_path = os.path.join(database, "dir")
+    driver.scheme_client.make_directory(dir_path)
+
+    with ydb.SessionPool(driver) as pool:
+        def create_table(session, path):
+            session.create_table(
+                path,
+                ydb.TableDescription()
+                .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
+                .with_primary_key("id")
+            )
+
+        def write_some_data(session, path):
+            session.transaction().execute(
+                f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",
+                commit_tx=True)
+
+        def drop_table(session, path):
+            session.drop_table(
+                path
+            )
+
+        table_path = os.path.join(dir_path, "create_table_with_dedicated_nodes_table")
+        pool.retry_operation_sync(create_table, None, table_path)
+        pool.retry_operation_sync(write_some_data, None, table_path)
+        pool.retry_operation_sync(drop_table, None, table_path)
+
+
+def test_seamless_migration_to_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+    alter_database_serverless_compute_resources_mode(
+        ydb_cluster,
+        ydb_serverless_db_with_nodes,
+        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+    )
+
+    database = ydb_serverless_db_with_nodes
+    driver_config = ydb.DriverConfig(ydb_endpoint, database)
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    session = driver.table_client.session().create()
+    path = os.path.join(database, "seamless_migration_table")
+    session.create_table(
+        path,
+        ydb.TableDescription()
+        .with_column(ydb.Column("id", ydb.OptionalType(ydb.DataType.Uint64)))
+        .with_primary_key("id")
+    )
+
+    session.transaction().execute(
+        f"UPSERT INTO `{path}` (id) VALUES (1), (2), (3);",
+        commit_tx=True
+    )
+
+    alter_database_serverless_compute_resources_mode(
+        ydb_cluster,
+        ydb_serverless_db_with_nodes,
+        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+    )
+
+    # Old session keeps work fine with old connections to shared nodes
+    session.transaction().execute(
+        f"UPSERT INTO `{path}` (id) VALUES (4), (5), (6);",
+        commit_tx=True
+    )
+
+    # Force rediscovery
+    newDriver = ydb.Driver(driver_config)
+    newDriver.wait(120)
+    session._driver = newDriver
+
+    # Old session works fine with new connections to dedicated nodes
+    session.transaction().execute(
+        f"UPSERT INTO `{path}` (id) VALUES (7), (8), (9);",
+        commit_tx=True
+    )
+
+    # New session works fine
+    newSession = newDriver.table_client.session().create()
+    newSession.transaction().execute(
+        f"UPSERT INTO `{path}` (id) VALUES (10), (11), (12);",
+        commit_tx=True
+    )

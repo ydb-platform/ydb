@@ -103,8 +103,9 @@ int RecursiveFunction(size_t maxDepth, size_t currentDepth)
         array[i] = rand();
     }
 
-    return std::accumulate(array.begin(), array.end(), 0)
-        + RecursiveFunction(maxDepth, currentDepth + 1);
+    int result = RecursiveFunction(maxDepth, currentDepth + 1);
+
+    return std::accumulate(array.begin(), array.end(), 0) + result;
 }
 
 // Fiber stack base address is unavailable on Windows (and always returns nullptr).
@@ -620,10 +621,10 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
     auto p1 = NewPromise<void>();
     auto f1 = p1.ToFuture();
 
-    BIND([=] () {
+    YT_UNUSED_FUTURE(BIND([=] () {
         Sleep(SleepQuantum);
         p1.Set();
-    }).AsyncVia(Queue1->GetInvoker()).Run();
+    }).AsyncVia(Queue1->GetInvoker()).Run());
 
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
@@ -736,25 +737,25 @@ TEST_F(TSchedulerTest, CancelInApply)
     BIND([=] () {
         auto promise = NewPromise<void>();
 
-        promise.ToFuture().Apply(BIND([] {
+        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 
             auto p = NewPromise<void>();
             WaitFor(p.ToFuture())
                 .ThrowOnError();
-        }));
+        })));
 
         promise.Set();
 
-        promise.ToFuture().Apply(BIND([] {
+        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
             auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
             canceler(TError("kek"));
 
             auto p = NewPromise<void>();
             WaitFor(p.ToFuture())
                 .ThrowOnError();
-        }));
+        })));
     })
         .AsyncVia(invoker)
         .Run()
@@ -847,9 +848,9 @@ TEST_W(TSchedulerTest, FiberTiming)
 
     CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(0), TDuration::MilliSeconds(100));
     Sleep(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
     TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
-    CheckCurrentFiberRunDuration(timer.GetElapsedTime(),TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
+    CheckCurrentFiberRunDuration(timer.GetElapsedTime(), TDuration::MilliSeconds(900), TDuration::MilliSeconds(1100));
 }
 
 TEST_W(TSchedulerTest, CancelDelayedFuture)
@@ -1105,12 +1106,12 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
         auto promise = NewPromise<void>();
         auto modifiedFuture = promise.ToFuture();
 
-        modifiedFuture.Apply(
+        YT_UNUSED_FUTURE(modifiedFuture.Apply(
             BIND([&] {
                 modifiedFuture = MakeFuture(TError{"error that should not be seen"});
             })
                 .AsyncVia(serializedInvoker)
-        );
+        ));
 
         NThreading::TCountDownLatch latch{1};
 
@@ -1127,14 +1128,14 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
         // Wait until serialized executor starts executing action.
         latch.Wait();
 
-        BIND([&] {
+        YT_UNUSED_FUTURE(BIND([&] {
             // N.B. waiting action is inside WairFor now, because:
             //   - we know that waiting action had started execution before this action was scheduled
             //   - this action is executed inside the same serialized invoker.
             promise.Set();
         })
             .AsyncVia(serializedInvoker)
-            .Run();
+            .Run());
 
         ASSERT_NO_THROW(testResultFuture
             .Get()
@@ -1410,8 +1411,10 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
     auto threadPool = CreateNewTwoLevelFairShareThreadPool(
         numThreads,
         "MyFairSharePool",
-        /*poolWeightProvider*/ nullptr,
-        /*verboseLogging*/ true);
+        {
+            /*poolWeightProvider*/ nullptr,
+            /*verboseLogging*/ true
+        });
 
     std::vector<TDuration> progresses(numWorkers);
     std::vector<TDuration> pools(numPools);
@@ -1604,10 +1607,10 @@ INSTANTIATE_TEST_SUITE_P(
     Test,
     TFairShareSchedulerTest,
     ::testing::Values(
-        std::make_tuple(1, 5, 1, FSWorkTime),
-        std::make_tuple(1, 7, 3, FSWorkTime),
-        std::make_tuple(5, 7, 1, FSWorkTime),
-        std::make_tuple(5, 7, 3, FSWorkTime)
+        std::tuple(1, 5, 1, FSWorkTime),
+        std::tuple(1, 7, 3, FSWorkTime),
+        std::tuple(5, 7, 1, FSWorkTime),
+        std::tuple(5, 7, 3, FSWorkTime)
         ));
 
 ////////////////////////////////////////////////////////////////////////////////

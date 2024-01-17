@@ -7,6 +7,7 @@ namespace NKikimr::NOlap {
 
 bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     if (auto* dataPtr = Summary.AddInserted(std::move(data))) {
+        AddBlobLink(dataPtr->GetBlobRange().BlobId);
         dbTable.Insert(*dataPtr);
         return true;
     } else {
@@ -86,14 +87,16 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     return Summary.GetInsertedByPathId(pathId);
 }
 
-void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data) {
+void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.EraseCommitted(data)) {
+        RemoveBlobLink(data.GetBlobRange().BlobId, blobsAction);
         dbTable.EraseCommitted(data);
     }
 }
 
-void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) {
+void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
     if (Summary.EraseAborted((TWriteId)data.WriteTxId)) {
+        RemoveBlobLink(data.GetBlobRange().BlobId, blobsAction);
         dbTable.EraseAborted(data);
     }
 }
@@ -130,6 +133,21 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
     }
 
     return result;
+}
+
+bool TInsertTableAccessor::RemoveBlobLink(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction) {
+    AFL_VERIFY(blobsAction);
+    auto itBlob = BlobLinks.find(blobId);
+    AFL_VERIFY(itBlob != BlobLinks.end());
+    AFL_VERIFY(itBlob->second >= 1);
+    if (itBlob->second == 1) {
+        blobsAction->DeclareRemove(itBlob->first);
+        BlobLinks.erase(itBlob);
+        return true;
+    } else {
+        --itBlob->second;
+        return false;
+    }
 }
 
 }

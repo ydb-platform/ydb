@@ -22,7 +22,7 @@ def fix_files(args):
             fixed_name = ''.join(fixed_name)
             with open(fixed_name[1:], 'w') as f:
                 f.write(fixed)
-            tail[idx:idx + 1] = [fixed_name]
+            tail[idx : idx + 1] = [fixed_name]
     return tail
 
 

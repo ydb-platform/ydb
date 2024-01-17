@@ -3,8 +3,8 @@
 #include "flat_part_overlay.h"
 #include "flat_part_keys.h"
 #include "util_fmt_abort.h"
-
-#include <typeinfo>
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/core/base/feature_flags.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -78,16 +78,18 @@ void TLoader::StageParseMeta() noexcept
 
         BTreeGroupIndexes.clear();
         BTreeHistoricIndexes.clear();
-        for (bool history : {false, true}) {
-            for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
-                NPage::TBtreeIndexMeta converted{{
-                    meta.GetRootPageId(), 
-                    meta.GetCount(), 
-                    meta.GetErasedCount(), 
-                    meta.GetDataSize()}, 
-                    meta.GetLevelsCount(), 
-                    meta.GetIndexSize()};
-                (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex()) {
+            for (bool history : {false, true}) {
+                for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
+                    NPage::TBtreeIndexMeta converted{{
+                        meta.GetRootPageId(), 
+                        meta.GetRowCount(), 
+                        meta.GetDataSize(), 
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
+                        meta.GetIndexSize()};
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                }
             }
         }
 
@@ -182,8 +184,15 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // TODO: put index size to stat?
     // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
-    for (auto indexPage : groupIndexesIds) {
-        indexesRawSize += GetPageSize(indexPage);
+    if (BTreeGroupIndexes) {
+        for (const auto &meta : BTreeGroupIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
+        // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
+    } else {
+        for (auto indexPage : groupIndexesIds) {
+            indexesRawSize += GetPageSize(indexPage);
+        }
     }
 
     auto *partStore = new TPartStore(

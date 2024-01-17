@@ -30,12 +30,16 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
+#ifndef GRND_RANDOM
 #include <sys/random.h>
+#endif
 
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <linux/audit.h>
+#ifndef GRND_RANDOM
 #include <linux/random.h>
+#endif
 
 #ifndef __SI_MAX_SIZE
 #define __SI_MAX_SIZE        128
@@ -295,6 +299,7 @@ int main(int argc, char **argv) {
                 Allow(brk),
                 Allow(chdir),
                 Allow(clock_gettime),
+                Allow(clock_nanosleep),
                 Allow(clone),
                 Allow(close),
 #ifndef _arm64_

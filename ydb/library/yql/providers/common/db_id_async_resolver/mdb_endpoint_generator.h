@@ -9,14 +9,19 @@ namespace NYql {
     // https://cloud.yandex.ru/docs/managed-clickhouse/api-ref/Cluster/listHosts
     class IMdbEndpointGenerator {
     public:
+        struct TParams {
+            NYql::EDatabaseType DatabaseType;
+            TString MdbHost;
+            bool UseTls;
+            NConnector::NApi::EProtocol Protocol;
+        };
+
         using TPtr = std::shared_ptr<IMdbEndpointGenerator>;
         using TEndpoint = std::pair<TString, ui32>;
 
+
         // Returns FQDN and port of the database host
-        virtual TEndpoint ToEndpoint(
-            const NYql::EDatabaseType databaseType,
-            const TString& mdbHost,
-            bool useTls) const = 0;
+        virtual TEndpoint ToEndpoint(const TParams& params) const = 0;
 
         virtual ~IMdbEndpointGenerator() = default;
     };

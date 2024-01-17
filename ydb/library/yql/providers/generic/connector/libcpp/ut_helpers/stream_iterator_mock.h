@@ -18,14 +18,14 @@ namespace NYql::NConnector::NTest {
         virtual TAsyncResult<TResponse> ReadNext() override {
             if (Index_ < Responses_.size()) {
                 // return predefined message
-                auto future = NThreading::MakeFuture<TResult<TResponse>>({NGrpc::TGrpcStatus(), Responses_[Index_]});
+                auto future = NThreading::MakeFuture<TResult<TResponse>>({NYdbGrpc::TGrpcStatus(), Responses_[Index_]});
                 Index_++;
                 return future;
             }
 
             // special message - mark of the end of the stream
             auto future = NThreading::MakeFuture<TResult<TResponse>>(
-                {NGrpc::TGrpcStatus("Read EOF", grpc::StatusCode::OUT_OF_RANGE, false),
+                {NYdbGrpc::TGrpcStatus("Read EOF", grpc::StatusCode::OUT_OF_RANGE, false),
                  std::nullopt});
 
             return future;

@@ -88,7 +88,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::SubString(NUdf::TUnboxedValuePod value
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewList(NUdf::TUnboxedValue* items, ui64 count) const {
     if (!items || !count)
-        return HolderFactory_.GetEmptyContainer();
+        return HolderFactory_.GetEmptyContainerLazy();
 
     if (count < Max<ui32>()) {
         NUdf::TUnboxedValue* inplace = nullptr;

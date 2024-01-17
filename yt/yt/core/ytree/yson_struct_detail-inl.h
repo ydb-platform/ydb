@@ -5,9 +5,12 @@
 #endif
 
 #include "ypath_client.h"
+#include "yson_schema.h"
 #include "yson_struct.h"
 
 #include <yt/yt/core/yson/token_writer.h>
+
+#include <library/cpp/yt/misc/wrapper_traits.h>
 
 namespace NYT::NYTree {
 
@@ -31,9 +34,7 @@ concept SupportsDontSerializeDefaultImpl =
 
 template <class T>
 concept SupportsDontSerializeDefault =
-    SupportsDontSerializeDefaultImpl<T> ||
-    TStdOptionalTraits<T>::IsStdOptional &&
-    SupportsDontSerializeDefaultImpl<typename TStdOptionalTraits<T>::TValueType>;
+    SupportsDontSerializeDefaultImpl<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -569,14 +570,6 @@ inline void InvokeForComposites(const Map<T...>* parameter, const F& func)
     }
 }
 
-template <class T, class = void>
-struct IsYsonStructPtr : std::false_type
-{ };
-
-template <class T>
-struct IsYsonStructPtr<TIntrusivePtr<T>, typename std::enable_if<std::is_convertible<T&, TYsonStruct&>::value>::type> : std::true_type
-{ };
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYsonStructDetail
@@ -787,6 +780,12 @@ const std::vector<TString>& TYsonStructParameter<TValue>::GetAliases() const
 }
 
 template <class TValue>
+bool TYsonStructParameter<TValue>::IsRequired() const
+{
+    return !Optional_;
+}
+
+template <class TValue>
 const TString& TYsonStructParameter<TValue>::GetKey() const
 {
     return Key_;
@@ -867,6 +866,13 @@ template <class TValue>
 IMapNodePtr TYsonStructParameter<TValue>::GetRecursiveUnrecognized(const TYsonStructBase* self) const
 {
     return NPrivate::TGetRecursiveUnrecognized<TValue>::Do(FieldAccessor_->GetValue(self));
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
+{
+    // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
+    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

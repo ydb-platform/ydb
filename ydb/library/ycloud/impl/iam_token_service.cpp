@@ -1,5 +1,5 @@
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 #include "iam_token_service.h"
 #include "grpc_service_client.h"

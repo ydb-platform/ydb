@@ -31,7 +31,7 @@ TConnectionPool::TConnectionPool(
     , Config_(std::move(config))
     , Connections_(Config_->MaxIdleConnections)
     , ExpiredConnectionsCollector_(
-          New<TPeriodicExecutor>(
+        New<TPeriodicExecutor>(
             std::move(invoker),
             BIND([weakThis = MakeWeak(this)] {
                 auto this_ = weakThis.Lock();

@@ -1,0 +1,108 @@
+GO_LIBRARY()
+
+SRCS(
+    api.go
+    array.go
+    assignments.go
+    basic.go
+    builtins.go
+    call.go
+    chan.go
+    check.go
+    const.go
+    context.go
+    conversions.go
+    decl.go
+    errors.go
+    eval.go
+    expr.go
+    exprstring.go
+    gccgosizes.go
+    generate.go
+    index.go
+    infer.go
+    initorder.go
+    instantiate.go
+    interface.go
+    labels.go
+    lookup.go
+    map.go
+    methodset.go
+    mono.go
+    named.go
+    object.go
+    objset.go
+    operand.go
+    package.go
+    pointer.go
+    predicates.go
+    resolver.go
+    return.go
+    scope.go
+    selection.go
+    signature.go
+    sizes.go
+    slice.go
+    stmt.go
+    struct.go
+    subst.go
+    termlist.go
+    tuple.go
+    type.go
+    typelists.go
+    typeparam.go
+    typeset.go
+    typestring.go
+    typeterm.go
+    typexpr.go
+    under.go
+    unify.go
+    union.go
+    universe.go
+    util.go
+    validtype.go
+    version.go
+)
+
+GO_TEST_SRCS(
+    context_test.go
+    errors_test.go
+    sizeof_test.go
+    termlist_test.go
+    token_test.go
+    typeset_test.go
+    typeterm_test.go
+    util_test.go
+    version_test.go
+)
+
+GO_XTEST_SRCS(
+    api_test.go
+    builtins_test.go
+    check_test.go
+    commentMap_test.go
+    errorcalls_test.go
+    eval_test.go
+    example_test.go
+    exprstring_test.go
+    generate_test.go
+    hilbert_test.go
+    instantiate_test.go
+    issues_test.go
+    lookup_test.go
+    main_test.go
+    methodset_test.go
+    mono_test.go
+    named_test.go
+    object_test.go
+    resolver_test.go
+    self_test.go
+    sizes_test.go
+    stdlib_test.go
+    typestring_test.go
+)
+
+END()
+
+RECURSE(
+)

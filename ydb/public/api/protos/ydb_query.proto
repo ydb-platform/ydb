@@ -184,6 +184,8 @@ message ExecuteQueryResponsePart {
 
     // Execution statistics (last part only)
     Ydb.TableStats.QueryStats exec_stats = 5;
+
+    TransactionMeta tx_meta = 6;
 }
 
 message ExecuteScriptRequest {

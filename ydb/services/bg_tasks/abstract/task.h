@@ -9,7 +9,7 @@
 #include <ydb/services/metadata/abstract/decoder.h>
 
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <util/generic/guid.h>
 

@@ -1,0 +1,38 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:7:5: Warning: BETWEEN operation will return NULL here
+    	    null between 2 and 4,
+	    ^
+    <tmp_path>/program.sql:<main>:11:5: Warning: BETWEEN operation will return NULL here
+    	    1 between null and null,
+	    ^
+    <tmp_path>/program.sql:<main>:12:5: Warning: BETWEEN operation will return NULL here
+    	    null between null and null;
+	    ^
+    <tmp_path>/program.sql:<main>:20:5: Warning: BETWEEN operation will return NULL here
+    	    null between asymmetric 2 and 4,
+	    ^
+    <tmp_path>/program.sql:<main>:24:5: Warning: BETWEEN operation will return NULL here
+    	    1 between asymmetric null and null,
+	    ^
+    <tmp_path>/program.sql:<main>:25:5: Warning: BETWEEN operation will return NULL here
+    	    null between asymmetric null and null;
+	    ^
+    <tmp_path>/program.sql:<main>:34:5: Warning: BETWEEN operation will return NULL here
+    	    null between symmetric 2 and 4,
+	    ^
+    <tmp_path>/program.sql:<main>:35:5: Warning: BETWEEN operation will return NULL here
+    	    1 between symmetric null and 4,
+	    ^
+    <tmp_path>/program.sql:<main>:36:5: Warning: BETWEEN operation will return NULL here
+    	    1 between symmetric 4 and null,
+	    ^
+    <tmp_path>/program.sql:<main>:37:5: Warning: BETWEEN operation will return NULL here
+    	    1 between symmetric 0 and null,
+	    ^
+    <tmp_path>/program.sql:<main>:38:5: Warning: BETWEEN operation will return NULL here
+    	    1 between symmetric null and null,
+	    ^
+    <tmp_path>/program.sql:<main>:39:5: Warning: BETWEEN operation will return NULL here
+    	    null between symmetric null and null;
+	    ^

@@ -2,7 +2,7 @@
 
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 // for 'create' funcs
 #include <ydb/core/mind/bscontroller/bsc.h>
@@ -25,7 +25,7 @@
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr {
 

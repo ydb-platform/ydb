@@ -29,6 +29,7 @@ target_link_libraries(ydbd PUBLIC
   yql-parser-pg_wrapper
   yql-sql-pg
   common-clickhouse-client
+  compress_udf
   datetime_udf
   datetime2_udf
   digest_udf

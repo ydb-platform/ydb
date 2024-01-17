@@ -1,6 +1,8 @@
 #include "yql_s3_provider_impl.h"
 #include "yql_s3_listing_strategy.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -9,8 +11,6 @@
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
@@ -63,8 +63,10 @@ struct TListRequest {
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
-    return std::tie(a.S3Request.Token, a.S3Request.Url, a.S3Request.Pattern) <
-           std::tie(b.S3Request.Token, b.S3Request.Url, b.S3Request.Pattern);
+    const auto& lhs = a.S3Request.AuthInfo;
+    const auto& rhs = b.S3Request.AuthInfo;
+    return std::tie(lhs.Token, lhs.AwsAccessKey, lhs.AwsAccessSecret, lhs.AwsRegion, a.S3Request.Url, a.S3Request.Pattern) <
+           std::tie(rhs.Token, rhs.AwsAccessKey, rhs.AwsAccessSecret, rhs.AwsRegion, b.S3Request.Url, b.S3Request.Pattern);
 }
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<NS3Lister::TListResult>>;
@@ -567,11 +569,9 @@ private:
         TS3DataSource dataSource = source.DataSource().Maybe<TS3DataSource>().Cast();
         const auto& connect = State_->Configuration->Clusters.at(dataSource.Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(dataSource.Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
 
+        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
         const TString url = connect.Url;
-        const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-
         auto s3ParseSettings = source.Input().Maybe<TS3ParseSettings>().Cast();
         TString filePattern;
         if (s3ParseSettings.Ref().ChildrenSize() > TS3ParseSettings::idx_Settings) {
@@ -602,7 +602,7 @@ private:
 
                 auto req = TListRequest{.S3Request{
                     .Url = url,
-                    .Token = tokenStr,
+                    .AuthInfo = authInfo,
                     .Pattern = NS3::NormalizePath(
                         TStringBuilder() << dir.Path << "/" << effectiveFilePattern),
                     .PatternType = NS3Lister::ES3PatternType::Wildcard,
@@ -725,10 +725,9 @@ private:
 
         const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
         const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
 
+        const auto authInfo = GetAuthInfo(State_->CredentialsFactory, token);
         const TString url = connect.Url;
-        const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         TGeneratedColumnsConfig config;
         if (!partitionedBy.empty()) {
@@ -755,7 +754,7 @@ private:
                 State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
                     State_->Configuration->AllowConcurrentListings);
             auto req = TListRequest{
-                .S3Request{.Url = url, .Token = tokenStr},
+                .S3Request{.Url = url, .AuthInfo = authInfo},
                 .FilePattern = effectiveFilePattern,
                 .Options{
                     .IsConcurrentListing = isConcurrentListingEnabled,

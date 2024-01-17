@@ -18,11 +18,13 @@ NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId,
     return NThreading::MakeFuture();
 }
 
-void TDummyPqGateway::CloseSession(const TString& sessionId) {
+NThreading::TFuture<void> TDummyPqGateway::CloseSession(const TString& sessionId) {
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
         OpenedSessions.erase(sessionId);
     }
+
+    return NThreading::MakeFuture();
 }
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {

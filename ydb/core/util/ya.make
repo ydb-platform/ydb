@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    activeactors.h
     address_classifier.cpp
     backoff.cpp
     cache.cpp
@@ -11,6 +12,8 @@ SRCS(
     concurrent_rw_hash.h
     console.cpp
     console.h
+    count_min_sketch.cpp
+    count_min_sketch.h
     counted_leaky_bucket.h
     defs.h
     event_priority_queue.h
@@ -60,9 +63,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/interconnect/mock
-    library/cpp/actors/util
+    ydb/library/actors/core
+    ydb/library/actors/interconnect/mock
+    ydb/library/actors/util
     library/cpp/containers/stack_vector
     library/cpp/html/escape
     library/cpp/ipmath

@@ -19,11 +19,13 @@ message TSubDomainSettings {
     optional bool ExternalSchemeShard = 7 [default = false];
     optional bool ExternalHive = 8 [default = false];
     optional TDomainKey ResourcesDomainKey = 9;
+    optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 15;
     optional bool ExternalSysViewProcessor = 10 [default = false];
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
     optional TAuditSettings AuditSettings = 13;
     optional bool ExternalStatisticsAggregator = 14 [default = false];
+    optional bool GraphShard = 16 [default = false];
 }
 
 message TProcessingParams {
@@ -37,8 +39,7 @@ message TProcessingParams {
     optional fixed64 Hive = 7;
     optional fixed64 SysViewProcessor = 8;
     optional fixed64 StatisticsAggregator = 10;
-
-    //put there SubSchemeShard and SubHive at the future
+    optional fixed64 GraphShard = 11;
 
     // Plan resolution for idle coordinators
     optional uint64 IdlePlanResolution = 9;
@@ -87,6 +88,7 @@ message TDomainDescription {
     optional uint64 ShardsLimit = 9;
 
     optional TDomainKey ResourcesDomainKey = 10;
+    optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 23;
 
     optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
 
@@ -101,6 +103,7 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
+    optional fixed64 SharedHive = 22;
 }
 
 message TSchemeQuotas {
@@ -110,4 +113,10 @@ message TSchemeQuotas {
 message TSchemeQuota {
     optional double BucketSize = 1;
     optional uint64 BucketSeconds = 2;
+}
+
+enum EServerlessComputeResourcesMode {
+    SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED = 0;
+    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED = 1;     // using nodes that serve resources domain
+    SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED = 2;  // using nodes that serve self domain
 }

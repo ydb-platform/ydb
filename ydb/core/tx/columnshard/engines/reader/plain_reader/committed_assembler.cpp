@@ -9,7 +9,9 @@ bool TCommittedAssembler::DoExecute() {
     ResultBatch = ReadMetadata->GetIndexInfo().AddSpecialColumns(ResultBatch, DataSnapshot);
     Y_ABORT_UNLESS(ResultBatch);
     ReadMetadata->GetPKRangesFilter().BuildFilter(ResultBatch).Apply(ResultBatch);
-    EarlyFilter = ReadMetadata->GetProgram().BuildEarlyFilter(ResultBatch);
+    auto t = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ResultBatch}));
+    EarlyFilter = ReadMetadata->GetProgram().ApplyEarlyFilter(t, false);
+    ResultBatch = NArrow::ToBatch(t, true);
     return true;
 }
 

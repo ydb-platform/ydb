@@ -18,8 +18,8 @@ target_link_libraries(ydb-core-control-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-control
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   cpp-testing-unittest
   ydb-core-base
   ydb-core-mind

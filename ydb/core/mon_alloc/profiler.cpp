@@ -3,11 +3,11 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/monlib/service/pages/templates.h>

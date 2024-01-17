@@ -50,7 +50,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   core-tx-datashard
   core-tx-sharding
   tx-long_tx_service-public
-  core-tx-ev_write
+  core-tx-data_events
   ydb-core-ydb_convert
   ydb-core-security
   ydb-library-aclib
@@ -60,6 +60,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-persqueue-topic_parser
   parser-pg_wrapper-interface
   yql-public-types
+  yql-public-issue
   ydb-library-services
   api-grpc-draft
   api-protos

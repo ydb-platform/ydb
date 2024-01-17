@@ -35,6 +35,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> AlterSubDomains;
 
+    TDeque<TPathId> Views;
+
 public:
     ~TStorageChanges() = default;
 
@@ -92,6 +94,10 @@ public:
 
     void PersistSubDomainAlter(const TPathId& pathId) {
         AlterSubDomains.push_back(pathId);
+    }
+
+    void PersistView(const TPathId& pathId) {
+        Views.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

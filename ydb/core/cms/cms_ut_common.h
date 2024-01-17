@@ -34,6 +34,7 @@ struct TFakeNodeInfo {
     TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     bool Connected = true;
+    bool VDisksMoved = false;
 };
 
 class TFakeNodeWhiteboardService : public TActorBootstrapped<TFakeNodeWhiteboardService> {
@@ -84,6 +85,7 @@ struct TTestEnvOpts {
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
+    bool EnableSentinel;
 
     TTestEnvOpts() = default;
 
@@ -99,7 +101,18 @@ struct TTestEnvOpts {
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
+        , EnableSentinel(false)
     {
+    }
+
+    TTestEnvOpts& WithSentinel() {
+        EnableSentinel = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithoutSentinel() {
+        EnableSentinel = false;
+        return *this;
     }
 };
 
@@ -368,6 +381,8 @@ public:
     void EnableNoisyBSCPipe();
 
     const ui64 CmsId;
+
+    void RegenerateBSConfig(NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &opts);
 
 private:
     void SetupLogging();

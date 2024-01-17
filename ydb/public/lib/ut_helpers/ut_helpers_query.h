@@ -1,17 +1,17 @@
 #pragma once
 
 #include <util/generic/fwd.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NTestHelpers {
 
-TString CreateQuerySession(const NGrpc::TGRpcClientConfig& clientConfig);
+TString CreateQuerySession(const NYdbGrpc::TGRpcClientConfig& clientConfig);
 
-NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, const NGrpc::TGRpcClientConfig& clientConfig,
+NYdbGrpc::IStreamRequestCtrl::TPtr CheckAttach(NYdbGrpc::TGRpcClientLow& clientLow, const NYdbGrpc::TGRpcClientConfig& clientConfig,
     const TString& id, int code, bool& allDoneOk);
 
-void CheckAttach(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
-void CheckDelete(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
-void EnsureSessionClosed(NGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
+void CheckAttach(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
+void CheckDelete(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
+void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
 
 }

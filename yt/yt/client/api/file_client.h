@@ -59,6 +59,8 @@ struct TPutFileToCacheResult
 
 struct IFileClientBase
 {
+    virtual ~IFileClientBase() = default;
+
     virtual TFuture<IFileReaderPtr> CreateFileReader(
         const NYPath::TYPath& path,
         const TFileReaderOptions& options = {}) = 0;
@@ -72,6 +74,8 @@ struct IFileClientBase
 
 struct IFileClient
 {
+    virtual ~IFileClient() = default;
+
     virtual TFuture<TGetFileFromCacheResult> GetFileFromCache(
         const TString& md5,
         const TGetFileFromCacheOptions& options = {}) = 0;

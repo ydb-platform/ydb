@@ -16,14 +16,14 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/wilson/wilson_trace.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanFetcherActor: public NActors::TActorBootstrapped<TKqpScanFetcherActor> {
+class TKqpScanFetcherActor: public NActors::TActorBootstrapped<TKqpScanFetcherActor>, public IExternalObjectsProvider {
 private:
     using TBase = NActors::TActorBootstrapped<TKqpScanFetcherActor>;
     struct TEvPrivate {
@@ -50,7 +50,6 @@ private:
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
     const NYql::NDq::TTxId TxId;
-    bool ReturnShardInPool(TShardState::TPtr state);
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_FETCH_ACTOR;
@@ -66,8 +65,6 @@ public:
     void Bootstrap();
 
     STATEFN(StateFunc) {
-        auto gTimeFull = KqpComputeActorSpan.StartStackTimeGuard("processing");
-        auto gTime = KqpComputeActorSpan.StartStackTimeGuard("event_" + ev->GetTypeName());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -83,6 +80,7 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
+                    AFL_VERIFY_DEBUG(false)("event_type", ev->GetTypeName());
                     StopOnError("unexpected message on data fetching: " + ev->GetTypeName());
             }
         } catch (...) {
@@ -96,6 +94,9 @@ public:
 
 private:
 
+    void CheckFinish();
+    ui32 GetShardsInProgressCount() const;
+
     std::vector<NActors::TActorId> ComputeActorIds;
 
     void StopOnError(const TString& errorMessage) const;
@@ -103,11 +104,13 @@ private:
 
     bool SendGlobalFail(const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
 
-    bool ProvideDataToCompute(const NActors::TActorId& scannerId, TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state) noexcept;
-
     bool SendScanFinished();
 
-    THolder<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const;
+    virtual std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges) const override;
+    virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const override {
+        return KeyColumnTypes;
+    }
+
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
@@ -131,25 +134,9 @@ private:
 
 private:
 
-    bool StartTableScan();
-
-    void StartReadShard(TShardState::TPtr state);
-
-    bool SendScanDataAck(TShardState::TPtr state);
-
-    void SendStartScanRequest(TShardState::TPtr state, ui32 gen);
+    void StartTableScan();
 
     void RetryDeliveryProblem(TShardState::TPtr state);
-
-    void TerminateExpiredScan(const TActorId& actorId, TStringBuf msg);
-
-    void TerminateChunk(TShardState::TPtr sState) {
-        if (!sState->ActorId) {
-            return;
-        }
-        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel non actual scan");
-        Send(sState->ActorId, abortEv.Release());
-    }
 
     void ResolveNextShard() {
         if (!PendingResolveShards.empty()) {
@@ -158,41 +145,17 @@ private:
         }
     }
 
-    void EnqueueResolveShard(TShardState::TPtr state);
+    void EnqueueResolveShard(const TShardState::TPtr& state);
 
     void DoAckAvailableWaiting();
-
-    bool StopReadChunk(const TShardState& state);
 
     void ResolveShard(TShardState& state);
 
 private:
     void PassAway() override {
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-        for (ui32 nodeId : TrackingNodes) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-        }
-
         TBase::PassAway();
     }
-
-    template<class TMessage>
-    TShardState::TPtr GetShardState(const TMessage& msg, const TActorId& scanActorId) {
-        if (!InFlightShards.IsActive()) {
-            return nullptr;
-        }
-        ui32 generation;
-        if constexpr (std::is_same_v<TMessage, NKikimrKqp::TEvScanError>) {
-            generation = msg.GetGeneration();
-        } else if constexpr (std::is_same_v<TMessage, NKikimrKqp::TEvScanInitActor>) {
-            generation = msg.GetGeneration();
-        } else {
-            generation = msg.Generation;
-        }
-        return GetShardStateByGeneration(generation, scanActorId);
-    }
-
-    TShardState::TPtr GetShardStateByGeneration(const ui32 generation, const TActorId& scanActorId);
 
 private:
     TString LogPrefix;
@@ -205,10 +168,8 @@ private:
     std::deque<TShardState> PendingShards;
     std::deque<TShardState> PendingResolveShards;
 
-    NWilson::TProfileSpan KqpComputeActorSpan;
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
-    ui32 ScansCounter = 0;
     ui32 TotalRetries = 0;
 
     std::set<ui32> TrackingNodes;

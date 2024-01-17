@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) Steve Holme, <steve_holme@hotmail.com>.
+ * Copyright (C) 2014 - 2022, Steve Holme, <steve_holme@hotmail.com>.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -104,11 +104,11 @@ CURLcode Curl_auth_create_digest_md5_message(struct Curl_easy *data,
                                              const char *service,
                                              struct bufref *out);
 
-/* This is used to decode an HTTP DIGEST challenge message */
+/* This is used to decode a HTTP DIGEST challenge message */
 CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
                                               struct digestdata *digest);
 
-/* This is used to generate an HTTP DIGEST response message */
+/* This is used to generate a HTTP DIGEST response message */
 CURLcode Curl_auth_create_digest_http_message(struct Curl_easy *data,
                                               const char *userp,
                                               const char *passwdp,
@@ -219,7 +219,7 @@ bool Curl_auth_is_spnego_supported(void);
    message */
 CURLcode Curl_auth_decode_spnego_message(struct Curl_easy *data,
                                          const char *user,
-                                         const char *password,
+                                         const char *passwood,
                                          const char *service,
                                          const char *host,
                                          const char *chlg64,

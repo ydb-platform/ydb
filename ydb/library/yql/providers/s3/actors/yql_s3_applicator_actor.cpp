@@ -5,16 +5,18 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #ifdef THROW
 #undef THROW
@@ -81,15 +83,19 @@ struct TListMultipartUploads {
     }
 
     TString BuildUrl() const {
+        // We have to sort the cgi parameters for the correct aws signature
+        // This requirement will be fixed in the curl library
+        // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
+        // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
         TUrlBuilder urlBuilder(Url);
-        urlBuilder.AddUrlParam("uploads");
-        urlBuilder.AddUrlParam("prefix", Prefix);
         if (KeyMarker) {
             urlBuilder.AddUrlParam("key-marker", KeyMarker);
         }
+        urlBuilder.AddUrlParam("prefix", Prefix);
         if (UploadIdMarker) {
             urlBuilder.AddUrlParam("upload-id-marker", UploadIdMarker);
         }
+        urlBuilder.AddUrlParam("uploads");
         return urlBuilder.Build();
     }
 };
@@ -131,11 +137,15 @@ struct TListParts {
     }
 
     TString BuildUrl() const {
+        // We have to sort the cgi parameters for the correct aws signature
+        // This requirement will be fixed in the curl library
+        // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
+        // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
         TUrlBuilder urlBuilder(Url);
-        urlBuilder.AddUrlParam("uploadId", UploadId);
         if (PartNumberMarker) {
             urlBuilder.AddUrlParam("part-number-marker", PartNumberMarker);
         }
+        urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
 };
@@ -503,16 +513,16 @@ public:
         }
     }
 
-    TString GetSecureToken(const TString& token) {
+    TS3Credentials::TAuthInfo GetAuthInfo(const TString& token) {
         const auto secureToken = SecureParams.Value(token, TString{});
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, secureToken);
-        return credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        return ::NYql::GetAuthInfo(CredentialsFactory, secureToken);
     }
 
     void CommitMultipartUpload(TCompleteMultipartUpload::TPtr state) {
         LOG_D("CommitMultipartUpload BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Upload(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token), "application/xml"),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             state->BuildMessage(),
             std::bind(&TS3ApplicatorActor::OnCommitMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
             false,
@@ -525,8 +535,9 @@ public:
 
     void ListMultipartUploads(TListMultipartUploads::TPtr state) {
         LOG_D("ListMultipartUploads BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token)),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             0U,
             std::bind(&TS3ApplicatorActor::OnListMultipartUploads, ActorSystem, SelfId(), state, std::placeholders::_1),
@@ -540,8 +551,9 @@ public:
 
     void AbortMultipartUpload(TAbortMultipartUpload::TPtr state) {
         LOG_D("AbortMultipartUpload BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Delete(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token), "application/xml"),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             std::bind(&TS3ApplicatorActor::OnAbortMultipartUpload, ActorSystem, SelfId(), state, std::placeholders::_1),
             RetryPolicy);
     }
@@ -552,8 +564,9 @@ public:
 
     void ListParts(TListParts::TPtr state) {
         LOG_D("ListParts BEGIN " << state->BuildUrl());
+        auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
-            IHTTPGateway::MakeYcHeaders(state->RequestId, GetSecureToken(state->Token)),
+            IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
             0U,
             std::bind(&TS3ApplicatorActor::OnListParts, ActorSystem, SelfId(), state, std::placeholders::_1),

@@ -21,6 +21,7 @@
 #include <yt/yt/core/actions/bind.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/wrapper_traits.h>
 
 #include <util/datetime/base.h>
 
@@ -622,9 +623,7 @@ concept SupportsDontSerializeDefaultImpl =
 
 template <class T>
 concept SupportsDontSerializeDefault =
-    SupportsDontSerializeDefaultImpl<T> ||
-    TStdOptionalTraits<T>::IsStdOptional &&
-    SupportsDontSerializeDefaultImpl<typename TStdOptionalTraits<T>::TValueType>;
+    SupportsDontSerializeDefaultImpl<typename TWrapperTraits<T>::TRecursiveUnwrapped>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

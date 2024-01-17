@@ -64,7 +64,6 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Self->EnqueueBackgroundActivities(false, TriggerActivity);
     }
 
-    Self->UpdateResourceMetrics(ctx, Ev->Get()->PutResult->GetResourceUsage());
     changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(Self->TabletID(), changes->TypeString());
 }

@@ -11,7 +11,7 @@
 using namespace Aws::Utils::Crypto;
 
 
-MD5::MD5() : 
+MD5::MD5() :
     m_hashImpl(CreateMD5Implementation())
 {
 }
@@ -28,4 +28,14 @@ HashResult MD5::Calculate(const Aws::String& str)
 HashResult MD5::Calculate(Aws::IStream& stream)
 {
     return m_hashImpl->Calculate(stream);
+}
+
+void MD5::Update(unsigned char* buffer, size_t bufferSize)
+{
+    return m_hashImpl->Update(buffer, bufferSize);
+}
+
+HashResult MD5::GetHash()
+{
+    return m_hashImpl->GetHash();
 }

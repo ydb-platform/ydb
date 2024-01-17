@@ -15,8 +15,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(const TString 
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString &name, const TStoragePools &pools) {
     NKikimrSubDomains::TSubDomainSettings subdomain;
     subdomain.SetName(name);
-    subdomain.SetCoordinators(2);
-    subdomain.SetMediators(2);
+    subdomain.SetCoordinators(1);
+    subdomain.SetMediators(1);
     subdomain.SetPlanResolution(50);
     subdomain.SetTimeCastBucketsPerMediator(2);
     for (auto& pool: pools) {

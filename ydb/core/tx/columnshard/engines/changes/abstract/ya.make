@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
-    mark.cpp
     compaction_info.cpp
     settings.cpp
 )

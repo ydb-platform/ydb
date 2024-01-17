@@ -12,8 +12,8 @@
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/stream/file.h>
 #include <util/string/split.h>
@@ -261,9 +261,9 @@ private:
         limits.ChannelBufferSize = 20_MB;
         limits.OutputChunkMaxSize = 2_MB;
 
-        auto wakeup = [this]{ ResumeExecution(); };
+        auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
-            TraceId, UseSpilling, std::move(wakeup), TlsActivationContext->AsActorContext());
+            TraceId, UseSpilling, std::move(wakeup));
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }
@@ -722,7 +722,7 @@ private:
     }
     /*_________________________________________________________*/
     /*______________________ Sink Events ----__________________*/
-    void ResumeExecution() override {
+    void ResumeExecution(EResumeSource) override {
         Send(SelfId(), new TEvContinueRun());
     }
 

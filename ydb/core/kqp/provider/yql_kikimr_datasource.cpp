@@ -64,6 +64,51 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
     return ctx.NewList(pos, std::move(items));
 }
 
+TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource) {
+    switch (externalSource.DataSourceAuth.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            properties["authMethod"] = "SERVICE_ACCOUNT";
+            properties["serviceAccountId"] = externalSource.DataSourceAuth.GetServiceAccount().GetId();
+            properties["serviceAccountIdSignature"] = externalSource.ServiceAccountIdSignature;
+            properties["serviceAccountIdSignatureReference"] = externalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
+            return {};
+
+        case NKikimrSchemeOp::TAuth::kNone:
+            properties["authMethod"] = "NONE";
+            return {};
+
+        case NKikimrSchemeOp::TAuth::kBasic:
+            properties["authMethod"] = "BASIC";
+            properties["login"] = externalSource.DataSourceAuth.GetBasic().GetLogin();
+            properties["password"] = externalSource.Password;
+            properties["passwordReference"] = externalSource.DataSourceAuth.GetBasic().GetPasswordSecretName();
+            return {};
+
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            properties["authMethod"] = "MDB_BASIC";
+            properties["serviceAccountId"] = externalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountId();
+            properties["serviceAccountIdSignature"] = externalSource.ServiceAccountIdSignature;
+            properties["serviceAccountIdSignatureReference"] = externalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountSecretName();
+
+            properties["login"] = externalSource.DataSourceAuth.GetMdbBasic().GetLogin();
+            properties["password"] = externalSource.Password;
+            properties["passwordReference"] = externalSource.DataSourceAuth.GetMdbBasic().GetPasswordSecretName();
+            return {};
+
+        case NKikimrSchemeOp::TAuth::kAws:
+            properties["authMethod"] = "AWS";
+            properties["awsAccessKeyId"] = externalSource.AwsAccessKeyId;
+            properties["awsAccessKeyIdReference"] = externalSource.DataSourceAuth.GetAws().GetAwsAccessKeyIdSecretName();
+            properties["awsSecretAccessKey"] = externalSource.AwsSecretAccessKey;
+            properties["awsSecretAccessKeyReference"] = externalSource.DataSourceAuth.GetAws().GetAwsSecretAccessKeySecretName();
+            properties["awsRegion"] = externalSource.DataSourceAuth.GetAws().GetAwsRegion();
+            return {};
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            return {"Identity case is not specified"};
+    }
+}
+
 namespace {
 
 using namespace NKikimr;
@@ -257,47 +302,10 @@ public:
 
         properties.insert(metadata.ExternalSource.Properties.GetProperties().begin(), metadata.ExternalSource.Properties.GetProperties().end());
 
-        switch (metadata.ExternalSource.DataSourceAuth.identity_case()) {
-            case NKikimrSchemeOp::TAuth::kServiceAccount:
-                properties["authMethod"] = "SERVICE_ACCOUNT";
-                properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetId();
-                properties["serviceAccountIdSignature"] = metadata.ExternalSource.ServiceAccountIdSignature;
-                properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
-                break;
-
-            case NKikimrSchemeOp::TAuth::kNone:
-                properties["authMethod"] = "SERVICE_ACCOUNT";
-                break;
-
-            case NKikimrSchemeOp::TAuth::kBasic:
-                properties["authMethod"] = "BASIC";
-                properties["login"] = metadata.ExternalSource.DataSourceAuth.GetBasic().GetLogin();
-                properties["password"] = metadata.ExternalSource.Password;
-                properties["passwordReference"] = metadata.ExternalSource.DataSourceAuth.GetBasic().GetPasswordSecretName();
-                break;
-
-            case NKikimrSchemeOp::TAuth::kMdbBasic:
-                properties["authMethod"] = "MDB_BASIC";
-                properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountId();
-                properties["serviceAccountIdSignature"] = metadata.ExternalSource.ServiceAccountIdSignature;
-                properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountSecretName();
-
-                properties["login"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetLogin();
-                properties["password"] = metadata.ExternalSource.Password;
-                properties["passwordReference"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetPasswordSecretName();
-                break;
-
-            case NKikimrSchemeOp::TAuth::kAws:
-                properties["authMethod"] = "AWS";
-                properties["awsAccessKeyId"] = metadata.ExternalSource.AwsAccessKeyId;
-                properties["awsAccessKeyIdReference"] = metadata.ExternalSource.DataSourceAuth.GetAws().GetAwsAccessKeyIdSecretName();
-                properties["awsSecretAccessKey"] = metadata.ExternalSource.AwsSecretAccessKey;
-                properties["awsSecretAccessKeyReference"] = metadata.ExternalSource.DataSourceAuth.GetAws().GetAwsSecretAccessKeySecretName();
-                break;
-
-            case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-                res.AddIssue(TIssue("Identity case is not specified"));
-                return false;
+        const auto error = FillAuthProperties(properties, metadata.ExternalSource);
+        if (error) {
+            res.AddIssue(TIssue(error));
+            return false;
         }
 
         it->second->AddCluster(metadata.ExternalSource.DataSourcePath, properties);
@@ -735,7 +743,7 @@ public:
         IOptimizationContext& optCtx) override
     {
         auto queryType = SessionCtx->Query().Type;
-        if (queryType == EKikimrQueryType::Scan) {
+        if (queryType == EKikimrQueryType::Scan || queryType == EKikimrQueryType::Query) {
             return source;
         }
 

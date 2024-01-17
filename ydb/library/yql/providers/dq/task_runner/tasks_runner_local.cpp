@@ -114,10 +114,10 @@ public:
         return Task.GetId();
     }
 
-    NYql::NDqProto::TPrepareResponse Prepare() override {
+    NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits) override {
         NYql::NDqProto::TPrepareResponse ret;
         TDqTaskRunnerExecutionContextDefault ctx;
-        Runner->Prepare(Task, DefaultMemoryLimits(), ctx);
+        Runner->Prepare(Task, limits, ctx);
         return ret;
     }
 
@@ -141,8 +141,8 @@ public:
         return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), Task.GetStageId(), &QueryStat);
     }
 
-    IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
-        return Runner->GetSource(index);
+    IDqAsyncInputBuffer* GetSource(ui64 index) override {
+        return Runner->GetSource(index).Get();
     }
 
     IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) override {

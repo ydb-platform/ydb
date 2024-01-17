@@ -187,7 +187,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
             return pgmBuilder.NewListType(voidType);
         }
 
-        return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyList();
+        return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyListLazy();
     }
 
     case ETypeAnnotationKind::EmptyDict: {
@@ -196,7 +196,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
             return pgmBuilder.NewDictType(voidType, voidType, false);
         }
 
-        return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyDict();
+        return pgmBuilder.GetTypeEnvironment().GetTypeOfEmptyDictLazy();
     }
 
     case ETypeAnnotationKind::Block: {

@@ -73,6 +73,7 @@ private:
                     tableInfo->PhysicalPath = path;
                 }
 
+                tableInfo->Tablets.reserve(rsp->tablets_size());
                 for (const auto& protoTabletInfo : rsp->tablets()) {
                     auto tabletInfo = New<NTabletClient::TTabletInfo>();
                     FromProto(tabletInfo.Get(), protoTabletInfo);
@@ -97,12 +98,14 @@ private:
                 }
 
                 tableInfo->Indices.reserve(rsp->indices_size());
-                for (const auto& protoIndexInfo: rsp->indices()) {
-                    TIndexInfo indexInfo;
-                    FromProto(&indexInfo.TableId, protoIndexInfo.index_table_id());
-                    indexInfo.Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind());
-                    THROW_ERROR_EXCEPTION_IF(!TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
-                        "Unsupported secondary index kind %v (client not up-to-date)", indexInfo.Kind);
+                for (const auto& protoIndexInfo : rsp->indices()) {
+                    TIndexInfo indexInfo{
+                        .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
+                        .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
+                    };
+                    THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
+                        "Unsupported secondary index kind %Qlv (client not up-to-date)",
+                        indexInfo.Kind);
                     tableInfo->Indices.push_back(indexInfo);
                 }
 

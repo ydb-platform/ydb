@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         )");
         Cerr << "!!! distributed write end" << Endl;
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             )"),
             "ERROR: ABORTED");
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Verify transaction was not committed
         UNIT_ASSERT_VALUES_EQUAL(
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
         Cerr << "!!! distributed write end" << Endl;
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Verify transaction was not committed
         UNIT_ASSERT_VALUES_EQUAL(
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
         Cerr << "!!! distributed write end" << Endl;
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Verify transaction was not committed
         UNIT_ASSERT_VALUES_EQUAL(
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
 
         runtime.SetObserverFunc(prevObserverFunc);
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Make sure snapshot transaction cannot see uncommitted changes and doesn't block on them
         UNIT_ASSERT_VALUES_EQUAL(
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
 
         runtime.SetObserverFunc(prevObserverFunc);
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
         auto snapshotReadFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_VALUES_EQUAL(capturedPlans.size(), 1u);
 
         runtime.SetObserverFunc(prevObserverFunc);
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Start reading from table-2
         TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return observedPlans >= 2; }, "observed plans");
         UNIT_ASSERT_VALUES_EQUAL(capturedPlans.size(), 1u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Wait until it completes at shard2
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         observedPropose = 0;
         ui64 txId = AsyncDropTable(server, sender, "/Root", "table-1");
@@ -763,7 +763,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Note: this upsert happens over the upsert into the value column
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value2) VALUES (2, 51);");
@@ -850,7 +850,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         observedPropose = 0;
         ui64 txId = AsyncCreateCopyTable(server, sender, "/Root", "table-1-copy", "/Root/table-1");
@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
         auto shards1before = GetTableShards(server, sender, "/Root/table-1");
@@ -1017,7 +1017,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
             TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
@@ -1178,7 +1178,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.MutableSnapshot()->SetTxId(Max<ui64>());
             msg->Record.AddColumns(1);
             msg->Record.AddColumns(2);
-            msg->Record.SetResultFormat(NKikimrTxDataShard::ARROW);
+            msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
             msg->Record.SetMaxRowsInResult(1);
 
             TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
@@ -1298,7 +1298,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         std::vector<TString> observedResults;
         TMaybe<Ydb::StatusIds::StatusCode> observedStatus;
@@ -1392,7 +1392,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 30);
         )");
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Make sure changes are actually delivered
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -1476,7 +1476,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Write to key 2 using bulk upsert
         NThreading::TFuture<Ydb::Table::BulkUpsertResponse> bulkUpsertFuture;
@@ -1638,7 +1638,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
-        runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(false);
+        runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Write to key 2 using bulk upsert
         NThreading::TFuture<Ydb::Table::BulkUpsertResponse> bulkUpsertFuture;

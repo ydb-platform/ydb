@@ -8,21 +8,21 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
     ui32 currentStartPortionIdx = *RecordIndexStart;
     ui32 currentFinishPortionIdx = RecordIndexFinish;
-
-    while (currentStartPortionIdx - ChunkRecordIndexStartPosition >= CurrentColumnChunk->GetMeta().GetNumRowsVerified()) {
+//    NActors::TLogContextGuard lg(NActors::TLogContextBuilder::Build()("portion_id", PortionId));
+    while (currentStartPortionIdx - ChunkRecordIndexStartPosition >= CurrentChunkRecordsCount) {
         if (!NextChunk()) {
             return false;
         }
     }
 
     ui32 currentStart = currentStartPortionIdx - ChunkRecordIndexStartPosition;
-    while (currentFinishPortionIdx - ChunkRecordIndexStartPosition >= CurrentColumnChunk->GetMeta().GetNumRowsVerified()) {
-        const ui32 currentFinish = CurrentColumnChunk->GetMeta().GetNumRowsVerified();
-        if (currentStart == 0) {
-            column.AppendBlob(CurrentBlobChunk->GetData(), *CurrentColumnChunk);
-        } else {
+    while (currentFinishPortionIdx - ChunkRecordIndexStartPosition >= CurrentChunkRecordsCount) {
+        const ui32 currentFinish = CurrentChunkRecordsCount;
+//        if (currentStart == 0 && CurrentColumnChunk) {
+//            column.AppendBlob(CurrentBlobChunk->GetData(), *CurrentColumnChunk);
+//        } else {
             column.AppendSlice(GetCurrentArray(), currentStart, currentFinish - currentStart);
-        }
+//        }
         currentStart = 0;
         if (!NextChunk()) {
             return false;
@@ -31,7 +31,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
 
     const ui32 currentFinish = currentFinishPortionIdx - ChunkRecordIndexStartPosition;
     if (currentStart < currentFinish) {
-        Y_ABORT_UNLESS(currentFinish < CurrentColumnChunk->GetMeta().GetNumRowsVerified());
+        Y_ABORT_UNLESS(currentFinish < CurrentChunkRecordsCount);
         column.AppendSlice(GetCurrentArray(), currentStart, currentFinish - currentStart);
     }
 
@@ -60,9 +60,10 @@ bool TPortionColumnCursor::NextChunk() {
     if (++ChunkIdx == ColumnChunks.size()) {
         return false;
     } else {
-        ChunkRecordIndexStartPosition += CurrentColumnChunk->GetMeta().GetNumRowsVerified();
+        ChunkRecordIndexStartPosition += CurrentChunkRecordsCount;
         CurrentBlobChunk = BlobChunks[ChunkIdx];
         CurrentColumnChunk = ColumnChunks[ChunkIdx];
+        CurrentChunkRecordsCount = CurrentBlobChunk->GetRecordsCount();
         return true;
     }
 }

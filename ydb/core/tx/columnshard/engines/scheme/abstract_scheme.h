@@ -18,12 +18,24 @@ public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
 
     virtual ~ISnapshotSchema() {}
-    virtual std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const = 0;
-    std::shared_ptr<TColumnLoader> GetColumnLoader(const TString& columnName) const {
-        return GetColumnLoader(std::string(columnName.data(), columnName.size()));
+    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const {
+        auto result = GetColumnLoaderOptional(columnId);
+        AFL_VERIFY(result);
+        return result;
     }
-    std::shared_ptr<TColumnLoader> GetColumnLoader(const std::string& columnName) const {
-        return GetColumnLoader(GetColumnId(columnName));
+    std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const {
+        const std::optional<ui32> id = GetColumnIdOptional(columnName);
+        if (id) {
+            return GetColumnLoaderOptional(*id);
+        } else {
+            return nullptr;
+        }
+    }
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const std::string& columnName) const {
+        auto result = GetColumnLoaderOptional(columnName);
+        AFL_VERIFY(result);
+        return result;
     }
 
     virtual TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const = 0;
@@ -34,15 +46,13 @@ public:
         return GetColumnSaver(TString(columnName.data(), columnName.size()), context);
     }
 
-    virtual ui32 GetColumnId(const std::string& columnName) const = 0;
+    virtual std::optional<ui32> GetColumnIdOptional(const std::string& columnName) const = 0;
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
+
+    ui32 GetColumnId(const std::string& columnName) const;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
-    std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const {
-        auto result = GetFieldByColumnId(columnId);
-        Y_ABORT_UNLESS(result);
-        return result;
-    }
+    std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
 
     TString DebugString() const {
         return DoDebugString();

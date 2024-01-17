@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr {
 

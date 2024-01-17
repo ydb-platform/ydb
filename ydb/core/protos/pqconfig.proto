@@ -8,7 +8,7 @@ import "ydb/core/protos/netclassifier.proto";
 import "ydb/library/services/services.proto";
 import "ydb/core/scheme/protos/type_info.proto";
 
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 
 package NKikimrPQ;
@@ -90,7 +90,7 @@ message TPQConfig {
     optional uint32 RemoteClusterEnabledDelaySec = 24 [default = 300]; // 5 minutes
     optional uint32 CloseClientSessionWithEnabledRemotePreferredClusterDelaySec = 25 [default = 300]; // 5 minutes
 
-    optional bool RoundRobinPartitionMapping = 26 [default = true];
+    reserved 26; // optional bool RoundRobinPartitionMapping = 26 [default = true];
 
     optional string Root = 27 [default = ""];
     optional string TestDatabaseRoot = 47; // For unit-tests only
@@ -339,6 +339,7 @@ message TPQTabletConfig {
         repeated uint32 ParentPartitionIds = 4;
         repeated uint32 ChildPartitionIds = 5;
         optional uint64 CreateVersion = 6;
+        optional uint64 TabletId = 7;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
 
@@ -357,6 +358,9 @@ message TPQTabletConfig {
         required uint32 MaxPartitionCount = 2;
     }
     optional TPartitionStrategy PartitionStrategy = 35;
+
+    repeated TPartition AllPartitions = 36;
+
 }
 
 message THeartbeat {
@@ -654,6 +658,7 @@ message TOffsetsResponse {
 message TStatus {
     optional string ClientId = 1;
     optional bool GetStatForAllConsumers = 2;
+    repeated string Consumers = 3;
 }
 
 message TClientPosition {
@@ -757,6 +762,8 @@ message TStatusResponse {
         optional uint64 WriteLagMs = 5;
         optional uint64 ReadLagMs = 6;
         optional uint64 LastReadTimestampMs = 7;
+        optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 8;
+        optional uint64 CommitedOffset = 9;
     }
 
     optional uint64 TabletId = 1;
@@ -802,6 +809,8 @@ message TUserInfo {
     optional string Session = 4;
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
+    optional uint64 PartitionSessionId = 7;
+
 }
 
 message TPartitionClientInfo {
@@ -927,6 +936,33 @@ message TEvSubDomainStatus {
     required bool SubDomainOutOfSpace = 1;
 };
 
+message TEvSourceIdRequest {
+    optional uint32 Partition = 1;
+    repeated string SourceId = 2;
+};
+
+message TEvSourceIdResponse {
+    enum EState {
+        Unknown = 0;
+        Registered = 1;
+        PendingRegistration = 2;
+    };
+
+    message TSource {
+        optional string Id = 1;
+        optional EState State = 2;
+        optional uint64 SeqNo = 3;
+        optional uint64 Offset = 4;
+        optional bool Explicit = 5;
+        optional uint64 WriteTimestamp = 6;
+
+    };
+    optional string Error = 1;
+    optional uint32 Partition = 2;
+    repeated TSource Source = 3;
+};
+
+
 message TTransaction {
     enum EKind {
         KIND_UNKNOWN = 0;
@@ -976,23 +1012,6 @@ message TTransaction {
 };
 
 message TTabletTxInfo {
-    //
-    // использовать RangeRead. может венутьнеполный список
-    //
-    repeated uint64 TxIds = 1;
-
-    //
-    // оставить
-    //
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
-
-    //
-    // держать в памяти
-    //
-    optional uint64 ActiveTxId = 4;
-    //
-    // выкинуть
-    //
-    optional uint64 ReadSetSeqNo = 5 [ default = 1 ];
 }

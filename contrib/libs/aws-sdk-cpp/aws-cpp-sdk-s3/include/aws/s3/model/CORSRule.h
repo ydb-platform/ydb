@@ -29,14 +29,14 @@ namespace Model
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CORSRule">AWS API
    * Reference</a></p>
    */
-  class AWS_S3_API CORSRule
+  class CORSRule
   {
   public:
-    CORSRule();
-    CORSRule(const Aws::Utils::Xml::XmlNode& xmlNode);
-    CORSRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CORSRule();
+    AWS_S3_API CORSRule(const Aws::Utils::Xml::XmlNode& xmlNode);
+    AWS_S3_API CORSRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
-    void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+    AWS_S3_API void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
     /**
@@ -371,22 +371,22 @@ namespace Model
   private:
 
     Aws::String m_iD;
-    bool m_iDHasBeenSet;
+    bool m_iDHasBeenSet = false;
 
     Aws::Vector<Aws::String> m_allowedHeaders;
-    bool m_allowedHeadersHasBeenSet;
+    bool m_allowedHeadersHasBeenSet = false;
 
     Aws::Vector<Aws::String> m_allowedMethods;
-    bool m_allowedMethodsHasBeenSet;
+    bool m_allowedMethodsHasBeenSet = false;
 
     Aws::Vector<Aws::String> m_allowedOrigins;
-    bool m_allowedOriginsHasBeenSet;
+    bool m_allowedOriginsHasBeenSet = false;
 
     Aws::Vector<Aws::String> m_exposeHeaders;
-    bool m_exposeHeadersHasBeenSet;
+    bool m_exposeHeadersHasBeenSet = false;
 
     int m_maxAgeSeconds;
-    bool m_maxAgeSecondsHasBeenSet;
+    bool m_maxAgeSecondsHasBeenSet = false;
   };
 
 } // namespace Model

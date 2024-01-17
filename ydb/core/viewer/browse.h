@@ -1,6 +1,6 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet.h>
@@ -97,6 +97,8 @@ public:
             return NKikimrViewer::EObjectType::ExternalTable;
         case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             return NKikimrViewer::EObjectType::ExternalDataSource;
+        case NKikimrSchemeOp::EPathType::EPathTypeView:
+            return NKikimrViewer::EObjectType::View;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

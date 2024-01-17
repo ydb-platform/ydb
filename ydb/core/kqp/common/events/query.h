@@ -8,8 +8,8 @@
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/aclib/aclib.h>
-#include <library/cpp/actors/core/event_pb.h>
-#include <library/cpp/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -161,6 +161,13 @@ public:
         return Record.GetTraceId();
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const {
+        if (RequestCtx) {
+            return RequestCtx->GetWilsonTraceId();
+        }
+        return {};
+    }
+
     const TString& GetRequestType() const {
         if (RequestCtx) {
             if (!RequestType) {
@@ -274,6 +281,14 @@ public:
         return UserRequestContext;
     }
 
+    void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
+        ProgressStatsPeriod = progressStatsPeriod;
+    }
+
+    TDuration GetProgressStatsPeriod() const {
+        return ProgressStatsPeriod;
+    }
+
     mutable NKikimrKqp::TEvQueryRequest Record;
 
 private:
@@ -301,6 +316,7 @@ private:
     TDuration CancelAfter;
     const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    TDuration ProgressStatsPeriod;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

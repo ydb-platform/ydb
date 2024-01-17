@@ -10,13 +10,14 @@ class IDataSource;
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, ResultFields);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, ResultSchema);
-    YDB_READONLY_DEF(std::vector<TString>, ResultFieldNames);
 
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, EFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, PKColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
+
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
     std::shared_ptr<TColumnsSet> PKFFColumns;
@@ -37,7 +38,8 @@ public:
         return TStringBuilder() <<
             "ef=" << EFColumns->DebugString() << ";" <<
             "pk=" << PKColumns->DebugString() << ";" <<
-            "ff=" << FFColumns->DebugString() << ";"
+            "ff=" << FFColumns->DebugString() << ";" <<
+            "program_input=" << ProgramInputColumns->DebugString()
             ;
     }
 
@@ -48,25 +50,37 @@ public:
         Y_ABORT_UNLESS(ReadMetadata);
         Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
-        EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo());
-        PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo());
-        FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetAllColumns(), ReadMetadata->GetIndexInfo());
-        TrivialEFFlag = EFColumns->ColumnsOnly(ReadMetadata->GetIndexInfo().ArrowSchemaSnapshot()->field_names());
+        auto readSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetSnapshot());
+        SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSpecialColumnIdsSet(), ReadMetadata->GetIndexInfo(), readSchema);
+        {
+            auto efColumns = ReadMetadata->GetEarlyFilterColumnIds();
+            if (efColumns.size()) {
+                EFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetEarlyFilterColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+            } else {
+                EFColumns = SpecColumns;
+            }
+        }
+        *EFColumns = *EFColumns + *SpecColumns;
+        if (ReadMetadata->HasProcessingColumnIds()) {
+            FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
+            *FFColumns = *FFColumns + *EFColumns;
+        } else {
+            FFColumns = std::make_shared<TColumnsSet>(*EFColumns);
+        }
+        ProgramInputColumns = FFColumns;
 
+        PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), ReadMetadata->GetIndexInfo(), readSchema);
+        MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
+
+        TrivialEFFlag = EFColumns->ColumnsOnly(ReadMetadata->GetIndexInfo().ArrowSchemaSnapshot()->field_names());
 
         PKFFColumns = std::make_shared<TColumnsSet>(*PKColumns + *FFColumns);
         EFPKColumns = std::make_shared<TColumnsSet>(*EFColumns + *PKColumns);
         FFMinusEFColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns);
         FFMinusEFPKColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns - *PKColumns);
 
-        Y_ABORT_UNLESS(FFColumns->Contains(EFColumns));
-
-        auto resultSchema = ReadMetadata->GetLoadSchema(ReadMetadata->GetSnapshot());
-        for (auto&& f : ReadMetadata->GetAllColumns()) {
-            ResultFields.emplace_back(resultSchema->GetFieldByColumnIdVerified(f));
-            ResultFieldNames.emplace_back(ResultFields.back()->name());
-        }
-        ResultSchema = std::make_shared<arrow::Schema>(ResultFields);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
     }
 
     TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const {

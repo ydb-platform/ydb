@@ -19,7 +19,7 @@ ENDIF()
     PEERDIR(
         contrib/libs/protobuf
         ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-        library/cpp/actors/http
+        ydb/library/actors/http
         library/cpp/getopt
         library/cpp/lfalloc/alloc_profiler
         library/cpp/logger
@@ -58,19 +58,24 @@ ENDIF()
         ydb/library/yql/providers/ydb/actors
         ydb/library/yql/providers/ydb/comp_nodes
         ydb/library/yql/providers/ydb/provider
+        ydb/library/yql/providers/pg/provider
 
         ydb/library/yql/public/udf/service/terminate_policy
         ydb/library/yql/utils/backtrace
         ydb/library/yql/utils/bindings
         ydb/library/yql/utils/log
+        ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/yt/gateway/file
         ydb/library/yql/providers/yt/gateway/native
+        ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/yt/provider
+        ydb/library/yql/providers/yt/codec/codegen
+        ydb/library/yql/providers/yt/comp_nodes/llvm
         ydb/library/yql/providers/yt/lib/yt_download
         ydb/library/yql/providers/yt/lib/yt_url_lister
         ydb/library/yql/providers/yt/lib/config_clusters

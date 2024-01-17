@@ -19,16 +19,23 @@ namespace NKikimr::NSsa {
 
 size_t FilterTest(std::vector<std::shared_ptr<arrow::Array>> args, EOperation op1, EOperation op2) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{
-                                                    std::make_shared<arrow::Field>("x", args.at(0)->type()),
-                                                    std::make_shared<arrow::Field>("y", args.at(1)->type()),
-                                                    std::make_shared<arrow::Field>("z", args.at(2)->type())});
+        std::make_shared<arrow::Field>("x", args.at(0)->type()),
+        std::make_shared<arrow::Field>("y", args.at(1)->type()),
+        std::make_shared<arrow::Field>("z", args.at(2)->type())});
     auto batch = arrow::RecordBatch::Make(schema, 3, std::vector{args.at(0), args.at(1), args.at(2)});
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
-    step->Assignes = {TAssign("res1", op1, {"x", "y"}), TAssign("res2", op2, {"res1", "z"})};
-    step->Filters = {"res2"};
-    step->Projection = {"res1", "res2"};
+    auto res1Info = TColumnInfo::Generated(3, "res1");
+    auto res2Info = TColumnInfo::Generated(3, "res2");
+    auto xInfo = TColumnInfo::Original(0, "x");
+    auto yInfo = TColumnInfo::Original(1, "y");
+    auto zInfo = TColumnInfo::Original(2, "z");
+    step->AddAssigne(TAssign(res1Info, op1, {xInfo, yInfo}));
+    step->AddAssigne(TAssign(res2Info, op2, {res1Info, zInfo}));
+    step->AddFilter(res2Info);
+    step->AddProjection(res1Info);
+    step->AddProjection(res2Info);
     UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
     UNIT_ASSERT(batch->ValidateFull().ok());
     UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -43,9 +50,16 @@ size_t FilterTestUnary(std::vector<std::shared_ptr<arrow::Array>> args, EOperati
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
-    step->Assignes = {TAssign("res1", op1, {"x"}), TAssign("res2", op2, {"res1", "z"})};
-    step->Filters = {"res2"};
-    step->Projection = {"res1", "res2"};
+    auto res1Info = TColumnInfo::Generated(3, "res1");
+    auto res2Info = TColumnInfo::Generated(3, "res2");
+    auto xInfo = TColumnInfo::Original(0, "x");
+    auto zInfo = TColumnInfo::Original(1, "z");
+
+    step->AddAssigne(TAssign(res1Info, op1, {xInfo}));
+    step->AddAssigne(TAssign(res2Info, op2, {res1Info, zInfo}));
+    step->AddFilter(res2Info);
+    step->AddProjection(res1Info);
+    step->AddProjection(res2Info);
     auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
     if (!status.ok()) {
         Cerr << status.ToString() << "\n";
@@ -75,10 +89,12 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data,
     UNIT_ASSERT(batch->ValidateFull().ok());
 
     auto step = std::make_shared<TProgramStep>();
-    step->Assignes = {
-        TAssign("res", op, {"x"}, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase))
-    };
-    step->Projection = {"res"};
+
+    auto resInfo = TColumnInfo::Generated(1, "res");
+    auto xInfo = TColumnInfo::Original(0, "x");
+
+    step->AddAssigne(TAssign(resInfo, op, {xInfo}, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase)));
+    step->AddProjection(resInfo);
     auto status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
     if (!status.ok()) {
         Cerr << status.ToString() << "\n";
@@ -247,13 +263,18 @@ void GroupByXY(bool nullable, ui32 numKeys, ETest test = ETest::DEFAULT,
     UNIT_ASSERT(status.ok());
 
     auto step = std::make_shared<TProgramStep>();
-    step->GroupBy = {
-        TAggregateAssign("agg_x", aggFunc, {"x"}),
-        TAggregateAssign("agg_y", aggFunc, {"y"})
-    };
-    step->GroupByKeys.push_back("x");
+
+    auto xInfo = TColumnInfo::Original(0, "x");
+    auto yInfo = TColumnInfo::Original(1, "y");
+
+    auto aggXInfo = TColumnInfo::Generated(2, "agg_x");
+    auto aggYInfo = TColumnInfo::Generated(3, "agg_y");
+
+    step->AddGroupBy(TAggregateAssign(aggXInfo, aggFunc, xInfo));
+    step->AddGroupBy(TAggregateAssign(aggYInfo, aggFunc, yInfo));
+    step->AddGroupByKeys(xInfo);
     if (numKeys == 2) {
-        step->GroupByKeys.push_back("y");
+        step->AddGroupByKeys(yInfo);
     }
 
     status = ApplyProgram(batch, TProgram({step}), GetCustomExecContext());
@@ -476,9 +497,18 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         UNIT_ASSERT(batch->ValidateFull().ok());
 
         auto step = std::make_shared<TProgramStep>();
-        step->Assignes = {TAssign("y", 56), TAssign("res", EOperation::Add, {"x", "y"})};
-        step->Filters = {"filter"};
-        step->Projection = {"res", "filter"};
+
+        auto xInfo = TColumnInfo::Original(0, "x");
+        auto yInfo = TColumnInfo::Generated(1, "y");
+
+        auto filterInfo = TColumnInfo::Generated(2, "filter");
+        auto resInfo = TColumnInfo::Generated(3, "res");
+
+        step->AddAssigne(TAssign(yInfo, 56));
+        step->AddAssigne(TAssign(resInfo, EOperation::Add, {xInfo, yInfo}));
+        step->AddFilter(filterInfo);
+        step->AddProjection(filterInfo);
+        step->AddProjection(resInfo);
         UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -493,8 +523,10 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
                                                                      BoolVecToArray({true, false, false, true})});
         UNIT_ASSERT(batch->ValidateFull().ok());
 
+        auto xInfo = TColumnInfo::Original(0, "x");
+
         auto step = std::make_shared<TProgramStep>();
-        step->Projection = {"x"};
+        step->AddProjection(xInfo);
         UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
@@ -513,10 +545,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         UNIT_ASSERT(batch->ValidateFull().ok());
 
         auto step = std::make_shared<TProgramStep>();
-        step->GroupBy = {
-            TAggregateAssign("min_x", EAggregate::Min, {"x"}),
-            TAggregateAssign("max_y", EAggregate::Max, {"y"})
-        };
+
+        auto minXInfo = TColumnInfo::Generated(2, "min_x");
+        auto maxYInfo = TColumnInfo::Generated(3, "max_y");
+        auto xInfo = TColumnInfo::Original(0, "x");
+        auto yInfo = TColumnInfo::Original(1, "y");
+
+        step->AddGroupBy(TAggregateAssign(minXInfo, EAggregate::Min, {xInfo}));
+        step->AddGroupBy(TAggregateAssign(maxYInfo, EAggregate::Max, {yInfo}));
         UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
@@ -537,10 +573,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         UNIT_ASSERT(batch->ValidateFull().ok());
 
         auto step = std::make_shared<TProgramStep>();
-        step->GroupBy = {
-            TAggregateAssign("sum_x", EAggregate::Sum, {"x"}),
-            TAggregateAssign("sum_y", EAggregate::Sum, {"y"})
-        };
+
+        auto sumXInfo = TColumnInfo::Generated(2, "sum_x");
+        auto sumYInfo = TColumnInfo::Generated(3, "sum_y");
+        auto xInfo = TColumnInfo::Original(0, "x");
+        auto yInfo = TColumnInfo::Original(1, "y");
+
+        step->AddGroupBy(TAggregateAssign(sumXInfo, EAggregate::Sum, {xInfo}));
+        step->AddGroupBy(TAggregateAssign(sumYInfo, EAggregate::Sum, {yInfo}));
         UNIT_ASSERT(ApplyProgram(batch, TProgram({step}), GetCustomExecContext()).ok());
         UNIT_ASSERT(batch->ValidateFull().ok());
         UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);

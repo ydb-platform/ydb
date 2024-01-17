@@ -405,11 +405,25 @@ FROM Input MATCH_RECOGNIZE(
         const auto& lastTerm = patternCallable->GetChild(2);
         UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 3));
         const auto& firstFactorOfLastTerm = lastTerm->GetChild(1)->GetChild(0);
-        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 5));
+        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 6));
         const auto nestedPattern = firstFactorOfLastTerm->GetChild(1)->GetChild(0);
         UNIT_ASSERT_EQUAL(nestedPattern->GetChildrenCount(), 1 + 1);
         UNIT_ASSERT_EQUAL(nestedPattern->GetChild(0)->GetContent(), "MatchRecognizePattern");
         UNIT_ASSERT(IsQuotedListOfSize(nestedPattern->GetChild(1), 2));
+    }
+
+    Y_UNIT_TEST(PatternManyAlternatives) {
+        const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+PATTERN (
+        (A B C D ) | (B A C D ) | (C B A D ) | (B C A D ) | (C A B D ) | (A C B D ) | (D A B C ) | (A D B C ) | (B A D C ) | (A B D C ) | (B D A C ) | (D B A C ) | (C D A B ) | (D C A B ) | (A D C B ) | (D A C B ) | (A C D B ) | (C A D B ) | (B C D A ) | (C B D A ) | (D C B A ) | (C D B A ) | (D B C A ) | (B D C A )
+    )
+    DEFINE A as A
+)
+)";
+        UNIT_ASSERT(MatchRecognizeSqlToYql(stmt).IsOk());
     }
 
     Y_UNIT_TEST(PatternLimitedNesting) {
@@ -461,7 +475,8 @@ FROM Input MATCH_RECOGNIZE(
                     FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
                     FromString<uint64_t>(factor->GetChild(2)->GetChild(1)->GetContent()), //QuantityMax
                     FromString<bool>(factor->GetChild(3)->GetChild(1)->GetContent()), //Greedy
-                    false //Output, not used in this test
+                    false, //Output, not used in this test
+                    false, // Flag "Unused", not used in this test
             };
         };
         {
@@ -616,9 +631,56 @@ FROM Input MATCH_RECOGNIZE(
         }
     }
 
+    Y_UNIT_TEST(Permute) {
+        const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN (
+        PERMUTE(A, B, C, D, E) --5 variables produce 5! permutations
+    )
+    DEFINE A as A
+)
+)";
+        const auto& r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(r.IsOk());
+
+        const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
+        const auto permutePattern = patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1)->GetChild(0);
+        UNIT_ASSERT(permutePattern->IsListOfSize(1 + 120)); //CallableName + 5!
+    }
+
+    Y_UNIT_TEST(PermuteTooMuch) {
+        for (size_t n = 1; n <= NYql::NMatchRecognize::MaxPermutedItems + 1; ++n) {
+            std::vector<std::string> vars(n);
+            std::generate(begin(vars), end(vars), [n = 0] () mutable { return "A" + std::to_string(n++);});
+            const auto stmt = TString(R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN (
+        PERMUTE( )" + std::accumulate(cbegin(vars) + 1, cend(vars), vars.front(),
+            [](const std::string& acc, const std::string& v) {
+                return acc + ", " + v;
+            }) +
+    R"(
+        )
+    )
+    DEFINE A0 as A0
+)
+)"
+            );
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            if (n <= NYql::NMatchRecognize::MaxPermutedItems) {
+                UNIT_ASSERT(r.IsOk());
+            } else {
+                UNIT_ASSERT(!r.IsOk());
+            }
+        }
+    }
 
 
-   Y_UNIT_TEST(row_pattern_subset_clause) {
+    Y_UNIT_TEST(row_pattern_subset_clause) {
         //TODO https://st.yandex-team.ru/YQL-16186
     }
 

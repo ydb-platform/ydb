@@ -24,7 +24,7 @@ namespace fast_float {
  * to determine whether we allow the fixed point and scientific notation respectively.
  * The default is  `fast_float::chars_format::general` which allows both `fixed` and `scientific`.
  */
-template<typename T, typename UC = char>
+template<typename T, typename UC = char, typename = FASTFLOAT_ENABLE_IF(is_supported_float_type<T>())>
 FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars(UC const * first, UC const * last,
                              T &value, chars_format fmt = chars_format::general)  noexcept;
@@ -36,6 +36,12 @@ template<typename T, typename UC = char>
 FASTFLOAT_CONSTEXPR20
 from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
                                       T &value, parse_options_t<UC> options)  noexcept;
+/**
+* from_chars for integer types.
+*/
+template <typename T, typename UC = char, typename = FASTFLOAT_ENABLE_IF(!is_supported_float_type<T>())>
+FASTFLOAT_CONSTEXPR20
+from_chars_result_t<UC> from_chars(UC const * first, UC const * last, T& value, int base = 10) noexcept;
 
 } // namespace fast_float
 #include "parse_number.h"

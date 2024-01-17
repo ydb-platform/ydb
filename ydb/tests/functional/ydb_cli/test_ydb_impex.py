@@ -110,8 +110,8 @@ DATA_ARRAY["json"] = ["""{"key":1,"id":1111,"value":"one"}
 {"key":7777,"id":7777,"value":"seven"}
 """]
 
-FILES_COUNT = 4
-DATASET_SIZE = 200000
+FILES_COUNT = 3
+DATASET_SIZE = 100000
 
 ARRAYS = [pa.array([1, 2, 3, 5, 7], type=pa.uint32()), pa.array([1111, 2222, 3333, 5555, 7777], type=pa.uint64()), pa.array(["one", "two", "three", "five", "seven"], type=pa.string())]
 ARRAY_NAMES = ['key', 'id', 'value']

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include "source.h"
+#include "columns_set.h"
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -18,17 +19,9 @@ protected:
     const TReadMetadata::TConstPtr ReadMetadata;
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Blobs;
 
-    TPortionInfo::TPreparedBatchData BuildBatchConstructor(const std::set<ui32>& columnIds) const {
+    TPortionInfo::TPreparedBatchData BuildBatchConstructor(const ISnapshotSchema& resultSchema) {
         auto blobSchema = ReadMetadata->GetLoadSchema(PortionInfo->GetMinSnapshot());
-        auto readSchema = ReadMetadata->GetLoadSchema(Context->GetReadMetadata()->GetSnapshot());
-        ISnapshotSchema::TPtr resultSchema;
-        if (columnIds.size()) {
-            resultSchema = std::make_shared<TFilteredSnapshotSchema>(readSchema, columnIds);
-        } else {
-            resultSchema = readSchema;
-        }
-
-        return PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, Blobs);
+        return PortionInfo->PrepareForAssemble(*blobSchema, resultSchema, Blobs);
     }
 
 public:
@@ -41,8 +34,9 @@ public:
         , ReadMetadata(Context->GetReadMetadata())
         , Blobs(blobs)
     {
-
+        AFL_VERIFY(Blobs.size());
     }
+
 };
 
 class TAssembleFilter: public TAssemblerCommon, public NColumnShard::TMonitoringObjectsCounter<TAssembleFilter, true, true> {
@@ -54,10 +48,9 @@ private:
     std::shared_ptr<NArrow::TColumnFilter> EarlyFilter;
     const TSnapshot RecordsMaxSnapshot;
     ui32 OriginalCount = 0;
-    std::set<ui32> FilterColumnIds;
+    std::shared_ptr<TColumnsSet> FilterColumns;
     const bool UseFilter = true;
     const NColumnShard::TCounterGuard TaskGuard;
-    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Blobs;
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
     virtual bool DoExecute() override;
@@ -68,10 +61,10 @@ public:
     }
 
     TAssembleFilter(const std::shared_ptr<TSpecialReadContext>& context, const std::shared_ptr<TPortionInfo>& portionInfo,
-        const std::shared_ptr<IDataSource>& source, const std::set<ui32>& filterColumnIds, const bool useFilter, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs)
+        const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TColumnsSet>& filterColumns, const bool useFilter, const THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo>& blobs)
         : TBase(context, portionInfo, source, std::move(blobs))
         , RecordsMaxSnapshot(PortionInfo->RecordSnapshotMax())
-        , FilterColumnIds(filterColumnIds)
+        , FilterColumns(filterColumns)
         , UseFilter(useFilter)
         , TaskGuard(Context->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     {

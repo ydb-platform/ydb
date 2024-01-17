@@ -43,8 +43,9 @@ if __name__ == '__main__':
         main(args)
     except Exception as e:
         logging.exception(e)
-        print >>sys.stderr, open(args.abs_log_path).read()
+        print >> sys.stderr, open(args.abs_log_path).read()
         sys.stderr.flush()
 
         import error
+
         sys.exit(error.ExitCodes.INFRASTRUCTURE_ERROR if fetch_from.is_temporary(e) else 1)

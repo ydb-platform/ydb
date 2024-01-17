@@ -16,7 +16,7 @@ def main():
                 continue
             basename = os.path.basename(arg)
             assert arg.startswith(build_root) and len(arg) > length + len(basename) and arg[length] in ('/', '\\')
-            cmd.extend([str('--dep'), str('{}:{}:{}'.format(build_root, os.path.dirname(arg[length+1:]), basename))])
+            cmd.extend([str('--dep'), str('{}:{}:{}'.format(build_root, os.path.dirname(arg[length + 1 :]), basename))])
         elif arg == '--dep':
             is_dep = True
         else:

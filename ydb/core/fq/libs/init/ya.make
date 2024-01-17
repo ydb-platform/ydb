@@ -5,8 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/http
+    ydb/library/actors/core
+    ydb/library/actors/http
     ydb/core/base
     ydb/core/fq/libs/actors
     ydb/core/fq/libs/audit
@@ -30,7 +30,7 @@ PEERDIR(
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/utils/actor_log
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes

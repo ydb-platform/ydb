@@ -5,7 +5,7 @@
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -24,7 +24,8 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnProposeTransaction(const NKikimrPQ::TDataTransaction& txBody,
                               ui64 extractTabletId);
-    void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody);
+    void OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody,
+                              ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
     void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
@@ -85,7 +86,7 @@ struct TDistributedTransaction {
     void InitConfigTransaction(const NKikimrPQ::TTransaction& tx);
 
     void InitPartitions(const google::protobuf::RepeatedPtrField<NKikimrPQ::TPartitionOperation>& tx);
-    void InitPartitions(const NKikimrPQ::TPQTabletConfig& config);
+    void InitPartitions();
 
     template<class E>
     void OnPartitionResult(const E& event, EDecision decision);

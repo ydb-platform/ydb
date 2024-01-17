@@ -188,6 +188,8 @@ struct TInternalizeNodeOptions
 
 struct ICypressClientBase
 {
+    virtual ~ICypressClientBase() = default;
+
     virtual TFuture<NYson::TYsonString> GetNode(
         const NYPath::TYPath& path,
         const TGetNodeOptions& options = {}) = 0;

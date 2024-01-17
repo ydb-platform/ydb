@@ -4,7 +4,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {
 namespace NPQ {

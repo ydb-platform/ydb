@@ -46,6 +46,7 @@ message TLoggingConfig {
         CORE_DQ = 22;
         HTTP_GATEWAY = 23;
         PROVIDER_GENERIC = 24;
+        PROVIDER_PG = 25;
     }
 
     message TComponentLevel {

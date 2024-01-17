@@ -1,7 +1,7 @@
 #pragma once
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/user_account_service.h>
@@ -24,7 +24,7 @@
 
 namespace NKikimr {
 
-inline bool IsRetryableGrpcError(const NGrpc::TGrpcStatus& status) {
+inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
     switch (status.GRpcStatusCode) {
     case grpc::StatusCode::UNAUTHENTICATED:
     case grpc::StatusCode::PERMISSION_DENIED:
@@ -1444,20 +1444,20 @@ protected:
             }
             settings.GrpcKeepAliveTimeMs = Config.GetAccessServiceGrpcKeepAliveTimeMs();
             settings.GrpcKeepAliveTimeoutMs = Config.GetAccessServiceGrpcKeepAliveTimeoutMs();
-            AccessServiceValidator = Register(NCloud::CreateAccessService(settings), TMailboxType::Simple, AppData()->IOPoolId);
+            AccessServiceValidator = Register(NCloud::CreateAccessService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheAccessServiceAuthentication()) {
                 AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(
                                                           AccessServiceValidator,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
             if (Config.GetCacheAccessServiceAuthorization()) {
                 AccessServiceValidator = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvAccessService::TEvAuthorizeRequest, NCloud::TEvAccessService::TEvAuthorizeResponse>(
                                                           AccessServiceValidator,
                                                           Config.GetGrpcCacheSize(),
                                                           TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                          TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 
@@ -1467,13 +1467,13 @@ protected:
             if (Config.GetUseUserAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
             }
-            UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::Simple, AppData()->IOPoolId);
+            UserAccountService = Register(CreateUserAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheUserAccountService()) {
                 UserAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvUserAccountService::TEvGetUserAccountRequest, NCloud::TEvUserAccountService::TEvGetUserAccountResponse>(
                                                       UserAccountService,
                                                       Config.GetGrpcCacheSize(),
                                                       TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                      TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                      TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 
@@ -1483,13 +1483,13 @@ protected:
             if (Config.GetUseServiceAccountServiceTLS()) {
                 settings.CertificateRootCA = TUnbufferedFileInput(Config.GetPathToRootCA()).ReadAll();
             }
-            ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::Simple, AppData()->IOPoolId);
+            ServiceAccountService = Register(NCloud::CreateServiceAccountService(settings), TMailboxType::HTSwap, AppData()->UserPoolId);
             if (Config.GetCacheServiceAccountService()) {
                 ServiceAccountService = Register(NCloud::CreateGrpcServiceCache<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest, NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse>(
                                                          ServiceAccountService,
                                                          Config.GetGrpcCacheSize(),
                                                          TDuration::MilliSeconds(Config.GetGrpcSuccessLifeTime()),
-                                                         TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::Simple, AppData()->UserPoolId);
+                                                         TDuration::MilliSeconds(Config.GetGrpcErrorLifeTime())), TMailboxType::HTSwap, AppData()->UserPoolId);
             }
         }
 

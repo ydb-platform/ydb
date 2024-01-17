@@ -13,7 +13,7 @@ YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/testing/unittest
-    library/cpp/actors/testlib
+    ydb/library/actors/testlib
     ydb/library/services
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/public/udf/service/exception_policy

@@ -146,6 +146,10 @@ namespace NKikimr::NBsController {
                             Self->UseSelfHealLocalPolicy = value;
                             db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
                         }
+                        for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
+                            Self->TryToRelocateBrokenDisksLocallyFirst = value;
+                            db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                        }
                         return true;
                     }
 
@@ -311,7 +315,6 @@ namespace NKikimr::NBsController {
                 state.SanitizingRequests.clear();
                 state.ExplicitReconfigureMap.clear();
                 state.SuppressDonorMode.clear();
-                state.TargetNodeId.reset();
                 switch (cmd.GetCommandCase()) {
 #define HANDLE_COMMAND(NAME) \
                     case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: return state.ExecuteStep(cmd.Get ## NAME(), status);

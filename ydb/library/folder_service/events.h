@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/events.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NKikimr::NFolderService {
 
@@ -28,7 +28,7 @@ struct TEvFolderService {
     struct TEvGetCloudByFolderResponse : TEventLocal<TEvGetCloudByFolderResponse, EvGetCloudByFolderResponse> {
         TString FolderId;
         TString CloudId;
-        NGrpc::TGrpcStatus Status;
+        NYdbGrpc::TGrpcStatus Status;
     };
 };
 } // namespace NKikimr::NFolderService

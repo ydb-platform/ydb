@@ -9,7 +9,7 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -235,6 +235,7 @@ namespace NSQLTranslationV1 {
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
         THashMap<TString, TString> ImportModuleAliases;
+        THashMap<TString, TString> RequiredModules;
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
         TScopedStatePtr Scoped;
@@ -268,8 +269,6 @@ namespace NSQLTranslationV1 {
         TMaybe<bool> JsonQueryReturnsJsonDocument;
         TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
         TMaybe<bool> AnsiRankForNullableKeys = true;
-        TMaybe<bool> AnsiOrderByLimitInUnionAll = true;
-        bool EnforceAnsiOrderByLimitInUnionAll = false;
         const bool AnsiQuotedIdentifiers;
         bool AnsiOptionalAs = true;
         bool OrderedColumns = false;
@@ -309,6 +308,8 @@ namespace NSQLTranslationV1 {
         bool AnsiLike = false;
         bool FeatureR010 = false; //Row pattern recognition: FROM clause
         TMaybe<bool> CompactGroupBy;
+        bool BlockEngineEnable = false;
+        bool BlockEngineForce = false;
     };
 
     class TColumnRefScope {

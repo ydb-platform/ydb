@@ -161,6 +161,11 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetResultSetsTtl("1d");
     }
 
+    if (config.AvailableStreamingConnectionSize() == 0) {
+        // For backward compatibility, TODO: YQ-2628, remove after config update on every cluster
+        config.MutableAvailableStreamingConnection()->CopyFrom(config.GetAvailableConnection());
+    }
+
     return config;
 }
 

@@ -61,7 +61,8 @@ bool TTableMountInfo::IsChaosReplica() const
 TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
 {
     if (tabletIndex < 0 || tabletIndex >= std::ssize(Tablets)) {
-        THROW_ERROR_EXCEPTION("Invalid tablet index for table %v: expected in range [0,%v], got %v",
+        THROW_ERROR_EXCEPTION(EErrorCode::NoSuchTablet,
+            "Invalid tablet index for table %v: expected in range [0,%v], got %v",
             Path,
             Tablets.size() - 1,
             tabletIndex);
@@ -113,8 +114,7 @@ int TTableMountInfo::GetRandomMountedTabletIndex() const
     ValidateTabletOwner();
 
     if (MountedTablets.empty()) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::TabletNotMounted,
+        THROW_ERROR_EXCEPTION(EErrorCode::TabletNotMounted,
             "Table %v has no mounted tablets",
             Path);
     }
@@ -179,4 +179,3 @@ void TTableMountInfo::ValidateReplicationLog() const
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTabletClient
-

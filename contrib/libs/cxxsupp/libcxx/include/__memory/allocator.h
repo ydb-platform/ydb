@@ -28,6 +28,8 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 template <class _Tp> class allocator;
 
 #if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_ENABLE_CXX20_REMOVED_ALLOCATOR_VOID_SPECIALIZATION)
+// These specializations shouldn't be marked _LIBCPP_DEPRECATED_IN_CXX17.
+// Specializing allocator<void> is deprecated, but not using it.
 template <>
 class _LIBCPP_TEMPLATE_VIS allocator<void>
 {
@@ -121,7 +123,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
     void deallocate(_Tp* __p, size_t __n) _NOEXCEPT {
         if (__libcpp_is_constant_evaluated()) {
-            ::operator delete((void*)__p);
+            ::operator delete(__p);
         } else {
             _VSTD::__libcpp_deallocate((void*)__p, __n * sizeof(_Tp), _LIBCPP_ALIGNOF(_Tp));
         }

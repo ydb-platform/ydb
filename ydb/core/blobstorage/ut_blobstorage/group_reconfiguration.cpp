@@ -4,7 +4,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
     class TBsProxyLoader : public TActorBootstrapped<TBsProxyLoader> {
     public:
-        TBsProxyLoader(ui32 groupId, ui32& sendCounter, ui32& successCounter) 
+        TBsProxyLoader(ui32 groupId, ui32& sendCounter, ui32& successCounter)
             : GroupId(groupId)
             , SendCounter(sendCounter)
             , SuccessCounter(successCounter)
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         void HandleWakeup() {
             TString data = TString(BlobSize, '0');
             SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvPut(
-                    TLogoBlobID(TabletId, 1, 1, Channel, data.size(), Counter++), 
+                    TLogoBlobID(TabletId, 1, 1, Channel, data.size(), Counter++),
                     std::move(data),
                     TInstant::Max()));
             SendCounter += 1;
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
                 break;
             }
         }
-    
+
         for (const auto& pdisk : base.GetPDisk()) {
             toNodeId = pdisk.GetNodeId();
             if (nodesInGroup.count(toNodeId) == 0) {
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         }
     }
 
-    
+
     void VerifyCounters(std::vector<std::pair<ui32, ui32>>& counters, ui32 acceptableLoss = 5) {
         for (ui32 i = 0; i < counters.size(); ++i) {
             auto [sent, successes] = counters[i];
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
         for (ui32 nodeId : nodesToCheck) {
             auto edge = env.Runtime->AllocateEdgeActor(nodeId);
-            
+
             env.Runtime->WrapInActorContext(edge, [&] {
                 env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
                         new TEvNodeWardenQueryGroupInfo(groupId), nodeId));
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         ui32 toNodeId;
 
         std::vector<std::pair<ui32, ui32>> counters;
-    
+
         NKikimrBlobStorage::TConfigRequest request;
         NKikimrBlobStorage::TConfigResponse response;
 
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         env->Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->Sender.NodeId() == bscNodeId) {
                 if (nodesInGroup.count(nodeId) > 0 && nodeId != fromNodeId && nodeId != toNodeId && nodeId != bscNodeId) {
-                    if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType 
+                    if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType
                             && !std::exchange(bscShutDown, true)) {
                         Cerr << "Send configuration to nodeId# " << nodeId << Endl;
                         return true;
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         ui32 toNodeId;
 
         std::vector<std::pair<ui32, ui32>> counters;
-    
+
         NKikimrBlobStorage::TConfigRequest request;
         NKikimrBlobStorage::TConfigResponse response;
 
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
         response = env->Invoke(request);
         env->Sim(TDuration::MilliSeconds(1));
-        
+
 
         std::array<bool, numNodes - 1> passedMessages{true};
 
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
     class TConfigurationRequestActor : public TActorBootstrapped<TConfigurationRequestActor> {
     public:
-        TConfigurationRequestActor(ui32 groupId, ui64 bsController, TDuration& delay) 
+        TConfigurationRequestActor(ui32 groupId, ui64 bsController, TDuration& delay)
             : GroupId(groupId)
             , BsController(bsController)
             , Delay(delay)

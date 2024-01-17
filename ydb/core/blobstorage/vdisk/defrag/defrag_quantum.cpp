@@ -9,7 +9,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/actors/core/actor_coroutine.h>
+#include <ydb/library/actors/core/actor_coroutine.h>
 
 using namespace NKikimrServices;
 

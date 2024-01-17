@@ -58,25 +58,26 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     // Save new portions (their column records)
     {
         auto g = self.GranulesStorage->StartPackModification();
-
+        THashSet<ui64> usedPortionIds;
         for (auto& [_, portionInfo] : PortionsToRemove) {
             Y_ABORT_UNLESS(!portionInfo.Empty());
             Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
 
             const TPortionInfo& oldInfo = self.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
-
+            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
             self.UpsertPortion(portionInfo, &oldInfo);
 
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
+                context.DB.WriteColumn(portionInfo, record);
             }
         }
         for (auto& portionInfoWithBlobs : AppendedPortions) {
             auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
             Y_ABORT_UNLESS(!portionInfo.Empty());
+            AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
             self.UpsertPortion(portionInfo);
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
+                context.DB.WriteColumn(portionInfo, record);
             }
         }
     }

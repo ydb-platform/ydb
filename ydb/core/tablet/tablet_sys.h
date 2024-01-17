@@ -2,10 +2,10 @@
 #include "defs.h"
 #include "tablet_impl.h"
 #include "tablet_setup.h"
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/set.h>
 

@@ -8,6 +8,8 @@
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
 
+#include <library/cpp/yt/misc/tls.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,8 +100,8 @@ private:
 
     TSharedMutableRef Buffer_;
 
-    static thread_local TPerThreadCache* Cache_;
-    static thread_local bool CacheDestroyed_;
+    static YT_THREAD_LOCAL(TPerThreadCache*) Cache_;
+    static YT_THREAD_LOCAL(bool) CacheDestroyed_;
     static TPerThreadCache* GetCache();
 
     static constexpr size_t ChunkSize = 128_KB - 64;

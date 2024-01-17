@@ -20,7 +20,9 @@ def just_do_it():
         if os.path.exists(args.target):
             os.remove(args.target)
         with tarfile.open(args.target, 'w') as tf:
-            tf.add(os.path.join(args.temp_dir, 'bin'), arcname=os.path.join(os.path.basename(args.binary) + '.app', 'bin'))
+            tf.add(
+                os.path.join(args.temp_dir, 'bin'), arcname=os.path.join(os.path.basename(args.binary) + '.app', 'bin')
+            )
         return
     if len(app_tar) > 1:
         app_tar = [p for p in args.peers if not p.endswith('.default.ios.interface')]
@@ -30,7 +32,7 @@ def just_do_it():
     with tarfile.open(app_tar) as tf:
         tf.extractall(args.temp_dir)
     tar_suffix = '.default.ios.interface' if app_tar.endswith('.default.ios.interface') else '.ios.interface'
-    app_unpacked_path = os.path.join(args.temp_dir, os.path.basename(app_tar)[:-len(tar_suffix)] + '.app')
+    app_unpacked_path = os.path.join(args.temp_dir, os.path.basename(app_tar)[: -len(tar_suffix)] + '.app')
     if not os.path.exists(app_unpacked_path):
         raise Exception('Bad IOS_INTERFACE resource: {}'.format(app_tar))
     shutil.copyfile(args.binary, os.path.join(app_unpacked_path, 'bin'))

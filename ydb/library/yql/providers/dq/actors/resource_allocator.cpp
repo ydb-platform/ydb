@@ -5,7 +5,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
@@ -51,7 +51,8 @@ public:
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks,
         const TString& computeActorType,
-        NDqProto::EDqStatsMode statsMode)
+        NDqProto::EDqStatsMode statsMode,
+        bool enableSpilling)
         : TRichActor<TResourceAllocator>(&TResourceAllocator::Handle)
         , GwmActor(gwmActor)
         , SenderId(senderId)
@@ -66,6 +67,7 @@ public:
         , Tasks(tasks)
         , ComputeActorType(computeActorType)
         , StatsMode(statsMode)
+        , UseSpilling(enableSpilling)
     {
         AllocatedWorkers.resize(workerCount);
         if (!Tasks.empty()) {
@@ -256,6 +258,7 @@ private:
             *request->Record.AddTask() = node.Task;
         }
         request->Record.SetStatsMode(StatsMode);
+        request->Record.SetEnableSpilling(UseSpilling);
         YQL_CLOG(WARN, ProviderDq) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
         if (backoff) {
             TActivationContext::Schedule(backoff, new IEventHandle(
@@ -296,7 +299,7 @@ private:
             auto delta = TInstant::Now() - maybeRequestInfo->second.StartTime;
             // catched at grpc_service
             QueryStat.AddCounter(
-                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTime"),
+                QueryStat.GetCounterName("Actor", {{"ClusterName", maybeRequestInfo->second.ClusterName}}, "CreateFailTimeUs"),
                 delta);
         }
         TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;
@@ -335,6 +338,7 @@ private:
     TVector<NYql::NDqProto::TDqTask> Tasks; // for compute actor
     const TString ComputeActorType;
     NDqProto::EDqStatsMode StatsMode;
+    bool UseSpilling;
 };
 
 NActors::IActor* CreateResourceAllocator(
@@ -347,9 +351,10 @@ NActors::IActor* CreateResourceAllocator(
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     const TVector<NYql::NDqProto::TDqTask>& tasks,
     const TString& computeActorType,
-    NDqProto::EDqStatsMode statsMode)
+    NDqProto::EDqStatsMode statsMode,
+    bool enableSpilling)
 {
-    return new TResourceAllocator(gwmActor, senderId, controlId, size, traceId, settings, counters, tasks, computeActorType, statsMode);
+    return new TResourceAllocator(gwmActor, senderId, controlId, size, traceId, settings, counters, tasks, computeActorType, statsMode, enableSpilling);
 }
 
 } // namespace NYql

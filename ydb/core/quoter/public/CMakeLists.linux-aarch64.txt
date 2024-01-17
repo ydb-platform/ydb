@@ -21,7 +21,7 @@ target_link_libraries(core-quoter-public PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   ydb-library-time_series_vec
   tools-enum_parser-enum_serialization_runtime
 )

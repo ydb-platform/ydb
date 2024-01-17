@@ -1,5 +1,6 @@
 #include "mkql_zip.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
@@ -109,7 +110,7 @@ public:
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
             if (Lists.empty()) {
-                return Ctx.HolderFactory.GetEmptyContainer();
+                return Ctx.HolderFactory.GetEmptyContainerLazy();
             }
 
             TUnboxedValueVector iters;
@@ -184,7 +185,7 @@ public:
         const auto size = *(All ? std::max_element(sizes.cbegin(), sizes.cend()) : std::min_element(sizes.cbegin(), sizes.cend()));
 
         if (!size)
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
 
         NUdf::TUnboxedValue *listItems = nullptr;
         const auto list = ctx.HolderFactory.CreateDirectArrayHolder(size, listItems);

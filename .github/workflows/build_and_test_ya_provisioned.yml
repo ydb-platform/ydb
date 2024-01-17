@@ -12,9 +12,11 @@ on:
         default: "relwithdebinfo"
         description: "Build preset"
         options:
+          - debug
           - relwithdebinfo
           - release-asan
           - release-tsan
+          - release-msan
       test_size:
         type: choice
         default: "small,medium,large"
@@ -49,12 +51,11 @@ on:
         description: "link threads count"
       runner_label:
         type: string
-        default: "ya-make"
+        default: "auto-provisioned"
         description: "runner label"
-      cache_tests:
+      put_build_results_to_cache:
         type: boolean
-        default: false
-        description: "Use cache for tests"
+        default: true
   workflow_call:
     inputs:
       build_target:
@@ -85,18 +86,18 @@ on:
         description: "link threads count"
       runner_label:
         type: string
-        default: "ya-make"
-      cache_tests:
+        default: "auto-provisioned"
+      put_build_results_to_cache:
         type: boolean
-        default: false
-        description: "Use cache for tests"
-
+        default: true
 jobs:
   main:
     uses: ./.github/workflows/build_and_test_ya.yml
     with:
-      runner_kind: provisioned
+      # FIXME: always use auto-provisioned here?
       runner_label: ${{ inputs.runner_label }}
+      # naive check for -asan, -tsan, -msan
+      runner_additional_label: ${{ contains(inputs.build_preset, '-') && format('build-preset-{0}', inputs.build_preset) || '' }}
       build_target: ${{ inputs.build_target }}
       build_preset: ${{ inputs.build_preset }}
       run_build: ${{ inputs.run_build }}
@@ -105,5 +106,5 @@ jobs:
       test_type: ${{ inputs.test_type }}
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
-      cache_tests: ${{ inputs.cache_tests }}
+      put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
     secrets: inherit

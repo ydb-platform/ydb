@@ -1,7 +1,5 @@
 import os
 
-from _common import sort_by_keywords
-
 
 def oncreate_init_py_structure(unit, *args):
     if unit.get('DISTBUILD') or unit.get('AUTOCHECK'):

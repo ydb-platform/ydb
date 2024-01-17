@@ -12,6 +12,7 @@ namespace NKqpRun {
 struct TYdbSetupSettings {
     TString DomainName = "Root";
 
+    bool TraceOpt = false;
     TMaybe<TString> LogOutputFile;
 
     TString YqlToken;
@@ -21,6 +22,11 @@ struct TYdbSetupSettings {
 
 
 struct TRunnerOptions {
+    enum class EResultOutputFormat {
+        RowsJson,  // Rows in json format
+        FullJson,  // Columns, rows and types in json format
+    };
+
     i64 ResultsRowsLimit = 1000;
 
     IOutputStream* ResultOutput = &Cout;
@@ -28,6 +34,7 @@ struct TRunnerOptions {
     IOutputStream* ScriptQueryAstOutput = nullptr;
     IOutputStream* ScriptQueryPlanOutput = nullptr;
 
+    EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
     NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
 
     TYdbSetupSettings YdbSettings;

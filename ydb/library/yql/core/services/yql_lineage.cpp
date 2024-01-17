@@ -41,7 +41,8 @@ public:
         writer.OnBeginList();
         for (const auto& r : Reads_) {
             TVector<TPinInfo> inputs;
-            r.second->GetPlanFormatter().GetInputs(*r.first, inputs);
+            auto& formatter = r.second->GetPlanFormatter();
+            formatter.GetInputs(*r.first, inputs);
             for (const auto& i : inputs) {
                 auto id = ++NextReadId_;
                 ReadIds_[r.first].push_back(id);
@@ -52,7 +53,12 @@ public:
                 writer.OnKeyedItem("Name");
                 writer.OnStringScalar(i.DisplayName);
                 writer.OnKeyedItem("Schema");
-                WriteSchema(writer, *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+                const auto& itemType = *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                WriteSchema(writer, itemType, nullptr);
+                if (formatter.WriteSchemaHeader(writer)) {
+                    WriteSchema(writer, itemType, &formatter);
+                }
+
                 writer.OnEndMap();
             }
         }
@@ -63,7 +69,8 @@ public:
         for (const auto& w : Writes_) {
             auto data = w.first->Child(3);
             TVector<TPinInfo> outputs;
-            w.second->GetPlanFormatter().GetOutputs(*w.first, outputs);
+            auto& formatter = w.second->GetPlanFormatter();
+            formatter.GetOutputs(*w.first, outputs);
             YQL_ENSURE(outputs.size() == 1);
             auto id = ++NextWriteId_;
             WriteIds_[w.first] = id;
@@ -74,7 +81,12 @@ public:
             writer.OnKeyedItem("Name");
             writer.OnStringScalar(outputs.front().DisplayName);
             writer.OnKeyedItem("Schema");
-            WriteSchema(writer, *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+            const auto& itemType = *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            WriteSchema(writer, itemType, nullptr);
+            if (formatter.WriteSchemaHeader(writer)) {
+                WriteSchema(writer, itemType, &formatter);
+            }
+
             writer.OnKeyedItem("Lineage");
             auto lineage = CollectLineage(*data);
             WriteLineage(writer, *lineage);
@@ -87,7 +99,7 @@ public:
     }
 
 private:
-    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType) {
+    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType, IPlanFormatter* formatter) {
         writer.OnBeginMap();
         for (const auto& i : structType.GetItems()) {
             if (i->GetName().StartsWith("_yql_sys_")) {
@@ -95,7 +107,11 @@ private:
             }
 
             writer.OnKeyedItem(i->GetName());
-            writer.OnStringScalar(FormatType(i->GetItemType()));
+            if (formatter) {
+                formatter->WriteTypeDetails(writer, *i->GetItemType());
+            } else {
+                writer.OnStringScalar(FormatType(i->GetItemType()));
+            }
         }
 
         writer.OnEndMap();
@@ -193,7 +209,7 @@ private:
             return &lineage;
         }
 
-        if (node.IsCallable({"Unordered", "Right!", "Skip", "Take", "Sort", "AssumeSorted"})) {
+        if (node.IsCallable({"Unordered", "UnorderedSubquery", "Right!", "Skip", "Take", "Sort", "AssumeSorted"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
@@ -230,10 +246,6 @@ private:
             return Nothing();
         }
 
-        if (node.IsArgument()) {
-            return Nothing();
-        }
-
         auto [it, inserted] = visited.emplace(&node, Nothing());
         if (!inserted) {
             return it->second;
@@ -257,13 +269,15 @@ private:
             }
 
             auto inner = ScanExprLineage(node.Head(), arg, src, visited);
-            if (!inner || !inner->StructItems) {
+            if (!inner) {
                 return Nothing();
             }
 
-            TFieldsLineage result; 
-            result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
-            return it->second = result;
+            if (inner->StructItems) {
+                TFieldsLineage result; 
+                result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+                return it->second = result;
+            }
         }
 
         if (node.IsCallable("SqlIn")) {

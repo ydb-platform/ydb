@@ -109,9 +109,9 @@ namespace Aws
                 inline Aws::String GetEventPayloadAsString() { return Aws::String(m_eventPayload.begin(), m_eventPayload.end()); }
 
             private:
-                size_t m_totalLength;
-                size_t m_headersLength;
-                size_t m_payloadLength;
+                size_t m_totalLength = 0;
+                size_t m_headersLength = 0;
+                size_t m_payloadLength = 0;
 
                 Aws::Utils::Event::EventHeaderValueCollection m_eventHeaders;
                 Aws::Vector<unsigned char> m_eventPayload;

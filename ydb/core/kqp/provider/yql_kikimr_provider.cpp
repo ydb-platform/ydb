@@ -57,12 +57,14 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDropObject::CallableName());
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
+        DataSinkNames.insert(TKiRenameGroup::CallableName());
         DataSinkNames.insert(TKiDropGroup::CallableName());
         DataSinkNames.insert(TKiDataQueryBlock::CallableName());
         DataSinkNames.insert(TKiDataQueryBlocks::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
         DataSinkNames.insert(TPgDropObject::CallableName());
+        DataSinkNames.insert(TKiReturningList::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -105,6 +107,7 @@ struct TKikimrData {
             TYdbOperation::CreateGroup |
             TYdbOperation::AlterGroup |
             TYdbOperation::DropGroup |
+            TYdbOperation::RenameGroup |
             TYdbOperation::ModifyPermission;
 
         SystemColumns = {
@@ -591,6 +594,73 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLite
 
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto) {
     FillLiteralProtoImpl(literal, proto);
+}
+
+void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto)
+{
+    auto type = literal.Ref().GetTypeAnn();
+
+    // TODO: support pg types
+    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+
+    auto slot = type->Cast<TDataExprType>()->GetSlot();
+    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
+        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+
+    auto& protoType = *proto.mutable_type();
+    auto& protoValue = *proto.mutable_value();
+
+    protoType.set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
+
+    auto value = literal.Literal().Value();
+
+    switch (slot) {
+        case EDataSlot::Bool:
+            protoValue.set_bool_value(FromString<bool>(value));
+            break;
+        case EDataSlot::Uint8:
+        case EDataSlot::Uint32:
+        case EDataSlot::Date:
+        case EDataSlot::Datetime:
+            protoValue.set_uint32_value(FromString<ui32>(value));
+            break;
+        case EDataSlot::Int32:
+            protoValue.set_int32_value(FromString<i32>(value));
+            break;
+        case EDataSlot::Int64:
+        case EDataSlot::Interval:
+            protoValue.set_int64_value(FromString<i64>(value));
+            break;
+        case EDataSlot::Uint64:
+        case EDataSlot::Timestamp:
+            protoValue.set_uint64_value(FromString<ui64>(value));
+            break;
+        case EDataSlot::String:
+        case EDataSlot::DyNumber:
+            protoValue.set_bytes_value(value.Data(), value.Size());
+            break;
+        case EDataSlot::Utf8:
+            protoValue.set_text_value(ToString(value));
+            break;
+        case EDataSlot::Decimal: {
+            const auto paramsDataType = type->Cast<TDataExprParamsType>();
+            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
+            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
+            protoType.mutable_decimal_type()->set_precision(precision);
+            protoType.mutable_decimal_type()->set_scale(scale);
+
+            auto v = NDecimal::FromString(literal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
+            const auto p = reinterpret_cast<ui8*>(&v);
+            protoValue.set_low_128(*reinterpret_cast<ui64*>(p));
+            protoValue.set_high_128(*reinterpret_cast<ui64*>(p + 8));
+            break;
+        }
+
+        default:
+            YQL_ENSURE(false, "Unexpected type slot " << slot);
+    }
 }
 
 template<class OutputIterator>

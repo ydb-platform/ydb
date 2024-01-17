@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 #include <memory>
 #include <optional>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/writer/json_value.h>
 
 namespace NKikimr::NTracing {
@@ -152,6 +152,7 @@ public:
 
     static TTraceClientGuard GetClient(const TString& type, const TString& clientId, const TString& parentId);
     static TTraceClientGuard GetClientUnique(const TString& type, const TString& clientId, const TString& parentId);
+    static TTraceClientGuard GetLocalClient(const TString& type, const TString& clientId);
     static TTraceClientGuard GetTypeUnique(const TString& type, const TString& parentId);
 };
 

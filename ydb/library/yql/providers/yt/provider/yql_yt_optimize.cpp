@@ -631,51 +631,35 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
     }
 }
 
-template<bool WithWideFlow>
 struct TPeepholePipelineConfigurator : public IPipelineConfigurator {
-    TPeepholePipelineConfigurator(TYtState::TPtr state, const TYtExtraPeepHoleSettings& settings)
-        : State_(std::move(state)) 
-        , Settings_(settings)
+    TPeepholePipelineConfigurator(TYtState::TPtr state)
+        : State_(std::move(state))
         {}
 private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
-        pipeline->Add(CreateTYtPeepholeTransformer(State_, Settings_), "Peephole");
-        if constexpr (WithWideFlow) {
-            pipeline->Add(CreateTYtWideFlowTransformer(State_), "WideFlow");
-        }
+        pipeline->Add(CreateYtPeepholeTransformer(State_, {}), "Peephole");
+        pipeline->Add(CreateYtWideFlowTransformer(State_), "WideFlow");
     }
 
     void AfterOptimize(TTransformationPipeline*) const final {}
 
     const TYtState::TPtr State_;
-    const TYtExtraPeepHoleSettings Settings_;
 };
 
-template<bool ForNativeExecution>
 IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx,
-    const TYtExtraPeepHoleSettings& settings)
+    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx)
 {
-    if constexpr (ForNativeExecution) {
-        if (const auto status = UpdateTableContentMemoryUsage(input, output, state, ctx);
-            status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
+    if (const auto status = UpdateTableContentMemoryUsage(input, output, state, ctx);
+        status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
     }
 
-    const TPeepholePipelineConfigurator<ForNativeExecution> wideFlowTransformers(state, settings);
+    const TPeepholePipelineConfigurator wideFlowTransformers(state);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &wideFlowTransformers;
     return PeepHoleOptimizeNode(output, output, ctx, *state->Types, nullptr, hasNonDeterministicFunctions, peepholeSettings);
 }
 
-template
-IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec<true>(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx, const TYtExtraPeepHoleSettings& settings);
-
-template
-IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec<false>(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx, const TYtExtraPeepHoleSettings& settings);
 } // NYql

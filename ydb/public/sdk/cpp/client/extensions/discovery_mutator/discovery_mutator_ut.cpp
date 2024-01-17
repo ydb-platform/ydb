@@ -12,18 +12,20 @@ using namespace NDiscoveryMutator;
 Y_UNIT_TEST_SUITE(DiscoveryMutator) {
     Y_UNIT_TEST(Simple) {
 
-        std::unordered_set<TString> dbs;
+        std::unordered_set<std::string_view> dbs;
+        TString discoveryEndpont = "localhost:100";
 
-        auto mutator = [&dbs](Ydb::Discovery::ListEndpointsResult* proto, TStatus status, const TString& database) {
-            UNIT_ASSERT_VALUES_EQUAL("localhost:100", status.GetEndpoint());
-            dbs.insert(database);
+        auto mutator = [&](Ydb::Discovery::ListEndpointsResult* proto, TStatus status, const IDiscoveryMutatorApi::TAuxInfo& aux) {
+            UNIT_ASSERT_VALUES_EQUAL(discoveryEndpont, status.GetEndpoint());
+            UNIT_ASSERT_VALUES_EQUAL(discoveryEndpont, aux.DiscoveryEndpoint);
+            dbs.insert(aux.Database);
             Y_UNUSED(proto);
             return status;
         };
         auto driver = TDriver(
             TDriverConfig()
                 .SetDatabase("db1")
-                .SetEndpoint("localhost:100"));
+                .SetEndpoint(discoveryEndpont));
 
         driver.AddExtension<TDiscoveryMutator>(TDiscoveryMutator::TParams(std::move(mutator)));
 

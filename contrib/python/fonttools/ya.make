@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.43.1)
+VERSION(4.47.0)
 
 LICENSE(MIT)
 
@@ -13,6 +13,7 @@ NO_CHECK_IMPORTS(
     fontTools.pens.*
     fontTools.ttLib.removeOverlaps
     fontTools.ufoLib.*
+    fontTools.varLib.interpolatablePlot
     fontTools.varLib.plot
 )
 
@@ -298,6 +299,10 @@ PY_SRCS(
     fontTools/varLib/instancer/names.py
     fontTools/varLib/instancer/solver.py
     fontTools/varLib/interpolatable.py
+    fontTools/varLib/interpolatableHelpers.py
+    fontTools/varLib/interpolatablePlot.py
+    fontTools/varLib/interpolatableTestContourOrder.py
+    fontTools/varLib/interpolatableTestStartingPoint.py
     fontTools/varLib/interpolate_layout.py
     fontTools/varLib/iup.py
     fontTools/varLib/merger.py

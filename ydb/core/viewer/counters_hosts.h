@@ -1,8 +1,8 @@
 #pragma once
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/library/services/services.pb.h>

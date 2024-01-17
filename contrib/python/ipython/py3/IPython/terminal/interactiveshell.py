@@ -588,6 +588,17 @@ class TerminalInteractiveShell(InteractiveShell):
         help="Display the current vi mode (when using vi editing mode)."
     ).tag(config=True)
 
+    prompt_line_number_format = Unicode(
+        "",
+        help="The format for line numbering, will be passed `line` (int, 1 based)"
+        " the current line number and `rel_line` the relative line number."
+        " for example to display both you can use the following template string :"
+        " c.TerminalInteractiveShell.prompt_line_number_format='{line: 4d}/{rel_line:+03d} | '"
+        " This will display the current line number, with leading space and a width of at least 4"
+        " character, as well as the relative line number 0 padded and always with a + or - sign."
+        " Note that when using Emacs mode the prompt of the first line may not update.",
+    ).tag(config=True)
+
     @observe('term_title')
     def init_term_title(self, change=None):
         # Enable or disable the terminal title.
@@ -631,7 +642,7 @@ class TerminalInteractiveShell(InteractiveShell):
 
         editing_mode = getattr(EditingMode, self.editing_mode.upper())
 
-        self.pt_loop = asyncio.new_event_loop()
+        self._use_asyncio_inputhook = False
         self.pt_app = PromptSession(
             auto_suggest=self.auto_suggest,
             editing_mode=editing_mode,
@@ -736,7 +747,7 @@ class TerminalInteractiveShell(InteractiveShell):
         def get_message():
             return PygmentsTokens(self.prompts.in_prompt_tokens())
 
-        if self.editing_mode == 'emacs':
+        if self.editing_mode == "emacs" and self.prompt_line_number_format == "":
             # with emacs mode the prompt is (usually) static, so we call only
             # the function once. With VI mode it can toggle between [ins] and
             # [nor] so we can't precompute.
@@ -753,7 +764,7 @@ class TerminalInteractiveShell(InteractiveShell):
             "message": get_message,
             "prompt_continuation": (
                 lambda width, lineno, is_soft_wrap: PygmentsTokens(
-                    self.prompts.continuation_prompt_tokens(width)
+                    self.prompts.continuation_prompt_tokens(width, lineno=lineno)
                 )
             ),
             "multiline": True,
@@ -798,24 +809,23 @@ class TerminalInteractiveShell(InteractiveShell):
         # If we don't do this, people could spawn coroutine with a
         # while/true inside which will freeze the prompt.
 
-        policy = asyncio.get_event_loop_policy()
-        old_loop = get_asyncio_loop()
-
-        # FIXME: prompt_toolkit is using the deprecated `asyncio.get_event_loop`
-        # to get the current event loop.
-        # This will probably be replaced by an attribute or input argument,
-        # at which point we can stop calling the soon-to-be-deprecated `set_event_loop` here.
-        if old_loop is not self.pt_loop:
-            policy.set_event_loop(self.pt_loop)
-        try:
-            with patch_stdout(raw=True):
+        with patch_stdout(raw=True):
+            if self._use_asyncio_inputhook:
+                # When we integrate the asyncio event loop, run the UI in the
+                # same event loop as the rest of the code. don't use an actual
+                # input hook. (Asyncio is not made for nesting event loops.)
+                asyncio_loop = get_asyncio_loop()
+                text = asyncio_loop.run_until_complete(
+                    self.pt_app.prompt_async(
+                        default=default, **self._extra_prompt_options()
+                    )
+                )
+            else:
                 text = self.pt_app.prompt(
                     default=default,
-                    **self._extra_prompt_options())
-        finally:
-            # Restore the original event loop.
-            if old_loop is not None and old_loop is not self.pt_loop:
-                policy.set_event_loop(old_loop)
+                    inputhook=self._inputhook,
+                    **self._extra_prompt_options(),
+                )
 
         return text
 
@@ -950,29 +960,7 @@ class TerminalInteractiveShell(InteractiveShell):
         else:
             self.active_eventloop = self._inputhook = None
 
-        # For prompt_toolkit 3.0. We have to create an asyncio event loop with
-        # this inputhook.
-        if PTK3:
-            import asyncio
-            from prompt_toolkit.eventloop import new_eventloop_with_inputhook
-
-            if gui == 'asyncio':
-                # When we integrate the asyncio event loop, run the UI in the
-                # same event loop as the rest of the code. don't use an actual
-                # input hook. (Asyncio is not made for nesting event loops.)
-                self.pt_loop = get_asyncio_loop()
-                print("Installed asyncio event loop hook.")
-
-            elif self._inputhook:
-                # If an inputhook was set, create a new asyncio event loop with
-                # this inputhook for the prompt.
-                self.pt_loop = new_eventloop_with_inputhook(self._inputhook)
-                print(f"Installed {self.active_eventloop} event loop hook.")
-            else:
-                # When there's no inputhook, run the prompt in a separate
-                # asyncio event loop.
-                self.pt_loop = asyncio.new_event_loop()
-                print("GUI event loop hook disabled.")
+        self._use_asyncio_inputhook = gui == "asyncio"
 
     # Run !system commands directly, not through pipes, so terminal programs
     # work correctly.

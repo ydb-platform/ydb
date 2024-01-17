@@ -6,11 +6,12 @@ SPLIT_FACTOR(20)
 
 IF (NOT OS_WINDOWS)
     PEERDIR(
-        library/cpp/actors/core
+        ydb/library/actors/core
         library/cpp/digest/md5
         library/cpp/testing/unittest
         ydb/core/protos
         ydb/core/testlib/basics/default
+        ydb/library/yql/minikql/comp_nodes/llvm
         ydb/core/wrappers/ut_helpers
     )
     SRCS(

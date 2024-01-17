@@ -35,7 +35,7 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     self.BackgroundController.FinishTtl();
 }
 
-std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, const THashMap<TBlobRange, TString>& srcBlobs,
+std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, THashMap<TBlobRange, TString>& srcBlobs,
     TConstructionContext& context) const {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
@@ -56,7 +56,6 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
-    auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
 
     TSaverContext saverContext(evictFeatures.StorageOperator, SaverContext.GetStoragesManager());
     saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);

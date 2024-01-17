@@ -101,6 +101,15 @@ namespace NDatetime {
     TTimeZone GetTimeZone(TStringBuf name);
 
     /**
+     *Helper for get timezone offset from timezone string
+     * Examples:
+     * "+01:30" -> 5400
+     * "-10" -> -36000
+     * "-0200" -> -7200
+     */
+    bool TryParseOffset(TStringBuf name, int& offset);
+
+    /**
      * Returns a time zone that is a fixed offset (seconds east) from UTC.
      * Note: If the absolute value of the offset is greater than 24 hours
      * you'll get UTC (i.e., zero offset) instead.
@@ -108,7 +117,7 @@ namespace NDatetime {
     TTimeZone GetFixedTimeZone(const long offset);
 
     /** Convert civil time from one timezone to another
-     * @param[in] src is source time with 'from' timezone 
+     * @param[in] src is source time with 'from' timezone
      * @param[in] from is a initial timezone
      * @param[in] from is a destination timezone
      * @return a civil time
@@ -323,7 +332,7 @@ namespace NDatetime {
      * 02      6  7  8  9 10 11...
      *
      * In case if you received zero value, you may call function again with usePreviousYear=true
-     * Also you may use usePreviousYear to calculate week difference between two dates in different year 
+     * Also you may use usePreviousYear to calculate week difference between two dates in different year
      */
      CONSTEXPR_M int GetYearWeek(const TCivilDay& cd, bool usePreviousYear = false) noexcept {
          const auto jan1 = NDatetime::GetWeekday(NDatetime::TCivilDay{cd.year() - (usePreviousYear ? 1 : 0), 1, 1});

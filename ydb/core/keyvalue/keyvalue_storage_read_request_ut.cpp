@@ -31,7 +31,7 @@ struct TBlobStorageMockState {
     }
 
     std::unique_ptr<TEvBlobStorage::TEvGetResult> MakeGetResult(ui32 groupId, TEvBlobStorage::TEvGet *get,
-            std::function<const std::pair<NKikimrProto::EReplyStatus, const TString&>&(TLogoBlobID blobId)> getBlob)
+            std::function<std::pair<NKikimrProto::EReplyStatus, TString>(TLogoBlobID blobId)> getBlob)
     {
         TGroup &group = Groups[groupId];
         if (group.GroupId) {
@@ -186,7 +186,7 @@ struct TReadRequestBuilder {
     TBuilderResult Build(TActorId respondTo, TActorId keyValueActorId, ui32 channelGeneration = 1, ui32 channelStep = 1)
     {
         std::unique_ptr<TIntermediate> intermediate = std::make_unique<TIntermediate>(respondTo, keyValueActorId,
-                channelGeneration, channelStep, TRequestType::ReadOnly);
+                channelGeneration, channelStep, TRequestType::ReadOnly, NWilson::TTraceId());
         TStringBuilder valueBuilder;
         for (auto &[value, blobId, offset, size] : Items) {
                 valueBuilder << value;
@@ -231,7 +231,7 @@ struct TRangeReadRequestBuilder {
     TBuilderResult Build(TActorId respondTo, TActorId keyValueActorId, ui32 channelGeneration = 1, ui32 channelStep = 1)
     {
         std::unique_ptr<TIntermediate> intermediate = std::make_unique<TIntermediate>(respondTo, keyValueActorId,
-                channelGeneration, channelStep, TRequestType::ReadOnly);
+                channelGeneration, channelStep, TRequestType::ReadOnly, NWilson::TTraceId());
 
         TBuilderResult res;
         intermediate->ReadCommand = TIntermediate::TRangeRead();

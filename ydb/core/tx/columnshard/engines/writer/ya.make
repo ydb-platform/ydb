@@ -14,9 +14,10 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/protos
     ydb/core/tablet_flat
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/writer/buffer
 
 
-    library/cpp/actors/core
+    ydb/library/actors/core
 )
 
 YQL_LAST_ABI_VERSION()

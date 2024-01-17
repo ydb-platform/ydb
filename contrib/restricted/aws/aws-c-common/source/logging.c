@@ -15,7 +15,7 @@
 #include <errno.h>
 #include <stdarg.h>
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
 #endif
 
@@ -468,7 +468,7 @@ static int s_noalloc_stderr_logger_log(
     va_list format_args;
     va_start(format_args, format);
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #    pragma warning(push)
 #    pragma warning(disable : 4221) /* allow struct member to reference format_buffer  */
 #endif
@@ -484,7 +484,7 @@ static int s_noalloc_stderr_logger_log(
         .amount_written = 0,
     };
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #    pragma warning(pop) /* disallow struct member to reference local value */
 #endif
 
@@ -502,7 +502,8 @@ static int s_noalloc_stderr_logger_log(
 
     int write_result = AWS_OP_SUCCESS;
     if (fwrite(format_buffer, 1, format_data.amount_written, impl->file) < format_data.amount_written) {
-        aws_translate_and_raise_io_error(errno);
+        int errno_value = errno; /* Always cache errno before potential side-effect */
+        aws_translate_and_raise_io_error(errno_value);
         write_result = AWS_OP_ERR;
     }
 
@@ -561,6 +562,10 @@ int aws_logger_init_noalloc(
     } else { /* _MSC_VER */
         if (options->filename != NULL) {
             impl->file = aws_fopen(options->filename, "w");
+            if (!impl->file) {
+                aws_mem_release(allocator, impl);
+                return AWS_OP_ERR;
+            }
             impl->should_close = true;
         } else {
             impl->file = stderr;

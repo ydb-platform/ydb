@@ -53,6 +53,30 @@ PutObjectResult& PutObjectResult::operator =(const Aws::AmazonWebServiceResult<X
     m_eTag = eTagIter->second;
   }
 
+  const auto& checksumCRC32Iter = headers.find("x-amz-checksum-crc32");
+  if(checksumCRC32Iter != headers.end())
+  {
+    m_checksumCRC32 = checksumCRC32Iter->second;
+  }
+
+  const auto& checksumCRC32CIter = headers.find("x-amz-checksum-crc32c");
+  if(checksumCRC32CIter != headers.end())
+  {
+    m_checksumCRC32C = checksumCRC32CIter->second;
+  }
+
+  const auto& checksumSHA1Iter = headers.find("x-amz-checksum-sha1");
+  if(checksumSHA1Iter != headers.end())
+  {
+    m_checksumSHA1 = checksumSHA1Iter->second;
+  }
+
+  const auto& checksumSHA256Iter = headers.find("x-amz-checksum-sha256");
+  if(checksumSHA256Iter != headers.end())
+  {
+    m_checksumSHA256 = checksumSHA256Iter->second;
+  }
+
   const auto& serverSideEncryptionIter = headers.find("x-amz-server-side-encryption");
   if(serverSideEncryptionIter != headers.end())
   {

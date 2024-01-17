@@ -12,8 +12,8 @@ target_link_libraries(libs-audit-events PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  library-actors-core
+  library-actors-interconnect
   fq-libs-checkpointing_common
   libs-control_plane_storage-events
   yql-public-issue

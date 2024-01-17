@@ -24,36 +24,36 @@ namespace S3
 {
 namespace Model
 {
-  class AWS_S3_API GetObjectLegalHoldResult
+  class GetObjectLegalHoldResult
   {
   public:
-    GetObjectLegalHoldResult();
-    GetObjectLegalHoldResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
-    GetObjectLegalHoldResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetObjectLegalHoldResult();
+    AWS_S3_API GetObjectLegalHoldResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
+    AWS_S3_API GetObjectLegalHoldResult& operator=(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>& result);
 
 
     /**
-     * <p>The current Legal Hold status for the specified object.</p>
+     * <p>The current legal hold status for the specified object.</p>
      */
     inline const ObjectLockLegalHold& GetLegalHold() const{ return m_legalHold; }
 
     /**
-     * <p>The current Legal Hold status for the specified object.</p>
+     * <p>The current legal hold status for the specified object.</p>
      */
     inline void SetLegalHold(const ObjectLockLegalHold& value) { m_legalHold = value; }
 
     /**
-     * <p>The current Legal Hold status for the specified object.</p>
+     * <p>The current legal hold status for the specified object.</p>
      */
     inline void SetLegalHold(ObjectLockLegalHold&& value) { m_legalHold = std::move(value); }
 
     /**
-     * <p>The current Legal Hold status for the specified object.</p>
+     * <p>The current legal hold status for the specified object.</p>
      */
     inline GetObjectLegalHoldResult& WithLegalHold(const ObjectLockLegalHold& value) { SetLegalHold(value); return *this;}
 
     /**
-     * <p>The current Legal Hold status for the specified object.</p>
+     * <p>The current legal hold status for the specified object.</p>
      */
     inline GetObjectLegalHoldResult& WithLegalHold(ObjectLockLegalHold&& value) { SetLegalHold(std::move(value)); return *this;}
 

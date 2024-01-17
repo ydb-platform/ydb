@@ -17,7 +17,7 @@ ELSE()
     PEERDIR(
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
         contrib/libs/curl
-        library/cpp/actors/core
+        ydb/library/actors/core
         ydb/core/base
         ydb/core/protos
         ydb/core/wrappers/ut_helpers

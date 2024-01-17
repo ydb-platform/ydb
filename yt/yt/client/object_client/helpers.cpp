@@ -20,7 +20,6 @@ bool IsScalarType(EObjectType type)
         type == EObjectType::Int64Node ||
         type == EObjectType::Uint64Node ||
         type == EObjectType::DoubleNode ||
-        type == EObjectType::ListNode ||
         type == EObjectType::BooleanNode;
 }
 

@@ -9,14 +9,14 @@ on:
         description: "limit build and test to specific target"
       build_preset:
         type: string
-      runner_kind:
-        type: string
-        required: true
-        description: "self-hosted or provisioned"
       runner_label:
         type: string
         default: "linux"
         description: "runner label"
+      runner_additional_label:
+        type: string
+        default: "linux"
+        description: "additional runner label, can be empty"
       run_build:
         type: boolean
         default: true
@@ -46,11 +46,14 @@ on:
         type: boolean
         default: false
         description: "Use cache for tests"
+      put_build_results_to_cache:
+        type: boolean
+        default: true
 
 jobs:
   main:
     name: Build and test ${{ inputs.build_preset }}
-    runs-on: [ self-hosted, "${{ inputs.runner_kind }}", "${{ inputs.runner_label }}" ]
+    runs-on: [ self-hosted, "${{ inputs.runner_label }}", "${{ inputs.runner_additional_label || inputs.runner_label }}"]
     steps:
     - name: Checkout PR
       uses: actions/checkout@v3
@@ -78,8 +81,8 @@ jobs:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
         bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
-        bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
-        bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
+        bazel_remote_username: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
 
     - name: Run tests
@@ -94,5 +97,7 @@ jobs:
         testman_url: ${{ vars.TESTMO_URL }}
         testman_project_id: ${{ vars.TESTMO_PROJECT_ID }}
         bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA || '' }}
+        bazel_remote_username: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ inputs.put_build_results_to_cache && secrets.REMOTE_CACHE_PASSWORD || '' }}
         link_threads: ${{ inputs.link_threads }}
         test_threads: ${{ inputs.test_threads }}

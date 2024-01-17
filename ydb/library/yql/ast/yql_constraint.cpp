@@ -508,7 +508,7 @@ TSortedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type, 
 
 const TConstraintWithFieldsNode*
 TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
-    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().size() == 1U && Content_.front().first.front().front().empty())
+    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().empty())
         return DoGetComplicatedForType(type, ctx);
 
     const auto& rowType = GetSeqItemType(type);
@@ -1574,7 +1574,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
 
 template<class TOriginalConstraintNode>
 void TPartOfConstraintNode<TOriginalConstraintNode>::UniqueMerge(TMapType& output, TMapType&& input) {
-    output.merge(std::move(input));
+    output.merge(input);
     while (!input.empty()) {
         const auto exists = input.extract(input.cbegin());
         auto& target = output[exists.key()];

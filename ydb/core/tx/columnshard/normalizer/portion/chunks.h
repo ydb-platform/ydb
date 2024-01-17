@@ -74,7 +74,7 @@ namespace NKikimr::NOlap {
             }
 
             std::shared_ptr<TColumnLoader> GetLoader() const {
-                return Schema->GetColumnLoader(Key.GetColumnIdx());
+                return Schema->GetColumnLoaderVerified(Key.GetColumnIdx());
             }
             void InitSchema(const NColumnShard::TTablesManager& tm);
 
@@ -106,5 +106,5 @@ namespace NKikimr::NOlap {
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;
         TAtomic ActiveTasksCount = 0;
-    };     
+    };
 }

@@ -3,6 +3,8 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "google/protobuf/any.proto";
+
 
 package NKikimrIndexBuilder;
 option java_package = "ru.yandex.kikimr.proto";
@@ -28,6 +30,8 @@ message TIndexBuildSettings {
     optional uint64 max_batch_bytes = 4 [ default = 8388608 ];
     optional uint32 max_shards_in_flight = 5 [ default = 32 ];
     optional uint32 max_retries_upload_batch = 6 [ default = 50 ];
+
+    optional google.protobuf.Any AlterMainTablePayload = 10;
 }
 
 message TIndexBuild {

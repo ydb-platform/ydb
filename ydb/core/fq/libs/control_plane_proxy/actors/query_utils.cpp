@@ -169,8 +169,8 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
 
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,
-    const TString& objectStorageEndpoint,
-    const TSigner::TPtr& signer) {
+    const TSigner::TPtr& signer,
+    const NConfig::TCommonConfig& common) {
     using namespace fmt::literals;
 
     TString properties;
@@ -184,11 +184,12 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="ClickHouse",
                     MDB_CLUSTER_ID={mdb_cluster_id},
                     DATABASE_NAME={database_name},
-                    PROTOCOL="NATIVE",
+                    PROTOCOL="{protocol}",
                     USE_TLS="true"
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
-                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'),
+                "protocol"_a = common.GetUseNativeProtocolForClickHouse() ? "NATIVE" : "HTTP");
         break;
         case FederatedQuery::ConnectionSetting::kDataStreams:
         break;
@@ -199,7 +200,7 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="{location}"
                 )",
-                "location"_a = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/");
+                "location"_a = common.GetObjectStorageEndpoint() + "/" + EscapeString(bucketName, '"') + "/");
             break;
         }
         case FederatedQuery::ConnectionSetting::kMonitoring:

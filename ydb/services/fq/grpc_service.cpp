@@ -14,12 +14,12 @@ TGRpcFederatedQueryService::TGRpcFederatedQueryService(NActors::TActorSystem *sy
     , Counters_(counters)
     , GRpcRequestProxyId_(id) {}
 
-void TGRpcFederatedQueryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+void TGRpcFederatedQueryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcFederatedQueryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+void TGRpcFederatedQueryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
     Limiter_ = limiter;
 }
 
@@ -32,7 +32,7 @@ void TGRpcFederatedQueryService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcFederatedQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcFederatedQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
@@ -40,7 +40,7 @@ void TGRpcFederatedQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 #define ADD_REQUEST(NAME, CB)                                                                                  \
 MakeIntrusive<TGRpcRequest<FederatedQuery::NAME##Request, FederatedQuery::NAME##Response, TGRpcFederatedQueryService, TSecurityTextFormatPrinter<FederatedQuery::NAME##Request>, TSecurityTextFormatPrinter<FederatedQuery::NAME##Response>>>( \
     this, &Service_, CQ_,                                                                                      \
-    [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
+    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
         ActorSystem_->Send(GRpcRequestProxyId_, CreateFederatedQuery##NAME##RequestOperationCall(ctx).release());            \
     },                                                                                                         \

@@ -7,9 +7,37 @@
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NOlap {
+
+class TComputeShardingPolicy {
+private:
+    YDB_READONLY(ui32, ShardsCount, 0);
+    YDB_READONLY_DEF(std::vector<std::string>, ColumnNames);
+public:
+    TString DebugString() const {
+        return TStringBuilder() << "shards_count:" << ShardsCount << ";columns=" << JoinSeq(",", ColumnNames) << ";";
+    }
+
+    TComputeShardingPolicy() = default;
+    bool DeserializeFromProto(const NKikimrTxDataShard::TComputeShardingPolicy& policy) {
+        ShardsCount = policy.GetShardsCount();
+        for (auto&& i : policy.GetColumnNames()) {
+            ColumnNames.emplace_back(i);
+        }
+        if (ShardsCount >= 1 && ColumnNames.empty()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
+            return false;
+        }
+        return true;
+    }
+
+    bool IsEnabled() const {
+        return ShardsCount > 1 && ColumnNames.size();
+    }
+};
 
 class TActorBasedMemoryAccesor: public TScanMemoryLimiter::IMemoryAccessor {
 private:
@@ -35,9 +63,14 @@ private:
     const TActorId ScanActorId;
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
+    const NOlap::TComputeShardingPolicy ComputeShardingPolicy;
 public:
     bool IsReverse() const {
         return ReadMetadata->IsDescSorted();
+    }
+
+    const TComputeShardingPolicy& GetComputeShardingPolicy() const {
+        return ComputeShardingPolicy;
     }
 
     const TActorId& GetResourceSubscribeActorId() const {
@@ -65,7 +98,7 @@ public:
     }
 
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const bool isInternalRead, const TReadMetadataBase::TConstPtr& readMetadata,
-        const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId)
+        const TActorId& scanActorId, const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const NOlap::TComputeShardingPolicy& computeShardingPolicy)
         : StoragesManager(storagesManager)
         , Counters(counters)
         , IsInternalRead(isInternalRead)
@@ -74,6 +107,7 @@ public:
         , ScanActorId(scanActorId)
         , ResourceSubscribeActorId(resourceSubscribeActorId)
         , ReadCoordinatorActorId(readCoordinatorActorId)
+        , ComputeShardingPolicy(computeShardingPolicy)
     {
         Y_ABORT_UNLESS(ReadMetadata);
     }

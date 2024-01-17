@@ -1532,19 +1532,6 @@ BELONGS ya.make
     Files with this license:
         linux/counter.h [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 45e2d75eb13ae712fe77928934ffcf0a
-BELONGS ya.make
-    License text:
-                  Copyright (c) 1987-1999 Carnegie Mellon University
-                          Additional copyrights listed below
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/coda.h [11:12]
-        linux/coda.h [28:29]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 48639a758e4e40c533dc66c319a34a01
 BELONGS ya.make
     License text:
@@ -3738,17 +3725,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/nfsd/stats.h [7:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL aacb9d157d6235c30f16941d701e91cf
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2014-2016, Intel Corporation.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/ndctl.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ab13f7af6e72999d8328743072658177
 BELONGS ya.make

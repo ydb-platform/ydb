@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/actors/wilson
+    ydb/library/actors/wilson
     library/cpp/deprecated/atomic
     library/cpp/lwtrace
     ydb/core/protos

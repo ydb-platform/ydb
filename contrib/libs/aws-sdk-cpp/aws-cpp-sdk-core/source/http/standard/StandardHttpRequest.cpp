@@ -4,7 +4,7 @@
  */
 
 #include <aws/core/http/standard/StandardHttpRequest.h>
-
+#include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/StringUtils.h>
 
 #include <iostream>
@@ -14,6 +14,8 @@
 using namespace Aws::Http;
 using namespace Aws::Http::Standard;
 using namespace Aws::Utils;
+
+static const char* STANDARD_HTTP_REQUEST_LOG_TAG = "StandardHttpRequest";
 
 static bool IsDefaultPort(const URI& uri)
 {
@@ -59,8 +61,13 @@ HeaderValueCollection StandardHttpRequest::GetHeaders() const
 
 const Aws::String& StandardHttpRequest::GetHeaderValue(const char* headerName) const
 {
-    auto iter = headerMap.find(headerName);
+    auto iter = headerMap.find(StringUtils::ToLower(headerName));
     assert (iter != headerMap.end());
+    if (iter == headerMap.end()) {
+        AWS_LOGSTREAM_ERROR(STANDARD_HTTP_REQUEST_LOG_TAG, "Requested a header value for a missing header key: " << headerName);
+        static const Aws::String EMPTY_STRING = "";
+        return EMPTY_STRING;
+    }
     return iter->second;
 }
 

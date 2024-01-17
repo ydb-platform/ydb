@@ -2,7 +2,7 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
 #include <ydb/library/yql/providers/common/metrics/metrics_registry.h>

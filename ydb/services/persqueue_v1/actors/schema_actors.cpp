@@ -645,10 +645,18 @@ void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
 }
 
 void TDescribeTopicActorImpl::RequestPartitionStatus(const TTabletInfo& tablet, const TActorContext& ctx) {
-    THolder<NKikimr::TEvPersQueue::TEvStatus> ev(new NKikimr::TEvPersQueue::TEvStatus(
-                Settings.Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx),
-                Settings.Consumer.empty()
-    ));
+    THolder<NKikimr::TEvPersQueue::TEvStatus> ev;
+    if (Settings.Consumers.empty()) {
+        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>(
+            Settings.Consumer.empty() ? "" : NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx),
+            Settings.Consumer.empty()
+        );
+    } else {
+        ev = MakeHolder<NKikimr::TEvPersQueue::TEvStatus>();
+        for (const auto& consumer : Settings.Consumers) {
+            ev->Record.AddConsumers(consumer);
+        }
+    }
     NTabletPipe::SendData(ctx, tablet.Pipe, ev.Release());
     ++RequestsInfly;
 }
@@ -678,6 +686,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 }
 
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
+    Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
             ctx, *BalancerPipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
@@ -695,12 +704,18 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
     if (tabletInfo.ResultRecived) return;
 
     auto& record = ev->Get()->Record;
+    bool doRestart = (record.PartResultSize() == 0);
+    
     for (auto& partResult : record.GetPartResult()) {
         if (partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_INITIALIZING ||
             partResult.GetStatus() == NKikimrPQ::TStatusResponse::STATUS_UNKNOWN) {
-            RestartTablet(record.GetTabletId(), ctx, {}, TDuration::MilliSeconds(100));
-            return;
+                doRestart = true;
+                break;
         }
+    }
+    if (doRestart) {
+        RestartTablet(record.GetTabletId(), ctx, {}, TDuration::MilliSeconds(100));
+        return;
     }
 
     tabletInfo.ResultRecived = true;

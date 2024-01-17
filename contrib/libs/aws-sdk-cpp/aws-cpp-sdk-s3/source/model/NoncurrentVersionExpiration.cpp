@@ -22,13 +22,17 @@ namespace Model
 
 NoncurrentVersionExpiration::NoncurrentVersionExpiration() : 
     m_noncurrentDays(0),
-    m_noncurrentDaysHasBeenSet(false)
+    m_noncurrentDaysHasBeenSet(false),
+    m_newerNoncurrentVersions(0),
+    m_newerNoncurrentVersionsHasBeenSet(false)
 {
 }
 
 NoncurrentVersionExpiration::NoncurrentVersionExpiration(const XmlNode& xmlNode) : 
     m_noncurrentDays(0),
-    m_noncurrentDaysHasBeenSet(false)
+    m_noncurrentDaysHasBeenSet(false),
+    m_newerNoncurrentVersions(0),
+    m_newerNoncurrentVersionsHasBeenSet(false)
 {
   *this = xmlNode;
 }
@@ -45,6 +49,12 @@ NoncurrentVersionExpiration& NoncurrentVersionExpiration::operator =(const XmlNo
       m_noncurrentDays = StringUtils::ConvertToInt32(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(noncurrentDaysNode.GetText()).c_str()).c_str());
       m_noncurrentDaysHasBeenSet = true;
     }
+    XmlNode newerNoncurrentVersionsNode = resultNode.FirstChild("NewerNoncurrentVersions");
+    if(!newerNoncurrentVersionsNode.IsNull())
+    {
+      m_newerNoncurrentVersions = StringUtils::ConvertToInt32(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(newerNoncurrentVersionsNode.GetText()).c_str()).c_str());
+      m_newerNoncurrentVersionsHasBeenSet = true;
+    }
   }
 
   return *this;
@@ -58,6 +68,14 @@ void NoncurrentVersionExpiration::AddToNode(XmlNode& parentNode) const
    XmlNode noncurrentDaysNode = parentNode.CreateChildElement("NoncurrentDays");
    ss << m_noncurrentDays;
    noncurrentDaysNode.SetText(ss.str());
+   ss.str("");
+  }
+
+  if(m_newerNoncurrentVersionsHasBeenSet)
+  {
+   XmlNode newerNoncurrentVersionsNode = parentNode.CreateChildElement("NewerNoncurrentVersions");
+   ss << m_newerNoncurrentVersions;
+   newerNoncurrentVersionsNode.SetText(ss.str());
    ss.str("");
   }
 

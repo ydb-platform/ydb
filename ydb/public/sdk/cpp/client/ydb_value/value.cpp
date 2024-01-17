@@ -1021,6 +1021,7 @@ TUuidValue::TUuidValue(const TString& uuidString) {
         ThrowFatalError(TStringBuilder() << "Unable to parse string as uuid");
     }
     static_assert(sizeof(dw) == sizeof(Buf_.Bytes));
+    // TODO: check output on big-endian machines here and everywhere.
     std::memcpy(Buf_.Bytes, dw, sizeof(dw));
 }
 

@@ -1,0 +1,12 @@
+Kind: 2
+Order: 50
+MergeStrategy: 2
+Config {
+    LogConfig {
+        SysLog: false
+        UAClientConfig {
+            Uri: "[fd53::1]:16400"
+            GrpcMaxMessageSize: 4194304
+        }
+    }
+}

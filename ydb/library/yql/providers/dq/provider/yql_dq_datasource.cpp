@@ -157,19 +157,31 @@ public:
             return {};
         }
 
-        TExprNode::TListType worlds;
-        VisitExpr(node, [&worlds] (const TExprNode::TPtr& item) {
+        const auto newWorld = ctx.NewWorld(node->Pos());
+        TNodeOnNodeOwnedMap replaces;
+        VisitExpr(node, [&replaces, &newWorld, &ctx] (const TExprNode::TPtr& item) {
             if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) {
-                worlds.emplace_back(item);
+                replaces[item.Get()] = newWorld;
                 return false;
             }
+
+            if (auto right = TMaybeNode<TCoRight>(item)) {
+                if (right.Cast().Input().Ref().IsCallable("PgReadTable!")) {
+                    const auto& read = right.Cast().Input().Ref();
+                    replaces[item.Get()] = ctx.Builder(item->Pos())
+                        .Callable("PgTableContent")
+                            .Add(0, read.Child(1)->TailPtr())
+                            .Add(1, read.ChildPtr(2))
+                            .Add(2, read.ChildPtr(3))
+                            .Add(3, read.ChildPtr(4))
+                        .Seal()
+                        .Build();
+                    return false;
+                }
+            }
+
             return true;
         });
-
-        const auto newWorld = ctx.NewWorld(node->Pos());
-        TNodeOnNodeOwnedMap replaces(worlds.size());
-        for (const auto& w : worlds)
-            replaces.emplace(w.Get(), newWorld);
 
         return Build<TDqCnResult>(ctx, node->Pos())
             .Output()

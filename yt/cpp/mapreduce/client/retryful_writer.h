@@ -18,8 +18,6 @@
 #include <util/system/thread.h>
 #include <util/system/event.h>
 
-#include <atomic>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +77,7 @@ public:
 
     size_t GetRetryBlockRemainingSize() const
     {
-      return (BufferSize_ > Buffer_.size()) ? (BufferSize_ - Buffer_.size()) : 0;
+        return (BufferSize_ > Buffer_.size()) ? (BufferSize_ - Buffer_.size()) : 0;
     }
 
 protected:

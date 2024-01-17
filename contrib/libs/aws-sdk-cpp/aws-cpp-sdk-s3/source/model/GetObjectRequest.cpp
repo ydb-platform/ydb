@@ -39,6 +39,8 @@ GetObjectRequest::GetObjectRequest() :
     m_partNumber(0),
     m_partNumberHasBeenSet(false),
     m_expectedBucketOwnerHasBeenSet(false),
+    m_checksumMode(ChecksumMode::NOT_SET),
+    m_checksumModeHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -88,7 +90,7 @@ void GetObjectRequest::AddQueryStringParameters(URI& uri) const
 
     if(m_responseExpiresHasBeenSet)
     {
-      ss << m_responseExpires.ToGmtString(DateFormat::RFC822);
+      ss << m_responseExpires.ToGmtString(Aws::Utils::DateFormat::RFC822);
       uri.AddQueryStringParameter("response-expires", ss.str());
       ss.str("");
     }
@@ -139,7 +141,7 @@ Aws::Http::HeaderValueCollection GetObjectRequest::GetRequestSpecificHeaders() c
 
   if(m_ifModifiedSinceHasBeenSet)
   {
-    headers.emplace("if-modified-since", m_ifModifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("if-modified-since", m_ifModifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_ifNoneMatchHasBeenSet)
@@ -151,7 +153,7 @@ Aws::Http::HeaderValueCollection GetObjectRequest::GetRequestSpecificHeaders() c
 
   if(m_ifUnmodifiedSinceHasBeenSet)
   {
-    headers.emplace("if-unmodified-since", m_ifUnmodifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("if-unmodified-since", m_ifUnmodifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_rangeHasBeenSet)
@@ -194,5 +196,35 @@ Aws::Http::HeaderValueCollection GetObjectRequest::GetRequestSpecificHeaders() c
     ss.str("");
   }
 
+  if(m_checksumModeHasBeenSet)
+  {
+    headers.emplace("x-amz-checksum-mode", ChecksumModeMapper::GetNameForChecksumMode(m_checksumMode));
+  }
+
   return headers;
 }
+
+GetObjectRequest::EndpointParameters GetObjectRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}
+bool GetObjectRequest::ShouldValidateResponseChecksum() const
+{
+  return m_checksumMode == ChecksumMode::ENABLED;
+}
+
+Aws::Vector<Aws::String> GetObjectRequest::GetResponseChecksumAlgorithmNames() const
+{
+  Aws::Vector<Aws::String> responseChecksumAlgorithmNames;
+  responseChecksumAlgorithmNames.push_back("CRC32");
+  responseChecksumAlgorithmNames.push_back("CRC32C");
+  responseChecksumAlgorithmNames.push_back("SHA256");
+  responseChecksumAlgorithmNames.push_back("SHA1");
+  return responseChecksumAlgorithmNames;
+}
+

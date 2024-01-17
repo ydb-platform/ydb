@@ -23,6 +23,7 @@ namespace Model
 MetricsFilter::MetricsFilter() : 
     m_prefixHasBeenSet(false),
     m_tagHasBeenSet(false),
+    m_accessPointArnHasBeenSet(false),
     m_andHasBeenSet(false)
 {
 }
@@ -30,6 +31,7 @@ MetricsFilter::MetricsFilter() :
 MetricsFilter::MetricsFilter(const XmlNode& xmlNode) : 
     m_prefixHasBeenSet(false),
     m_tagHasBeenSet(false),
+    m_accessPointArnHasBeenSet(false),
     m_andHasBeenSet(false)
 {
   *this = xmlNode;
@@ -52,6 +54,12 @@ MetricsFilter& MetricsFilter::operator =(const XmlNode& xmlNode)
     {
       m_tag = tagNode;
       m_tagHasBeenSet = true;
+    }
+    XmlNode accessPointArnNode = resultNode.FirstChild("AccessPointArn");
+    if(!accessPointArnNode.IsNull())
+    {
+      m_accessPointArn = Aws::Utils::Xml::DecodeEscapedXmlText(accessPointArnNode.GetText());
+      m_accessPointArnHasBeenSet = true;
     }
     XmlNode andNode = resultNode.FirstChild("And");
     if(!andNode.IsNull())
@@ -77,6 +85,12 @@ void MetricsFilter::AddToNode(XmlNode& parentNode) const
   {
    XmlNode tagNode = parentNode.CreateChildElement("Tag");
    m_tag.AddToNode(tagNode);
+  }
+
+  if(m_accessPointArnHasBeenSet)
+  {
+   XmlNode accessPointArnNode = parentNode.CreateChildElement("AccessPointArn");
+   accessPointArnNode.SetText(m_accessPointArn);
   }
 
   if(m_andHasBeenSet)

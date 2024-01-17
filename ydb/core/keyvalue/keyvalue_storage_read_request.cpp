@@ -2,7 +2,9 @@
 #include "keyvalue_const.h"
 
 #include <ydb/core/util/stlog.h>
-#include <library/cpp/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <util/generic/overloaded.h>
 
 
@@ -49,6 +51,8 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     TString ErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
+
+    NWilson::TSpan Span;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -189,7 +193,7 @@ public:
             ev->ReaderTabletData = {TabletInfo->TabletID, TabletGeneration};
 
             SendToBSProxy(TActivationContext::AsActorContext(), batch.GroupId, ev.release(),
-                    batch.Cookie);
+                    batch.Cookie, Span.GetTraceId());
             batch.SentTime = TActivationContext::Now();
         }
     }
@@ -378,6 +382,7 @@ public:
         Send(IntermediateResult->RespondTo, response.release());
         IntermediateResult->IsReplied = true;
         SendNotify(status);
+        Span.EndError(TStringBuilder() << NKikimrKeyValue::Statuses::ReplyStatus_Name(status));
         PassAway();
     }
 
@@ -489,6 +494,7 @@ public:
         Send(IntermediateResult->RespondTo, response.release());
         IntermediateResult->IsReplied = true;
         SendNotify(status);
+        Span.EndOk();
         PassAway();
     }
 
@@ -505,6 +511,7 @@ public:
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
+        , Span(TWilsonTablet::Tablet, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {}
 };
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/align.h>
 

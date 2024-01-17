@@ -15,9 +15,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
 
@@ -65,8 +65,14 @@ public:
             ApiHandlers["/api/console/yamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvGetAllConfigsRequest,
                                                                                              NConsole::TEvConsole::TEvGetAllConfigsResponse, true, true>>;
 
+            ApiHandlers["/api/console/readonly"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvIsYamlReadOnlyRequest,
+                                                                                             NConsole::TEvConsole::TEvIsYamlReadOnlyResponse, true, true>>;
+
             ApiHandlers["/api/console/removevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvRemoveVolatileConfigRequest,
                                                                                          NConsole::TEvConsole::TEvRemoveVolatileConfigResponse, true, true>>;
+
+            ApiHandlers["/api/console/configureyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvReplaceYamlConfigRequest,
+                                                                                            NConsole::TEvConsole::TEvReplaceYamlConfigResponse, true, true>>;
 
             ApiHandlers["/api/console/configurevolatileyamlconfig"] = new TApiMethodHandler<TJsonProxyConsole<NConsole::TEvConsole::TEvAddVolatileConfigRequest,
                                                                                             NConsole::TEvConsole::TEvAddVolatileConfigResponse, true, true>>;
@@ -112,7 +118,7 @@ private:
         }
     }
 
-    void ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name, const bool cached = false) {
+    void ReplyWithFile(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx, const TString& name) {
         TString filename = TString("cms/ui") + name;
         if (filename.EndsWith('/'))
             filename += "index.html";
@@ -134,12 +140,22 @@ private:
             type = "text/html";
         }
 
+        bool cached = false;
+        if (filename.StartsWith("cms/ui/ext/monaco-editor/")) {
+            cached = true;
+            if (filename.EndsWith(".css")) {
+                type = "text/css; charset=utf-8";
+            } else if (filename.EndsWith(".js")) {
+                type = "application/javascript; charset=utf-8";
+            }
+        }
+
         TStringStream response;
         response << "HTTP/1.1 200 Ok\r\n";
         response << "Content-Type: " << type << "\r\n";
         response << "Content-Length: " << blob.size() << "\r\n";
         if (cached) {
-            response << "Cache-Control: public, max-age=31536000\r\n" << "\r\n";
+            response << "Cache-Control: public, max-age=31536000, immutable\r\n";
         }
         response << "\r\n";
         response.Write(blob.data(), blob.size());
@@ -208,10 +224,6 @@ private:
                                                           + R"({"enabled":)" + (AppData()->YamlConfigEnabled ? "true" : "false") + "}",
                                                           0,
                                                           NMon::IEvHttpInfoRes::EContentType::Custom));
-            return;
-        }
-        if (msg->Request.GetPathInfo().StartsWith("/ext/monaco-editor/")) {
-            ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()}, true);
             return;
         }
         ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()});

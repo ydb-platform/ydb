@@ -38,6 +38,8 @@ struct TKqpEvents {
         EvCancelScriptExecutionResponse,
         EvCancelQueryRequest,
         EvCancelQueryResponse,
+        EvParseRequest,
+        EvParseResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

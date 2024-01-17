@@ -39,5 +39,6 @@ target_sources(core-kqp-host PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_runner.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_transform.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_translate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/host/kqp_type_ann.cpp
 )

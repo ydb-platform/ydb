@@ -55,6 +55,7 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         : DomainKey(GetDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
+        , ServerlessComputeResourcesMode(descr.GetServerlessComputeResourcesMode())
     {
         if (descr.HasResourcesDomainKey()) {
             ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
@@ -83,6 +84,8 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
     TCoordinators Coordinators;
+    NKikimrSubDomains::EServerlessComputeResourcesMode ServerlessComputeResourcesMode =
+        NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED;
 
     TString ToString() const;
 
@@ -136,6 +139,7 @@ struct TSchemeCacheNavigate {
         KindExternalDataSource = 18,
         KindBlockStoreVolume = 19,
         KindFileStore = 20,
+        KindView = 21,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -238,6 +242,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TFileStoreDescription Description;
     };
 
+    struct TViewInfo : public TAtomicRefCount<TViewInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TViewDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -287,6 +296,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TExternalDataSourceInfo> ExternalDataSourceInfo;
         TIntrusiveConstPtr<TBlockStoreVolumeInfo> BlockStoreVolumeInfo;
         TIntrusiveConstPtr<TFileStoreInfo> FileStoreInfo;
+        TIntrusiveConstPtr<TViewInfo> ViewInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

@@ -61,7 +61,7 @@ namespace NKikimr {
                     auto loader = std::make_unique<TLevelSegmentLoader<TKeyLogoBlob, TMemRecLogoBlob>>(VCtx,
                             PDiskCtx, item.Segment.Get(), ctx.SelfID, "BulkSegsLoader");
                     TActorId loaderId = ctx.ExecutorThread.RegisterActor(loader.release());
-                    ActiveActors.Insert(loaderId);
+                    ActiveActors.Insert(loaderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     BulkSegmentLoadInFlight.emplace(loaderId, std::move(item));
                     BulkSegmentLoadQueue.pop();
                 }

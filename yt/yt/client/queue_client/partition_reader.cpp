@@ -59,8 +59,9 @@ public:
 private:
     const TPartitionReaderConfigPtr Config_;
     const IClientPtr Client_;
-    TYPath ConsumerPath_;
-    int PartitionIndex_;
+    const TYPath ConsumerPath_;
+    const int PartitionIndex_;
+
     NLogging::TLogger Logger;
 
     bool Opened_ = false;
@@ -127,9 +128,9 @@ private:
         }
 
     private:
-        IQueueRowsetPtr Rowset_;
-        TWeakPtr<TPartitionReader> PartitionReader_;
-        i64 CurrentOffset_;
+        const IQueueRowsetPtr Rowset_;
+        const TWeakPtr<TPartitionReader> PartitionReader_;
+        const i64 CurrentOffset_;
     };
 
     IPersistentQueueRowsetPtr DoRead()
@@ -207,7 +208,7 @@ private:
         TWallTimer timer;
 
         std::vector<int> partitionIndexesToFetch{PartitionIndex_};
-        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(Client_, partitionIndexesToFetch))
+        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(partitionIndexesToFetch))
             .ValueOrThrow();
 
         YT_VERIFY(partitions.size() <= 1);
@@ -229,12 +230,12 @@ private:
 
         ConsumerClient_ = CreateBigRTConsumerClient(Client_, ConsumerPath_);
 
-        QueuePath_ = WaitFor(ConsumerClient_->FetchTargetQueue(Client_))
+        QueuePath_ = WaitFor(ConsumerClient_->FetchTargetQueue())
             .ValueOrThrow().Path;
 
         Logger.AddTag("Queue: %v", QueuePath_);
 
-        auto partitionStatistics = WaitFor(ConsumerClient_->FetchPartitionStatistics(Client_, QueuePath_, PartitionIndex_))
+        auto partitionStatistics = WaitFor(ConsumerClient_->FetchPartitionStatistics(QueuePath_, PartitionIndex_))
             .ValueOrThrow();
 
         RecomputeApproximateDataWeightPerRow(partitionStatistics.FlushedDataWeight, partitionStatistics.FlushedRowCount);
@@ -299,6 +300,7 @@ private:
     const int PartitionIndex_;
     const TQueueRowBatchReadOptions RowBatchReadOptions_;
     const NLogging::TLogger Logger;
+
     TPullConsumerOptions PullConsumerOptions_;
 
     ISubConsumerClientPtr ConsumerClient_;
@@ -308,7 +310,10 @@ private:
         : public IPersistentQueueRowset
     {
     public:
-        TPersistentQueueRowset(IQueueRowsetPtr rowset, TWeakPtr<TMultiQueueConsumerPartitionReader> partitionReader, i64 currentOffset)
+        TPersistentQueueRowset(
+            IQueueRowsetPtr rowset,
+            TWeakPtr<TMultiQueueConsumerPartitionReader> partitionReader,
+            i64 currentOffset)
             : Rowset_(std::move(rowset))
             , PartitionReader_(std::move(partitionReader))
             , CurrentOffset_(currentOffset)
@@ -361,9 +366,9 @@ private:
         }
 
     private:
-        IQueueRowsetPtr Rowset_;
-        TWeakPtr<TMultiQueueConsumerPartitionReader> PartitionReader_;
-        i64 CurrentOffset_;
+        const IQueueRowsetPtr Rowset_;
+        const TWeakPtr<TMultiQueueConsumerPartitionReader> PartitionReader_;
+        const i64 CurrentOffset_;
     };
 
     IPersistentQueueRowsetPtr DoRead()
@@ -425,7 +430,7 @@ private:
         TWallTimer timer;
 
         std::vector<int> partitionIndexesToFetch{PartitionIndex_};
-        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(Client_, partitionIndexesToFetch))
+        auto partitions = WaitFor(ConsumerClient_->CollectPartitions(partitionIndexesToFetch))
             .ValueOrThrow();
 
         YT_VERIFY(partitions.size() <= 1);
@@ -450,10 +455,12 @@ private:
             THROW_ERROR_EXCEPTION("Queue cluster must be specified");
         }
 
-        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_.GetPath())->GetSubConsumerClient({
-            .Cluster = *queueCluster,
-            .Path = QueuePath_.GetPath(),
-        });
+        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_.GetPath())->GetSubConsumerClient(
+            Client_,
+            {
+                .Cluster = *queueCluster,
+                .Path = QueuePath_.GetPath()
+            });
 
         Opened_ = true;
 

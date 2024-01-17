@@ -21,7 +21,7 @@ struct TPerfomancer {
         ui8* ShuffleMask(ui32 v[8]) {
             ui8* det = new ui8[32];
             for (size_t i = 0; i < 32; i += 1) {
-                det[i] = v[i / 4] + i % 4;
+                det[i] = v[i / 4] == ui32(-1) ? ui8(-1) : 4 * v[i / 4] + i % 4;
             }
             return det;
         }
@@ -48,12 +48,12 @@ struct TPerfomancer {
             TSimd<ui8> permReg11, permReg21;
             TSimd<ui8> permReg12, permReg22;
 
-            TSimd<ui8> permIdx11(ShuffleMask((ui32[8]) {0, 0, 0, 0, 1, 0, 0, 0}));
-            TSimd<ui8> permIdx12(ShuffleMask((ui32[8]) {0, 0, 0, 0, 3, 0, 0, 2}));
-            TSimd<ui8> permIdx1f(ShuffleMask((ui32[8]) {7, 7, 7, 7, 7, 6, 5, 4}));
+            TSimd<ui8> permIdx11(ShuffleMask((ui32[8]) {0, 0, 0, 1, 0, 0, 0, 0}));
+            TSimd<ui8> permIdx12(ShuffleMask((ui32[8]) {2, 0, 0, 3, 0, 0, 0, 0}));
+            TSimd<ui8> permIdx1f(ShuffleMask((ui32[8]) {4, 5, 6, 7, 7, 7, 7, 7}));
 
-            TSimd<ui8> permIdx21(ShuffleMask((ui32[8]) {0, 0, 3, 2, 0, 1, 0, 0}));
-            TSimd<ui8> permIdx22(ShuffleMask((ui32[8]) {0, 0, 7, 6, 0, 5, 4, 0}));
+            TSimd<ui8> permIdx21(ShuffleMask((ui32[8]) {0, 0, 1, 0, 2, 3, 0, 0}));
+            TSimd<ui8> permIdx22(ShuffleMask((ui32[8]) {0, 4, 5, 0, 6, 7, 0, 0}));
 
             ui32 val1[8], val2[8]; // val3[8];
 
@@ -86,7 +86,7 @@ struct TPerfomancer {
                     readReg2 = TSimd<ui8>((ui8*) addr2);
                     addr2++;
                     permReg21 = readReg2.Shuffle(permIdx21);
-                    blended1 = permReg11.template Blend16<blendMask>(permReg21);
+                    blended1 = permReg11.template Blend32<blendMask>(permReg21);
                     blended1.Store((ui8*) val1);
 
                     hash1 = TSimd<ui8>::CRC32u32(0, val1[0]);
@@ -97,7 +97,7 @@ struct TPerfomancer {
 
                     permReg12 = readReg1.Shuffle(permIdx12);
                     permReg22 = readReg2.Shuffle(permIdx22);
-                    blended2 = permReg12.template Blend16<blendMask>(permReg12);
+                    blended2 = permReg12.template Blend32<blendMask>(permReg22);
                     blended2.Store((ui8*) val2);
 
                     hash3 = TSimd<ui8>::CRC32u32(0, val2[0]);
@@ -113,6 +113,10 @@ struct TPerfomancer {
                 addr1++;
             }
 
+
+            std::chrono::steady_clock::time_point end01 =
+                std::chrono::steady_clock::now();
+
             Cerr << "Loaded col1 ";
             readReg1.template Log<ui32>(Cerr);
             Cerr << "Loaded col2 ";
@@ -123,10 +127,6 @@ struct TPerfomancer {
             permReg21.template Log<ui32>(Cerr);
             Cerr << "Blended ";
             blended1.template Log<ui32>(Cerr);
-
-
-            std::chrono::steady_clock::time_point end01 =
-                std::chrono::steady_clock::now();
 
             ui64 microseconds =
                 std::chrono::duration_cast<std::chrono::microseconds>(end01 - begin01).count();

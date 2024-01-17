@@ -19,6 +19,7 @@
                                 "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
@@ -37,9 +38,19 @@
                                 "Node Type": "Aggregate-Limit",
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Aggregate"
                                     },
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
                                         "Limit": "1",
                                         "Name": "Limit"
                                     }
@@ -55,6 +66,7 @@
                                                 "Node Type": "TableFullScan",
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "ReadColumns": [
                                                             "URL"
@@ -93,30 +105,14 @@
                                                                                 }
                                                                             ],
                                                                             "FunctionType": 2,
-                                                                            "Id": 9,
                                                                             "KernelIdx": 0
-                                                                        }
-                                                                    }
-                                                                },
-                                                                {
-                                                                    "Assign": {
-                                                                        "Column": {
-                                                                            "Id": 108
-                                                                        },
-                                                                        "Function": {
-                                                                            "Arguments": [
-                                                                                {
-                                                                                    "Id": 107
-                                                                                }
-                                                                            ],
-                                                                            "Id": 18
                                                                         }
                                                                     }
                                                                 },
                                                                 {
                                                                     "Filter": {
                                                                         "Predicate": {
-                                                                            "Id": 108
+                                                                            "Id": 107
                                                                         }
                                                                     }
                                                                 },
@@ -125,7 +121,7 @@
                                                                         "Aggregates": [
                                                                             {
                                                                                 "Column": {
-                                                                                    "Id": 109
+                                                                                    "Id": 108
                                                                                 },
                                                                                 "Function": {
                                                                                     "Id": 2
@@ -138,13 +134,13 @@
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 109
+                                                                                "Id": 108
                                                                             }
                                                                         ]
                                                                     }
                                                                 }
                                                             ],
-                                                            "Version": 3
+                                                            "Version": 4
                                                         },
                                                         "Table": "clickbench/plans/column/hits"
                                                     }

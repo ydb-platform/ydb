@@ -1,5 +1,5 @@
-#include "flat_part_charge.h"
 #include <ydb/core/tablet_flat/flat_part_dump.h>
+#include "ydb/core/tablet_flat/flat_part_charge_range.h"
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
@@ -23,6 +23,7 @@ namespace {
         conf.Groups.resize(groups);
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
+            conf.Group(group).BTreeIndexNodeTargetSize = 512; /* Should cover up/down moves */
         }
         conf.SmallEdge = 19;  /* Packed to page collection large cell values */
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
@@ -96,9 +97,9 @@ namespace {
         }
 
         if constexpr (Direction == EDirection::Forward) {
-            TCharge::Range(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+            ChargeRange(env, from, to, run, *keyDefaults, tags, 0, 0, true);
         } else {
-            TCharge::RangeReverse(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+            ChargeRangeReverse(env, from, to, run, *keyDefaults, tags, 0, 0, true);
         }
 
         env->PrechargePhase = false;
@@ -416,7 +417,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT(one && one == part.Store->PageCollectionPagesCount(part.Store->GetOuterRoom()));
         }
 
-        { /*_ Enusre there is some rows with two cells with references */
+        { /*_ Ensure that there is some rows with two cells with references */
 
             ui32 large = cWidth(Eggs0().Lone()->Large.Get(), 2);
             ui32 small = cWidth(Eggs0().Lone()->Small.Get(), 2);
@@ -425,16 +426,22 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_C(large > 10, "Eggs0 has trivial external blobs set");
         }
 
-        { /*_  Check that the last key matches in the index */
+        { /*_  Ensure that the last key matches in the index */
             UNIT_ASSERT_VALUES_EQUAL(IndexTools::GetEndRowId(part), Mass0().Saved.Size());
             const NPage::TCompare<NPage::TIndex::TRecord> cmp(part.Scheme->Groups[0].ColsKeyIdx, *Eggs0().Scheme->Keys);
             auto lastKey = TRowTool(*Eggs0().Scheme).KeyCells(Mass0().Saved[Mass0().Saved.Size()-1]);
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetLastRecord(part), lastKey), 0);
         }
 
-        { /*_  Check that part has correct number of slices */
+        { /*_  Ensure that part has correct number of slices */
             UNIT_ASSERT_C(part.Slices, "Part was generated without slices");
             UNIT_ASSERT_C(part.Slices->size() > 1, "Slice items " << +part.Slices->size());
+        }
+
+        { /*_  Ensure that B-Tree index has enough layers */
+            if (part.IndexPages.BTreeGroups.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, 3);
+            }
         }
 
         DumpPart(*Eggs0().Lone(), 1);

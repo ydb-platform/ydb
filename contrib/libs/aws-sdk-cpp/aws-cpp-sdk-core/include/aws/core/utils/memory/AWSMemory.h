@@ -9,6 +9,7 @@
 #include <aws/core/utils/UnreferencedParam.h>
 #include <aws/core/utils/memory/MemorySystemInterface.h>
 
+#include <assert.h>
 #include <memory>
 #include <cstdlib>
 #include <algorithm>
@@ -246,7 +247,50 @@ namespace Aws
         }
     };
 
-    template< typename T > using UniquePtr = std::unique_ptr< T, Deleter< T > >;
+    template< typename T, typename D = Deleter< T > > using UniquePtr = std::unique_ptr< T, D >;
+
+    /*
+     * A UniquePtr that ensures that underlying pointer is set to null on destruction.
+     *   ...thanks to the legacy design, UniquePtr is used as a static global variable that may be destructed twice.
+     */
+    template< typename T, typename D = Deleter< T > >
+    class UniquePtrSafeDeleted : public UniquePtr< T, D >
+    {
+    public:
+        using UniquePtr<T,D>::UniquePtr;
+        UniquePtrSafeDeleted(const UniquePtrSafeDeleted&) noexcept = delete;
+        UniquePtrSafeDeleted(UniquePtrSafeDeleted&&) noexcept = default;
+        UniquePtrSafeDeleted& operator=( const UniquePtrSafeDeleted<T,D>& r ) noexcept = delete;
+        UniquePtrSafeDeleted& operator=( UniquePtrSafeDeleted<T,D>&& r ) noexcept
+        {
+            if(&r != this) {
+                UniquePtr<T, D>::operator=(std::move(r));
+                r.forceReset();
+            }
+            return *this;
+        }
+        UniquePtrSafeDeleted& operator=( std::nullptr_t ) noexcept
+        {
+            forceReset();
+            return *this;
+        }
+
+        void forceReset()
+        {
+            if(!this->get())
+                return;
+            this->reset(nullptr);
+            T volatile* newVal = this->get();  // volatile to prohibit optimizing out setting ptr to null
+            AWS_UNREFERENCED_PARAM(newVal);
+            // issue happens in Release where asserts are not enabled, so the next statement is for you, my dear reader
+            assert(newVal == nullptr && this->get() == nullptr);
+        }
+
+        ~UniquePtrSafeDeleted()
+        {
+            forceReset();
+        }
+    };
 
     /**
      * ::new, ::delete, ::malloc, ::free, std::make_shared, and std::make_unique should not be used in SDK code
@@ -255,7 +299,18 @@ namespace Aws
     template<typename T, typename ...ArgTypes>
     UniquePtr<T> MakeUnique(const char* allocationTag, ArgTypes&&... args)
     {
+        static_assert(!std::is_array<T>::value || std::is_trivial<T>::value,
+                "This wrapper/function is not designed to support non-trivial arrays.");
         return UniquePtr<T>(Aws::New<T>(allocationTag, std::forward<ArgTypes>(args)...));
+    }
+
+    template<typename T, typename D = Deleter<T>, typename ...ArgTypes>
+    UniquePtrSafeDeleted<T, D> MakeUniqueSafeDeleted(const char* allocationTag, ArgTypes&&... args)
+    {
+        static_assert(!std::is_array<T>::value || std::is_trivial<T>::value,
+                      "This wrapper/function is not designed to support non-trivial arrays.");
+
+        return UniquePtrSafeDeleted<T, D>(Aws::New<T>(allocationTag, std::forward<ArgTypes>(args)...), D());
     }
 
     template<typename T>

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/formats/arrow/hash/xx_hash.h>
 #include <util/generic/map.h>
 
 namespace NKikimr::NMiniKQL {
@@ -37,13 +38,13 @@ class TUnboxedValueReader {
 private:
     YDB_READONLY_DEF(std::vector<TColumnUnboxedPlaceInfo>, ColumnsInfo);
     template <class T>
-    static void FieldToHashString(const NYql::NUdf::TUnboxedValue& value, IHashCalcer& hashCalcer) {
+    static void FieldToHashString(const NYql::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
         static_assert(std::is_arithmetic<T>::value);
         const T result = value.Get<T>();
         hashCalcer.Update((const ui8*)&result, sizeof(result));
     }
 public:
-    void BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, IHashCalcer& hashCalcer) const;
+    void BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const;
     TUnboxedValueReader(const NMiniKQL::TStructType* structInfo, const TMap<TString, TExternalTableColumn>& columnsRemap, const std::vector<TString>& shardingColumns);
 };
 

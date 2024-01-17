@@ -24,6 +24,7 @@ struct TEvKqpExecuter {
         TVector<TKqpExecuterTxResult> TxResults;
 
         NLWTrace::TOrbit Orbit;
+        IKqpGateway::TKqpSnapshot Snapshot;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
 
@@ -92,7 +93,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target,
+IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     bool temporary, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx);

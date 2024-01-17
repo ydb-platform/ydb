@@ -1,0 +1,74 @@
+GO_LIBRARY()
+
+SRCS(
+    client.go
+    clone.go
+    cookie.go
+    doc.go
+    filetransport.go
+    fs.go
+    h2_bundle.go
+    h2_error.go
+    header.go
+    http.go
+    jar.go
+    method.go
+    request.go
+    response.go
+    responsecontroller.go
+    roundtrip.go
+    server.go
+    sniff.go
+    socks_bundle.go
+    status.go
+    transfer.go
+    transport.go
+    transport_default_other.go
+)
+
+GO_TEST_SRCS(
+    cookie_test.go
+    export_test.go
+    filetransport_test.go
+    h2_error_test.go
+    header_test.go
+    http_test.go
+    proxy_test.go
+    range_test.go
+    readrequest_test.go
+    requestwrite_test.go
+    response_test.go
+    responsewrite_test.go
+    server_test.go
+    transfer_test.go
+    transport_internal_test.go
+)
+
+GO_XTEST_SRCS(
+    alpn_test.go
+    client_test.go
+    clientserver_test.go
+    example_filesystem_test.go
+    example_handle_test.go
+    example_test.go
+    fs_test.go
+    main_test.go
+    request_test.go
+    responsecontroller_test.go
+    serve_test.go
+    sniff_test.go
+    transport_test.go
+)
+
+END()
+
+RECURSE(
+    cgi
+    cookiejar
+    fcgi
+    httptest
+    httptrace
+    httputil
+    internal
+    pprof
+)

@@ -77,7 +77,6 @@ TMaybe<TCondenseInputResult> CondenseInput(const TExprBase& input, TExprContext&
     TVector<TCoArgument> stageArguments;
 
     if (IsDqPureExpr(input)) {
-        YQL_ENSURE(input.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List, "" << input.Ref().Dump());
         auto stream = Build<TCoToStream>(ctx, input.Pos())
             .Input<TCoJust>()
                 .Input(input)
@@ -163,16 +162,25 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const TExprBase& input, con
     };
 }
 
-TCoLambda MakeTableKeySelector(const TKikimrTableMetadataPtr meta, TPositionHandle pos, TExprContext& ctx) {
+TCoLambda MakeTableKeySelector(const TKikimrTableMetadataPtr meta, TPositionHandle pos, TExprContext& ctx, TMaybe<int> tupleId) {
     auto keySelectorArg = TCoArgument(ctx.NewArgument(pos, "key_selector"));
 
     TVector<TExprBase> keyTuples;
     keyTuples.reserve(meta->KeyColumnNames.size());
+
+    TExprBase selector = keySelectorArg;
+    if (tupleId) {
+        selector = Build<TCoNth>(ctx, pos)
+            .Tuple(keySelectorArg)
+            .Index().Build(*tupleId)
+            .Done();
+    }
+
     for (const auto& key : meta->KeyColumnNames) {
         auto tuple = Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(key)
             .Value<TCoMember>()
-                .Struct(keySelectorArg)
+                .Struct(selector)
                 .Name().Build(key)
                 .Build()
             .Done();

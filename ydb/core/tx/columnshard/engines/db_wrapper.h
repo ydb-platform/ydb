@@ -29,12 +29,12 @@ public:
     virtual bool Load(TInsertTableAccessor& insertTable,
                       const TInstant& loadTime) = 0;
 
-    virtual void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) = 0;
+    virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
+    virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
+    virtual bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) = 0;
 
-    virtual void WriteCounter(ui32 index, ui32 counterId, ui64 value) = 0;
-    virtual bool LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) = 0;
+    virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
+    virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
 };
 
 class TDbWrapper : public IDbWrapper {
@@ -51,15 +51,14 @@ public:
     void EraseCommitted(const TInsertedData& data) override;
     void EraseAborted(const TInsertedData& data) override;
 
-    bool Load(TInsertTableAccessor& insertTable,
-              const TInstant& loadTime) override;
+    bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) override;
 
-    void WriteColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    void EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(ui32 index, const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override;
+    void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
+    void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
+    bool LoadColumns(const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override;
 
-    void WriteCounter(ui32 index, ui32 counterId, ui64 value) override;
-    bool LoadCounters(ui32 index, const std::function<void(ui32 id, ui64 value)>& callback) override;
+    void WriteCounter(ui32 counterId, ui64 value) override;
+    bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
 
 private:
     NTable::TDatabase& Database;

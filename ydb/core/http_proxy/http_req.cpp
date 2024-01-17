@@ -5,7 +5,7 @@
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/http/misc/parsed_request.h>

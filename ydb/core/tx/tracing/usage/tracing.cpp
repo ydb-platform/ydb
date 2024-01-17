@@ -67,6 +67,10 @@ TTraceClientGuard TTraceClient::GetClientUnique(const TString& type, const TStri
     return Singleton<TTracing>()->GetClient(type, clientId + "::" + ::ToString(ClientsCounter.Inc()), parentId);
 }
 
+TTraceClientGuard TTraceClient::GetLocalClient(const TString& type, const TString& clientId) {
+    return Singleton<TTracing>()->GetLocalClient(type, clientId + "::" + ::ToString(ClientsCounter.Inc()));
+}
+
 TTraceClientGuard TTraceClient::GetTypeUnique(const TString& type, const TString& parentId) {
     return Singleton<TTracing>()->GetClient(type, type + "::" + ::ToString(ClientsCounter.Inc()), parentId);
 }

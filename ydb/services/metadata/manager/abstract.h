@@ -2,6 +2,7 @@
 #include "common.h"
 #include "table_record.h"
 
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
@@ -12,7 +13,7 @@
 #include <ydb/services/metadata/abstract/parsing.h>
 
 #include <library/cpp/threading/future/core/future.h>
-#include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -80,21 +81,43 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
 protected:
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, TInternalModificationContext& context) const = 0;
+        const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const = 0;
+
+    virtual TYqlConclusionStatus DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+        const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const = 0;
 public:
     virtual ~IOperationsManager() = default;
 
     NThreading::TFuture<TYqlConclusionStatus> UpsertObject(const NYql::TUpsertObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TYqlConclusionStatus> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TYqlConclusionStatus> AlterObject(const NYql::TAlterObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TYqlConclusionStatus> DropObject(const NYql::TDropObjectSettings& settings, const ui32 nodeId,
-        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
+        const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const;
+
+    TYqlConclusionStatus PrepareUpsertObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const NYql::TUpsertObjectSettings& settings, const IClassBehaviour::TPtr& manager,
+        const TExternalModificationContext& context) const;
+
+    TYqlConclusionStatus PrepareCreateObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const NYql::TCreateObjectSettings& settings, const IClassBehaviour::TPtr& manager,
+        const TExternalModificationContext& context) const;
+
+    TYqlConclusionStatus PrepareAlterObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const NYql::TAlterObjectSettings& settings, const IClassBehaviour::TPtr& manager,
+        const TExternalModificationContext& context) const;
+
+    TYqlConclusionStatus PrepareDropObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const NYql::TDropObjectSettings& settings, const IClassBehaviour::TPtr& manager,
+        const TExternalModificationContext& context) const;
+
+    virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
+        const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
 
     const TTableSchema& GetSchema() const {
         Y_ABORT_UNLESS(!!ActualSchema);

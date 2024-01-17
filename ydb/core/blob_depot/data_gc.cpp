@@ -45,6 +45,7 @@ namespace NKikimr::NBlobDepot {
         const ui8 Channel;
         const ui32 GroupId;
         std::vector<TLogoBlobID> TrashDeleted;
+        size_t Index;
         const TGenStep ConfirmedGenStep;
 
         static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
@@ -52,43 +53,92 @@ namespace NKikimr::NBlobDepot {
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_CONFIRM_GC; }
 
-        TTxConfirmGC(TBlobDepot *self, ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep)
+        TTxConfirmGC(TBlobDepot *self, ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, size_t index,
+                TGenStep confirmedGenStep)
             : TTransactionBase(self)
             , Channel(channel)
             , GroupId(groupId)
             , TrashDeleted(std::move(trashDeleted))
+            , Index(index)
             , ConfirmedGenStep(confirmedGenStep)
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
 
-            for (ui32 i = 0; i < TrashDeleted.size() && i < MaxKeysToProcessAtOnce; ++i) {
-                db.Table<Schema::Trash>().Key(TKey(TrashDeleted[i]).MakeBinaryKey()).Delete();
+            for (ui32 i = 0; Index < TrashDeleted.size() && i < MaxKeysToProcessAtOnce; ++i, ++Index) {
+                db.Table<Schema::Trash>().Key(TKey(TrashDeleted[Index]).MakeBinaryKey()).Delete();
             }
-            if (TrashDeleted.size() <= MaxKeysToProcessAtOnce) {
-                TrashDeleted.clear();
+            if (Index == TrashDeleted.size()) {
                 db.Table<Schema::GC>().Key(Channel, GroupId).Update<Schema::GC::ConfirmedGenStep>(ui64(ConfirmedGenStep));
-            } else {
-                std::vector<TLogoBlobID> temp;
-                temp.insert(temp.end(), TrashDeleted.begin() + MaxKeysToProcessAtOnce, TrashDeleted.end());
-                temp.swap(TrashDeleted);
             }
 
             return true;
         }
 
         void Complete(const TActorContext&) override {
-            if (TrashDeleted.empty()) {
-                Self->Data->OnCommitConfirmedGC(Channel, GroupId);
+            if (Index == TrashDeleted.size()) {
+                Self->Data->OnCommitConfirmedGC(Channel, GroupId, std::move(TrashDeleted));
             } else { // resume transaction
-                Self->Data->ExecuteConfirmGC(Channel, GroupId, std::move(TrashDeleted), ConfirmedGenStep);
+                Self->Data->ExecuteConfirmGC(Channel, GroupId, std::move(TrashDeleted), Index, ConfirmedGenStep);
             }
         }
     };
 
-    void TData::ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep) {
-        Self->Execute(std::make_unique<TTxConfirmGC>(Self, channel, groupId, std::move(trashDeleted), confirmedGenStep));
+    void TData::ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, size_t index,
+            TGenStep confirmedGenStep) {
+        Self->Execute(std::make_unique<TTxConfirmGC>(Self, channel, groupId, std::move(trashDeleted), index,
+            confirmedGenStep));
+    }
+
+    class TData::TTxHardGC : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui8 Channel;
+        const ui32 GroupId;
+        const TGenStep HardGenStep;
+        bool MoreToGo = false;
+        std::vector<TLogoBlobID> TrashDeleted;
+
+        static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_HARD_GC; }
+
+        TTxHardGC(TBlobDepot *self, ui8 channel, ui32 groupId, TGenStep hardGenStep)
+            : TTransactionBase(self)
+            , Channel(channel)
+            , GroupId(groupId)
+            , HardGenStep(hardGenStep)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            NIceDb::TNiceDb db(txc.DB);
+
+            std::function<bool(TLogoBlobID)> callback = [&](TLogoBlobID id) -> bool {
+                if (TrashDeleted.size() == MaxKeysToProcessAtOnce) {
+                    MoreToGo = true;
+                    return false;
+                }
+                db.Table<Schema::Trash>().Key(TKey(id).MakeBinaryKey()).Delete();
+                TrashDeleted.push_back(id);
+                return true;
+            };
+            Self->Data->CollectTrashByHardBarrier(Channel, GroupId, HardGenStep, callback);
+
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Self->Data->TrimChannelHistory(Channel, GroupId, std::move(TrashDeleted));
+            if (MoreToGo) {
+                Self->Data->ExecuteHardGC(Channel, GroupId, HardGenStep);
+            } else {
+                Self->Data->OnCommitHardGC(Channel, GroupId, HardGenStep);
+            }
+        }
+    };
+
+    void TData::ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep) {
+        Self->Execute(std::make_unique<TTxHardGC>(Self, channel, groupId, hardGenStep));
     }
 
 } // NKikimr::NBlobDepot

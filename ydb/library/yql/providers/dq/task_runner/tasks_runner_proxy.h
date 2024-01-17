@@ -12,6 +12,10 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
+i64 SaveRopeToPipe(IOutputStream& output, const TRope& rope);
+void LoadRopeFromPipe(IInputStream& input, TRope& rope);
+NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
+
 class IInputChannel : public TThrRefBase, private TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<IInputChannel>;
@@ -45,12 +49,12 @@ public:
 
     virtual ui64 GetTaskId() const = 0;
 
-    virtual NYql::NDqProto::TPrepareResponse Prepare() = 0;
+    virtual NYql::NDqProto::TPrepareResponse Prepare(const NDq::TDqTaskRunnerMemoryLimits& limits = DefaultMemoryLimits()) = 0;
     virtual NYql::NDqProto::TRunResponse Run() = 0;
 
     virtual IInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
-    virtual NDq::IDqAsyncInputBuffer::TPtr GetSource(ui64 index) = 0;
+    virtual NDq::IDqAsyncInputBuffer* GetSource(ui64 index) = 0;
     virtual NDq::IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) = 0;
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;
@@ -83,8 +87,5 @@ public:
 
     virtual TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TString& traceId = "TODO") = 0;
 };
-
-
-NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 
 } // namespace NYql::NTaskRunnerProxy

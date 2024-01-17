@@ -14,7 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <library/cpp/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport).SetDomainName("Root").SetUseRealThreads(false);
         // set small compilation timeout to avoid long timer creation
-        settings.AppConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(400);
+        settings.AppConfig->MutableTableServiceConfig()->SetCompileTimeoutMs(400);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -525,14 +525,14 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         bool allDoneOk = false;
 
         {
-            NGrpc::TGRpcClientLow clientLow;
+            NYdbGrpc::TGRpcClientLow clientLow;
             auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
 
             Ydb::Table::KeepAliveRequest request;
             request.set_session_id("ydb://session/3?node_id=2&id=YDB0NDRhNjItYWQwZmIzMTktMWUyOTE4ZWYtYzE0NzJjNg==");
 
-            NGrpc::TResponseCallback<Ydb::Table::KeepAliveResponse> responseCb =
-                [&allDoneOk](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::KeepAliveResponse&& response) -> void {
+            NYdbGrpc::TResponseCallback<Ydb::Table::KeepAliveResponse> responseCb =
+                [&allDoneOk](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::KeepAliveResponse&& response) -> void {
                     UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
                     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_SESSION);
                     allDoneOk = true;

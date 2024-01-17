@@ -3,12 +3,12 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
 #include <util/random/shuffle.h>
 
@@ -2071,15 +2071,15 @@ public:
         }
 
         TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_SYNC";
+        syncContext.Type = "NODES_TIME_DIFFERENCE";
         FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
         if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {
             syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
@@ -2242,22 +2242,22 @@ public:
         };
 
         struct TEvError : TEventLocal<TEvError, EvError> {
-            NGrpc::TGrpcStatus Status;
+            NYdbGrpc::TGrpcStatus Status;
 
-            TEvError(NGrpc::TGrpcStatus&& status)
+            TEvError(NYdbGrpc::TGrpcStatus&& status)
                 : Status(std::move(status))
             {}
         };
     };
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
-    std::shared_ptr<NGrpc::TGRpcClientLow> GRpcClientLow;
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
     TActorId Sender;
     THolder<RequestType> Request;
     ui64 Cookie;
     Ydb::Monitoring::SelfCheckResult Result;
 
-    TNodeCheckRequest(std::shared_ptr<NGrpc::TGRpcClientLow> grpcClient, const TActorId& sender, THolder<RequestType> request, ui64 cookie)
+    TNodeCheckRequest(std::shared_ptr<NYdbGrpc::TGRpcClientLow> grpcClient, const TActorId& sender, THolder<RequestType> request, ui64 cookie)
         : GRpcClientLow(grpcClient)
         , Sender(sender)
         , Request(std::move(request))
@@ -2276,7 +2276,7 @@ public:
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
-        NGrpc::TGRpcClientConfig config;
+        NYdbGrpc::TGRpcClientConfig config;
         for (const auto& systemStateInfo : ev->Get()->Record.GetSystemStateInfo()) {
             for (const auto& endpoint : systemStateInfo.GetEndpoints()) {
                 if (endpoint.GetName() == "grpc") {
@@ -2297,15 +2297,15 @@ public:
         NActors::TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
         NActors::TActorId actorId = TBase::SelfId();
         Ydb::Monitoring::NodeCheckRequest request;
-        NGrpc::TResponseCallback<Ydb::Monitoring::NodeCheckResponse> responseCb =
-            [actorId, actorSystem, context = GRpcClientLow->CreateContext()](NGrpc::TGrpcStatus&& status, Ydb::Monitoring::NodeCheckResponse&& response) -> void {
+        NYdbGrpc::TResponseCallback<Ydb::Monitoring::NodeCheckResponse> responseCb =
+            [actorId, actorSystem, context = GRpcClientLow->CreateContext()](NYdbGrpc::TGrpcStatus&& status, Ydb::Monitoring::NodeCheckResponse&& response) -> void {
             if (status.Ok()) {
                 actorSystem->Send(actorId, new typename TEvPrivate::TEvResult(std::move(response)));
             } else {
                 actorSystem->Send(actorId, new typename TEvPrivate::TEvError(std::move(status)));
             }
         };
-        NGrpc::TCallMeta meta;
+        NYdbGrpc::TCallMeta meta;
         meta.Timeout = Timeout;
         auto service = GRpcClientLow->CreateGRpcServiceConnection<::Ydb::Monitoring::V1::MonitoringService>(config);
         service->DoRequest(request, std::move(responseCb), &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncNodeCheck, meta);
@@ -2424,11 +2424,11 @@ public:
         Register(new TSelfCheckRequest(ev->Sender, ev.Get()->Release(), ev->Cookie));
     }
 
-    std::shared_ptr<NGrpc::TGRpcClientLow> GRpcClientLow;
+    std::shared_ptr<NYdbGrpc::TGRpcClientLow> GRpcClientLow;
 
     void Handle(TEvNodeCheckRequest::TPtr& ev) {
         if (!GRpcClientLow) {
-            GRpcClientLow = std::make_shared<NGrpc::TGRpcClientLow>();
+            GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
         }
         Register(new TNodeCheckRequest<TEvNodeCheckRequest>(GRpcClientLow, ev->Sender, ev.Get()->Release(), ev->Cookie));
     }
@@ -2436,7 +2436,7 @@ public:
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
         if (ev->Get()->Request.GetPath() == "/status") {
             if (!GRpcClientLow) {
-                GRpcClientLow = std::make_shared<NGrpc::TGRpcClientLow>();
+                GRpcClientLow = std::make_shared<NYdbGrpc::TGRpcClientLow>();
             }
             Register(new TNodeCheckRequest<NMon::TEvHttpInfo>(GRpcClientLow, ev->Sender, ev.Get()->Release(), ev->Cookie));
         } else {

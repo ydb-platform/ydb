@@ -41,26 +41,30 @@ TUnversionedRow FromRecord(
     const TRecord& record,
     const TRowBufferPtr& rowBuffer,
     const typename TRecord::TRecordDescriptor::TIdMapping& idMapping =
-        TRecord::TRecordDescriptor::Get()->GetIdMapping());
+        TRecord::TRecordDescriptor::Get()->GetIdMapping(),
+    NTableClient::EValueFlags flags = NTableClient::EValueFlags::None);
 
 template <class TRecord>
 TUnversionedOwningRow FromRecord(
     const TRecord& record,
     const typename TRecord::TRecordDescriptor::TIdMapping& idMapping =
-        TRecord::TRecordDescriptor::Get()->GetIdMapping());
+        TRecord::TRecordDescriptor::Get()->GetIdMapping(),
+    NTableClient::EValueFlags flags = NTableClient::EValueFlags::None);
 
 template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
     const TRowBufferPtr& rowBuffer,
     const typename TRecord::TRecordDescriptor::TIdMapping& idMapping =
-        TRecord::TRecordDescriptor::Get()->GetIdMapping());
+        TRecord::TRecordDescriptor::Get()->GetIdMapping(),
+    NTableClient::EValueFlags flags = NTableClient::EValueFlags::None);
 
 template <class TRecord>
 TSharedRange<TUnversionedRow> FromRecords(
     TRange<TRecord> records,
     const typename TRecord::TRecordDescriptor::TIdMapping& idMapping =
-        TRecord::TRecordDescriptor::Get()->GetIdMapping());
+        TRecord::TRecordDescriptor::Get()->GetIdMapping(),
+    NTableClient::EValueFlags flags = NTableClient::EValueFlags::None);
 
 ////////////////////////////////////////////////////////////////////////////////
 

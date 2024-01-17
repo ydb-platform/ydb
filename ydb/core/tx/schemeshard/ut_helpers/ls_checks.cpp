@@ -13,7 +13,7 @@ namespace NLs {
 
 using namespace NKikimr;
 
-#define DESCRIBE_ASSERT_EQUAL(name, type, expression, description)                                                    \
+#define DESCRIBE_ASSERT(op, name, type, expression, description)                                                      \
     TCheckFunc name(type expected) {                                                                                  \
         return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {                                           \
             UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());       \
@@ -22,12 +22,15 @@ using namespace NKikimr;
             const auto& subdomain = pathDescr.GetDomainDescription();                                                 \
             const auto& value = expression;                                                                           \
                                                                                                                       \
-            UNIT_ASSERT_EQUAL_C(value, expected,                                                                      \
+            UNIT_ASSERT_##op(value, expected,                                                                         \
                             description << " mismatch, subdomain with id " << subdomain.GetDomainKey().GetPathId() << \
                                 " has value " << value <<                                                             \
                                 " but expected " << expected);                                                        \
     };                                                                                                                \
 }
+
+#define DESCRIBE_ASSERT_EQUAL(name, type, expression, description) DESCRIBE_ASSERT(EQUAL_C, name, type, expression, description)
+#define DESCRIBE_ASSERT_GE(name, type, expression, description)    DESCRIBE_ASSERT(GE_C, name, type, expression, description)
 
 
 void NotInSubdomain(const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -209,6 +212,19 @@ TCheckFunc StoragePoolsEqual(TSet<TString> poolNames) {
 
         UNIT_ASSERT_VALUES_EQUAL(presentPools.size(), poolNames.size());
         UNIT_ASSERT_VALUES_EQUAL(presentPools, poolNames);
+    };
+}
+
+TCheckFunc SharedHive(ui64 sharedHiveId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& domainDesc = record.GetPathDescription().GetDomainDescription();
+        if (sharedHiveId) {
+            UNIT_ASSERT_VALUES_EQUAL(domainDesc.GetSharedHive(), sharedHiveId);
+        } else {
+            UNIT_ASSERT(!domainDesc.HasSharedHive());
+        }
     };
 }
 
@@ -432,6 +448,13 @@ void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record) 
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeExternalDataSource);
 }
 
+void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeView);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns,
                         NKikimrSchemeOp::EPathState pathState) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -484,7 +507,8 @@ void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     for (ui32 i = 0; i < descr.GetTable().SplitBoundarySize(); ++i) {
         const auto& b = descr.GetTable().GetSplitBoundary(i);
         TVector<TCell> cells;
-        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr);
+        TVector<TString> memoryOwner;
+        NMiniKQL::CellsFromTuple(nullptr, b.GetKeyPrefix(), keyColTypes, false, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL(errStr, "");
 
         TString serialized = TSerializedCellVec::Serialize(cells);
@@ -650,6 +674,7 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
 
 DESCRIBE_ASSERT_EQUAL(TopicReservedStorage, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetReserveSize(), "Topic ReserveSize")
 DESCRIBE_ASSERT_EQUAL(TopicAccountSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
+DESCRIBE_ASSERT_GE(TopicAccountSizeGE, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
 DESCRIBE_ASSERT_EQUAL(TopicUsedReserveSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetUsedReserveSize(), "Topic UsedReserveSize")
 
 TCheckFunc PathsInsideDomainOneOf(TSet<ui64> variants) {
@@ -1150,7 +1175,22 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
     };
 }
 
+TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& domainDesc = record.GetPathDescription().GetDomainDescription();
+        if (serverlessComputeResourcesMode) {
+            UNIT_ASSERT_VALUES_EQUAL(domainDesc.GetServerlessComputeResourcesMode(), serverlessComputeResourcesMode);
+        } else {
+            UNIT_ASSERT(!domainDesc.HasServerlessComputeResourcesMode());
+        }
+    };
+}
+
 #undef DESCRIBE_ASSERT_EQUAL
+#undef DESCRIBE_ASSERT_GE
+#undef DESCRIBE_ASSERT
 
 } // NLs
 } // NSchemeShardUT_Private

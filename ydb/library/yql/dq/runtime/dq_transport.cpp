@@ -78,7 +78,7 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
         }
         case NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0: {
-            packResult = DoSerializeBuffer<false>(type, buffer);
+            packResult = DoSerializeBuffer<true>(type, buffer);
             break;
         }
         default:

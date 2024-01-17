@@ -53,6 +53,7 @@ private:
     virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleRenameGroup(NNodes::TKiRenameGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleWrite(NNodes::TExprBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0;
@@ -63,6 +64,8 @@ private:
     virtual TStatus HandlePgDropObject(NNodes::TPgDropObject node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -222,6 +225,8 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto);
+void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
+// todo gvit switch to ydb typed value.
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
 
 // Optimizer rules
@@ -244,5 +249,6 @@ bool IsKikimrSystemColumn(const TStringBuf columnName);
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
+TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
 
 } // namespace NYql

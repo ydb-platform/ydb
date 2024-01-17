@@ -368,6 +368,25 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TTypedConsumer
+    : public NYson::TForwardingYsonConsumer
+{
+protected:
+    void ThrowInvalidType(ENodeType actualType);
+    virtual ENodeType GetExpectedType() = 0;
+
+    void OnMyStringScalar(TStringBuf value) override;
+    void OnMyInt64Scalar(i64 value) override;
+    void OnMyUint64Scalar(ui64 value) override;
+    void OnMyDoubleScalar(double value) override;
+    void OnMyBooleanScalar(bool value) override;
+    void OnMyEntity() override;
+
+    void OnMyBeginList() override;
+
+    void OnMyBeginMap() override;
+};
+
 void SetNodeFromProducer(
     const INodePtr& node,
     const NYson::TYsonProducer& producer,

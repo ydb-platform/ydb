@@ -14,9 +14,9 @@ target_link_libraries(ydb-core-util PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   actors-interconnect-mock
-  cpp-actors-util
+  library-actors-util
   cpp-containers-stack_vector
   cpp-html-escape
   library-cpp-ipmath
@@ -35,6 +35,7 @@ target_sources(ydb-core-util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/console.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/count_min_sketch.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/failure_injection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/fast_tls.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/format.cpp

@@ -177,22 +177,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         // Capture all upload rows requests
         TVector<THolder<IEventHandle>> uploadRequests;
-        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvUploadRowsRequest::EventType: {
-                    Cerr << "... captured TEvUploadRowsRequest" << Endl;
-                    uploadRequests.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserver = runtime.SetObserverFunc(observer);
+
+        auto observerHolder = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&uploadRequests](auto& ev) {
+            Cerr << "... captured TEvUploadRowsRequest" << Endl;
+            uploadRequests.emplace_back(ev.Release());
+        });
 
         DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32);
 
         waitFor([&]{ return uploadRequests.size() >= 3; }, "TEvUploadRowsRequest");
-        runtime.SetObserverFunc(prevObserver);
+        observerHolder.Remove();
 
         ui64 dropTxId = AsyncAlterDropColumn(server, "/Root", "table-1", "value");
         WaitTxNotification(server, dropTxId);
@@ -772,19 +766,21 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         TVector<ui32> observedUploadStatus;
         TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+
+        auto observerRequestHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&overloadSubscribe](auto& ev) {
+            if (!overloadSubscribe) {
+                ev->Get()->Record.ClearOverloadSubscribe();
+            }
+        });
+
+        auto observerResponseHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>([&observedUploadStatus](auto& ev) {
+            observedUploadStatus.push_back(ev->Get()->Record.GetStatus());
+        });
+
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case NDataShard::TEvChangeExchange::EvEnqueueRecords:
-                    blockedEnqueueRecords.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                case TEvDataShard::TEvUploadRowsRequest::EventType:
-                    if (!overloadSubscribe) {
-                        ev->Get<TEvDataShard::TEvUploadRowsRequest>()->Record.ClearOverloadSubscribe();
-                    }
-                    break;
-                case TEvDataShard::TEvUploadRowsResponse::EventType:
-                    observedUploadStatus.push_back(ev->Get<TEvDataShard::TEvUploadRowsResponse>()->Record.GetStatus());
-                    break;
+            if (ev->GetTypeRewrite() == NDataShard::TEvChangeExchange::EvEnqueueRecords) {
+                blockedEnqueueRecords.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -821,6 +817,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         observedUploadStatus.clear();
         UNIT_ASSERT(responses.empty());
 
+        observerRequestHandler.Remove();
+        observerResponseHandler.Remove();
         runtime.SetObserverFunc(prevObserverFunc);
         for (auto& ev : blockedEnqueueRecords) {
             runtime.Send(ev.Release(), 0, true);
@@ -851,7 +849,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
     Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetry) {
         DoShouldRejectOnChangeQueueOverflow(true);
     }
-
 }
 
 } // namespace NKikimr

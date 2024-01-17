@@ -12,8 +12,8 @@ add_library(core-tx-tx_allocator)
 target_link_libraries(core-tx-tx_allocator PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-helpers
-  cpp-actors-interconnect
+  library-actors-helpers
+  library-actors-interconnect
   ydb-core-actorlib_impl
   ydb-core-base
   core-engine-minikql

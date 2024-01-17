@@ -1,4 +1,4 @@
-import "library/cpp/actors/protos/actors.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
@@ -36,7 +36,6 @@ message TReadStats {
     optional uint64 IndexBatches = 6;
     optional uint64 NotIndexedBatches = 7;
     optional uint32 SchemaColumns = 8;
-    optional uint64 PortionsBytes = 9;
     optional uint64 DataFilterBytes = 10;
     optional uint64 DataAdditionalBytes = 11;
 
@@ -44,6 +43,9 @@ message TReadStats {
     optional uint32 AdditionalColumns = 13;
 
     optional uint32 SelectedRows = 14;
+    optional uint64 CompactedPortionsBytes = 15;
+    optional uint64 InsertedPortionsBytes = 16;
+    optional uint64 CommittedPortionsBytes = 17;
 }
 
 message TLogicalMetadata {

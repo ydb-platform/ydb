@@ -81,7 +81,7 @@ private:
     grpc::Alarm Alarm;
 
 private:
-    using TFixedEvent = NGrpc::TQueueClientFixedEvent<TSelf>;
+    using TFixedEvent = NYdbGrpc::TQueueClientFixedEvent<TSelf>;
 
     TFixedEvent OnAlarmTag = { this, &TSelf::OnAlarm };
 };
@@ -303,7 +303,7 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
     GRpcClientLow_.Stop(wait);
 }
 
-void TGRpcConnectionsImpl::SetGrpcKeepAlive(NGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
+void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
     ui64 timeoutMs = timeout.MilliSeconds();
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = timeoutMs >> 3;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = timeoutMs;
@@ -346,11 +346,11 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         if (strong && result.DiscoveryStatus.IsTransportError()) {
             strong->StatCollector.IncDiscoveryFailDueTransportError();
         }
-        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), strong->Database));
+        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), *strong));
     });
 }
 
-TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TStringType& database) {
+TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TDbDriverState& dbDriverState) {
     std::lock_guard lock(ExtensionsLock_);
     if (!DiscoveryMutatorCb)
         return result;
@@ -358,7 +358,12 @@ TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult 
     auto endpoint = result.DiscoveryStatus.Endpoint;
     auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
-    ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), database);
+    auto aux = IDiscoveryMutatorApi::TAuxInfo {
+        .Database = dbDriverState.Database,
+        .DiscoveryEndpoint = dbDriverState.DiscoveryEndpoint
+    };
+
+    ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), aux);
 
     auto issues = ydbStatus.GetIssues();
 

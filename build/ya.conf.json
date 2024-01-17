@@ -1,6 +1,64 @@
 {
     "bottles": {
-        "clang14": {
+        "atop": {
+            "executable": {
+                "atop": [
+                    "atop",
+                    "atop"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "linux-x86_64": {
+                        "uri": "sbr:1277521710"
+                    }
+                }
+            }
+        },
+        "black": {
+            "executable": {
+                "black": [
+                    "black"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-arm64": {
+                        "uri": "sbr:5599877541"
+                    },
+                    "darwin-x86_64": {
+                        "uri": "sbr:5599878022"
+                    },
+                    "linux-aarch64": {
+                        "uri": "sbr:5599877008"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:5599878769"
+                    },
+                    "win32-x86_64": {
+                        "uri": "sbr:5599878473"
+                    }
+                }
+            }
+        },
+        "clang-format": {
+            "executable": {
+                "clang-format": [
+                    "clang-format"
+                ]
+            },
+            "formula": {
+                "by_platform": {
+                    "darwin-x86_64": {
+                        "uri": "sbr:4111727026"
+                    },
+                    "linux-x86_64": {
+                        "uri": "sbr:4111727778"
+                    }
+                }
+            }
+        },
+        "clang16": {
             "executable": {
                 "c++": [
                     "bin",
@@ -47,7 +105,7 @@
                     "llvm-symbolizer"
                 ]
             },
-            "formula": "build/platform/clang/clang14.json"
+            "formula": "build/platform/clang/clang16.json"
         },
         "gdb": {
             "executable": {
@@ -68,6 +126,39 @@
                 ]
             },
             "formula": "build/external_resources/gdb/resources.json"
+        },
+        "gdbnew": {
+            "executable": {
+                "gcore": [
+                    "gdb",
+                    "bin",
+                    "gcore"
+                ],
+                "gdb": [
+                    "gdb",
+                    "bin",
+                    "gdb"
+                ],
+                "gdbserver": [
+                    "gdb",
+                    "bin",
+                    "gdbserver"
+                ]
+            },
+            "formula": "build/external_resources/gdb/resources.json"
+        },
+        "golang": {
+            "executable": {
+                "go": [
+                    "bin",
+                    "go"
+                ],
+                "gofmt": [
+                    "bin",
+                    "gofmt"
+                ]
+            },
+            "formula": "build/external_resources/go_tools/go1.21.json"
         },
         "python": {
             "executable": {
@@ -120,7 +211,109 @@
         }
     },
     "toolchain": {
-        "clang14": {
+        "atop": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "atop": {
+                    "bottle": "atop",
+                    "executable": "atop"
+                }
+            }
+        },
+        "black": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "black": {
+                    "bottle": "black",
+                    "executable": "black"
+                }
+            }
+        },
+        "clang-format": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clang-format": {
+                    "bottle": "clang-format",
+                    "executable": "clang-format"
+                }
+            }
+        },
+        "clang16": {
             "env": {
                 "CPATH": [
                     ""
@@ -135,7 +328,7 @@
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang",
                 "cxx_compiler": "$(CLANG)/bin/clang++",
-                "gcc_version": "14.0",
+                "gcc_version": "16",
                 "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
                 "match_root": "CLANG",
                 "objcopy": "$(CLANG)/bin/llvm-objcopy",
@@ -620,57 +813,67 @@
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
                 }
             ],
             "tools": {
                 "c++": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++"
                 },
                 "c++filt": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++filt"
                 },
                 "cc": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "cc"
                 },
                 "clang-rename": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "clang-rename"
                 },
                 "gcov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-gcov"
                 },
                 "llvm-cov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-cov"
                 },
                 "llvm-profdata": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-profdata"
                 },
                 "llvm-symbolizer": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-symbolizer"
                 },
                 "nm": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-nm"
                 },
                 "objcopy": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-objcopy"
                 },
                 "strip": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-strip"
                 }
             }
         },
-        "clang14-windows": {
-            "name": "clang14",
+        "clang16-windows": {
+            "name": "clang16",
             "params": {
                 "c_compiler": "$(CLANG)/bin/clang-cl",
                 "cxx_compiler": "$(CLANG)/bin/clang-cl",
@@ -728,43 +931,43 @@
             ],
             "tools": {
                 "c++": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++"
                 },
                 "c++filt": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "c++filt"
                 },
                 "cc": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "cc"
                 },
                 "gcov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-gcov"
                 },
                 "llvm-cov": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-cov"
                 },
                 "llvm-profdata": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-profdata"
                 },
                 "llvm-symbolizer": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-symbolizer"
                 },
                 "nm": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-nm"
                 },
                 "objcopy": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-objcopy"
                 },
                 "strip": {
-                    "bottle": "clang14",
+                    "bottle": "clang16",
                     "executable": "llvm-strip"
                 }
             }
@@ -820,6 +1023,83 @@
                 "gdb": {
                     "bottle": "gdb",
                     "executable": "gdb"
+                }
+            }
+        },
+        "gdbnew": {
+            "env": {
+                "TERMINFO": [
+                    "$(ROOT)/gdb/lib/terminfo"
+                ]
+            },
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "gdbnew": {
+                    "bottle": "gdbnew",
+                    "executable": "gdb"
+                }
+            }
+        },
+        "golang": {
+            "params": {
+                "type": "golang",
+                "version": "1.20.6"
+            },
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "go": {
+                    "bottle": "golang",
+                    "executable": "go"
+                },
+                "gofmt": {
+                    "bottle": "golang",
+                    "executable": "gofmt"
                 }
             }
         },
@@ -1026,18 +1306,69 @@
         }
     },
     "toolchain_aliases": {
-        "clang-win-i686": "clang14-win-i686",
-        "clang-win-x86_64": "clang14-win-x86_64",
+        "clang-win-i686": "default-win-i686",
+        "clang-win-x86_64": "default-win-x86_64",
         "gcc-linux-x86_64": "gcc82-linux-x86_64",
         "msvc-win-x86_64": "msvc2019-win-x86_64"
     },
     "tools": {
+        "atop": {
+            "description": "Advanced System & Process Monitor"
+        },
+        "black": {
+            "description": "Python styler, Python 3 only"
+        },
+        "c++": {
+            "description": "Run C++ compiler"
+        },
+        "c++filt": {
+            "description": "Run c++filt"
+        },
+        "cc": {
+            "description": "Run C compiler"
+        },
+        "clang-format": {
+            "description": "Run Clang-Format source code formatter"
+        },
+        "clang-rename": {
+            "description": "Run Clang-Rename refactoring tool"
+        },
+        "gcov": {
+            "description": "Run gcov"
+        },
         "gdb": {
             "description": "Run gdb"
+        },
+        "gdbnew": {
+            "description": "Run gdb for Ubuntu 16.04 or later"
+        },
+        "go": {
+            "description": "Run go tool"
+        },
+        "gofmt": {
+            "description": "Run gofmt tool"
+        },
+        "llvm-cov": {
+            "description": "Run llvm-cov Clang utility"
+        },
+        "llvm-profdata": {
+            "description": "Run llvm-profdata Clang utility"
+        },
+        "llvm-symbolizer": {
+            "description": "Run llvm-symbolizer Clang utility"
+        },
+        "nm": {
+            "description": "Run nm"
+        },
+        "objcopy": {
+            "description": "Run objcopy"
         },
         "python": {
             "description": "Run pseudo-python",
             "visible": false
+        },
+        "strip": {
+            "description": "Run strip utility"
         },
         "ya-tc": {
             "description": "Run ya-tc tool",

@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <library/cpp/threading/atomic/bool.h>
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/json/json_reader.h>
@@ -74,7 +74,7 @@ private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
     public:
         TImpl(const TIamEndpoint& iamEndpoint, const TRequestFiller& requestFiller)
-            : Client(MakeHolder<NGrpc::TGRpcClientLow>())
+            : Client(MakeHolder<NYdbGrpc::TGRpcClientLow>())
             , Connection_(nullptr)
             , Ticket_("")
             , NextTicketUpdate_(TInstant::Zero())
@@ -86,10 +86,10 @@ private:
             , BackoffTimeout_(BACKOFF_START)
             , Lock_()
         {
-            NGrpc::TGRpcClientConfig grpcConf;
+            NYdbGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = IamEndpoint_.Endpoint;
             grpcConf.EnableSsl = true;
-            Connection_ = THolder<NGrpc::TServiceConnection<TService>>(Client->CreateGRpcServiceConnection<TService>(grpcConf).release());
+            Connection_ = THolder<NYdbGrpc::TServiceConnection<TService>>(Client->CreateGRpcServiceConnection<TService>(grpcConf).release());
         }
 
         void UpdateTicket(bool sync = false) {
@@ -105,7 +105,7 @@ private:
             std::shared_ptr<TImpl> self = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::shared_from_this();
 
             auto cb = [self, resultPromise, sync](
-                NGrpc::TGrpcStatus&& status, TResponse&& result) mutable {
+                NYdbGrpc::TGrpcStatus&& status, TResponse&& result) mutable {
                 self->ProcessIamResponse(std::move(status), std::move(result), sync);
                 resultPromise.SetValue();
             };
@@ -153,7 +153,7 @@ private:
         }
 
     private:
-        void ProcessIamResponse(NGrpc::TGrpcStatus&& status, TResponse&& result, bool sync) {
+        void ProcessIamResponse(NYdbGrpc::TGrpcStatus&& status, TResponse&& result, bool sync) {
             if (!status.Ok()) {
                 TDuration sleepDuration;
                 with_lock(Lock_) {
@@ -191,8 +191,8 @@ private:
 
     private:
 
-        THolder<NGrpc::TGRpcClientLow> Client;
-        THolder<NGrpc::TServiceConnection<TService>> Connection_;
+        THolder<NYdbGrpc::TGRpcClientLow> Client;
+        THolder<NYdbGrpc::TServiceConnection<TService>> Connection_;
         TStringType Ticket_;
         TInstant NextTicketUpdate_;
         const TIamEndpoint IamEndpoint_;

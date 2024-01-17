@@ -136,4 +136,6 @@ enum class EAttachChildResult : ui32 {
     RejectAsNewerUnCreated
 };
 
+using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
+
 }

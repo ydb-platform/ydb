@@ -1062,6 +1062,8 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     }
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
+    ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    TMaybe<NYT::TNode> nativeType;
 
     if (needRemapBeforeSort) {
         inputSection = Build<TYtSection>(ctx, pos)
@@ -1095,13 +1097,22 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
             .Done();
 
         inputWorld = Build<TCoWorld>(ctx, pos).Done();
+    } else {
+        auto inputRowSpec = TYtTableBaseInfo::GetRowSpec(section.Paths().Item(0).Table());
+        // Use types from first input only, because all of them shoud be equal (otherwise remap is required)
+        nativeTypeFlags = inputRowSpec->GetNativeYtTypeFlags();
+        nativeType = inputRowSpec->GetNativeYtType();
     }
 
-    TYtOutTableInfo sortOut(sortTableType, state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo sortOut(sortTableType, nativeTypeFlags);
     sortOut.RowSpec->SortMembers = sortTableOrder;
     sortOut.RowSpec->SortedBy = sortTableOrder;
     sortOut.RowSpec->SortedByTypes = sortedByTypes;
     sortOut.RowSpec->SortDirections = sortDirections;
+
+    if (nativeType) {
+        sortOut.RowSpec->CopyTypeOrders(*nativeType);
+    }
 
     return Build<TYtSection>(ctx, pos)
         .Paths()
@@ -1692,10 +1703,11 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         const bool needPayload = joinType->IsAtom({"Inner", "Left"});
 
         // don't produce nulls
+        TExprNode::TListType remappedMembers;
+        TExprNode::TListType remappedMembersToSkipNull;
+
         TExprNode::TPtr smallKeySelector;
         if (!isCross) {
-            TExprNode::TListType remappedMembers;
-            TExprNode::TListType remappedMembersToSkipNull;
             tableContent = RemapNonConvertibleItems(tableContent, smallLabel, *rightKeyColumns, outputKeyType, remappedMembers, remappedMembersToSkipNull, ctx);
             if (!remappedMembersToSkipNull.empty()) {
                 tableContent = ctx.NewCallable(pos, "SkipNullMembers", { tableContent, ctx.NewList(pos, std::move(remappedMembersToSkipNull)) });
@@ -1872,8 +1884,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                                 .Arg(1, "dict")
                                 .Add(2, joinType)
                                 .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                                .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                                .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                                .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                                .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                                .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                             .Seal()
                         .Seal()
                     .Seal()
@@ -1885,8 +1898,9 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                         .Add(1, dict)
                         .Add(2, joinType)
                         .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                        .Add(4, ctx.NewList(pos, std::move(leftRenameNodes)))
-                        .Add(5, ctx.NewList(pos, std::move(rightRenameNodes)))
+                        .Add(4, ctx.NewList(pos, std::move(remappedMembers)))
+                        .Add(5, ctx.NewList(pos, std::move(leftRenameNodes)))
+                        .Add(6, ctx.NewList(pos, std::move(rightRenameNodes)))
                     .Seal()
                     .Build();
             }
@@ -2882,28 +2896,24 @@ TStatus CollectPathsAndLabels(TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& l
     return TStatus::Ok;
 }
 
-TStatus CollectPathsAndLabelsReady(TMaybe<TVector<TYtPathInfo::TPtr>>& tables, TJoinLabels& labels,
+TStatus CollectPathsAndLabelsReady(bool& ready, TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& labels,
     const TStructExprType*& itemType, const TStructExprType*& itemTypeBeforePremap,
     const TYtJoinNodeLeaf& leaf, TExprContext& ctx)
 {
-    TVector<TYtPathInfo::TPtr> existingTables;
-    TStatus result = CollectPathsAndLabels(existingTables, labels, itemType, itemTypeBeforePremap, leaf, ctx);
+    ready = false;
+    TStatus result = CollectPathsAndLabels(tables, labels, itemType, itemTypeBeforePremap, leaf, ctx);
     if (result != TStatus::Ok) {
         return result;
     }
 
-    bool ready = AllOf(existingTables, [](const auto& pathInfo) { return bool(pathInfo->Table->Stat); });
-    if (ready) {
-        tables = std::move(existingTables);
-    }
+    ready = AllOf(tables, [](const auto& pathInfo) { return bool(pathInfo->Table->Stat); });
     return TStatus::Ok;
 }
 
-
 TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSettings& mapSettings,
     TJoinSideStats& leftStats, TJoinSideStats& rightStats,
-    const TMaybe<TVector<TYtPathInfo::TPtr>>& leftTables, const THashSet<TString>& leftJoinKeys,
-    const TMaybe<TVector<TYtPathInfo::TPtr>>& rightTables, const THashSet<TString>& rightJoinKeys,
+    bool leftTablesReady, const TVector<TYtPathInfo::TPtr>& leftTables, const THashSet<TString>& leftJoinKeys,
+    bool rightTablesReady, const TVector<TYtPathInfo::TPtr>& rightTables, const THashSet<TString>& rightJoinKeys,
     TYtJoinNodeLeaf* leftLeaf, TYtJoinNodeLeaf* rightLeaf, const TYtState& state, bool isCross,
     TString cluster, TExprContext& ctx)
 {
@@ -2911,34 +2921,36 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
     leftStats = {};
     rightStats = {};
 
-    if (leftTables.Defined()) {
-        YQL_ENSURE(leftLeaf);
+    if (leftLeaf) {
         auto premap = GetPremapLambda(*leftLeaf);
-        auto joinSideStatus = CollectJoinSideStats(sizeMode, leftStats, leftLeaf->Section, state, cluster,
-                                                   *leftTables, leftJoinKeys, isCross, premap, ctx);
+        auto joinSideStatus = CollectJoinSideStats(leftTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, leftStats, leftLeaf->Section, state, cluster,
+                                                   leftTables, leftJoinKeys, isCross, premap, ctx);
         if (joinSideStatus.Level != TStatus::Ok) {
             return joinSideStatus;
         }
 
-        mapSettings.LeftRows = leftStats.RowsCount;
-        mapSettings.LeftSize = leftStats.Size;
-        mapSettings.LeftCount = leftTables->size();
-        mapSettings.LeftUnique = leftStats.HasUniqueKeys && mapSettings.LeftCount == 1;
+        if (leftTablesReady) {
+            mapSettings.LeftRows = leftStats.RowsCount;
+            mapSettings.LeftSize = leftStats.Size;
+            mapSettings.LeftCount = leftTables.size();
+            mapSettings.LeftUnique = leftStats.HasUniqueKeys && mapSettings.LeftCount == 1;
+        }
     }
 
-    if (rightTables.Defined()) {
-        YQL_ENSURE(rightLeaf);
+    if (rightLeaf) {
         auto premap = GetPremapLambda(*rightLeaf);
-        auto joinSideStatus = CollectJoinSideStats(sizeMode, rightStats, rightLeaf->Section, state, cluster,
-                                                   *rightTables, rightJoinKeys, isCross, premap, ctx);
+        auto joinSideStatus = CollectJoinSideStats(rightTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, rightStats, rightLeaf->Section, state, cluster,
+                                                   rightTables, rightJoinKeys, isCross, premap, ctx);
         if (joinSideStatus.Level != TStatus::Ok) {
             return joinSideStatus;
         }
 
-        mapSettings.RightRows = rightStats.RowsCount;
-        mapSettings.RightSize = rightStats.Size;
-        mapSettings.RightCount = rightTables->size();
-        mapSettings.RightUnique = rightStats.HasUniqueKeys && mapSettings.RightCount == 1;
+        if (rightTablesReady) {
+            mapSettings.RightRows = rightStats.RowsCount;
+            mapSettings.RightSize = rightStats.Size;
+            mapSettings.RightCount = rightTables.size();
+            mapSettings.RightUnique = rightStats.HasUniqueKeys && mapSettings.RightCount == 1;
+        }
     }
 
     if (sizeMode == ESizeStatCollectMode::RawSize) {
@@ -2949,27 +2961,28 @@ TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSe
     return TStatus::Ok;
 }
 
-
 TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNodeLeaf& leftLeaf,
                               TYtJoinNodeLeaf& rightLeaf, const TYtState::TPtr& state, TExprContext& ctx)
 {
     TJoinLabels labels;
 
-    TMaybe<TVector<TYtPathInfo::TPtr>> leftTables;
-    TMaybe<TVector<TYtPathInfo::TPtr>> rightTables;
+    bool leftTablesReady = false;
+    TVector<TYtPathInfo::TPtr> leftTables;
+    bool rightTablesReady = false;
+    TVector<TYtPathInfo::TPtr> rightTables;
     const TStructExprType* leftItemType = nullptr;
     const TStructExprType* leftItemTypeBeforePremap = nullptr;
     const TStructExprType* rightItemType = nullptr;
     const TStructExprType* rightItemTypeBeforePremap = nullptr;
 
     {
-        auto status = CollectPathsAndLabelsReady(leftTables, labels, leftItemType, leftItemTypeBeforePremap, leftLeaf, ctx);
+        auto status = CollectPathsAndLabelsReady(leftTablesReady, leftTables, labels, leftItemType, leftItemTypeBeforePremap, leftLeaf, ctx);
         if (status != TStatus::Ok) {
             YQL_ENSURE(status.Level == TStatus::Error);
             return status;
         }
 
-        status = CollectPathsAndLabelsReady(rightTables, labels, rightItemType, rightItemTypeBeforePremap, rightLeaf, ctx);
+        status = CollectPathsAndLabelsReady(rightTablesReady, rightTables, labels, rightItemType, rightItemTypeBeforePremap, rightLeaf, ctx);
         if (status != TStatus::Ok) {
             YQL_ENSURE(status.Level == TStatus::Error);
             return status;
@@ -2980,9 +2993,8 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     const auto disableOptimizers = state->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
 
     bool empty = false;
-    if (leftTables.Defined()
-        && 0ul == Accumulate(*leftTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
-        && AllOf(*leftTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
+    if (leftLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
+        && AllOf(leftTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
             empty = true;
@@ -2990,9 +3002,8 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
     if (!empty
-        && rightTables.Defined()
-        && 0ul == Accumulate(*rightTables, 0ul, [] (ui64 sum, const TYtPathInfo::TPtr& p) { return sum + p->Table->Stat->RecordsCount; })
-        && AllOf(*rightTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
+        && rightLeaf.Section.Ref().GetConstraint<TEmptyConstraintNode>() != nullptr
+        && AllOf(rightTables, [](const TYtPathInfo::TPtr& p) { return !p->Table->Meta->IsDynamic; })
     ) {
         if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") {
             empty = true;
@@ -3006,7 +3017,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     }
 
     const bool isCross = joinType == "Cross";
-    const unsigned readyCount = unsigned(leftTables.Defined()) + rightTables.Defined();
+    const unsigned readyCount = unsigned(leftTablesReady) + rightTablesReady;
     if (isCross && readyCount < 2) {
         return TStatus::Repeat;
     }
@@ -3059,10 +3070,10 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     TJoinSideStats leftStats;
     TJoinSideStats rightStats;
 
-    const bool allowLookupJoin = !isCross && leftTables.Defined() && rightTables.Defined() && !forceMergeJoin;
+    const bool allowLookupJoin = !isCross && leftTablesReady && rightTablesReady && !forceMergeJoin;
     if (allowLookupJoin) {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::RawSize, mapSettings, leftStats, rightStats,
-                                                     leftTables, leftJoinKeys, rightTables, rightJoinKeys,
+                                                     leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
                                                      &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
         if (status.Level != TStatus::Ok) {
             return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
@@ -3128,9 +3139,9 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
 
-    if (!forceMergeJoin) {
+    {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::ColumnarSize, mapSettings, leftStats, rightStats,
-                                                    leftTables, leftJoinKeys, rightTables, rightJoinKeys,
+                                                    leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
                                                     &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
         if (status.Level != TStatus::Ok) {
             return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
@@ -3138,9 +3149,9 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     }
 
     YQL_CLOG(INFO, ProviderYt) << "Left table(s): "
-        << (leftTables.Defined() ? leftStats.TableNames : "(not ready)") << " with size: " << mapSettings.LeftSize << ", rows: "
+        << (leftTablesReady ? leftStats.TableNames : "(not ready)") << " with size: " << mapSettings.LeftSize << ", rows: "
         << mapSettings.LeftRows << ", dynamic : " << leftStats.IsDynamic << ", right table(s): "
-        << (rightTables.Defined() ? rightStats.TableNames : "(not ready)") << " with size: " << mapSettings.RightSize << ", rows: "
+        << (rightTablesReady ? rightStats.TableNames : "(not ready)") << " with size: " << mapSettings.RightSize << ", rows: "
         << mapSettings.RightRows << ", dynamic : " << rightStats.IsDynamic;
 
     YQL_CLOG(INFO, ProviderYt) << "Join kind: " << op.JoinKind->Content() << ", left hints: " <<
@@ -3150,7 +3161,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         << JoinSeq(",", leftStats.SortedKeys) << "], right sorted prefix: ["
         << JoinSeq(",", rightStats.SortedKeys) << "]";
 
-    bool allowOrderedJoin = !isCross && ((leftTables.Defined() && rightTables.Defined()) || forceMergeJoin);
+    bool allowOrderedJoin = !isCross && ((leftTablesReady && rightTablesReady) || forceMergeJoin);
 
     TMergeJoinSortInfo sortInfo;
     sortInfo.LeftSortedKeys = leftStats.SortedKeys;
@@ -3365,12 +3376,12 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             TMaybe<ui64> leftPartCount;
             TMaybe<ui64> rightPartCount;
             if (leftPartSize) {
-                YQL_ENSURE(leftTables.Defined());
+                YQL_ENSURE(leftTablesReady);
                 leftPartCount = (mapSettings.LeftRows + *leftPartSize - 1) / *leftPartSize;
             }
 
             if (rightPartSize) {
-                YQL_ENSURE(rightTables.Defined());
+                YQL_ENSURE(rightTablesReady);
                 rightPartCount = (mapSettings.RightRows + *rightPartSize - 1) / *rightPartSize;
             }
 
@@ -3378,7 +3389,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             const bool rightUnique = linkSettings.RightHints.contains("unique") || mapSettings.RightUnique;
             const bool denyShardRight = linkSettings.RightHints.contains("any") && !rightUnique;
             // TODO: currently we disable sharding when other side is not ready
-            if (leftTables.Defined() && rightPartCount && !denyShardRight && ((joinType == "Inner") || (joinType == "Cross") ||
+            if (leftTablesReady && rightPartCount && !denyShardRight && ((joinType == "Inner") || (joinType == "Cross") ||
                 (joinType == "LeftSemi" && rightUnique))) {
                 allowShardRight = true;
                 rightLimit *= *rightPartCount;
@@ -3388,22 +3399,22 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             const bool leftUnique = linkSettings.LeftHints.contains("unique") || mapSettings.LeftUnique;
             const bool denyShardLeft = linkSettings.LeftHints.contains("any") && !leftUnique;
             // TODO: currently we disable sharding when other side is not ready
-            if (rightTables.Defined() && leftPartCount && !denyShardLeft && ((joinType == "Inner") || (joinType == "Cross") ||
+            if (rightTablesReady && leftPartCount && !denyShardLeft && ((joinType == "Inner") || (joinType == "Cross") ||
                 (joinType == "RightSemi" && leftUnique))) {
                 allowShardLeft = true;
                 leftLimit *= *leftPartCount;
             }
 
             auto mapJoinUseFlow = state->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
-            if (leftTables.Defined()) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, *leftTables, mapJoinUseFlow);
+            if (leftTablesReady) {
+                auto status = UpdateInMemorySizeSetting(mapSettings, leftLeaf.Section, labels, op, ctx, true, leftItemType, leftJoinKeyList, state, cluster, leftTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                 }
             }
 
-            if (rightTables.Defined()) {
-                auto status = UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, cluster, *rightTables, mapJoinUseFlow);
+            if (rightTablesReady) {
+                auto status = UpdateInMemorySizeSetting(mapSettings, rightLeaf.Section, labels, op, ctx, false, rightItemType, rightJoinKeyList, state, cluster, rightTables, mapJoinUseFlow);
                 if (status.Level != TStatus::Ok) {
                     return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
                 }
@@ -3411,18 +3422,18 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
 
             YQL_CLOG(INFO, ProviderYt) << "MapJoinShardMinRows: " << mapSettings.MapJoinShardMinRows
                 << ", MapJoinShardCount: " << mapSettings.MapJoinShardCount
-                << ", left is present: " << leftTables.Defined()
+                << ", left is present: " << leftTablesReady
                 << ", left size limit: " << leftLimit << ", left mem size:" << mapSettings.LeftMemSize
-                << ", right is present: " << rightTables.Defined()
+                << ", right is present: " << rightTablesReady
                 << ", right size limit: " << rightLimit << ", right mem size: " << mapSettings.RightMemSize;
 
             bool leftAny = linkSettings.LeftHints.contains("any");
             bool rightAny = linkSettings.RightHints.contains("any");
 
-            const bool isLeftAllowMapJoin = !leftAny && rightTables.Defined() && (mapSettings.RightMemSize <= rightLimit) &&
+            const bool isLeftAllowMapJoin = !leftAny && rightTablesReady && (mapSettings.RightMemSize <= rightLimit) &&
                 (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "Cross")
                 && !rightStats.IsDynamic;
-            const bool isRightAllowMapJoin = !rightAny && leftTables.Defined() && (mapSettings.LeftMemSize <= leftLimit) &&
+            const bool isRightAllowMapJoin = !rightAny && leftTablesReady && (mapSettings.LeftMemSize <= leftLimit) &&
                 (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "Cross")
                 && !leftStats.IsDynamic;
             YQL_CLOG(INFO, ProviderYt) << "MapJoin: isLeftAllowMapJoin: " << isLeftAllowMapJoin
@@ -3456,7 +3467,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
 
-    if (leftTables.Defined() && rightTables.Defined()) {
+    if (leftTablesReady && rightTablesReady) {
         YQL_CLOG(INFO, ProviderYt) << "Selected CommonJoin";
         return RewriteYtCommonJoin(equiJoin, labels, op, leftLeaf, rightLeaf, state, ctx, leftStats.HasUniqueKeys,
                                    rightStats.HasUniqueKeys, mapSettings.LeftSize, mapSettings.RightSize) ?
@@ -3526,42 +3537,6 @@ void CombineJoinStatus(TStatus& status, TStatus other) {
     default:
         YQL_ENSURE(false, "Unexpected join status");
     }
-}
-
-TStatus RewriteYtEquiJoinLeaves(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
-    TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
-    TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
-
-    TStatus result = TStatus::Repeat;
-    if (!leftLeaf) {
-        auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, leftOp, state, ctx));
-        if (result.Level == TStatus::Error) {
-            return result;
-        }
-        if (result.Level == TStatus::Ok && leftOp.Output) {
-            // convert to leaf
-            op.Left = ConvertYtEquiJoinToLeaf(leftOp, equiJoin.Pos(), ctx);
-        }
-    }
-
-    if (!rightLeaf) {
-        auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, rightOp, state, ctx));
-        if (result.Level == TStatus::Error) {
-            return result;
-        }
-        if (result.Level == TStatus::Ok && rightOp.Output) {
-            // convert to leaf
-            op.Right = ConvertYtEquiJoinToLeaf(rightOp, equiJoin.Pos(), ctx);
-        }
-    }
-
-    if (leftLeaf && rightLeaf) {
-        CombineJoinStatus(result, RewriteYtEquiJoinLeaf(equiJoin, op, *leftLeaf, *rightLeaf, state, ctx));
-    }
-
-    return result;
 }
 
 enum class EStarRewriteStatus {
@@ -3682,8 +3657,10 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
 
     TJoinLabels labels;
 
-    TMaybe<TVector<TYtPathInfo::TPtr>> leftTables;
-    TMaybe<TVector<TYtPathInfo::TPtr>> rightTables;
+    bool leftTablesReady = false;
+    TVector<TYtPathInfo::TPtr> leftTables;
+    bool rightTablesReady = false;
+    TVector<TYtPathInfo::TPtr> rightTables;
     const TStructExprType* leftItemType = nullptr;
     const TStructExprType* leftItemTypeBeforePremap = nullptr;
     const TStructExprType* rightItemType = nullptr;
@@ -3696,8 +3673,8 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
     TVector<TString> rightJoinKeyList;
 
     if (leftLeaf) {
-        leftTables.ConstructInPlace();
-        auto status = CollectPathsAndLabels(*leftTables, labels, leftItemType, leftItemTypeBeforePremap, *leftLeaf, ctx);
+        leftTablesReady = true;
+        auto status = CollectPathsAndLabels(leftTables, labels, leftItemType, leftItemTypeBeforePremap, *leftLeaf, ctx);
         if (status != TStatus::Ok) {
             YQL_ENSURE(status.Level == TStatus::Error);
             collectStatus = EStarRewriteStatus::Error;
@@ -3710,8 +3687,8 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
     }
 
     if (rightLeaf) {
-        rightTables.ConstructInPlace();
-        auto status = CollectPathsAndLabels(*rightTables, labels, rightItemType, rightItemTypeBeforePremap, *rightLeaf, ctx);
+        rightTablesReady = true;
+        auto status = CollectPathsAndLabels(rightTables, labels, rightItemType, rightItemTypeBeforePremap, *rightLeaf, ctx);
         if (status != TStatus::Ok) {
             YQL_ENSURE(status.Level == TStatus::Error);
             collectStatus = EStarRewriteStatus::Error;
@@ -3732,7 +3709,7 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
     {
         bool isCross = false;
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::NoSize, mapSettings, leftStats, rightStats,
-                                                     leftTables, leftJoinKeys, rightTables, rightJoinKeys,
+                                                     leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
                                                      leftLeaf, rightLeaf, *state, isCross, cluster, ctx);
 
         switch (status.Level) {
@@ -4706,6 +4683,42 @@ IGraphTransformer::TStatus RewriteYtEquiJoin(TYtEquiJoin equiJoin, TYtJoinNodeOp
     }
 
     return RewriteYtEquiJoinLeaves(equiJoin, op, state, ctx);
+}
+
+TStatus RewriteYtEquiJoinLeaves(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx) {
+    TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Left.Get());
+    TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op.Right.Get());
+
+    TStatus result = TStatus::Repeat;
+    if (!leftLeaf) {
+        auto& leftOp = *dynamic_cast<TYtJoinNodeOp*>(op.Left.Get());
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, leftOp, state, ctx));
+        if (result.Level == TStatus::Error) {
+            return result;
+        }
+        if (result.Level == TStatus::Ok && leftOp.Output) {
+            // convert to leaf
+            op.Left = ConvertYtEquiJoinToLeaf(leftOp, equiJoin.Pos(), ctx);
+        }
+    }
+
+    if (!rightLeaf) {
+        auto& rightOp = *dynamic_cast<TYtJoinNodeOp*>(op.Right.Get());
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaves(equiJoin, rightOp, state, ctx));
+        if (result.Level == TStatus::Error) {
+            return result;
+        }
+        if (result.Level == TStatus::Ok && rightOp.Output) {
+            // convert to leaf
+            op.Right = ConvertYtEquiJoinToLeaf(rightOp, equiJoin.Pos(), ctx);
+        }
+    }
+
+    if (leftLeaf && rightLeaf) {
+        CombineJoinStatus(result, RewriteYtEquiJoinLeaf(equiJoin, op, *leftLeaf, *rightLeaf, state, ctx));
+    }
+
+    return result;
 }
 
 TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp& op, TExprContext& ctx,

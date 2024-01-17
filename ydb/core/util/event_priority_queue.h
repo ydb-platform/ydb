@@ -1,5 +1,5 @@
 #pragma once
-#include <library/cpp/actors/core/events.h>
+#include <ydb/library/actors/core/events.h>
 
 #include <concepts>
 #include <queue>

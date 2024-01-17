@@ -4,10 +4,10 @@
 #include <ydb/library/folder_service/events.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -45,10 +45,10 @@ public:
     void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
         THolder<NCloud::TEvAccessService::TEvAuthenticateResponse> result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
         if (++RequestNumber % 3 == 0) {
-            result->Status = NGrpc::TGrpcStatus("Shit happened", grpc::StatusCode::UNAVAILABLE, false);
+            result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
             if (ev->Get()->Request.Hasiam_token()) {
-                result->Status = NGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             } else {
                 TString idStr = ev->Get()->Request.Getsignature().Getaccess_key_id();
 
@@ -56,9 +56,9 @@ public:
                 id.SkipPrefix(SERVICE_ACCOUNT_PREFIX);
 
                 if (id == "alkonavt") {
-                    result->Status = NGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                    result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
                 } else if (!id) {
-                    result->Status = NGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
+                    result->Status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
                 } else {
                     auto& serviceAccount = *result->Response.mutable_subject()->mutable_service_account();
                     serviceAccount.Setid(TString(id));
@@ -73,7 +73,7 @@ public:
     void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
         THolder<NCloud::TEvAccessService::TEvAuthorizeResponse> result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
         if (++RequestNumber % 3 == 0) {
-            result->Status = NGrpc::TGrpcStatus("Shit happened", grpc::StatusCode::DEADLINE_EXCEEDED, false);
+            result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
         } else {
             TString idStr;
             if (ev->Get()->Request.Hasiam_token()) {
@@ -84,21 +84,21 @@ public:
 
             TStringBuf id = idStr;
             if (!id) {
-               result->Status = NGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
+               result->Status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
             } else if (id.SkipPrefix(USER_ACCOUNT_PREFIX)) {
                 if (id == "alkonavt") {
-                    result->Status = NGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                    result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
                 } else {
                     result->Response.mutable_subject()->mutable_user_account()->set_id(TString(id));
-                    result->Status = NGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                    result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
                 }
             } else if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
                 auto& serviceAccount = *result->Response.mutable_subject()->mutable_service_account();
                 serviceAccount.Setid(TString(id));
                 serviceAccount.Setfolder_id(TString::Join("FOLDER_", id));
-                result->Status = NGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
             } else {
-                result->Status = NGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             }
         }
 
@@ -138,14 +138,14 @@ public:
         THolder<TEvGetCloudByFolderResponse> result = MakeHolder<TEvGetCloudByFolderResponse>();
 
         if (++RequestNumber % 3 == 0) {
-            result->Status = NGrpc::TGrpcStatus("Oops", grpc::StatusCode::INTERNAL, false);
+            result->Status = NYdbGrpc::TGrpcStatus("Oops", grpc::StatusCode::INTERNAL, false);
         } else {
             if (folder != "FOLDER_alkonavt") {
                 result->FolderId = folder;
                 result->CloudId = TString("CLOUD_FOR_") + folder;
-                result->Status = NGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
             } else {
-                result->Status = NGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
             }
         }
 

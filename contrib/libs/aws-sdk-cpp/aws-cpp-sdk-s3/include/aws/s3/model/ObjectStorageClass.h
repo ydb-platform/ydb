@@ -23,7 +23,8 @@ namespace Model
     ONEZONE_IA,
     INTELLIGENT_TIERING,
     DEEP_ARCHIVE,
-    OUTPOSTS
+    OUTPOSTS,
+    GLACIER_IR
   };
 
 namespace ObjectStorageClassMapper

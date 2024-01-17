@@ -1,7 +1,7 @@
 #pragma once
 
-#include <library/cpp/grpc/server/grpc_server.h>
-#include <library/cpp/actors/core/log_iface.h>
+#include <ydb/library/grpc/server/grpc_server.h>
+#include <ydb/library/actors/core/log_iface.h>
 
 namespace NKikimr::NConsole {
 

@@ -36,6 +36,7 @@ CFLAGS(
     -DJSONToObj=_pandas_JSONToObj
     -DJSON_DecodeObject=_pandas_JSON_DecodeObject
     -DJSON_EncodeObject=_pandas_JSON_EncodeObject
+    -Dobject_is_decimal_type=_pandas_object_is_decimal_type
     -DList_iterBegin=_pandas_List_iterBegin
     -DList_iterEnd=_pandas_List_iterEnd
     -DList_iterGetName=_pandas_List_iterGetName

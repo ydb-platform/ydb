@@ -1,0 +1,115 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 369853aeec235d11ed2b97b4f5174785
+BELONGS lib/tsan/ya.make
+    License text:
+                return AllocSuperBlock(c);
+              Block *ptr = MapBlock(idx);
+              xchg = ptr->next | (cmp & kCounterMask);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/tsan/rtl/tsan_dense_alloc.h [138:140]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4ef7946d23591afdcc1fd9c9984ea3a4
+BELONGS lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+    License text:
+            initCacheMaybe(C);
+            TransferBatch *B = Allocator->popBatch(this, ClassId);
+            if (UNLIKELY(!B))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/scudo/standalone/local_cache.h [210:212]
+    Belongs difference:
+        + lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8b2f9fffd684c9e8f615aa7e5b2d107
+BELONGS lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+    License text:
+        // Calling getenv should be fine (c)(tm) at any time.
+        const char *getEnv(const char *Name) { return getenv(Name); }
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/scudo/standalone/linux.cpp [98:99]
+    Belongs difference:
+        + lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5cab39d5c14d8220d0131818428faff
+BELONGS lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+    License text:
+            InitCache(c);
+            TransferBatch *b = allocator->AllocateBatch(&stats_, this, class_id);
+            if (UNLIKELY(!b))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sanitizer_common/sanitizer_allocator_local_cache.h [243:245]
+    Belongs difference:
+        + lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL debfce3edcb19585edc08c5b1d986c0b
+BELONGS lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 293
+    License text:
+        Copyright (c) 2009-2015 by the contributors listed in CREDITS.TXT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [293:293]
+    Belongs difference:
+        + lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebc015cad7377d32e7b2fc0ae5293aa1
+BELONGS lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 252
+    License text:
+        Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [252:252]
+    Belongs difference:
+        + lib/asan-preinit/ya.make lib/asan/ya.make lib/asan_cxx/ya.make lib/asan_static/ya.make lib/cfi/ya.make lib/cfi_diag/ya.make lib/dd/ya.make lib/dfsan/ya.make lib/gwp_asan/ya.make lib/hwasan/ya.make lib/hwasan_aliases/ya.make lib/hwasan_aliases_cxx/ya.make lib/hwasan_cxx/ya.make lib/lsan/ya.make lib/memprof-preinit/ya.make lib/memprof/ya.make lib/memprof_cxx/ya.make lib/msan/ya.make lib/msan_cxx/ya.make lib/profile/ya.make lib/safestack/ya.make lib/scudo_standalone/ya.make lib/scudo_standalone_cxx/ya.make lib/stats/ya.make lib/stats_client/ya.make lib/tsan/ya.make lib/tsan_cxx/ya.make lib/ubsan_minimal/ya.make lib/ubsan_standalone/ya.make lib/ubsan_standalone_cxx/ya.make

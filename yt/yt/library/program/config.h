@@ -2,7 +2,6 @@
 
 #include "public.h"
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt/core/ytalloc/config.h>
@@ -20,9 +19,9 @@
 
 #include <yt/yt/core/service_discovery/yp/config.h>
 
-#include <yt/yt/library/profiling/solomon/exporter.h>
+#include <yt/yt/core/yson/config.h>
 
-#include <yt/yt/library/containers/config.h>
+#include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
@@ -149,9 +148,7 @@ public:
     TStockpileConfigPtr Stockpile;
     bool EnableRefCountedTrackerProfiling;
     bool EnableResourceTracker;
-    bool EnablePortoResourceTracker;
     std::optional<double> ResourceTrackerVCpuFactor;
-    NContainers::TPodSpecConfigPtr PodSpec;
     THeapProfilerConfigPtr HeapProfiler;
 
     REGISTER_YSON_STRUCT(TSingletonsConfig);
@@ -175,6 +172,7 @@ public:
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
     TRpcConfigPtr Rpc;
     TTCMallocConfigPtr TCMalloc;
+    NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsDynamicConfig);
 

@@ -15,8 +15,8 @@ target_link_libraries(providers-dq-stats_collector PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-helpers
+  library-actors-core
+  library-actors-helpers
   cpp-monlib-dynamic_counters
 )
 target_sources(providers-dq-stats_collector PRIVATE

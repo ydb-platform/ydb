@@ -36,7 +36,7 @@
 #include <util/string/subst.h>
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/tablet/tablet.h>
@@ -44,6 +44,7 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/graph/api/shard.h>
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -1147,6 +1148,8 @@ namespace NKikimr {
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
                 HFunc(TEvHive::TEvUpdateTabletsObject, Handle);
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
+                HFunc(TEvHive::TEvUpdateDomain, Handle);
+                HFunc(TEvFakeHive::TEvRequestDomainInfo, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             }
         }
@@ -1221,6 +1224,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
                 } else if (type == TTabletTypes::StatisticsAggregator) {
                     bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
+                } else if (type == TTabletTypes::GraphShard) {
+                    bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }
@@ -1435,6 +1440,25 @@ namespace NKikimr {
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetTxPartId(ev->Get()->Record.GetTxPartId());
             ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void Handle(TEvHive::TEvUpdateDomain::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateDomain, msg: " << ev->Get()->Record.ShortDebugString());
+            
+            const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
+            NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
+            domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+
+            auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
+            response->Record.SetTxId(ev->Get()->Record.GetTxId());
+            response->Record.SetOrigin(TabletID());
+            ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
+
+        void Handle(TEvFakeHive::TEvRequestDomainInfo::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvRequestDomainInfo, " << ev->Get()->DomainKey);
+            auto response = std::make_unique<TEvFakeHive::TEvRequestDomainInfoReply>(State->Domains[ev->Get()->DomainKey]);
+            ctx.Send(ev->Sender, response.release());
         }
 
         void Handle(TEvFakeHive::TEvSubscribeToTabletDeletion::TPtr &ev, const TActorContext &ctx) {

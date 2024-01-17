@@ -96,6 +96,7 @@ struct TYtState : public TThrRefBase {
     THashMap<std::pair<TString, TString>, TString> AnonymousLabels; // cluster + label -> name
     std::unordered_map<ui64, TString> NodeHash; // unique id -> hash
     THashMap<ui32, TOperationStatistics> Statistics; // public id -> stat
+    THashMap<TString, TOperationStatistics> HybridStatistics; // operation name -> stat
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;

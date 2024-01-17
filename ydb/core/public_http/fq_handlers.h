@@ -2,7 +2,7 @@
 
 #include "grpc_request_context_wrapper.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -251,7 +251,7 @@ template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename
 class TGrpcCallWrapper : public TActorBootstrapped<TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
     THttpRequestContext RequestContext;
 
-    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
+    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
     TGrpcProxyEventFactory EventFactory;
 
     NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;

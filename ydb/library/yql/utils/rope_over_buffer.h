@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/actors/util/rope.h>
+#include <ydb/library/actors/util/rope.h>
 
 #include <memory>
 

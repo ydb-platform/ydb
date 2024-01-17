@@ -13,7 +13,7 @@ namespace NPQ {
 struct TUserInfo;
 
 struct TReadAnswer {
-    ui64 Size;
+    ui64 Size = 0;
     THolder<IEventBase> Event;
 };
 
@@ -35,19 +35,27 @@ struct TReadInfo {
     TVector<TRequestedBlob> Blobs; //offset, count, value
     ui64 CachedOffset; //offset of head can be bigger than last databody offset
     TVector<TClientBlob> Cached; //records from head
+    TActorId PipeClient;
+
+    ui64 SizeEstimate = 0;
+    ui64 RealReadOffset = 0;
+    ui64 LastOffset = 0;
+    bool Error = false;
 
     TReadInfo() = delete;
     TReadInfo(
         const TString& user,
         const TString& clientDC,
         const ui64 offset,
+        const ui64 lastOffset,
         const ui16 partNo,
         const ui64 count,
         const ui32 size,
         const ui64 dst,
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
-        const bool isExternalRead
+        const bool isExternalRead,
+        const TActorId& pipeClient
     )
         : User(user)
         , ClientDC(clientDC)
@@ -62,6 +70,8 @@ struct TReadInfo {
         , IsExternalRead(isExternalRead)
         , IsSubscription(false)
         , CachedOffset(0)
+        , PipeClient(pipeClient)
+        , LastOffset(lastOffset)
     {}
 
     TReadAnswer FormAnswer(
@@ -70,7 +80,7 @@ struct TReadInfo {
         const ui64 endOffset,
         const ui32 partition,
         TUserInfo* ui,
-        const ui64 dst,
+        const ui64 dst, 
         const ui64 sizeLag,
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode

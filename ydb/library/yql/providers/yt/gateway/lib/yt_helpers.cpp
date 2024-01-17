@@ -287,7 +287,7 @@ static bool IterateRows(NYT::ITransactionPtr tx,
     NYT::TRichYPath path,
     ui32 tableIndex,
     TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec,
+    IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
     const TMaybe<TSampleParams>& sampling)
 {
@@ -350,7 +350,7 @@ bool IterateYamredRows(NYT::ITransactionPtr tx,
     const NYT::TRichYPath& table,
     ui32 tableIndex,
     TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec,
+    IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
     const TMaybe<TSampleParams>& sampling)
 {
@@ -361,7 +361,7 @@ bool IterateYsonRows(NYT::ITransactionPtr tx,
     const NYT::TRichYPath& table,
     ui32 tableIndex,
     TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec,
+    IExecuteResOrPull& exec,
     const TTableLimiter& limiter,
     const TMaybe<TSampleParams>& sampling)
 {
@@ -372,7 +372,7 @@ bool SelectRows(NYT::IClientPtr client,
     const TString& table,
     ui32 tableIndex,
     TMkqlIOCache& specsCache,
-    TExecuteResOrPull& exec,
+    IExecuteResOrPull& exec,
     TTableLimiter& limiter)
 {
     ui64 startRecordInTable = limiter.GetTableStart();

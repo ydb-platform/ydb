@@ -42,6 +42,28 @@ UploadPartCopyRequest::UploadPartCopyRequest() :
 {
 }
 
+bool UploadPartCopyRequest::HasEmbeddedError(Aws::IOStream &body,
+  const Aws::Http::HeaderValueCollection &header) const
+{
+  // Header is unused
+  (void) header;
+
+  auto readPointer = body.tellg();
+  XmlDocument doc = XmlDocument::CreateFromXmlStream(body);
+
+  if (!doc.WasParseSuccessful()) {
+    body.seekg(readPointer);
+    return false;
+  }
+
+  if (doc.GetRootElement().GetName() == "Error") {
+    body.seekg(readPointer);
+    return true;
+  }
+  body.seekg(readPointer);
+  return false;
+}
+
 Aws::String UploadPartCopyRequest::SerializePayload() const
 {
   return {};
@@ -103,7 +125,7 @@ Aws::Http::HeaderValueCollection UploadPartCopyRequest::GetRequestSpecificHeader
 
   if(m_copySourceIfModifiedSinceHasBeenSet)
   {
-    headers.emplace("x-amz-copy-source-if-modified-since", m_copySourceIfModifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("x-amz-copy-source-if-modified-since", m_copySourceIfModifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_copySourceIfNoneMatchHasBeenSet)
@@ -115,7 +137,7 @@ Aws::Http::HeaderValueCollection UploadPartCopyRequest::GetRequestSpecificHeader
 
   if(m_copySourceIfUnmodifiedSinceHasBeenSet)
   {
-    headers.emplace("x-amz-copy-source-if-unmodified-since", m_copySourceIfUnmodifiedSince.ToGmtString(DateFormat::RFC822));
+    headers.emplace("x-amz-copy-source-if-unmodified-since", m_copySourceIfUnmodifiedSince.ToGmtString(Aws::Utils::DateFormat::RFC822));
   }
 
   if(m_copySourceRangeHasBeenSet)
@@ -187,4 +209,14 @@ Aws::Http::HeaderValueCollection UploadPartCopyRequest::GetRequestSpecificHeader
   }
 
   return headers;
+}
+
+UploadPartCopyRequest::EndpointParameters UploadPartCopyRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
 }

@@ -1,4 +1,4 @@
-#include <library/cpp/actors/core/actor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -118,7 +118,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
                 responsePartition.Offset = responseFromPQPartition.EndOffset;
                 responsePartition.ErrorCode = NONE_ERROR;
             } else {
-                responsePartition.ErrorCode = INVALID_REQUEST; //TODO savnik: handle it
+                responsePartition.ErrorCode = INVALID_REQUEST; // FIXME(savnik): handle it
                 ErrorCode = INVALID_REQUEST;
             }
         } else {

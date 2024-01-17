@@ -207,7 +207,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char>
     static inline size_t _LIBCPP_CONSTEXPR_AFTER_CXX14 length(const char_type* __s)  _NOEXCEPT {
       // GCC currently does not support __builtin_strlen during constant evaluation.
       // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=70816
-#if defined(_LIBCPP_COMPILER_GCC) || defined(_LIBCPP_COMPILER_MSVC)
+#ifdef _LIBCPP_COMPILER_GCC
       if (__libcpp_is_constant_evaluated()) {
         size_t __i = 0;
         for (; __s[__i] != char_type('\0'); ++__i)
@@ -802,9 +802,7 @@ __str_rfind(const _CharT *__p, _SizeT __sz,
         __pos += __n;
     else
         __pos = __sz;
-    const _CharT* __r = _VSTD::__find_end(
-                  __p, __p + __pos, __s, __s + __n, _Traits::eq,
-                        random_access_iterator_tag(), random_access_iterator_tag());
+    const _CharT* __r = std::__find_end_classic(__p, __p + __pos, __s, __s + __n, _Traits::eq);
     if (__n > 0 && __r == __p + __pos)
         return __npos;
     return static_cast<_SizeT>(__r - __p);

@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -88,6 +88,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 out << value.GetTimestamp();
                 break;
             }
+            case NYdb::EPrimitiveType::Bool:
+            {
+                out << value.GetBool();
+                break;
+            }
             default:
             {
                 UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
@@ -110,10 +115,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr) {
+    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it, NJson::TJsonValue* statInfo = nullptr, NJson::TJsonValue* diagnostics = nullptr) {
         TVector<THashMap<TString, NYdb::TValue>> rows;
         if (statInfo) {
             *statInfo = NJson::JSON_NULL;
+        }
+        if (diagnostics) {
+            *diagnostics = NJson::JSON_NULL;
         }
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
@@ -129,6 +137,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 auto plan = streamPart.GetQueryStats().GetPlan();
                 if (plan && statInfo) {
                     UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, statInfo));
+                }
+            }
+
+            if (streamPart.HasDiagnostics()) {
+                TString diagnosticsString = streamPart.GetDiagnostics();
+                if (!diagnosticsString.empty() && diagnostics) {
+                    UNIT_ASSERT(NJson::ReadJsonFastTree(diagnosticsString, diagnostics));
                 }
             }
 
@@ -183,6 +198,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    TString GetUtf8(const NYdb::TValue& v) {
+        NYdb::TValueParser value(v);
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+            return *value.GetOptionalUtf8();
+        } else {
+            return value.GetUtf8();
+        }
+    }
+
     TInstant GetTimestamp(const NYdb::TValue& v) {
         NYdb::TValueParser value(v);
         if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
@@ -225,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             , TableName(tableName)
             , StoreName(storeName)
         {
-            SetShardingMethod("HASH_FUNCTION_MODULO_N");
+            SetShardingMethod("HASH_FUNCTION_CONSISTENCY_64");
         }
 
         void PrintCount() {
@@ -317,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         if (c.first == "RawBytes") {
                             rawBytes += GetUint64(c.second);
                         }
-                        if (c.first == "Bytes") {
+                        if (c.first == "BlobRangeSize") {
                             bytes += GetUint64(c.second);
                         }
                         if (verbose) {
@@ -379,6 +403,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     private:
         using TBase = Tests::NCS::THelper;
     public:
+        TLocalHelper& SetShardingMethod(const TString& value) {
+            TBase::SetShardingMethod(value);
+            return *this;
+        }
 
         void CreateTestOlapTable(TString tableName = "olapTable", TString storeName = "olapStore",
             ui32 storeShardsCount = 4, ui32 tableShardsCount = 3) {
@@ -468,7 +496,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
                 Sharding {
                     HashSharding {
-                        Function: HASH_FUNCTION_MODULO_N
+                        Function: HASH_FUNCTION_CONSISTENCY_64
                         Columns: "EventTime"
                     }
                 })", tableName.c_str(), shardsCount, PROTO_SCHEMA));
@@ -496,74 +524,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
                 Sharding {
                     HashSharding {
-                        Function: HASH_FUNCTION_MODULO_N
+                        Function: HASH_FUNCTION_CONSISTENCY_64
                         Columns: "id"
                     }
                 })", tableName.c_str(), shardsCount, PROTO_SCHEMA));
         }
     };
 
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
-
         TLocalHelper lHelper(kikimr);
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
+        if (withSomeNulls)
+            lHelper.WithSomeNulls();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForClickBench(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
         UNIT_ASSERT(testTable == "/Root/benchTable"); // TODO: check schema instead
-
         TClickHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
         UNIT_ASSERT(testTable == "/Root/tableWithNulls"); // TODO: check schema instead
         TTableWithNullsHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch();
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
@@ -817,6 +805,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             const TString plan = jsonStat.GetStringRobust();
             Cerr << plan << Endl;
             UNIT_ASSERT(plan.find("NodesScanShards") != TString::npos);
+        }
+    }
+
+    Y_UNIT_TEST(SimpleQueryOlapDiagnostics) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetTableClient();
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonDiagnostics;
+            CollectRows(it, nullptr, &jsonDiagnostics);
+            UNIT_ASSERT_C(!jsonDiagnostics.IsDefined(), "Query result diagnostics should be empty, but it's not");
+        }
+
+        {
+            TStreamExecScanQuerySettings settings;
+            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+            settings.CollectFullDiagnostics(true);
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT `resource_id`, `timestamp`
+                FROM `/Root/olapStore/olapTable`
+                ORDER BY `resource_id`, `timestamp`
+            )", settings).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NJson::TJsonValue jsonDiagnostics;
+            CollectRows(it, nullptr, &jsonDiagnostics);
+            UNIT_ASSERT(!jsonDiagnostics.IsNull());
+
+            UNIT_ASSERT_C(jsonDiagnostics.IsMap(), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_id"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("version"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_text"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_parameter_types"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("table_metadata"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("created_at"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_syntax"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_database"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_cluster"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_plan"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(jsonDiagnostics.Has("query_type"), "Incorrect Diagnostics");
         }
     }
 
@@ -1345,6 +1391,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui32 rowsCount = 0;
         {
@@ -1453,6 +1500,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(rows.size() == expectedCount);
     }
 
+    TString BuildQuery(const TString& predicate, bool pushEnabled) {
+        TStringBuilder qBuilder;
+        qBuilder << "--!syntax_v1" << Endl;
+        qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
+        qBuilder << "PRAGMA Kikimr.OptEnablePredicateExtract = 'false';" << Endl;
+        qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
+        qBuilder << predicate;
+        qBuilder << " ORDER BY `timestamp`";
+        return qBuilder;
+    };
+
     Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
@@ -1463,7 +1521,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1471,7 +1529,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // TODO: Add support for DqPhyPrecompute push-down: Cast((2+2) as Uint64)
         std::vector<TString> testData = {
             R"(`resource_id` = `uid`)",
+            R"(`resource_id` != `uid`)",
             R"(`resource_id` = "10001")",
+            R"(`resource_id` != "10001")",
             R"(`level` = 1)",
             R"(`level` = Int8("1"))",
             R"(`level` = Int16("1"))",
@@ -1512,6 +1572,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` > `resource_id`)",
             R"(`level` IS NULL)",
             R"(`level` IS NOT NULL)",
+            R"(`message` IS NULL)",
+            R"(`message` IS NOT NULL)",
             R"((`level`, `uid`) > (Int32("1"), NULL))",
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
@@ -1524,62 +1586,32 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "%001")",
             R"(`uid` LIKE "uid%001")",
 #endif
-        };
-
-        std::vector<TString> testDataNoPush = {
-            R"(`level` != NULL)",
-            R"(`level` > NULL)",
-            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
-            R"(`level` >= CAST("2" As Uint32))",
-            R"(`level` = NULL)",
-            R"(`level` > NULL)",
-            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            // Not strict function in the beginning causes to disable pushdown
-            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
-            // We can handle this case in future
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-#if SSA_RUNTIME_VERSION < 2U
-            R"(`uid` LIKE "%30000%")",
-            R"(`uid` LIKE "uid%")",
-            R"(`uid` LIKE "%001")",
-            R"(`uid` LIKE "uid%001")",
+#if SSA_RUNTIME_VERSION >= 4U
+            R"(`level` + 2 < 5)",
+            R"(`level` - 2 >= 1)",
+            R"(`level` * 3 > 4)",
+            R"(`level` / 2 <= 1)",
+            R"(`level` % 3 != 1)",
+            R"(-`level` < -2)",
+            R"(Abs(`level` - 3) >= 1)",
+            R"(LENGTH(`message`) > 1037U)",
+            R"(LENGTH(`uid`) > 1U OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 2U AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 3U OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U AND `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U OR `resource_id` = "10001"))",
+            R"(`level` IS NULL OR `message` IS NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NULL)",
+            R"(`level` IS NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NULL)",
 #endif
         };
 
-        std::vector<TString> testDataPartialPush = {
-            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
-            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
-            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
-            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
-            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
-            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
-            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
-            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
-        };
-
-        auto buildQuery = [](const TString& predicate, bool pushEnabled) {
-            TStringBuilder qBuilder;
-
-            qBuilder << "--!syntax_v1" << Endl;
-
-            if (!pushEnabled) {
-                qBuilder << R"(PRAGMA Kikimr.OptEnableOlapPushdown = "false";)" << Endl;
-            }
-
-            qBuilder << R"(PRAGMA Kikimr.OptEnablePredicateExtract = "false";)" << Endl;
-            qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
-            qBuilder << predicate;
-            qBuilder << " ORDER BY `timestamp`";
-
-            return TString(qBuilder);
-        };
-
         for (const auto& predicate: testData) {
-            auto normalQuery = buildQuery(predicate, false);
-            auto pushQuery = buildQuery(predicate, true);
+            auto normalQuery = BuildQuery(predicate, false);
+            auto pushQuery = BuildQuery(predicate, true);
 
             Cerr << "--- Run normal query ---\n";
             Cerr << normalQuery << Endl;
@@ -1610,9 +1642,56 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                           TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
         }
+    }
+
+    Y_UNIT_TEST(PredicateDoNotPushdown) {
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testDataNoPush = {
+            R"(`level` != NULL)",
+            R"(`level` > NULL)",
+            R"(`timestamp` >= CAST(3000001 AS Timestamp))",
+            R"(`level` >= CAST("2" As Uint32))",
+            R"(`level` = NULL)",
+            R"(`level` > NULL)",
+            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
+            // Not strict function in the beginning causes to disable pushdown
+            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
+            // We can handle this case in future
+            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+            R"(`level` * 3.14 > 4)",
+#if SSA_RUNTIME_VERSION < 2U
+            R"(`uid` LIKE "%30000%")",
+            R"(`uid` LIKE "uid%")",
+            R"(`uid` LIKE "%001")",
+            R"(`uid` LIKE "uid%001")",
+#endif
+#if SSA_RUNTIME_VERSION < 4U
+            R"(`level` + 2 < 5)",
+            R"(`level` - 2 >= 1)",
+            R"(`level` * 3 > 4)",
+            R"(`level` / 2 <= 1)",
+            R"(`level` % 3 != 1)",
+#endif
+        };
 
         for (const auto& predicate: testDataNoPush) {
-            auto pushQuery = buildQuery(predicate, true);
+            auto pushQuery = BuildQuery(predicate, true);
 
             if (logQueries) {
                 Cerr << "Query: " << pushQuery << Endl;
@@ -1627,10 +1706,37 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
         }
+    }
+
+    Y_UNIT_TEST(PredicatePushdownPartial) {
+        constexpr bool logQueries = false;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableClient = kikimr.GetTableClient();
+
+        std::vector<TString> testDataPartialPush = {
+            R"(LENGTH(`uid`) > 0 AND `resource_id` = "10001")",
+            R"(`resource_id` = "10001" AND `level` > 1 AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` >= "10001" AND LENGTH(`uid`) > 0 AND `level` >= 1 AND `level` < 3)",
+            R"(LENGTH(`uid`) > 0 AND (`resource_id` >= "10001" OR `level`>= 1 AND `level` <= 3))",
+            R"(NOT(`resource_id` = "10001" OR `level` >= 1) AND LENGTH(`uid`) > 0)",
+            R"(NOT(`resource_id` = "10001" AND `level` != 1) AND LENGTH(`uid`) > 0)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level`)",
+            R"(`resource_id` = "10001" AND Unwrap(`level`/1) = `level` AND `level` > 1)",
+        };
 
         for (const auto& predicate: testDataPartialPush) {
-            auto normalQuery = buildQuery(predicate, false);
-            auto pushQuery = buildQuery(predicate, true);
+            auto normalQuery = BuildQuery(predicate, false);
+            auto pushQuery = BuildQuery(predicate, true);
 
             Cerr << "--- Run normal query ---\n";
             Cerr << normalQuery << Endl;
@@ -1664,7 +1770,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                           TStringBuilder() << "NarrowMap was removed. Query: " << pushQuery);
         }
     }
-
 #if SSA_RUNTIME_VERSION >= 2U
     Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
         auto settings = TKikimrSettings()
@@ -1685,7 +1790,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
             { R"(`uid` LIKE "uid%")", "TableFullScan" },
             { R"(`uid` LIKE "%001")", "TableFullScan" },
+#if SSA_RUNTIME_VERSION >= 4U
+            { R"(`uid` LIKE "uid%001")", "TableFullScan" },
+#else
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
+#endif
         };
         std::string query = R"(
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
@@ -1707,15 +1816,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             for (auto& op : operators) {
                 if (op.GetMapSafe().at("Name") == "TableFullScan") {
                     UNIT_ASSERT(op.GetMapSafe().at("SsaProgram").IsDefined());
-                    auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
-                    int filterCmdCount = 0;
-                    std::string::size_type pos = 0;
-                    std::string filterCmd = R"("Filter":{)";
-                    while ((pos = ssa.find(filterCmd, pos)) != std::string::npos) {
-                        ++filterCmdCount;
-                        pos += filterCmd.size();
-                    }
-                    UNIT_ASSERT_EQUAL(filterCmdCount, 2);
+                    const auto ssa = op.GetMapSafe().at("SsaProgram").GetStringRobust();
+                    UNIT_ASSERT(ssa.Contains(R"("Filter":{)"));
                 }
             }
         }
@@ -1804,9 +1906,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
-        UNIT_ASSERT_C(ast.find(R"("eq" '"resource_id")") != std::string::npos,
+        UNIT_ASSERT_C(ast.find(R"(('eq '"resource_id")") != std::string::npos,
                           TStringBuilder() << "Predicate not pushed down. Query: " << query);
-        UNIT_ASSERT_C(ast.find(R"("gt" '"level")") == std::string::npos,
+        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << query);
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);
@@ -2103,6 +2205,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         std::string ExpectedReadNodeType;
         TExpectedLimitChecker LimitChecker;
         TExpectedRecordChecker RecordChecker;
+        bool UseLlvm = true;
     public:
         void FillExpectedAggregationGroupByPlanOptions() {
 #if SSA_RUNTIME_VERSION >= 2U
@@ -2117,6 +2220,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             queryFixed << "--!syntax_v1" << Endl;
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
+            }
+            if (!UseLlvm) {
+                queryFixed << "PRAGMA Kikimr.UseLlvm = \"false\";" << Endl;
             }
             queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
@@ -2147,6 +2253,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         TAggregationTestCase& SetQuery(const TString& value) {
             Query = value;
+            return *this;
+        }
+        TAggregationTestCase& SetUseLlvm(const bool value) {
+            UseLlvm = value;
             return *this;
         }
         const TString& GetExpectedReply() const {
@@ -2280,7 +2390,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             WriteTestDataForClickBench(kikimr, "/Root/benchTable", 0, 1000000 + i * 1000000, iterationPackSize);
         }
@@ -2320,7 +2430,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         // write data
 
         ui32 numIterations = 10;
-        const ui32 iterationPackSize = 2000;
+        const ui32 iterationPackSize = NSan::PlainOrUnderSanitizer(2000, 20);
         for (ui64 i = 0; i < numIterations; ++i) {
             TClickHelper(*server).SendDataViaActorSystem("/Root/benchTable", 0, 1000000 + i * 1000000,
                                                          iterationPackSize);
@@ -3209,7 +3319,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // Should be fixed in https://st.yandex-team.ru/KIKIMR-17009
             // .SetExpectedReadNodeType("TableFullScan");
             .SetExpectedReadNodeType("Aggregate-TableFullScan");
-        ;
         q7.FillExpectedAggregationGroupByPlanOptions();
 
         TAggregationTestCase q9;
@@ -3288,7 +3397,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
         q39.FillExpectedAggregationGroupByPlanOptions();
 
-        TestClickBench({ q7, q9, q12, q14, q22, q39 });
+        std::vector<TAggregationTestCase> cases = {q7, q9, q12, q14, q22, q39};
+        for (auto&& c : cases) {
+            c.SetUseLlvm(NSan::PlainOrUnderSanitizer(true, false));
+        }
+
+        TestClickBench(cases);
     }
 
     Y_UNIT_TEST(StatsSysView) {
@@ -3296,7 +3410,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        static ui32 numKinds = 5;
+        static ui32 numKinds = 2;
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         for (ui64 i = 0; i < 100; ++i) {
@@ -3307,29 +3421,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
-            SELECT *
+            SELECT PathId, Kind, TabletId, Sum(Rows) as Rows
             FROM `/Root/olapStore/.sys/store_primary_index_stats`
-            ORDER BY PathId, Kind, TabletId
+            GROUP BY PathId, Kind, TabletId
+            ORDER BY TabletId, Kind, PathId
         )");
 
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), numKinds*3);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
         UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
+        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), 72075186224037889ull);
+        UNIT_ASSERT_GE(GetUint64(rows[4].at("TabletId")), 72075186224037890ull);
         UNIT_ASSERT_GE(GetUint64(rows[1].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
         UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), GetUint64(rows[1].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[6].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[7].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[7].at("TabletId")), GetUint64(rows[1].at("TabletId")));
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "SPLIT_COMPACTED");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("TabletId")), GetUint64(rows[2].at("TabletId")));
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[4].at("Kind")), "INSERTED");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[4].at("TabletId")), GetUint64(rows[5].at("TabletId")));
         UNIT_ASSERT_GE(
             GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")) +
-            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")) +
-            GetUint64(rows[6].at("Rows")) + GetUint64(rows[7].at("Rows")) + GetUint64(rows[8].at("Rows")),
+            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")),
             0.3*0.9*100*1000); // >= 90% of 100K inserted rows
     }
 
@@ -3352,31 +3468,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
+                GROUP BY PathId, TabletId, Kind
+                ORDER BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             UNIT_ASSERT_GT(rows.size(), 1*numKinds);
             UNIT_ASSERT_LE(rows.size(), 3*numKinds);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull);
         }
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
+                GROUP BY PathId, TabletId, Kind
+                ORDER BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             UNIT_ASSERT_GT(rows.size(), 1*numKinds);
             UNIT_ASSERT_LE(rows.size(), 3*numKinds);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % numKinds, 0);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull);
         }
@@ -3587,10 +3703,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(1000, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(50, 10);
-        TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
         for(ui64 i = 0; i < numIterations; ++i) {
-            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            TLocalHelper(*server).SendDataViaActorSystem("/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i * 1000000, 2000);
             insertRows += 2000;
         }
 
@@ -3717,7 +3833,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
-        TLocalHelper(*server).CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
+        TLocalHelper(*server).SetShardingMethod("HASH_FUNCTION_CLOUD_LOGS").CreateTestOlapTable("largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
 
         for(ui64 i = 0; i < numIterations; ++i) {
@@ -3770,7 +3886,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         if (prevIsFinished) {
                             Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
                             Cerr.Flush();
-                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation);
+                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation, 0);
                             runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
                         } else {
                             prevIsFinished = msg->Finished;
@@ -3797,7 +3913,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrRunner kikimr(settings);
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
         for (ui64 i = 0; i < 10; ++i) {
@@ -3820,36 +3935,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[3].at("Kind")), 2ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "INSERTED");
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Bytes, Rows
+                SELECT SUM(BlobRangeSize) as Bytes, SUM(Rows) as Rows, PathId, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, TabletId
                 ORDER BY Bytes
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_LE(GetUint64(rows[0].at("Bytes")), GetUint64(rows[1].at("Bytes")));
         }
         {
             auto selectQuery = TString(R"(
-                SELECT Rows, Kind, RawBytes, Rows as Rows2, Rows as Rows3, PathId
+                SELECT Sum(Rows) as Rows, Kind, Sum(RawBytes) as RawBytes, Sum(Rows) as Rows2, Sum(Rows) as Rows3, PathId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY Kind, PathId
                 ORDER BY PathId, Kind, Rows3
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("Rows")), GetUint64(rows[2].at("Rows2")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[5].at("Rows")), GetUint64(rows[5].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[11].at("Rows")), GetUint64(rows[11].at("Rows2")));
         }
     }
 
@@ -3857,9 +3971,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable_2");
@@ -3877,48 +3990,59 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
-                ORDER BY PathId, Kind, TabletId;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[8].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[8].at("Kind")), 3ull);
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY
-                    PathId DESC, Kind DESC, TabletId DESC
+                WHERE
+                    PathId == UInt64("3") AND Activity = true
+                GROUP BY TabletId, PathId, Kind
+                ORDER BY TabletId, Kind
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT PathId, Kind, TabletId
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, Kind, TabletId
+                ORDER BY PathId DESC, Kind DESC, TabletId DESC
                 ;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 3*3*numKinds;
+            ui32 numExpected = 3*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
                     PathId > UInt64("0") AND PathId < UInt32("4")
                     OR PathId > UInt64("4") AND PathId <= UInt64("5")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY
                     PathId DESC, Kind DESC, TabletId DESC
                 ;
@@ -3926,12 +4050,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            ui32 numExpected = 2*3*numKinds;
+            ui32 numExpected = 2*3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected-1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[numExpected-1].at("Kind")), 1ull);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected-1].at("Kind")), "INSERTED");
         }
     }
 
@@ -3951,9 +4075,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -3964,9 +4088,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, Kind, TabletId
+                SELECT PathId, Kind, TabletId, Sum(BlobRangeSize) as Bytes
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Bytes > UInt64("0")
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -3979,7 +4103,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind == UInt32("6")
+                WHERE Kind == 'EVICTED'
                 ORDER BY PathId, Kind, TabletId;
             )");
 
@@ -3990,15 +4114,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT *
+                SELECT PathId, Kind, TabletId
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE Kind >= UInt32("3")
+                WHERE Kind IN ('SPLIT_COMPACTED', 'INACTIVE', 'EVICTED')
+                GROUP BY PathId, Kind, TabletId
                 ORDER BY PathId, Kind, TabletId;
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
-            UNIT_ASSERT_GE(rows.size(), 3*3);
+            UNIT_ASSERT_GE(rows.size(), 3);
         }
     }
 
@@ -4006,7 +4131,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        static ui32 numKinds = 5;
 
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
         TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
@@ -4028,7 +4152,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -4042,7 +4166,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     SUM(Rows) as rows,
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind != UInt32("4") -- not INACTIVE
+                    Kind != 'INACTIVE'
                 GROUP BY
                     PathId
                 ORDER BY
@@ -4061,13 +4185,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    Kind < UInt32("4")
+                    Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4085,13 +4207,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId == UInt64("3") AND Kind < UInt32("4")
+                    PathId == UInt64("3") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4107,13 +4227,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     PathId,
                     SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
+                    SUM(BlobRangeSize) as bytes,
+                    SUM(RawBytes) as bytes_raw
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 WHERE
-                    PathId >= UInt64("4") AND Kind < UInt32("4")
+                    PathId >= UInt64("4") AND Kind IN ('INSERTED', 'SPLIT_COMPACTED', 'COMPACTED')
                 GROUP BY PathId
                 ORDER BY rows DESC
                 LIMIT 10
@@ -4127,13 +4245,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto selectQuery = TString(R"(
-                SELECT count(*)
+                SELECT PathId, TabletId, Kind
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                GROUP BY PathId, TabletId, Kind
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            // 3 Tables with 3 Shards each and 4 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*numKinds);
+            // 3 Tables with 3 Shards each and 2 KindId-s of stats
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3 * 3 * 2);
         }
 
         {
@@ -4147,13 +4266,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), numKinds);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 2);
             UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
         }
 
         {
             auto selectQuery = TString(R"(
-                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
+                SELECT PathId, count(*), sum(Rows), sum(BlobRangeSize), sum(RawBytes)
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
                 GROUP BY PathId
                 ORDER BY PathId
@@ -4163,7 +4282,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
             for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 3*numKinds);
             }
         }
     }
@@ -4781,9 +4899,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4800,9 +4915,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToString) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -4819,9 +4931,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_GetValue_ToInt) {
-        // Should be fixed after Arrow kernel implementation for JSON_VALUE
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
@@ -4886,9 +4995,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(Json_Exists) {
-        // Should be fixed after Arrow kernel implementation for JSON_EXISTS
-        // https://st.yandex-team.ru/KIKIMR-17903
-        return;
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(
                 SELECT id, JSON_EXISTS(jsonval, "$.col1"), JSON_EXISTS(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
@@ -5153,6 +5259,39 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cout << output << Endl;
         CompareYson(output, R"([[10u;]])");
     }
+
+    Y_UNIT_TEST(DuplicatesInIncomingBatch) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val1").AddNull();
+            tableInserter.AddRow().Add(3).Add("test_res_3").Add("val3").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+    }
+
 }
 
 } // namespace NKqp

@@ -26,9 +26,6 @@
             "name": "/local/base_write_insert_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup"
-                },
-                {
                     "columns": [
                         "Group",
                         "Name"
@@ -39,6 +36,9 @@
                     "scan_by": [
                         "Name (-\u221e, +\u221e)"
                     ],
+                    "type": "Scan"
+                },
+                {
                     "type": "Lookup"
                 }
             ],

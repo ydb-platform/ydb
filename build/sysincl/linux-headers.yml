@@ -410,7 +410,6 @@
   - linux/cifs/cifs_netlink.h
   - linux/close_range.h
   - linux/cn_proc.h
-  - linux/coda.h
   - linux/coff.h
   - linux/comedi.h
   - linux/connector.h
@@ -646,7 +645,6 @@
   - linux/nbd-netlink.h
   - linux/nbd.h
   - linux/ncsi.h
-  - linux/ndctl.h
   - linux/neighbour.h
   - linux/net.h
   - linux/net_dropmon.h

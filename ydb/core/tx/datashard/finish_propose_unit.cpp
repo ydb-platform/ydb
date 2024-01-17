@@ -29,7 +29,6 @@ private:
     void AddDiagnosticsResult(TOutputOpData::TResultPtr &res);
     void UpdateCounters(TOperation::TPtr op,
                         const TActorContext &ctx);
-    TString PrintErrors(const NKikimrTxDataShard::TEvProposeTransactionResult &rec);
 };
 
 TFinishProposeUnit::TFinishProposeUnit(TDataShard &dataShard,
@@ -236,26 +235,14 @@ void TFinishProposeUnit::UpdateCounters(TOperation::TPtr op,
             DataShard.IncCounter(COUNTER_PREPARE_ERROR);
             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx,  NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                         "Prepare transaction failed. txid " << op->GetTxId()
-                        << " at tablet " << DataShard.TabletID()  << " errors: "
-                        << PrintErrors(res->Record));
+                        << " at tablet " << DataShard.TabletID()  << " errors: " << res->GetError());
         } else {
             DataShard.IncCounter(COUNTER_PREPARE_IMMEDIATE);
         }
     }
 }
 
-TString TFinishProposeUnit::PrintErrors(const NKikimrTxDataShard::TEvProposeTransactionResult &rec)
-{
-    TString s;
-    TStringOutput str(s);
-    str << "[ ";
-    for (size_t i = 0; i < rec.ErrorSize(); ++i) {
-        str << NKikimrTxDataShard::TError_EKind_Name(rec.GetError(i).GetKind())
-            << "(" << rec.GetError(i).GetReason() << ") ";
-    }
-    str << "]";
-    return s;
-}
+
 
 THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard,
                                                 TPipeline &pipeline)

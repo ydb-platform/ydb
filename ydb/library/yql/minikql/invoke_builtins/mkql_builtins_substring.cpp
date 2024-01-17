@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h"  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
 namespace NKikimr {

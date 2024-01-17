@@ -13,6 +13,7 @@ private:
 public:
     bool DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config);
     ui32 GetWorkersCountForConveyor(const ui32 poolThreadsCount) const;
+    TString DebugString() const;
 };
 
 }

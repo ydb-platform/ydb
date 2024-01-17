@@ -2,11 +2,13 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/node/node_builder.h>
 
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
@@ -1015,6 +1017,13 @@ NYT::TSortColumns ToYTSortColumns(const TVector<std::pair<TString, bool>>& sortC
         res.Add(NYT::TSortColumn().Name(item.first).SortOrder(item.second ? NYT::ESortOrder::SO_ASCENDING : NYT::ESortOrder::SO_DESCENDING));
     }
     return res;
+}
+
+TString GetTypeV3String(const TTypeAnnotationNode& type, ui64 nativeTypeCompatibility) {
+    NYT::TNode typeNode;
+    NYT::TNodeBuilder nodeBuilder(&typeNode);
+    NCommon::WriteTypeToYson(nodeBuilder, &type);
+    return NYT::NodeToCanonicalYsonString(RowSpecYqlTypeToYtNativeType(typeNode, nativeTypeCompatibility));
 }
 
 } // NYql

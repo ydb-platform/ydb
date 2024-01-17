@@ -1530,6 +1530,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(value, rowset.GetValue<Schema::SubDomains::AuditSettings>()));
                         domainInfo->SetAuditSettings(value);
                     }
+
+                    if (rowset.HaveValue<Schema::SubDomains::ServerlessComputeResourcesMode>()) {
+                        domainInfo->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomains::ServerlessComputeResourcesMode>()
+                        );
+                    }
                 }
 
                 if (!rowset.Next())
@@ -1591,6 +1597,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Ydb::Cms::DatabaseQuotas databaseQuotas;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(databaseQuotas, rowset.GetValue<Schema::SubDomainsAlterData::DatabaseQuotas>()));
                         alter->SetDatabaseQuotas(databaseQuotas);
+                    }
+
+                    if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
+                        alter->SetServerlessComputeResourcesMode(
+                            rowset.GetValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()
+                        );
                     }
 
                     subdomainInfo->SetAlter(alter);
@@ -1829,6 +1841,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!rowset.Next())
                     return false;
+            }
+        }
+
+        // Read Views
+        {
+            auto rowset = db.Table<Schema::View>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::View::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto& view = Self->Views[pathId] = new TViewInfo();
+                view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
+                view->QueryText = rowset.GetValue<Schema::View::QueryText>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 
@@ -3279,6 +3313,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 txState.SourcePathId =  TPathId(txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceOwnerId>(),
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
+                txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
 
                 if (txState.TxType == TTxState::TxCopyTable && txState.SourcePathId) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
@@ -3889,12 +3924,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::StatisticsAggregator:
                 Self->TabletCounters->Simple()[COUNTER_STATISTICS_AGGREGATOR_COUNT].Add(1);
                 break;
+            case ETabletType::GraphShard:
+                Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
+                break;
             default:
-                Y_FAIL_S("dont know how to interpret tablet type"
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType
                          << ", pathId: " << pathId
                          << ", shardId: " << shardIdx
                          << ", tabletId: " << tabletId);
+                break;
             }
         }
 

@@ -37,7 +37,7 @@ public:
             }
         }
 
-        return EStrategyOutcome::DONE;
+        return EStrategyOutcome::IN_PROGRESS;
     }
 };
 

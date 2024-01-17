@@ -1,17 +1,15 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NColumnShard {
 
 namespace {
 
-class TWriteActor : public TActorBootstrapped<TWriteActor>, public TMonitoringObjectsCounter<TWriteActor> {
+class TWriteActor: public TActorBootstrapped<TWriteActor>, public TMonitoringObjectsCounter<TWriteActor> {
     ui64 TabletId;
-    TUsage ResourceUsage;
-
     IWriteController::TPtr WriteController;
 
     THashSet<ui32> YellowMoveChannels;
@@ -22,8 +20,8 @@ public:
     TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline)
         : TabletId(tabletId)
         , WriteController(writeController)
-        , Deadline(deadline)
-    {}
+        , Deadline(deadline) {
+    }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
         TEvBlobStorage::TEvPutResult* msg = ev->Get();
@@ -63,9 +61,8 @@ public:
         }
 
         auto putResult = std::make_shared<TBlobPutResult>(putStatus,
-                std::move(YellowMoveChannels),
-                std::move(YellowStopChannels),
-                ResourceUsage);
+            std::move(YellowMoveChannels),
+            std::move(YellowStopChannels));
 
         WriteController->OnReadyResult(ctx, putResult);
         Die(ctx);
@@ -84,7 +81,6 @@ public:
         }
 
         while (auto writeInfo = WriteController->Next()) {
-            ResourceUsage.Network += writeInfo->GetData().size();
             writeInfo->GetWriteOperator()->SendWriteBlobRequest(writeInfo->GetData(), writeInfo->GetBlobId());
         }
 

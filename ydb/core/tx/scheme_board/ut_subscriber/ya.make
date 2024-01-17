@@ -7,9 +7,10 @@ SIZE(MEDIUM)
 TIMEOUT(600)
 
 PEERDIR(
-    library/cpp/actors/interconnect
+    ydb/library/actors/interconnect
     library/cpp/testing/unittest
     ydb/core/testlib/basics/default
+    ydb/library/yql/minikql/comp_nodes/llvm
 )
 
 YQL_LAST_ABI_VERSION()

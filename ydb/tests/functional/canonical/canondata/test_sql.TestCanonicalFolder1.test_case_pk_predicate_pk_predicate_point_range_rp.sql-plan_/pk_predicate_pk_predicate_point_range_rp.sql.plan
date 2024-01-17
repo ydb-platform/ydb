@@ -20,7 +20,7 @@
                     "scan_by": [
                         "Name [Name1, Name3)"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

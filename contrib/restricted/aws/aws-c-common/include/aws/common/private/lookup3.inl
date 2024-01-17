@@ -60,7 +60,7 @@ on 1 byte), but shoehorning those bytes into integers efficiently is messy.
 # include <endian.h>    /* attempt to define endianness */
 #endif
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4127) /*Disable "conditional expression is constant" */
 #endif /* _MSC_VER */
@@ -1055,7 +1055,7 @@ int main()
 #endif  /* SELF_TEST */
 
 
-#if _MSC_VER
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif /* _MSC_VER */
 

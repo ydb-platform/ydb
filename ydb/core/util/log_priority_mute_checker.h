@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <library/cpp/actors/core/log_settings.h>
+#include <ydb/library/actors/core/log_settings.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr {

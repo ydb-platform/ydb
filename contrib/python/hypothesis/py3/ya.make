@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.88.1)
+VERSION(6.92.2)
 
 LICENSE(MPL-2.0)
 
@@ -22,7 +22,6 @@ PY_SRCS(
     _hypothesis_ftz_detector.py
     _hypothesis_pytestplugin.py
     hypothesis/__init__.py
-    hypothesis/_error_if_old.py
     hypothesis/_settings.py
     hypothesis/configuration.py
     hypothesis/control.py
@@ -83,7 +82,7 @@ PY_SRCS(
     hypothesis/internal/floats.py
     hypothesis/internal/healthcheck.py
     hypothesis/internal/intervalsets.py
-    hypothesis/internal/lazyformat.py
+    hypothesis/internal/observability.py
     hypothesis/internal/reflection.py
     hypothesis/internal/scrutineer.py
     hypothesis/internal/validation.py

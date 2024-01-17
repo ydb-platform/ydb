@@ -21,6 +21,10 @@
    don't. */
 #define HAVE_DECL_STRNLEN 1
 
+/* Define to 1 if you have the declaration of `_pgmptr', and to 0 if you
+   don't. */
+#define HAVE_DECL__PGMPTR 0
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
@@ -101,8 +105,14 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
+/* Define to 1 if you have the <windows.h> header file. */
+/* #undef HAVE_WINDOWS_H */
+
 /* Define if -lz is available. */
 /* #undef HAVE_ZLIB */
+
+/* Define if -lzstd is available. */
+/* #undef HAVE_ZSTD */
 
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */

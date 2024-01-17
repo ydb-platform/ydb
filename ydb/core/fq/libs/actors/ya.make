@@ -20,8 +20,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/interconnect
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
@@ -37,11 +37,13 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/fq/libs/compute/common
     ydb/core/fq/libs/compute/ydb
+    ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
+    ydb/core/fq/libs/exceptions
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
@@ -56,7 +58,7 @@ PEERDIR(
     ydb/library/yql/core/facade
     ydb/library/yql/core/services/mounts
     ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
@@ -97,4 +99,8 @@ END()
 
 RECURSE(
     logging
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

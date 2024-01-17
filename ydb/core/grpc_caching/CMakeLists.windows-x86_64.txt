@@ -11,7 +11,7 @@ add_library(ydb-core-grpc_caching)
 target_link_libraries(ydb-core-grpc_caching PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-protos
+  library-actors-protos
   ydb-core-base
 )
 target_sources(ydb-core-grpc_caching PRIVATE

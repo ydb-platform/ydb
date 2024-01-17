@@ -20,10 +20,10 @@
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
-#include <library/cpp/actors/interconnect/poller_tcp.h>
-#include <library/cpp/actors/core/executor_thread.h>
-#include <library/cpp/actors/core/monotonic_provider.h>
-#include <library/cpp/actors/util/should_continue.h>
+#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -74,6 +74,7 @@ TAppData::TAppData(
     , DomainsConfigPtr(new NKikimrConfig::TDomainsConfig())
     , BootstrapConfigPtr(new NKikimrConfig::TBootstrap())
     , AwsCompatibilityConfigPtr(new NKikimrConfig::TAwsCompatibilityConfig())
+    , S3ProxyResolverConfigPtr(new NKikimrConfig::TS3ProxyResolverConfig())
     , StreamingConfig(*StreamingConfigPtr.get())
     , PQConfig(*PQConfigPtr.get())
     , PQClusterDiscoveryConfig(*PQClusterDiscoveryConfigPtr.get())
@@ -94,6 +95,7 @@ TAppData::TAppData(
     , DomainsConfig(*DomainsConfigPtr.get())
     , BootstrapConfig(*BootstrapConfigPtr.get())
     , AwsCompatibilityConfig(*AwsCompatibilityConfigPtr.get())
+    , S3ProxyResolverConfig(*S3ProxyResolverConfigPtr.get())
     , KikimrShouldContinue(kikimrShouldContinue)
     
 {}

@@ -17,6 +17,7 @@
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
+#include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/row_buffer.h>
@@ -339,6 +340,7 @@ TFuture<void> TClient::ReshardTable(
     auto writer = CreateWireProtocolWriter();
     // XXX(sandello): This is ugly and inefficient.
     std::vector<TUnversionedRow> keys;
+    keys.reserve(pivotKeys.size());
     for (const auto& pivotKey : pivotKeys) {
         keys.push_back(pivotKey);
     }
@@ -504,17 +506,38 @@ TFuture<TYsonString> TClient::GetTablePivotKeys(
 }
 
 TFuture<void> TClient::CreateTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TCreateTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TCreateTableBackupOptions& options)
 {
-    ThrowUnimplemented("CreateTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.CreateTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_checkpoint_timestamp_delay(ToProto<i64>(options.CheckpointTimestampDelay));
+    req->set_checkpoint_check_period(ToProto<i64>(options.CheckpointCheckPeriod));
+    req->set_checkpoint_check_timeout(ToProto<i64>(options.CheckpointCheckTimeout));
+    req->set_force(options.Force);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<void> TClient::RestoreTableBackup(
-    const TBackupManifestPtr& /*manifest*/,
-    const TRestoreTableBackupOptions& /*options*/)
+    const TBackupManifestPtr& manifest,
+    const TRestoreTableBackupOptions& options)
 {
-    ThrowUnimplemented("RestoreTableBackup");
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RestoreTableBackup();
+    ToProto(req->mutable_manifest(), *manifest);
+
+    SetTimeoutOptions(*req, options);
+    req->set_force(options.Force);
+    req->set_mount(options.Mount);
+    req->set_enable_replicas(options.EnableReplicas);
+
+    return req->Invoke().As<void>();
 }
 
 TFuture<std::vector<TTableReplicaId>> TClient::GetInSyncReplicas(
@@ -638,6 +661,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->tablet_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->tablet_errors(index).errors().size());
             for (const auto& protoError : rsp->tablet_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -646,6 +670,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->replica_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->replication_errors(index).errors().size());
             for (const auto& protoError : rsp->replication_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -745,7 +770,7 @@ TFuture<IQueueRowsetPtr> TClient::PullQueue(
 TFuture<IQueueRowsetPtr> TClient::PullConsumer(
     const TRichYPath& consumerPath,
     const TRichYPath& queuePath,
-    i64 offset,
+    std::optional<i64> offset,
     int partitionIndex,
     const TQueueRowBatchReadOptions& rowBatchReadOptions,
     const TPullConsumerOptions& options)
@@ -758,7 +783,9 @@ TFuture<IQueueRowsetPtr> TClient::PullConsumer(
 
     ToProto(req->mutable_consumer_path(), consumerPath);
     ToProto(req->mutable_queue_path(), queuePath);
-    req->set_offset(offset);
+    if (offset) {
+        req->set_offset(*offset);
+    }
     req->set_partition_index(partitionIndex);
     ToProto(req->mutable_row_batch_read_options(), rowBatchReadOptions);
 
@@ -828,6 +855,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueueConsumerRegistrationsPtr& rsp) {
         std::vector<TListQueueConsumerRegistrationsResult> result;
+        result.reserve(rsp->registrations().size());
         for (const auto& registration : rsp->registrations()) {
             std::optional<std::vector<int>> partitions;
             if (registration.has_partitions()) {
@@ -1862,9 +1890,8 @@ TFuture<TMaintenanceCounts> TClient::RemoveMaintenance(
             counts[EMaintenanceType::DisableTabletCells] = rspValue->disable_tablet_cells();
             counts[EMaintenanceType::PendingRestart] = rspValue->pending_restart();
         } else {
-            for (auto type : TEnumTraits<EMaintenanceType>::GetDomainValues()) {
-                auto it = protoCounts.find(ConvertMaintenanceTypeToProto(type));
-                counts[type] = it == protoCounts.end() ? 0 : it->second;
+            for (auto [type, count] : protoCounts) {
+                counts[CheckedEnumCast<EMaintenanceType>(type)] = count;
             }
         }
 
@@ -1931,12 +1958,14 @@ TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
 
 TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
     const TString& nodeAddress,
+    bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.DestroyChunkLocations();
+    req->set_recover_unlinked_disks(recoverUnlinkedDisks);
     ToProto(req->mutable_node_address(), nodeAddress);
     ToProto(req->mutable_location_uuids(), locationUuids);
 
@@ -2030,6 +2059,13 @@ TFuture<void> TClient::AlterQuery(
     const TAlterQueryOptions& /*options*/)
 {
     ThrowUnimplemented("AlterQuery");
+}
+
+TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
+    const TString& /*bundleName*/,
+    const TGetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("GetBundleConfig");
 }
 
 TFuture<void> TClient::SetUserPassword(

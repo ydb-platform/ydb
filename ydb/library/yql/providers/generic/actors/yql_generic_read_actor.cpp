@@ -1,11 +1,11 @@
 #include "yql_generic_read_actor.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/event_local.h>
-#include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/log.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -58,12 +58,12 @@ namespace NYql::NDq {
             };
 
             struct TEvListSplitsFinished: public TEventLocal<TEvListSplitsFinished, EvListSplitsFinished> {
-                explicit TEvListSplitsFinished(NGrpc::TGrpcStatus&& status)
+                explicit TEvListSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
                     : Status(std::move(status))
                 {
                 }
 
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
             };
 
             struct TEvReadSplitsIterator: public TEventLocal<TEvReadSplitsIterator, EvReadSplitsIterator> {
@@ -85,12 +85,12 @@ namespace NYql::NDq {
             };
 
             struct TEvReadSplitsFinished: public TEventLocal<TEvReadSplitsFinished, EvReadSplitsFinished> {
-                explicit TEvReadSplitsFinished(NGrpc::TGrpcStatus&& status)
+                explicit TEvReadSplitsFinished(NYdbGrpc::TGrpcStatus&& status)
                     : Status(std::move(status))
                 {
                 }
 
-                NGrpc::TGrpcStatus Status;
+                NYdbGrpc::TGrpcStatus Status;
             };
         };
 
@@ -278,9 +278,7 @@ namespace NYql::NDq {
 
             // Preserve stream message to return it to ComputeActor later
             LastReadSplitsResponse_ = std::move(ev->Get()->Response);
-            IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
-            IngressStats_.Chunks++;
-            IngressStats_.Resume();
+            UpdateIngressStats();
             NotifyComputeActorWithData();
 
             YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
@@ -347,6 +345,18 @@ namespace NYql::NDq {
                     inputIndex,
                     NConnector::ErrorFromGRPCStatus(result.Status));
             }
+        }
+
+        void UpdateIngressStats() {
+            if (LastReadSplitsResponse_->has_stats()) {
+                IngressStats_.Bytes += LastReadSplitsResponse_->stats().bytes();
+                IngressStats_.Rows += LastReadSplitsResponse_->stats().rows();
+            } else {
+                // Delete this branch with fallback behavior after YQ-2347 is deployed
+                IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
+            }
+            IngressStats_.Chunks++;
+            IngressStats_.Resume();
         }
 
         void NotifyComputeActorWithData() {
@@ -444,6 +454,10 @@ namespace NYql::NDq {
 
         // IActor & IDqComputeActorAsyncInput
         void PassAway() override { // Is called from Compute Actor
+            YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
+                                            << ": bytes " << IngressStats_.Bytes
+                                            << ", rows " << IngressStats_.Rows
+                                            << ", chunks " << IngressStats_.Chunks;
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 

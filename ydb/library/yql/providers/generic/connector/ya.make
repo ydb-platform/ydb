@@ -1,7 +1,9 @@
 RECURSE(
     api
-    app
-    generate
     libcpp
-    libgo
 )
+
+RECURSE_FOR_TESTS(
+    tests
+)
+

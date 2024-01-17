@@ -41,8 +41,9 @@ public:
         if (description.HasSharding()) {
             Sharding = description.GetSharding();
         } else {
-            Sharding = DefaultSharding();
+            Sharding = NKikimrSchemeOp::TColumnTableSharding();
         }
+        FillDefaultSharding(*Sharding);
 
         if (!DoDeserialize(description, errors)) {
             return false;
@@ -130,11 +131,12 @@ private:
         return true;
     }
 
-    static NKikimrSchemeOp::TColumnTableSharding DefaultSharding() {
-        NKikimrSchemeOp::TColumnTableSharding sharding;
-        auto* hashSharding = sharding.MutableHashSharding();
-        hashSharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
-        return sharding;
+    static void FillDefaultSharding(NKikimrSchemeOp::TColumnTableSharding& info) {
+        if (info.HasRandomSharding()) {
+
+        } else if (!info.HasHashSharding() || !info.GetHashSharding().HasFunction()) {
+            info.MutableHashSharding()->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+        }
     }
 };
 

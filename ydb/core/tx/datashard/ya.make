@@ -34,6 +34,7 @@ SRCS(
     check_read_unit.cpp
     check_scheme_tx_unit.cpp
     check_snapshot_tx_unit.cpp
+    check_write_unit.cpp
     complete_data_tx_unit.cpp
     completed_operations_unit.cpp
     conflicts_cache.cpp
@@ -71,6 +72,7 @@ SRCS(
     datashard__stats.cpp
     datashard__store_table_path.cpp
     datashard__store_scan_state.cpp
+    datashard__write.cpp
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
@@ -127,6 +129,7 @@ SRCS(
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
     datashard_subdomain_path_id.cpp
+    datashard_write_operation.cpp    
     datashard_txs.h
     datashard.cpp
     datashard.h
@@ -153,6 +156,7 @@ SRCS(
     export_scan.cpp
     finalize_build_index_unit.cpp
     finish_propose_unit.cpp
+    finish_propose_write_unit.cpp
     follower_edge.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
@@ -196,6 +200,7 @@ SRCS(
     volatile_tx.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
+    write_unit.cpp
     upload_stats.cpp
 )
 
@@ -215,7 +220,8 @@ RESOURCE(
 
 PEERDIR(
     contrib/libs/zstd
-    library/cpp/actors/core
+    ydb/library/actors/core
+    ydb/library/actors/http
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/stack_vector
     library/cpp/digest/md5
@@ -229,6 +235,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
@@ -303,4 +310,6 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_upload_rows
     ut_volatile
+    ut_write
+    ut_trace
 )

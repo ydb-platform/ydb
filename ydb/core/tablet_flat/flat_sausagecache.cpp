@@ -322,7 +322,7 @@ const TSharedData* TPrivatePageCache::Lookup(ui32 pageId, TInfo *info) {
     if (page->Empty()) {
         ToLoad.PushBack(page);
 
-        // Note: for now we mark index pages sticky before we load them
+        // Note: we mark index pages sticky before we load them
         if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::Index) {
             MarkSticky(page->Id, info);
         }

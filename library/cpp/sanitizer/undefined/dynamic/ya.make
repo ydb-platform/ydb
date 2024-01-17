@@ -6,17 +6,10 @@ NO_UTIL()
 
 EXPORT_ALL_DYNAMIC_SYMBOLS()
 
-IF (CLANG16)
 DYNAMIC_LIBRARY_FROM(
-    contrib/libs/clang16-rt/lib/ubsan_standalone
-    contrib/libs/clang16-rt/lib/ubsan_standalone_cxx
+    contrib/libs/clang${CLANG_VER}-rt/lib/ubsan_standalone
+    contrib/libs/clang${CLANG_VER}-rt/lib/ubsan_standalone_cxx
 )
-ELSE()
-DYNAMIC_LIBRARY_FROM(
-    contrib/libs/clang14-rt/lib/ubsan_standalone
-    contrib/libs/clang14-rt/lib/ubsan_standalone_cxx
-)
-ENDIF()
 
 END()
 

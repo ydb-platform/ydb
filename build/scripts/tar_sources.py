@@ -37,7 +37,9 @@ def main():
                 with open(fname, 'rb') as fin:
                     tarinfo = out.gettarinfo(fname, arcname)
                     tarinfo.mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH if tarinfo.mode | stat.S_IXUSR else 0
-                    tarinfo.mode = tarinfo.mode | stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH
+                    tarinfo.mode = (
+                        tarinfo.mode | stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH
+                    )
                     tarinfo.mtime = 0
                     tarinfo.uid = 0
                     tarinfo.gid = 0

@@ -74,28 +74,6 @@ public:
     }
 
     void ChangeVolatileState(EVolatileState state);
-
-    static bool IsResourceDrainingState(TTabletInfo::EVolatileState state) {
-        switch (state) {
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN:
-            return true;
-        default:
-            return false;
-        }
-    }
-
-    static bool IsAliveState(TTabletInfo::EVolatileState state) {
-        switch (state) {
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING:
-        case TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING:
-            return true;
-        default:
-            return false;
-        }
-    }
-
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after);
 
@@ -257,6 +235,7 @@ public:
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
     void ActualizeNodeStatistics(TInstant now);
+    ui64 GetRestartsPerPeriod(TInstant barrier) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

@@ -15,7 +15,7 @@ target_link_libraries(fq-libs-health PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   fq-libs-shared_resources
   ydb-core-mon
   cpp-client-ydb_discovery

@@ -1,9 +1,12 @@
+#include "actors.h"
 #include "ydb_setup.h"
 
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 
 #include <ydb/core/testlib/test_client.h>
+
+#include <ydb/library/yql/utils/log/log.h>
 
 
 namespace NKqpRun {
@@ -63,6 +66,14 @@ private:
 
 class TYdbSetup::TImpl {
 private:
+    TAutoPtr<TLogBackend> CreateLogBackend() const {
+        if (Settings_.LogOutputFile) {
+            return NActors::CreateFileBackend(*Settings_.LogOutputFile);
+        } else {
+            return NActors::CreateStderrBackend();
+        }
+    }
+
     void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
         auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
             if (Settings_.AppConfig.GetLogConfig().HasDefaultLevel()) {
@@ -84,12 +95,7 @@ private:
         };
 
         serverSettings.SetLoggerInitializer(loggerInitializer);
-
-        if (Settings_.LogOutputFile) {
-            serverSettings.SetLogBackend(NActors::CreateFileBackend(*Settings_.LogOutputFile));
-        } else {
-            serverSettings.SetLogBackend(NActors::CreateStderrBackend());
-        }
+        serverSettings.SetLogBackend(CreateLogBackend());
     }
 
     void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
@@ -133,10 +139,34 @@ private:
         Client_->InitRootScheme();
     }
 
+    void InitializeYqlLogger() {
+        if (!Settings_.TraceOpt) {
+            return;
+        }
+
+        bool found = false;
+        for (auto& entry : *Settings_.AppConfig.MutableLogConfig()->MutableEntry()) {
+            if (entry.GetComponent() == "KQP_YQL") {
+                entry.SetLevel(NActors::NLog::PRI_TRACE);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            auto entry = Settings_.AppConfig.MutableLogConfig()->AddEntry();
+            entry->SetComponent("KQP_YQL");
+            entry->SetLevel(NActors::NLog::PRI_TRACE);
+        }
+
+        NYql::NLog::InitLogger(CreateLogBackend());
+    }
+
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
     {
+        InitializeYqlLogger();
         InitializeServer();
     }
 
@@ -147,13 +177,21 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event));
     }
 
-    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+    NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const {
         auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
-        event->Record.SetTraceId(traceId);
-
-        FillScriptRequest(script, action, *event->Record.MutableRequest());
+        FillScriptRequest(script, action, traceId, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvScriptRequest, NKikimr::NKqp::TEvKqp::TEvScriptResponse>(std::move(event));
+    }
+
+    NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const {
+        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
+        FillScriptRequest(query, action, traceId, event->Record);
+
+        auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr>();
+        GetRuntime()->Register(CreateRunScriptActorMock(std::move(event), promise, Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit()));
+
+        return promise.GetFuture().GetValueSync();
     }
 
     NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& operation) const {
@@ -199,18 +237,21 @@ private:
         request.SetQuery(query);
     }
 
-    void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, NKikimrKqp::TQueryRequest& request) const {
+    void FillScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, NKikimrKqp::TEvQueryRequest& event) const {
+        event.SetTraceId(traceId);
+        
+        auto request = event.MutableRequest();
         if (action == NKikimrKqp::QUERY_ACTION_EXECUTE) {
-            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.MutableTxControl()->set_commit_tx(true);
+            request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            request->MutableTxControl()->set_commit_tx(true);
         }
 
-        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
-        request.SetAction(action);
-        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+        request->SetAction(action);
+        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
 
-        request.SetDatabase(Settings_.DomainName);
-        request.SetQuery(script);
+        request->SetDatabase(Settings_.DomainName);
+        request->SetQuery(script);
     }
 
 private:
@@ -259,12 +300,24 @@ TRequestResult TYdbSetup::SchemeQueryRequest(const TString& query, TSchemeMeta& 
     return TRequestResult(schemeQueryOperationResponse.GetYdbStatus(), issues);
 }
 
-TRequestResult TYdbSetup::ScriptQueryRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const {
-    auto scriptExecutionOperation = Impl_->ScriptQueryRequest(script, action, traceId);
+TRequestResult TYdbSetup::ScriptRequest(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId, TString& operation) const {
+    auto scriptExecutionOperation = Impl_->ScriptRequest(script, action, traceId);
 
     operation = scriptExecutionOperation->Get()->OperationId;
 
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
+}
+
+TRequestResult TYdbSetup::QueryRequest(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId, TQueryMeta& meta) const {
+    auto queryOperationResponse = Impl_->QueryRequest(query, action, traceId)->Get()->Record.GetRef();
+
+    meta.Ast = queryOperationResponse.GetResponse().GetQueryAst();
+    meta.Plan = queryOperationResponse.GetResponse().GetQueryPlan();
+
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(queryOperationResponse.GetResponse().GetQueryIssues(), issues);
+
+    return TRequestResult(queryOperationResponse.GetYdbStatus(), issues);
 }
 
 TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& operation, TExecutionMeta& meta) const {

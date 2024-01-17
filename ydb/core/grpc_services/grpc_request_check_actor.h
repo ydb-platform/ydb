@@ -8,7 +8,7 @@
 #include "operation_helpers.h"
 #include "rpc_calls.h"
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
@@ -36,9 +36,9 @@ public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
         LOG_INFO(ctx, NKikimrServices::GRPC_SERVER, error.ToString());
         if (error.Retryable) {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_UNAVAILABLE);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_UNAVAILABLE);
         } else {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_FAIL);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_FAIL);
         }
         GrpcRequestBaseCtx_->RaiseIssue(NYql::TIssue{error.Message});
         ReplyBackAndDie();
@@ -212,7 +212,7 @@ public:
             const NYql::TIssues issues;
             ReplyUnavailableAndDie(issues);
         } else {
-            GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_OK);
             GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
             Continue();
         }
@@ -409,7 +409,8 @@ private:
     }
 
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
-        // Request audit happen after successfull authorization
+        // Request audit happen after successful authentication
+        // and authorization check against the database
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
 
         event->Release().Release()->Pass(*this);
@@ -420,12 +421,14 @@ private:
         ReplyBackAndDie();
     }
 
-    void HandleAndDie(TRefreshTokenImpl::TPtr&) {
+    template <ui32 TRpcId>
+    void HandleAndDie(TAutoPtr<TEventHandle<TRefreshTokenImpl<TRpcId>>>&) {
         ReplyBackAndDie();
     }
 
     template <typename T>
     void HandleAndDie(T& event) {
+        GrpcRequestBaseCtx_->LegacyFinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
         TBase::PassAway();
     }
@@ -520,47 +523,37 @@ void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEven
     InitializeAttributesFromSchema(schemeData);
 }
 
-// default permissions
+template<typename T>
+inline constexpr bool IsStreamWrite = (
+    std::is_same_v<T, TEvStreamPQWriteRequest>
+    || std::is_same_v<T, TEvStreamTopicWriteRequest>
+    || std::is_same_v<T, TRefreshTokenStreamWriteSpecificRequest>
+);
+
 template <typename TEvent>
 const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
-    static const TVector<TString> permissions = {
-                "ydb.databases.list",
-                "ydb.databases.create",
-                "ydb.databases.connect",
-                "ydb.tables.select",
-                "ydb.schemas.getMetadata"
-            };
-    return permissions;
-}
-
-// role yds.write permissions for PQv1
-template <>
-inline
-const TVector<TString>& TGrpcRequestCheckActor<TEvStreamPQWriteRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect",
-        "ydb.tables.select",
-        "ydb.schemas.getMetadata",
-        "ydb.streams.write"
-    };
-    return permissions;
-}
-
-// role yds.write permissions for Topic API
-template <>
-inline
-const TVector<TString>& TGrpcRequestCheckActor<TEvStreamTopicWriteRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect",
-        "ydb.tables.select",
-        "ydb.schemas.getMetadata",
-        "ydb.streams.write"
-    };
-    return permissions;
+    if constexpr (IsStreamWrite<TEvent>) {
+        // extended permissions for stream write request family
+        static const TVector<TString> permissions = {
+            "ydb.databases.list",
+            "ydb.databases.create",
+            "ydb.databases.connect",
+            "ydb.tables.select",
+            "ydb.schemas.getMetadata",
+            "ydb.streams.write"
+        };
+        return permissions;
+    } else {
+        // default permissions
+        static const TVector<TString> permissions = {
+            "ydb.databases.list",
+            "ydb.databases.create",
+            "ydb.databases.connect",
+            "ydb.tables.select",
+            "ydb.schemas.getMetadata"
+        };
+        return permissions;
+    }
 }
 
 template <typename TEvent>

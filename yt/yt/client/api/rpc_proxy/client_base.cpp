@@ -52,6 +52,19 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr i64 MaxTracingTagLength = 1000;
+static const TString DisabledSelectQueryTracingTag = "Tag is disabled, look for enable_select_query_tracing_tag parameter";
+
+TString SanitizeTracingTag(const TString& originalTag)
+{
+    if (originalTag.size() <= MaxTracingTagLength) {
+        return originalTag;
+    }
+    return Format("%v ... TRUNCATED", originalTag.substr(0, MaxTracingTagLength));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 IConnectionPtr TClientBase::GetConnection()
 {
     return GetRpcProxyConnection();
@@ -764,6 +777,9 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.table_path", path);
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -808,6 +824,9 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultLookupRowsTimeout));
 
     req->set_path(path);
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        req->TracingTags().emplace_back("yt.table_path", path);
+    }
     req->Attachments() = SerializeRowset(nameTable, keys, req->mutable_rowset_descriptor());
 
     if (!options.ColumnFilter.IsUniversal()) {
@@ -839,7 +858,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     }));
 }
 
-TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {
@@ -873,6 +892,15 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
             protoSubrequest->mutable_rowset_descriptor());
         protoSubrequest->set_attachment_count(rowset.size());
         req->Attachments().insert(req->Attachments().end(), rowset.begin(), rowset.end());
+    }
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        std::vector<TString> paths;
+        paths.reserve(subrequests.size());
+        for (const auto& subrequest : subrequests) {
+            paths.emplace_back(subrequest.Path);
+        }
+        req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -911,11 +939,16 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
 }
 
 template<class TRequest>
-void FillRequestBySelectRowsOptionsBase(const TSelectRowsOptionsBase& options, TRequest request)
+void FillRequestBySelectRowsOptionsBase(
+    const TSelectRowsOptionsBase& options,
+    const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,
+    TRequest request)
 {
     request->set_timestamp(options.Timestamp);
     if (options.UdfRegistryPath) {
         request->set_udf_registry_path(*options.UdfRegistryPath);
+    } else if (defaultUdfRegistryPath) {
+        request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
 }
 
@@ -929,11 +962,21 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->SetResponseHeavy(true);
     req->set_query(query);
 
-    FillRequestBySelectRowsOptionsBase(options, req);
+    const auto& config = GetRpcProxyConnection()->GetConfig();
+
+    if (NTracing::IsCurrentTraceContextRecorded()) {
+        if (config->EnableSelectQueryTracingTag) {
+            req->TracingTags().emplace_back("yt.query", SanitizeTracingTag(query));
+        } else {
+            req->TracingTags().emplace_back("yt.query", DisabledSelectQueryTracingTag);
+        }
+    }
+
+    FillRequestBySelectRowsOptionsBase(options, config->UdfRegistryPath, req);
     // TODO(ifsmirnov): retention timestamp in explain_query.
     req->set_retention_timestamp(options.RetentionTimestamp);
     // TODO(lukyan): Move to FillRequestBySelectRowsOptionsBase
-    req->SetTimeout(options.Timeout.value_or(GetRpcProxyConnection()->GetConfig()->DefaultSelectRowsTimeout));
+    req->SetTimeout(options.Timeout.value_or(config->DefaultSelectRowsTimeout));
 
     if (options.InputRowLimit) {
         req->set_input_row_limit(*options.InputRowLimit);
@@ -959,9 +1002,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
-    if (options.UseCanonicalNullRelations) {
-        req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
-    }
+    req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;
@@ -981,7 +1022,7 @@ TFuture<TYsonString> TClientBase::ExplainQuery(
 
     auto req = proxy.ExplainQuery();
     req->set_query(query);
-    FillRequestBySelectRowsOptionsBase(options, req);
+    FillRequestBySelectRowsOptionsBase(options, GetRpcProxyConnection()->GetConfig()->UdfRegistryPath, req);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspExplainQueryPtr& rsp) {
         return TYsonString(rsp->value());
@@ -1024,7 +1065,7 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
                 THROW_ERROR_EXCEPTION("Duplicate tablet id in end replication row indexes")
                     << TErrorAttribute("tablet_id", tabletId);
             }
-            InsertOrCrash(result.EndReplicationRowIndexes, std::make_pair(tabletId, rowIndex));
+            InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }
 
         result.Rowset = DeserializeRowset(

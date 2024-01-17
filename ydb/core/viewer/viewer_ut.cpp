@@ -1,7 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/actors/helpers/selfping_actor.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/helpers/selfping_actor.h>
+#include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -18,7 +19,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <library/cpp/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -264,7 +265,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
         auto& nodes = (*ev)->Get()->Nodes;
-        
+
         auto sample = nodes[0];
         nodes.clear();
 
@@ -289,6 +290,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         nodeId++;
+    }
+
+    void ChangeVDiskStateResponse(TEvWhiteboard::TEvVDiskStateResponse::TPtr* ev, NKikimrWhiteboard::EFlag diskSpace, ui64 used, ui64 limit) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto state = pbRecord.add_vdiskstateinfo();
+        state->mutable_vdiskid()->set_vdisk(0);
+        state->mutable_vdiskid()->set_groupid(0);
+        state->mutable_vdiskid()->set_groupgeneration(1);
+        state->set_diskspace(diskSpace);
+        state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::OK);
+        state->set_nodeid(0);
+        state->set_allocatedsize(used);
+        state->set_availablesize(limit - used);
     }
 
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, int tabletsTotal) {
@@ -444,11 +458,146 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
 
 #ifndef SANITIZER_TYPE
-#if !defined(NDEBUG) || defined(_hardening_enabled_) 
+#if !defined(NDEBUG) || defined(_hardening_enabled_)
         UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 30 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 30 * BASE_PERF);
 #else
         UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 10 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 10 * BASE_PERF);
 #endif
 #endif
+    }
+
+    NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("schema", schema);
+        httpReq.CgiParameters.emplace("base64", base64 ? "true" : "false");
+        httpReq.CgiParameters.emplace("query", query);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/query", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        return json;
+    }
+
+    void QueryTest(const TString& query, const bool base64, const TString& reply) {
+        NJson::TJsonValue result = SendQuery(query, "classic", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("column0").GetString(), reply);
+
+        result = SendQuery(query, "ydb", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("column0").GetString(), reply);
+
+        result = SendQuery(query, "modern", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetArray()[0].GetString(), reply);
+
+        result = SendQuery(query, "multi", base64);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("rows").GetArray()[0].GetArray()[0].GetString(), reply);
+    }
+
+    Y_UNIT_TEST(SelectStringWithBase64Encoding)
+    {
+        QueryTest("select \"Hello\"", true, "SGVsbG8=");
+    }
+
+    Y_UNIT_TEST(SelectStringWithNoBase64Encoding)
+    {
+        QueryTest("select \"Hello\"", false, "Hello");
+    }
+
+    void StorageSpaceTest(const TString& withValue, const NKikimrWhiteboard::EFlag diskSpace, const ui64 used, const ui64 limit, const bool isExpectingGroup) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("with", withValue);
+        httpReq.CgiParameters.emplace("version", "v2");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/storage", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                auto *x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                ChangeVDiskStateResponse(x, diskSpace, used, limit);
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().contains("StorageGroups"), isExpectingGroup);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithoutFilterNoDepends)
+    {
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Green, 10, 100, true);
+        StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 90, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnVDiskSpaceStatus)
+    {
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 10, 100, false);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Red, 10, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupOutputWithSpaceCheckDependsOnUsage)
+    {
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
+        StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
     }
 }

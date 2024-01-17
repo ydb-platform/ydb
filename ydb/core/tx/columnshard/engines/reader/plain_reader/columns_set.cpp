@@ -1,5 +1,6 @@
 #include "columns_set.h"
 #include <util/string/join.h>
+#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -15,9 +16,6 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsS
     for (auto&& i : external.ColumnIds) {
         result.ColumnIds.erase(i);
     }
-    for (auto&& i : external.ColumnNames) {
-        result.ColumnNames.erase(i);
-    }
     arrow::FieldVector fields;
     for (auto&& i : Schema->fields()) {
         if (!external.Schema->GetFieldByName(i->name())) {
@@ -25,13 +23,13 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator-(const TColumnsS
         }
     }
     result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Rebuild();
     return result;
 }
 
 NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
     TColumnsSet result = *this;
     result.ColumnIds.insert(external.ColumnIds.begin(), external.ColumnIds.end());
-    result.ColumnNames.insert(external.ColumnNames.begin(), external.ColumnNames.end());
     auto fields = result.Schema->fields();
     for (auto&& i : external.Schema->fields()) {
         if (!result.Schema->GetFieldByName(i->name())) {
@@ -39,6 +37,7 @@ NKikimr::NOlap::NPlainReader::TColumnsSet TColumnsSet::operator+(const TColumnsS
         }
     }
     result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Rebuild();
     return result;
 }
 
@@ -56,6 +55,20 @@ bool TColumnsSet::ColumnsOnly(const std::vector<std::string>& fieldNames) const 
         }
     }
     return true;
+}
+
+void TColumnsSet::Rebuild() {
+    ColumnNamesVector.clear();
+    ColumnNames.clear();
+    for (auto&& i : Schema->field_names()) {
+        ColumnNamesVector.emplace_back(i);
+        ColumnNames.emplace(i);
+    }
+    if (ColumnIds.size()) {
+        FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
+    } else {
+        FilteredSchema = FullReadSchema;
+    }
 }
 
 }

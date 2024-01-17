@@ -13,6 +13,7 @@
 #include "datashard_repl_offsets.h"
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
+#include "datashard_write.h"
 #include "build_index.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
@@ -50,7 +51,10 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <library/cpp/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/join.h>
 
@@ -175,6 +179,7 @@ class TDataShard
     class TTxProposeSchemeTransaction;
     class TTxCancelTransactionProposal;
     class TTxProposeTransactionBase;
+    class TTxWrite;
     class TTxReadSet;
     class TTxSchemaChanged;
     class TTxInitiateBorrowedPartsReturn;
@@ -272,7 +277,9 @@ class TDataShard
     friend class TPipeline;
     friend class TLocksDataShardAdapter<TDataShard>;
     friend class TActiveTransaction;
+    friend class TWriteOperation;
     friend class TValidatedDataTx;
+    friend class TValidatedWriteTx;
     friend class TEngineBay;
     friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
@@ -1205,7 +1212,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvProposeTransactionAttach::TPtr &ev, const TActorContext &ctx);
     void HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
     void ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&ev, const TActorContext &ctx);
-    void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
+    void ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, const TActorContext& ctx);
+    void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TActorContext &ctx);
@@ -1547,6 +1556,7 @@ public:
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);
     bool CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    bool CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
 
@@ -1835,7 +1845,7 @@ public:
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange>&& records);
-    void UpdateChangeDeliveryLag(TInstant now);
+    void UpdateChangeExchangeLag(TInstant now);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
@@ -1967,6 +1977,7 @@ public:
 
     bool WaitPlanStep(ui64 step);
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
+    bool CheckTxNeedWait() const;
 
     void WaitPredictedPlanStep(ui64 step);
     void SchedulePlanPredictedTxs();
@@ -2007,6 +2018,7 @@ public:
 
     enum ELogThrottlerType {
         CheckDataTxUnit_Execute = 0,
+        CheckWriteUnit_Execute = 0,
         TxProposeTransactionBase_Execute,
         FinishProposeUnit_CompleteRequest,
         FinishProposeUnit_UpdateCounters,
@@ -2399,7 +2411,7 @@ private:
     class TProposeQueue : private TTxProgressIdempotentScalarQueue<TEvPrivate::TEvDelayedProposeTransaction> {
     public:
         struct TItem : public TMoveOnly {
-            TItem(TEvDataShard::TEvProposeTransaction::TPtr&& event, TInstant receivedAt, ui64 tieBreakerIndex)
+            TItem(TAutoPtr<IEventHandle>&& event, TInstant receivedAt, ui64 tieBreakerIndex)
                 : Event(std::move(event))
                 , ReceivedAt(receivedAt)
                 , TieBreakerIndex(tieBreakerIndex)
@@ -2407,7 +2419,7 @@ private:
                 , Cancelled(false)
             { }
 
-            TEvDataShard::TEvProposeTransaction::TPtr Event;
+            TAutoPtr<IEventHandle> Event;
             TInstant ReceivedAt;
             ui64 TieBreakerIndex;
             TItem* Next;
@@ -2419,10 +2431,10 @@ private:
             TItem* Last = nullptr;
         };
 
-        void Enqueue(TEvDataShard::TEvProposeTransaction::TPtr event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
+        void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
             TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
 
-            const ui64 txId = item->Event->Get()->GetTxId();
+            const ui64 txId = EvWrite::Convertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
@@ -2437,7 +2449,7 @@ private:
 
         TItem Dequeue() {
             TItem* first = &Items.front();
-            const ui64 txId = first->Event->Get()->GetTxId();
+            const ui64 txId = EvWrite::Convertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,
@@ -2559,7 +2571,9 @@ private:
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
-    THashMap<ui64, TUserTable::TCPtr> TableInfos; // tableId -> local table info
+    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
+    
+    TTableInfos TableInfos;  // tableId -> local table info
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -2702,24 +2716,26 @@ private:
         TPathId TableId;
         ui64 SchemaVersion;
         bool SchemaSnapshotAcquired;
+        TInstant CreatedAt;
         TInstant EnqueuedAt;
         ui64 LockId;
         ui64 LockOffset;
 
         explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId,
-                ui64 schemaVersion, TInstant now, ui64 lockId = 0, ui64 lockOffset = 0)
+                ui64 schemaVersion, TInstant created, TInstant enqueued, ui64 lockId = 0, ui64 lockOffset = 0)
             : BodySize(bodySize)
             , TableId(tableId)
             , SchemaVersion(schemaVersion)
             , SchemaSnapshotAcquired(false)
-            , EnqueuedAt(now)
+            , CreatedAt(created)
+            , EnqueuedAt(enqueued)
             , LockId(lockId)
             , LockOffset(lockOffset)
         {
         }
 
         explicit TEnqueuedRecord(const IDataShardChangeCollector::TChange& record, TInstant now)
-            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, now,
+            : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion, record.CreatedAt(), now,
                 record.LockId, record.LockOffset)
         {
         }
@@ -2814,6 +2830,8 @@ private:
     bool UpdateFollowerReadEdgePending = false;
 
     bool ScheduledPlanPredictedTxs = false;
+
+    TVector<THolder<IEventHandle>> DelayedS3UploadRows;
 
     std::vector<TTrivialLogThrottler> LogThrottlers = {ELogThrottlerType::LAST, TDuration::Seconds(1)};
 public:
@@ -2940,6 +2958,7 @@ protected:
             HFunc(TEvDataShard::TEvReadAck, Handle);
             HFunc(TEvDataShard::TEvReadCancel, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
+            HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             HFunc(TEvDataShard::TEvGetInfoRequest, Handle);
             HFunc(TEvDataShard::TEvListOperationsRequest, Handle);
             HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
@@ -2988,13 +3007,11 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
             HFunc(TEvPrivate::TEvPlanPredictedTxs, Handle);
-        default:
-            if (!HandleDefaultEvents(ev, SelfId())) {
-                ALOG_WARN(NKikimrServices::TX_DATASHARD,
-                           "TDataShard::StateWork unhandled event type: "<< ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
-            }
-            break;
+            default:
+                if (!HandleDefaultEvents(ev, SelfId())) {
+                    ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                }
+                break;
         }
     }
 
@@ -3012,6 +3029,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            HFuncTraced(NEvents::TDataEvents::TEvWrite, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
@@ -3135,10 +3153,10 @@ protected:
             ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
             ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());
 
-            ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get());
+            ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get());
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());
             ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get()
                 + TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());

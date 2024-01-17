@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/checkpoint_storage/events

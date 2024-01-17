@@ -1,6 +1,6 @@
 option cc_enable_arenas = true;
 
-import "ydb/core/protos/tx_datashard.proto";
+import "ydb/core/protos/data_events.proto";
 
 package NKikimrDataShardLoad;
 option java_package = "ru.yandex.kikimr.proto";
@@ -47,7 +47,7 @@ message TEvYCSBTestLoadRequest {
         repeated uint32 Chunks = 4;
 
         // Specifies the format for result data in TEvReadResult
-        optional NKikimrTxDataShard.EScanDataFormat ResultFormat = 5;
+        optional NKikimrDataEvents.EDataFormat ResultFormat = 5;
 
         // special mode: actor reads RowCount rows again and again
         // implies no full scan and only first inflight will be used

@@ -11,7 +11,7 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/library/yql/utils/failure_injector
     ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/yt/codec

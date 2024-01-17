@@ -9,7 +9,6 @@ Copyright (c) 2009-2009: Joachim Faulhaber
 #define BOOST_ICL_ITERATOR_HPP_JOFA_091003
 
 #include <iterator>
-#include <boost/config/warning_disable.hpp>
 
 namespace boost{namespace icl
 {

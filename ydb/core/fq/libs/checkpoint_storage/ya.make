@@ -10,7 +10,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    library/cpp/actors/core
+    ydb/library/actors/core
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/ydb
@@ -32,4 +32,8 @@ END()
 RECURSE(
     events
     proto
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

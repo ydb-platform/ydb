@@ -1,6 +1,9 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <util/system/tls.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 
@@ -218,6 +221,20 @@ std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() c
     return (*res)->column(0);
 }
 
+std::shared_ptr<arrow::RecordBatch> TPortionInfo::TAssembleBlobInfo::BuildRecordBatch(const TColumnLoader& loader) const {
+    if (NullRowsCount) {
+        Y_ABORT_UNLESS(!Data);
+        return NArrow::MakeEmptyBatch(loader.GetExpectedSchema(), NullRowsCount);
+    } else {
+        auto result = loader.Apply(Data);
+        if (!result.ok()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString())("loader", loader.DebugString());
+            return nullptr;
+        }
+        return *result;
+    }
+}
+
 std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(const TAssembleOptions& options) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -225,7 +242,19 @@ std::shared_ptr<arrow::Table> TPortionInfo::TPreparedBatchData::AssembleTable(co
         if (!options.IsAcceptedColumn(i.GetColumnId())) {
             continue;
         }
-        columns.emplace_back(i.Assemble());
+        std::shared_ptr<arrow::Scalar> scalar;
+        if (options.IsConstantColumn(i.GetColumnId(), scalar)) {
+            auto type = i.GetField()->type();
+            std::shared_ptr<arrow::Array> arr;
+            if (scalar) {
+                arr = NArrow::TThreadSimpleArraysCache::GetConst(type, scalar, RowsCount);
+            } else {
+                arr = NArrow::TThreadSimpleArraysCache::GetNull(type, RowsCount);
+            }
+            columns.emplace_back(std::make_shared<arrow::ChunkedArray>(arr));
+        } else {
+            columns.emplace_back(i.Assemble());
+        }
         fields.emplace_back(i.GetField());
     }
 

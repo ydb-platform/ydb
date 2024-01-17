@@ -55,7 +55,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings))
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.GetOrElse(TDuration::Zero()) ?
@@ -77,6 +76,25 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 void TWriteSessionImpl::Start(const TDuration& delay) {
     Y_ABORT_UNLESS(SelfContext);
+
+    if (!EventsQueue) {
+#define WRAP_HANDLER(type, handler, ...)                                                                    \
+        if (auto h = Settings.EventHandlers_.handler##_) {                                                  \
+            Settings.EventHandlers_.handler([ctx = SelfContext, h = std::move(h)](__VA_ARGS__ type& ev){    \
+                if (auto self = ctx->LockShared()) {                                                        \
+                    h(ev);                                                                                  \
+                }                                                                                           \
+            });                                                                                             \
+        }
+        WRAP_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler);
+        WRAP_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler);
+        WRAP_HANDLER(TSessionClosedEvent, SessionClosedHandler, const);
+        WRAP_HANDLER(TWriteSessionEvent::TEvent, CommonHandler);
+#undef WRAP_HANDLER
+
+        EventsQueue = std::make_shared<TWriteSessionEventsQueue>(Settings);
+    }
+
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -141,8 +159,8 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
 
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Get partition location async, partition " << *Settings.PartitionId_ << ", delay " << delay );
 
-    NGrpc::IQueueClientContextPtr prevDescribePartitionContext;
-    NGrpc::IQueueClientContextPtr describePartitionContext = Client->CreateContext();
+    NYdbGrpc::IQueueClientContextPtr prevDescribePartitionContext;
+    NYdbGrpc::IQueueClientContextPtr describePartitionContext = Client->CreateContext();
 
     if (!describePartitionContext) {
         AbortImpl();
@@ -186,7 +204,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     Connections->ScheduleOneTimeTask(std::move(callback), delay);
 }
 
-void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NGrpc::IQueueClientContextPtr& describePartitionContext)
+void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext)
 {
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Got PartitionLocation response. Status " << status.GetStatus() << ", proto:\n" << proto.DebugString());
     TString endpoint, name;
@@ -382,7 +400,6 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
-// Client method.
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
@@ -398,7 +415,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
     }
     if (readyToAccept) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
 
@@ -407,6 +424,7 @@ void TWriteSessionImpl::Write(TContinuationToken&& token, TWriteMessage&& messag
     WriteInternal(std::move(token), std::move(message));
 }
 
+// Client method.
 void TWriteSessionImpl::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
 {
     WriteInternal(std::move(token), std::move(message));
@@ -425,12 +443,12 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::OnErrorImpl(NYdb::TPlainStat
 
 // No lock
 void TWriteSessionImpl::Connect(const TDuration& delay) {
-    NGrpc::IQueueClientContextPtr prevConnectContext;
-    NGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr prevConnectDelayContext;
-    NGrpc::IQueueClientContextPtr connectContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectDelayContext = nullptr;
-    NGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr prevConnectContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr prevConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr connectContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectDelayContext = nullptr;
+    NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
     TRpcRequestSettings reqSettings;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> connectionFactory;
 
@@ -511,7 +529,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 }
 
 // RPC callback.
-void TWriteSessionImpl::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+void TWriteSessionImpl::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
     LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session: connect timeout");
     THandleResult handleResult;
     with_lock (Lock) {
@@ -538,7 +556,7 @@ void TWriteSessionImpl::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& co
 
 // RPC callback.
 void TWriteSessionImpl::OnConnect(
-        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NGrpc::IQueueClientContextPtr& connectContext
+        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext
 ) {
     THandleResult handleResult;
     with_lock (Lock) {
@@ -618,7 +636,7 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
         return;
     }
     auto callback = [cbContext = SelfContext,
-                     connectionGeneration = ConnectionGeneration](NGrpc::TGrpcStatus&& grpcStatus) {
+                     connectionGeneration = ConnectionGeneration](NYdbGrpc::TGrpcStatus&& grpcStatus) {
         if (auto self = cbContext->LockShared()) {
             self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
         }
@@ -631,7 +649,7 @@ void TWriteSessionImpl::ReadFromProcessor() {
     Y_ASSERT(Processor);
     IProcessor::TPtr prc;
     ui64 generation;
-    std::function<void(NGrpc::TGrpcStatus&&)> callback;
+    std::function<void(NYdbGrpc::TGrpcStatus&&)> callback;
     with_lock(Lock) {
         if (Aborting) {
             return;
@@ -642,7 +660,7 @@ void TWriteSessionImpl::ReadFromProcessor() {
                     connectionGeneration = generation,
                     processor = prc,
                     serverMessage = ServerMessage]
-                    (NGrpc::TGrpcStatus&& grpcStatus) {
+                    (NYdbGrpc::TGrpcStatus&& grpcStatus) {
             if (auto self = cbContext->LockShared()) {
                 self->OnReadDone(std::move(grpcStatus), connectionGeneration);
             }
@@ -651,7 +669,7 @@ void TWriteSessionImpl::ReadFromProcessor() {
     prc->Read(ServerMessage.get(), std::move(callback));
 }
 
-void TWriteSessionImpl::OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration) {
+void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration) {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: OnWriteDone " << status.ToDebugString());
 
     THandleResult handleResult;
@@ -669,7 +687,7 @@ void TWriteSessionImpl::OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connecti
     ProcessHandleResult(handleResult);
 }
 
-void TWriteSessionImpl::OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
+void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: OnReadDone " << grpcStatus.ToDebugString());
 
     TPlainStatus errorStatus;
@@ -794,7 +812,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             OnErrorResolved();
 
             if (!FirstTokenSent) {
-                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
+                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 FirstTokenSent = true;
             }
             // Kickstart send after session reestablishment
@@ -846,7 +864,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 });
 
                 if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
-                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
+                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
             //EventsQueue->PushEvent(std::move(acksEvent));
@@ -986,7 +1004,7 @@ void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
         memoryUsage = OnCompressedImpl(std::move(block));
     }
     if (memoryUsage.NowOk && !memoryUsage.WasOk) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
 
@@ -1227,8 +1245,9 @@ void TWriteSessionImpl::SendImpl() {
 
 // Client method, no Lock
 bool TWriteSessionImpl::Close(TDuration closeTimeout) {
-    if (AtomicGet(Aborting))
+    if (AtomicGet(Aborting)) {
         return false;
+    }
     LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Write session: close. Timeout " << closeTimeout);
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;

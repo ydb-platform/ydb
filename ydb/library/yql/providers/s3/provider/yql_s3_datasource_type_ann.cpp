@@ -297,7 +297,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 2U, ctx)) {
+        if (!EnsureMinArgsCount(*input, 3U, ctx)) {
             return TStatus::Error;
         }
 
@@ -311,6 +311,10 @@ public:
             return TStatus::Error;
         }
 
+        if (!EnsureAtom(*input->Child(TS3SourceSettings::idx_RowsLimitHint), ctx)) {
+            return TStatus::Error;
+        }
+
         const TTypeAnnotationNode* itemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
         if (extraColumnsType->GetSize()) {
             itemType = ctx.MakeType<TTupleExprType>(
@@ -321,7 +325,7 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5U, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -333,6 +337,10 @@ public:
         if (!TCoSecureParam::Match(input->Child(TS3ParseSettings::idx_Token))) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ParseSettings::idx_Token)->Pos()),
                                 TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_RowsLimitHint), ctx)) {
             return TStatus::Error;
         }
 

@@ -106,18 +106,20 @@ private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
 
-#define DECLARE_HANDLER(type, handler, answer)          \
-        bool operator()(type& event) {                  \
-            if (Settings.EventHandlers_.handler) {      \
-                Settings.EventHandlers_.handler(event); \
-                return answer;                          \
-            }                                           \
-            return false;                               \
-        }                                               \
+#define DECLARE_HANDLER(type, handler, answer)                      \
+        bool operator()(type&) {                                    \
+            if (this->PushHandler<type>(                            \
+                std::move(TParent::TBaseHandlersVisitor::Event),    \
+                this->Settings.EventHandlers_.handler,              \
+                this->Settings.EventHandlers_.CommonHandler_)) {    \
+                return answer;                                      \
+            }                                                       \
+            return false;                                           \
+        }                                                           \
         /**/
 
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
-        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
+        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler_, true);
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
@@ -125,7 +127,6 @@ private:
         bool Visit() {
             return std::visit(*this, Event);
         }
-
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
@@ -158,7 +159,8 @@ namespace NTests {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
-class TWriteSessionImpl : public TEnableSelfContext<TWriteSessionImpl> {
+class TWriteSessionImpl : public TContinuationTokenIssuer,
+                          public TEnableSelfContext<TWriteSessionImpl> {
 private:
     friend class TWriteSession;
     friend class TSimpleBlockingWriteSession;
@@ -320,6 +322,10 @@ public:
 
     TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
 
+    const TWriteSessionSettings& GetSettings() const {
+        return Settings;
+    }
+
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
 
 private:
@@ -339,16 +345,16 @@ private:
     void DoCdsRequest(TDuration delay = TDuration::Zero());
     void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-            const NGrpc::IQueueClientContextPtr& connectContext);
-    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
+            const NYdbGrpc::IQueueClientContextPtr& connectContext);
+    void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
     void DoConnect(const TDuration& delay, const TString& endpoint);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
-    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     void CompressImpl(TBlock&& block);
@@ -391,10 +397,10 @@ private:
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
-    NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
-    NGrpc::IQueueClientContextPtr ConnectContext;
-    NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr ConnectDelayContext;
+    NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
+    NYdbGrpc::IQueueClientContextPtr ConnectContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectTimeoutContext;
+    NYdbGrpc::IQueueClientContextPtr ConnectDelayContext;
     size_t ConnectionGeneration = 0;
     size_t ConnectionAttemptsDone = 0;
     TAdaptiveLock Lock;

@@ -114,7 +114,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
-    ydb/core/tx/ev_write
+    ydb/core/tx/data_events
     ydb/core/ydb_convert
     ydb/core/security
     ydb/library/aclib
@@ -124,6 +124,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/types
+    ydb/library/yql/public/issue
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos

@@ -17,7 +17,7 @@
 
 #include <ydb/public/lib/operation_id/protos/operation_id.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 namespace NGRpcService {

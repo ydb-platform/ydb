@@ -106,6 +106,12 @@ Y_UNIT_TEST(CollectTaskRunnerStatisticsByStage) {
                 }
             }
         };
+        "Source" = {
+            "total" = {}
+        };
+        "Sink" = {
+            "total" = {}
+        };
         "Task" = {
             "total" = {
                 "Counter3" = {

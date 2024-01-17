@@ -8,14 +8,15 @@ LICENSE(
     BSD-2-Clause AND
     BSL-1.0 AND
     MIT AND
-    NCSA
+    NCSA AND
+    Unicode
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022-06-18)
+VERSION(2022-07-22)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/3766992291fde4b7f5d1ba45be9969e6ad5c6cf1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/1d057a6d43060eaf6c679e0593a43f99ecd70987.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include

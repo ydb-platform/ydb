@@ -20,8 +20,9 @@ public:
     void HandleRequest(const IRequestPtr& /*req*/, const IResponseWriterPtr& rsp) override
     {
         try {
+            static const auto queue = New<TActionQueue>("BacktraceIntro");
             auto dumpFuture = BIND(&THandlerBase::Dump, MakeStrong(this))
-                .AsyncVia(Queue_->GetInvoker())
+                .AsyncVia(queue->GetInvoker())
                 .Run();
 
             auto dump = WaitFor(dumpFuture)
@@ -41,9 +42,6 @@ public:
             throw;
         }
     }
-
-private:
-    static inline const TActionQueuePtr Queue_ = New<TActionQueue>("BacktraceIntro");
 
 protected:
     virtual TString Dump() = 0;

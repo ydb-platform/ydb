@@ -128,9 +128,9 @@ private:
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
@@ -154,6 +154,12 @@ private:
     TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "AlterGroup is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
+    TStatus HandleRenameGroup(TKiRenameGroup node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "RenameGroup is not yet implemented for intent determination transformer"));
         return TStatus::Error;
     }
 
@@ -340,6 +346,13 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleReturningList(TKiReturningList node, TExprContext& ctx) override {
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+
+        return TStatus::Ok;
+    }
+
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
@@ -466,6 +479,7 @@ public:
             || node.IsCallable(TKiDropUser::CallableName())
             || node.IsCallable(TKiCreateGroup::CallableName())
             || node.IsCallable(TKiAlterGroup::CallableName())
+            || node.IsCallable(TKiRenameGroup::CallableName())
             || node.IsCallable(TKiDropGroup::CallableName())
             || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
@@ -619,14 +633,22 @@ public:
                 }
 
                 auto returningColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                auto returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
                 TVector<TExprBase> columnsToReturn;
                 for (const auto item : settings.ReturningList.Cast()) {
                     auto pgResultNode = item.Cast<TCoPgResultItem>();
                     const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
                     if (value.empty()) {
-                        returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("true").Done();
+                        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+
+                        auto dataSinkNode = node->Child(1);
+                        TKiDataSink dataSink(dataSinkNode);
+                        auto table = SessionCtx->Tables().EnsureTableExists(
+                            TString(dataSink.Cluster()),
+                            key.GetTablePath(), node->Pos(), ctx);
+
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled);
+
                         break;
                     } else {
                         auto atom = Build<TCoAtom>(ctx, node->Pos())
@@ -654,7 +676,6 @@ public:
                             .Filter(settings.Filter.Cast())
                             .Update(settings.Update.Cast())
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     } else {
@@ -669,7 +690,6 @@ public:
                             .Build()
                             .Settings(settings.Other)
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -694,7 +714,6 @@ public:
                             .Build()
                             .Settings(settings.Other)
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -707,7 +726,6 @@ public:
                         .Mode(mode)
                         .Settings(settings.Other)
                         .ReturningColumns(returningColumns)
-                        .ReturningStar(returningStar)
                         .Done()
                         .Ptr();
                 }
@@ -738,14 +756,6 @@ public:
                         settings.PartitionBy = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
-                    if (!settings.NotNullColumns.IsValid()) {
-                        settings.NotNullColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                    }
-
-                    if (!settings.SerialColumns.IsValid()) {
-                        settings.SerialColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                    }
-
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
@@ -759,14 +769,11 @@ public:
                         .Temporary(temporary)
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
-                        .NotNullColumns(settings.NotNullColumns.Cast())
-                        .SerialColumns(settings.SerialColumns.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
-                        .ColumnsDefaultValues(settings.ColumnsDefaultValues.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
                         .ExistingOk<TCoAtom>()
@@ -794,7 +801,7 @@ public:
                         .Done()
                         .Ptr();
 
-                 } else if (mode == "drop" || mode == "drop_if_exists") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
@@ -860,13 +867,16 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "createObject") {
+                } else if (mode == "createObject" || mode == "createObjectIfNotExists") {
                     return Build<TKiCreateObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .ExistingOk<TCoAtom>()
+                            .Value(mode == "createObjectIfNotExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alterObject") {
@@ -878,13 +888,16 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "dropObject") {
+                } else if (mode == "dropObject" || mode == "dropObjectIfExists") {
                     return Build<TKiDropObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropObjectIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else {
@@ -914,12 +927,15 @@ public:
                         .Settings(settings.Other)
                         .Done()
                         .Ptr();
-                } else if (mode == "dropUser") {
+                } else if (mode == "dropUser" || mode == "dropUserIfExists") {
                     return Build<TKiDropUser>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .UserName().Build(key.GetRoleName())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropUserIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "createGroup") {
@@ -927,6 +943,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .GroupName().Build(key.GetRoleName())
+                        .Roles(settings.Roles.Cast())
                         .Done()
                         .Ptr();
                 } else if (mode == "addUsersToGroup" || mode == "dropUsersFromGroup") {
@@ -938,12 +955,23 @@ public:
                         .Roles(settings.Roles.Cast())
                         .Done()
                         .Ptr();
-                } else if (mode == "dropGroup") {
+                } else if (mode == "renameGroup") {
+                    return Build<TKiRenameGroup>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .GroupName().Build(key.GetRoleName())
+                        .NewName(settings.NewName.Cast())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "dropGroup" || mode == "dropGroupIfExists") {
                     return Build<TKiDropGroup>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .GroupName().Build(key.GetRoleName())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "dropGroupIfExists")
+                        .Build()
                         .Done()
                         .Ptr();
                 } else {
@@ -962,7 +990,7 @@ public:
                         .DataSink(node->Child(1))
                         .Action().Build(mode)
                         .Permissions(settings.Permissions.Cast())
-                        .Pathes(settings.Pathes.Cast())
+                        .Paths(settings.Paths.Cast())
                         .Roles(settings.RoleNames.Cast())
                         .Done()
                         .Ptr();
@@ -1114,6 +1142,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleAlterGroup(node.Cast(), ctx);
     }
 
+    if (auto node = TMaybeNode<TKiRenameGroup>(input)) {
+        return HandleRenameGroup(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiDropGroup>(input)) {
         return HandleDropGroup(node.Cast(), ctx);
     }
@@ -1144,6 +1176,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiEffects>()) {
         return HandleEffects(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiReturningList>()) {
+        return HandleReturningList(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

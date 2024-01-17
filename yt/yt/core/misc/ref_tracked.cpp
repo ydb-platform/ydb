@@ -1,5 +1,6 @@
-#include "ref_tracked.h"
 #include "ref_counted_tracker.h"
+
+#include <library/cpp/yt/memory/ref_tracked.h>
 
 namespace NYT {
 

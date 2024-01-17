@@ -58,8 +58,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(
                 return gateway->OpenSession(sessionId, username);
             };
 
-            info.CloseSession = [gateway](const TString& sessionId) {
-                gateway->CloseSession(sessionId);
+            info.CloseSessionAsync = [gateway](const TString& sessionId) {
+                return gateway->CloseSession(sessionId);
             };
 
             return info;

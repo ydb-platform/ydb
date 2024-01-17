@@ -72,7 +72,10 @@ def main(opts, props_args):
         extract_zip_file(opts.sources_jar_path, sources_dir)
     if opts.gcov_report_path:
         collect_cpp_sources(opts.gcov_report_path, opts.source_root, sources_dir)
-        base_props_args += ['-Dsonar.projectBaseDir=' + sources_dir, '-Dsonar.cxx.coverage.reportPath=' + opts.gcov_report_path]
+        base_props_args += [
+            '-Dsonar.projectBaseDir=' + sources_dir,
+            '-Dsonar.cxx.coverage.reportPath=' + opts.gcov_report_path,
+        ]
 
     if opts.classes_jar_paths:
         classes_dir = os.path.abspath('cls')
@@ -92,18 +95,25 @@ def main(opts, props_args):
                     if extracted is not None:
                         shutil.copyfileobj(extracted, dest)
 
-        base_props_args += [
-            '-Dsonar.core.codeCoveragePlugin=jacoco',
-            '-Dsonar.jacoco.reportPath=' + jacoco_report_path
-        ]
-    java_args = ['-{}'.format(i) for i in opts.java_args] + ['-Djava.net.preferIPv6Addresses=true', '-Djava.net.preferIPv4Addresses=false']
+        base_props_args += ['-Dsonar.core.codeCoveragePlugin=jacoco', '-Dsonar.jacoco.reportPath=' + jacoco_report_path]
+    java_args = ['-{}'.format(i) for i in opts.java_args] + [
+        '-Djava.net.preferIPv6Addresses=true',
+        '-Djava.net.preferIPv4Addresses=false',
+    ]
 
-    sonar_cmd = [
-        opts.java_binary_path,
-    ] + java_args + [
-        '-classpath',
-        opts.sonar_scanner_jar_path,
-    ] + base_props_args + props_args + [opts.sonar_scanner_main_class, '-X']
+    sonar_cmd = (
+        [
+            opts.java_binary_path,
+        ]
+        + java_args
+        + [
+            '-classpath',
+            opts.sonar_scanner_jar_path,
+        ]
+        + base_props_args
+        + props_args
+        + [opts.sonar_scanner_main_class, '-X']
+    )
 
     p = sp.Popen(sonar_cmd, stdout=sp.PIPE, stderr=sp.STDOUT)
     out, _ = p.communicate()

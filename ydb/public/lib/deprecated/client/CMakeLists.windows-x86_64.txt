@@ -11,7 +11,7 @@ add_library(lib-deprecated-client)
 target_link_libraries(lib-deprecated-client PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
+  library-grpc-client
   library-cpp-messagebus
   public-lib-base
 )

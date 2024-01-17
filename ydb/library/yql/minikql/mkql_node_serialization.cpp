@@ -1242,22 +1242,22 @@ namespace {
         }
 
         TNode* ReadTypeType() {
-            auto node = Env.GetTypeOfType();
+            auto node = Env.GetTypeOfTypeLazy();
             return node;
         }
 
         TNode* ReadVoidOrEmptyListOrEmptyDictType(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
-            case TType::EKind::Void: return Env.GetTypeOfVoid();
-            case TType::EKind::EmptyList: return Env.GetTypeOfEmptyList();
-            case TType::EKind::EmptyDict: return Env.GetTypeOfEmptyDict();
+            case TType::EKind::Void: return Env.GetTypeOfVoidLazy();
+            case TType::EKind::EmptyList: return Env.GetTypeOfEmptyListLazy();
+            case TType::EKind::EmptyDict: return Env.GetTypeOfEmptyDictLazy();
             default:
                 ThrowCorrupted();
             }
         }
 
         TNode* ReadNullType() {
-            auto node = Env.GetTypeOfNull();
+            auto node = Env.GetTypeOfNullLazy();
             return node;
         }
 
@@ -1507,7 +1507,7 @@ namespace {
         }
 
         TNode* ReadAnyType() {
-            auto node = Env.GetAnyType();
+            auto node = Env.GetAnyTypeLazy();
             return node;
         }
 
@@ -1595,16 +1595,16 @@ namespace {
 
         TNode* ReadVoid(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
-            case TType::EKind::Void: return Env.GetVoid();
-            case TType::EKind::EmptyList: return Env.GetEmptyList();
-            case TType::EKind::EmptyDict: return Env.GetEmptyDict();
+            case TType::EKind::Void: return Env.GetVoidLazy();
+            case TType::EKind::EmptyList: return Env.GetEmptyListLazy();
+            case TType::EKind::EmptyDict: return Env.GetEmptyDictLazy();
             default:
                 ThrowCorrupted();
             }
         }
 
         TNode* ReadNull() {
-            auto node = Env.GetNull();
+            auto node = Env.GetNullLazy();
             return node;
         }
 

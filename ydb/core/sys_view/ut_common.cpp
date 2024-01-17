@@ -51,7 +51,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
         Settings->AddStoragePool(poolName, TString("/Root:") + poolName, 2);
     }
 
-    Settings->AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(!disableSources);
+    Settings->AppConfig->MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(!disableSources);
+    Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

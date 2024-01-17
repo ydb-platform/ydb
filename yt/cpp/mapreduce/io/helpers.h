@@ -33,6 +33,16 @@ struct TIOOptionsTraits<TTableWriterOptions>
 };
 
 template <class TOptions>
+TNode FormIORequestParameters(const TOptions& options)
+{
+    TNode params = TNode::CreateMap();
+    if (options.Config_) {
+        params[TIOOptionsTraits<TOptions>::ConfigName] = *options.Config_;
+    }
+    return params;
+}
+
+template <class TOptions>
 TNode FormIORequestParameters(
     const TRichYPath& path,
     const TOptions& options)

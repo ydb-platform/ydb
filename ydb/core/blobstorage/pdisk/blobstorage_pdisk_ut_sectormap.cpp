@@ -22,10 +22,10 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
         auto deviceType = NPDisk::NSectorMap::DiskModeToDeviceType(diskMode);
         ui64 diskRate;
         if (testRead) {
-            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec : 
+            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec :
                 NPDisk::DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
         } else {
-            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec : 
+            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec :
                 NPDisk::DevicePerformance.at(deviceType).LastSectorWriteBytesPerSec;
         }
 
@@ -68,8 +68,8 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
         using EDiskMode = NPDisk::NSectorMap::EDiskMode;
         auto test = [&](EDiskMode diskMode, ui32 diskSizeGb, ui32 dataSizeMb, bool toFirstSector, bool testRead, ui32 tries) {
             if (!TestSectorMapPerformance(diskMode, diskSizeGb, dataSizeMb, toFirstSector, testRead, tries, 0.1, &time)) {
-                failedTests.push_back(TStringBuilder() << diskSizeGb << "GB " << NPDisk::NSectorMap::DiskModeToString(diskMode) <<    
-                        (testRead ? " read " : " write ") << dataSizeMb << " MB to" << (toFirstSector ? " first " : " last ") << 
+                failedTests.push_back(TStringBuilder() << diskSizeGb << "GB " << NPDisk::NSectorMap::DiskModeToString(diskMode) <<
+                        (testRead ? " read " : " write ") << dataSizeMb << " MB to" << (toFirstSector ? " first " : " last ") <<
                         "sector, timeExpected=" << time.first << ", timeAverage=" << time.second);
             }
         };

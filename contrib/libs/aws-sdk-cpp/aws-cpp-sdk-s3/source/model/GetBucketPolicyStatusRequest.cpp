@@ -63,3 +63,13 @@ Aws::Http::HeaderValueCollection GetBucketPolicyStatusRequest::GetRequestSpecifi
 
   return headers;
 }
+
+GetBucketPolicyStatusRequest::EndpointParameters GetBucketPolicyStatusRequest::GetEndpointContextParams() const
+{
+    EndpointParameters parameters;
+    // Operation context parameters
+    if (BucketHasBeenSet()) {
+        parameters.emplace_back(Aws::String("Bucket"), this->GetBucket(), Aws::Endpoint::EndpointParameter::ParameterOrigin::OPERATION_CONTEXT);
+    }
+    return parameters;
+}

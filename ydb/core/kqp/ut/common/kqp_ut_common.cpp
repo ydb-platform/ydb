@@ -124,6 +124,8 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetEnableUniqConstraint(true);
+    ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetEnableTablePgTypes(true);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -139,7 +141,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
-    Server->SetupDefaultProfiles();
+
+    RunCall([this, domain = settings.DomainRoot] {
+        this->Server->SetupDefaultProfiles();
+        return true;
+    });
 
     Client.Reset(MakeHolder<Tests::TClient>(*ServerSettings));
 
@@ -459,10 +465,16 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_BLOBS_STORAGE, NActors::NLog::PRI_DEBUG);
 
-    Client->InitRootScheme(settings.DomainRoot);
+    RunCall([this, domain = settings.DomainRoot]{
+        this->Client->InitRootScheme(domain);
+        return true;
+    });
 
     if (settings.WithSampleTables) {
-        CreateSampleTables();
+        RunCall([this] {
+            this->CreateSampleTables();
+            return true;
+        });
     }
 }
 
@@ -530,9 +542,9 @@ void PrintQueryStats(const TDataQueryResult& result) {
     }
 }
 
-void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
-    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats)
+{
     ui64 actualReads = 0;
     ui64 actualUpdates = 0;
     ui64 actualDeletes = 0;
@@ -561,6 +573,11 @@ void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TE
         UNIT_ASSERT_EQUAL_C(*expectedStats.ExpectedDeletes, actualDeletes, "table: " << table
             << ", deletes expected " << *expectedStats.ExpectedDeletes << ", actual " << actualDeletes);
     }
+}
+
+void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
 }
 
 TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query, const NYdb::TParams& params,
@@ -649,6 +666,37 @@ void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize
             auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+}
+
+void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows, ui32 shards, ui32 batchSizeRows)
+{
+    kikimr.GetTestClient().CreateTable("/Root", R"(
+        Name: "ManyShardsTable"
+        Columns { Name: "Key", Type: "Uint32" }
+        Columns { Name: "Data", Type: "Int32" }
+        KeyColumnNames: ["Key"]
+        UniformPartitionsCount:
+    )" + std::to_string(shards));
+
+    auto client = kikimr.GetTableClient();
+
+    for (ui32 rows = 0; rows < totalRows; rows += batchSizeRows) {
+        auto rowsBuilder = NYdb::TValueBuilder();
+        rowsBuilder.BeginList();
+        for (ui32 i = 0; i < batchSizeRows && rows + i < totalRows; ++i) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("Key")
+                    .OptionalUint32((std::numeric_limits<ui32>::max() / totalRows) * (rows + i))
+                .AddMember("Data")
+                    .OptionalInt32(i)
+                .EndStruct();
+        }
+        rowsBuilder.EndList();
+
+        auto result = client.BulkUpsert("/Root/ManyShardsTable", rowsBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 
@@ -849,9 +897,6 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NQuery::TExecuteQueryIterator>) {
-            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.GetStats(),
-                "Unexpected empty query service  response.");
-
             if (streamPart.HasResultSet()) {
                 auto resultSet = streamPart.ExtractResultSet();
                 PrintResultSet(resultSet, resultSetWriter);

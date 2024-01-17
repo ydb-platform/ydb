@@ -7,9 +7,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
-#include <library/cpp/actors/core/actor.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
@@ -480,7 +480,7 @@ public:
         }
 
         auto info = entry.DomainInfo;
-        if (info->DomainKey != info->ResourcesDomainKey) {
+        if (NeedResolveResources(info)) {
             DLOG_D("Resolve resources domain"
                 << ": domain key# " << info->DomainKey
                 << ", resources domain key# " << info->ResourcesDomainKey);
@@ -492,6 +492,21 @@ public:
         }
 
         MaybeReply();
+    }
+
+    static bool NeedResolveResources(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) {
+        if (!domainInfo->IsServerless()) {
+            return false;
+        }
+
+        switch (domainInfo->ServerlessComputeResourcesMode) {
+            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
+                return false;
+            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+                return true;
+            default:
+                return true;
+        } 
     }
 
     void MaybeReply() {

@@ -1,7 +1,7 @@
 import json
 import os
 import ymake
-from _common import strip_roots, resolve_common_const
+from _common import resolve_common_const
 
 PLACEHOLDER_EXT = "external"
 
@@ -35,7 +35,9 @@ def onlarge_files(unit, *args):
             external = "{}.{}".format(arg, PLACEHOLDER_EXT)
             rel_placeholder = resolve_common_const(unit.resolve_arc_path(external))
             if not rel_placeholder.startswith("$S"):
-                ymake.report_configure_error('LARGE_FILES: neither actual data nor placeholder is found for "{}"'.format(arg))
+                ymake.report_configure_error(
+                    'LARGE_FILES: neither actual data nor placeholder is found for "{}"'.format(arg)
+                )
                 return
             try:
                 abs_placeholder = unit.resolve(rel_placeholder)
@@ -43,8 +45,10 @@ def onlarge_files(unit, *args):
                     res_desc = json.load(f)
                     storage = res_desc["storage"]
                     res_id = res_desc["resource_id"]
-            except e:
-                ymake.report_configure_error('LARGE_FILES: error processing placeholder file "{}.": {}'.format(external, e))
+            except Exception as e:
+                ymake.report_configure_error(
+                    'LARGE_FILES: error processing placeholder file "{}.": {}'.format(external, e)
+                )
                 return
 
             from_cmd = ['FILE', '{}'.format(res_id), 'OUT_NOAUTO', arg, 'EXTERNAL_FILE', external]
@@ -55,4 +59,8 @@ def onlarge_files(unit, *args):
             if method:
                 method(from_cmd)
             else:
-                ymake.report_configure_error('LARGE_FILES: error processing placeholder file "{}.": unknown storage kind "{}"'.format(external, storage))
+                ymake.report_configure_error(
+                    'LARGE_FILES: error processing placeholder file "{}.": unknown storage kind "{}"'.format(
+                        external, storage
+                    )
+                )

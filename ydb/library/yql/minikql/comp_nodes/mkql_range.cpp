@@ -63,8 +63,8 @@ TRangeTypeInfo ExtractTypes(TType* rangeType) {
         auto type = rangeBoundaryTupleType->GetElementType(i);
         if (i % 2 == 1) {
             auto baseType = RemoveAllOptionals(type);
-            MKQL_ENSURE(type->IsOptional() && baseType->IsData(),
-                "Expecting (multiple) optional of Data at odd positions of range boundary tuple");
+            MKQL_ENSURE(type->IsOptional() && (baseType->IsData() || baseType->IsPg()),
+                "Expecting (multiple) optional of Data or Pg at odd positions of range boundary tuple");
         } else {
             MKQL_ENSURE(type->IsData() && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<i32>::Id,
                 "Expected i32 at even positions of range boundary tuple");
@@ -184,9 +184,8 @@ bool CanConvertToPointRange(const TExpandedRange& range, const TRangeTypeInfo& t
 
     // check for suitable type
     TType* baseType = RemoveAllOptionals(static_cast<TTupleType*>(typeInfo.BoundaryType)->GetElementType(lastCompIdx));
-    auto slot = static_cast<TDataType*>(baseType)->GetDataSlot();
-    Y_ENSURE(slot);
-    if (!(GetDataTypeInfo(*slot).Features & (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType))) {
+    auto slot = baseType->IsData() ? static_cast<TDataType*>(baseType)->GetDataSlot() : TMaybe<EDataSlot>{};
+    if (!slot || !(GetDataTypeInfo(*slot).Features & (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType))) {
         return false;
     }
 
@@ -498,10 +497,15 @@ public:
         }
         for (size_t i = 1; i < expandedLists.size(); ++i) {
             if (expandedLists[i].empty()) {
-                return ctx.HolderFactory.GetEmptyContainer();
+                return ctx.HolderFactory.GetEmptyContainerLazy();
             }
             if (!DoMultiply(ctx, limit, current, expandedLists[i], currentComponentsCompare, TypeInfos[i])) {
-                return FullRange(ctx);
+                if (i > 0) {
+                    PadInfs(ctx, current, i);
+                    break;
+                } else {
+                    return FullRange(ctx);
+                }
             }
         }
 
@@ -516,6 +520,24 @@ private:
     void RegisterDependencies() const final {
         DependsOn(Limit);
         std::for_each(Lists.cbegin(), Lists.cend(), std::bind(&TRangeMultiplyWrapper::DependsOn, this, std::placeholders::_1));
+    }
+
+    void PadInfs(TComputationContext& ctx, TUnboxedValueQueue& current, size_t currentPrefix) const {
+        size_t extraColumns = 0;
+        for (size_t i = 0; i < TypeInfos.size(); ++i) {
+            const auto& ti = TypeInfos[i];
+            Y_ENSURE(ti.Components.size() % 2 == 1);
+            if (currentPrefix <= i) {
+                extraColumns += (ti.Components.size() - 1) / 2;
+            }
+        }
+
+        TUnboxedValueQueue result;
+        for (const auto& c : current) {
+            auto curr = ExpandRange(c);
+            result.push_back(AppendInfs(ctx, curr, extraColumns));
+        }
+        std::swap(current, result);
     }
 
     bool DoMultiply(TComputationContext& ctx, ui64 limit, TUnboxedValueQueue& current, const TUnboxedValueQueue& next,

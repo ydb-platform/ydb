@@ -1,0 +1,10 @@
+--- unicode.out	(645054971474b440c91194f741c40b6d7be0b93d)
++++ unicode.out	(8a1083b9b852a7dbb540208bd92787ee92f311f7)
+@@ -1,7 +1,3 @@
+-SELECT getdatabaseencoding() <> 'UTF8' AS skip_test \gset
+-\if :skip_test
+-\quit
+-\endif
+ SELECT U&'\0061\0308bc' <> U&'\00E4bc' COLLATE "C" AS sanity_check;
+  sanity_check 
+ --------------

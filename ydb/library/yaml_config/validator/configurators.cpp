@@ -6,9 +6,7 @@
 #include <util/string/split.h>
 #include <util/generic/hash.h>
 
-using namespace NYamlConfig::NValidator;
-
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 namespace Configurators {
 
 std::function<void(TInt64Builder&)> nonNegative() {
@@ -84,4 +82,4 @@ TNodeWrapper walkFrom(TNodeWrapper node, const TVector<TString>& pathTokens) {
     return node;
 }
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

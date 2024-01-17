@@ -24,9 +24,9 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/schlab/mon/mon.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/actors/core/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/mon.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
@@ -648,7 +648,7 @@ public:
         }
         str << " StateErrorReason# " << StateErrorReason;
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
-        for (auto &log : evMultiLog.Logs) {
+        for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
         PDisk->Mon.WriteLog.CountRequest(0);
@@ -679,8 +679,10 @@ public:
         const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountRequest(0);
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountResponse();
-        Send(ev->Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED,
-            evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason));
+        auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::CORRUPTED,
+            evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, StateErrorReason);
+        res->Orbit = std::move(ev->Get()->Orbit);
+        Send(ev->Sender, res.release());
     }
 
     void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
@@ -781,9 +783,9 @@ public:
     }
 
     void Handle(NPDisk::TEvMultiLog::TPtr &ev) {
-        for (auto &log : ev->Get()->Logs) {
+        for (auto &[log, traceId] : ev->Get()->Logs) {
             double burstMs;
-            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(ev->TraceId));
+            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(traceId));
             CheckBurst(request->IsSensitive, burstMs);
             request->Orbit = std::move(log->Orbit);
             PDisk->InputRequest(request);
@@ -794,7 +796,7 @@ public:
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Marker# BSY01",
             (ui32)PDisk->PDiskId, ev->Get()->ToString().c_str());
         double burstMs;
-        auto* request = PDisk->ReqCreator.CreateFromEv<TLogRead>(*ev->Get(), ev->Sender, &burstMs);
+        auto* request = PDisk->ReqCreator.CreateFromEvPtr<TLogRead>(ev, &burstMs);
         CheckBurst(request->IsSensitive, burstMs);
         PDisk->InputRequest(request);
     }
@@ -802,6 +804,7 @@ public:
     void Handle(NPDisk::TEvChunkWrite::TPtr &ev) {
         double burstMs;
         TChunkWrite* request = PDisk->ReqCreator.CreateChunkWrite(*ev->Get(), ev->Sender, burstMs, std::move(ev->TraceId));
+        request->Orbit = std::move(ev->Get()->Orbit);
         CheckBurst(request->IsSensitive, burstMs);
         PDisk->InputRequest(request);
     }
@@ -871,7 +874,7 @@ public:
     }
 
     void Handle(NPDisk::TEvAskForCutLog::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TAskForCutLog>(*ev->Get(), ev->Sender);
+        auto* request = PDisk->ReqCreator.CreateFromEvPtr<TAskForCutLog>(ev);
         PDisk->InputRequest(request);
     }
 
@@ -1132,7 +1135,7 @@ public:
     }
 
     void Handle(NPDisk::TEvReadLogContinue::TPtr &ev) {
-        auto *request = PDisk->ReqCreator.CreateFromEv<TLogReadContinue>(*ev->Get(), SelfId());
+        auto *request = PDisk->ReqCreator.CreateFromEvPtr<TLogReadContinue>(ev);
         PDisk->InputRequest(request);
     }
 

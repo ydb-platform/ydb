@@ -2,10 +2,10 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/lz4
-    library/cpp/actors/core
-    library/cpp/actors/protos
-    library/cpp/actors/util
-    library/cpp/actors/wilson
+    ydb/library/actors/core
+    ydb/library/actors/protos
+    ydb/library/actors/util
+    ydb/library/actors/wilson
     library/cpp/containers/stack_vector
     library/cpp/deprecated/atomic
     library/cpp/lwtrace

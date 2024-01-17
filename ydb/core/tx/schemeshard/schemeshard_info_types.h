@@ -302,9 +302,11 @@ private:
 struct TAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
+    THashMap<TPathId, TPartitionStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;
@@ -527,6 +529,7 @@ public:
         NKikimrSchemeOp::TTableDescription& descr,
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
+        bool pgTypesEnabled,
         TString& errStr, const THashSet<TString>& localSequences = {});
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
@@ -1000,10 +1003,14 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         return Stats;
     }
 
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
         Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
+    }
+
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.UpdateTableStats(pathId, newStats);
     }
 };
 
@@ -1575,6 +1582,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
     }
 
+    TTabletId GetTenantGraphShardID() const {
+        if (!ProcessingParams.HasGraphShard()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetGraphShard());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1952,6 +1966,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (statisticsAggregators.size()) {
             ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
         }
+
+        ProcessingParams.ClearGraphShard();
+        TVector<TTabletId> graphs = FilterPrivateTablets(ETabletType::GraphShard, allShards);
+        Y_VERIFY_S(graphs.size() <= 1, "size was: " << graphs.size());
+        if (graphs.size()) {
+            ProcessingParams.SetGraphShard(ui64(graphs.front()));
+        }
     }
 
     void InitializeAsGlobal(NKikimrSubDomains::TProcessingParams&& processingParams) {
@@ -2133,6 +2154,15 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void ApplyAuditSettings(const TMaybeAuditSettings& diff);
 
+    const TMaybeServerlessComputeResourcesMode& GetServerlessComputeResourcesMode() const {
+        return ServerlessComputeResourcesMode;
+    }
+
+    void SetServerlessComputeResourcesMode(EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
+        Y_ABORT_UNLESS(serverlessComputeResourcesMode, "Can't set ServerlessComputeResourcesMode to unspecified");
+        ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2162,7 +2192,8 @@ private:
 
     TPathId ResourcesDomainId;
     TTabletId SharedHive = InvalidTabletId;
-
+    TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    
     NLoginProto::TSecurityState SecurityState;
     ui64 SecurityStateVersion = 0;
 
@@ -3340,6 +3371,13 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
     NKikimrSchemeOp::TAuth Auth;
     NKikimrSchemeOp::TExternalTableReferences ExternalTableReferences;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+};
+
+struct TViewInfo : TSimpleRefCount<TViewInfo> {
+    using TPtr = TIntrusivePtr<TViewInfo>;
+
+    ui64 AlterVersion = 0;
+    TString QueryText;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

@@ -2,7 +2,7 @@
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
-#include <library/cpp/actors/prof/tag.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>

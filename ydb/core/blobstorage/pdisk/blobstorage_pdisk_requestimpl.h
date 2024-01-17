@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/library/schlab/schine/job_kind.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/utility.h>
 #include <util/generic/ptr.h>
@@ -54,11 +55,11 @@ public:
     NHPTimer::STime ScheduleTime = 0;
 
     // Tracing
-    mutable NWilson::TTraceId TraceId;
+    mutable NWilson::TSpan Span;
     mutable NLWTrace::TOrbit Orbit;
 public:
     TRequestBase(const TActorId &sender, TReqId reqId, TOwner owner, TOwnerRound ownerRound, ui8 priorityClass,
-            NWilson::TTraceId traceId = {})
+            NWilson::TSpan span = {})
         : Sender(sender)
         , ReqId(reqId)
         , Owner(owner)
@@ -66,8 +67,10 @@ public:
         , PriorityClass(priorityClass)
         , OwnerGroupType(EOwnerGroupType::Dynamic)
         , CreationTime(HPNow())
-        , TraceId(std::move(traceId))
-    {}
+        , Span(std::move(span))
+    {
+        Span.EnableAutoEnd();
+    }
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
         OwnerGroupType = (isStaticGroupOwner ? EOwnerGroupType::Static : EOwnerGroupType::Dynamic);
@@ -177,11 +180,14 @@ public:
     TLogPosition Position;
     ui64 SizeLimit;
 
-    TLogRead(const NPDisk::TEvReadLog &ev, const TActorId &sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::LogRead, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::LogRead)
-        , Position(ev.Position)
-        , SizeLimit(ev.SizeLimit)
-    {}
+    TLogRead(const NPDisk::TEvReadLog::TPtr &ev, TAtomicBase reqIdx)
+        : TRequestBase(ev->Sender, TReqId(TReqId::LogRead, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::LogRead,
+                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogRead"))
+        , Position(ev->Get()->Position)
+        , SizeLimit(ev->Get()->SizeLimit)
+    {
+        Span.Attribute("size_limit", static_cast<i64>(ev->Get()->SizeLimit));
+    }
 
     ERequestType GetType() const override {
         return ERequestType::RequestLogRead;
@@ -199,14 +205,18 @@ public:
     TCompletionAction *CompletionAction;
     TReqId ReqId;
 
-    TLogReadContinue(const NPDisk::TEvReadLogContinue &ev, const TActorId &sender, TAtomicBase /*reqIdx*/)
-        : TRequestBase(sender, ev.ReqId, 0, 0, NPriInternal::LogRead)
-        , Data(ev.Data)
-        , Size(ev.Size)
-        , Offset(ev.Offset)
-        , CompletionAction(ev.CompletionAction)
-        , ReqId(ev.ReqId)
-    {}
+    TLogReadContinue(const NPDisk::TEvReadLogContinue::TPtr &ev, TAtomicBase /*reqIdx*/)
+        : TRequestBase(ev->Sender, ev->Get()->ReqId, 0, 0, NPriInternal::LogRead,
+                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.LogReadContinue"))
+        , Data(ev->Get()->Data)
+        , Size(ev->Get()->Size)
+        , Offset(ev->Get()->Offset)
+        , CompletionAction(ev->Get()->CompletionAction)
+        , ReqId(ev->Get()->ReqId)
+    {
+        Span.Attribute("size", ev->Get()->Size)
+            .Attribute("offset", static_cast<i64>(ev->Get()->Offset));
+    }
 
     ERequestType GetType() const override {
         return ERequestType::RequestLogReadContinue;
@@ -222,7 +232,6 @@ public:
 
     TLogReadResultProcess(NPDisk::TEvReadLogResult::TPtr &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::LogReadResultProcess, reqIdx), 0, 0, NPriInternal::LogRead)
-
         , ReadLogResult(std::move(ev))
     {}
 
@@ -274,8 +283,8 @@ public:
     THolder<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
 
-    TLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, ui32 estimatedChunkIdx, TReqId reqId, NWilson::TTraceId traceId)
-        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, NPriInternal::LogWrite, std::move(traceId))
+    TLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, ui32 estimatedChunkIdx, TReqId reqId, NWilson::TSpan span)
+        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, NPriInternal::LogWrite, std::move(span))
         , Signature(ev.Signature)
         , EstimatedChunkIdx(estimatedChunkIdx)
         , Data(ev.Data)
@@ -368,8 +377,8 @@ public:
 
     std::function<TString()> DebugInfoGenerator;
 
-    TChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, TReqId reqId, NWilson::TTraceId traceId)
-        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(traceId))
+    TChunkRead(const NPDisk::TEvChunkRead &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
+        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
         , ChunkIdx(ev.ChunkIdx)
         , Offset(ev.Offset)
         , Size(ev.Size)
@@ -433,7 +442,7 @@ public:
     // scheduler and drop owning when poped from scheduler
     TIntrusivePtr<TChunkReadPiece> SelfPointer;
 
-    TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, bool isTheLastPiece);
+    TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, bool isTheLastPiece, NWilson::TSpan span);
 
     virtual ~TChunkReadPiece() {
         Y_ABORT_UNLESS(!SelfPointer);
@@ -481,8 +490,8 @@ public:
 
     THolder<NPDisk::TCompletionAction> Completion;
 
-    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TTraceId traceId)
-        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(traceId))
+    TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
+        : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
         , ChunkIdx(ev.ChunkIdx)
         , Offset(ev.Offset)
         , PartsPtr(ev.PartsPtr)
@@ -545,8 +554,8 @@ public:
     ui32 PieceShift;
     ui32 PieceSize;
 
-    TChunkWritePiece(TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize)
-        : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass)
+    TChunkWritePiece(TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
+        : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
         , ChunkWrite(write)
         , PieceShift(pieceShift)
         , PieceSize(pieceSize)
@@ -571,8 +580,9 @@ public:
     ui32 Offset;
     ui64 Size;
 
-    TChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::ChunkTrim, reqIdx), OwnerUnallocated, TOwnerRound(0), NPriInternal::Trim)
+    TChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, NWilson::TSpan span, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ChunkTrim, reqIdx), OwnerUnallocated,
+                TOwnerRound(0), NPriInternal::Trim, std::move(span))
         , ChunkIdx(chunkIdx)
         , Offset(offset)
         , Size(size)
@@ -673,7 +683,7 @@ public:
     TOwner Owner;
     TVDiskID VDiskId;
     bool IsGenerationSet;
-    
+
     TChunkUnlock(const NPDisk::TEvChunkUnlock &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkUnlock, reqIdx), 0, 0, NPriInternal::Other)
         , LockFrom(ev.LockFrom)
@@ -827,8 +837,10 @@ public:
 //
 class TAskForCutLog : public TRequestBase {
 public:
-    TAskForCutLog(const NPDisk::TEvAskForCutLog &ev, const TActorId &sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::AskForCutLog, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+    TAskForCutLog(const NPDisk::TEvAskForCutLog::TPtr &ev, TAtomicBase reqIdx)
+        : TRequestBase(ev->Sender, TReqId(TReqId::AskForCutLog, reqIdx), ev->Get()->Owner, ev->Get()->OwnerRound, NPriInternal::Other,
+                NWilson::TSpan(TWilson::PDisk, std::move(ev->TraceId), "PDisk.AskForCutLog")
+            )
     {}
 
     ERequestType GetType() const override {
@@ -872,8 +884,8 @@ class TCommitLogChunks : public TRequestBase {
 public:
     TVector<ui32> CommitedLogChunks;
 
-    TCommitLogChunks(TVector<ui32>&& commitedLogChunks, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::CommitLogChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+    TCommitLogChunks(TVector<ui32>&& commitedLogChunks, NWilson::TSpan span, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::CommitLogChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
         , CommitedLogChunks(std::move(commitedLogChunks))
     {}
 
@@ -893,16 +905,16 @@ public:
     bool IsChunksFromLogSplice;
 
     TReleaseChunks(const TLogChunkInfo& gapStart, const TLogChunkInfo& gapEnd, TVector<TChunkIdx> chunksToRelease,
-            TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+            NWilson::TSpan span, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
         , GapStart(gapStart)
         , GapEnd(gapEnd)
         , ChunksToRelease(std::move(chunksToRelease))
         , IsChunksFromLogSplice(true)
     {}
 
-    TReleaseChunks(TVector<TChunkIdx> chunksToRelease, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+    TReleaseChunks(TVector<TChunkIdx> chunksToRelease, NWilson::TSpan span, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::ReleaseChunks, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
         , ChunksToRelease(std::move(chunksToRelease))
         , IsChunksFromLogSplice(false)
     {}
@@ -956,8 +968,8 @@ class TTryTrimChunk : public TRequestBase {
 public:
     ui64 TrimSize;
 
-    TTryTrimChunk(ui64 trimSize, TAtomicBase reqIdx)
-        : TRequestBase(TActorId(), TReqId(TReqId::TryTrimChunk, reqIdx), OwnerSystem, 0, NPriInternal::Other)
+    TTryTrimChunk(ui64 trimSize, NWilson::TSpan span, TAtomicBase reqIdx)
+        : TRequestBase(TActorId(), TReqId(TReqId::TryTrimChunk, reqIdx), OwnerSystem, 0, NPriInternal::Other, std::move(span))
         , TrimSize(trimSize)
     {}
 

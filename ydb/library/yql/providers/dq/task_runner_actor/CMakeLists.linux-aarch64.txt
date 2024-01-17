@@ -15,7 +15,7 @@ target_link_libraries(providers-dq-task_runner_actor PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
+  library-actors-core
   dq-actors-task_runner
   yql-dq-proto
   dq-api-protos

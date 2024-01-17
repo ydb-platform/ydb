@@ -1247,21 +1247,21 @@ message TImmediateControlsConfig {
     message TTracingControls {
         message TSamplingControls {
             optional uint64 SamplingPPM = 1 [(ControlOptions) = {
-                Description: "TBW",
+                Description: "Average amount of sampled requests per one million",
                 MinValue: 0,
                 MaxValue: 1000000,
                 DefaultValue: 0,
             }];
             optional uint64 MaxRatePerMinute = 2 [(ControlOptions) = {
-                Description: "TBW",
+                Description: "Maximum amount of traced requests per minute",
                 MinValue: 0,
-                MaxValue: 180,
+                MaxValue: 1000,
                 DefaultValue: 10,
             }];
             optional uint64 MaxBurst = 3 [(ControlOptions) = {
-                Description: "TBW",
+                Description: "Maximum burst of traced events",
                 MinValue: 0,
-                MaxValue: 180, 
+                MaxValue: 1000, 
                 DefaultValue: 15,
             }];
         }

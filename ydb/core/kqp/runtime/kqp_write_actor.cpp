@@ -12,6 +12,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/data_events/shards_splitter.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -43,7 +44,7 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        ResolveShards();
+        ResolveTable();
         Become(&TKqpWriteActor::StateFunc);
     }
 
@@ -92,7 +93,7 @@ private:
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ true);
-                MemoryUsed += cells[index].Size();
+                // MemoryUsed += cells[index].Size();
             }
             BatchBuilder.AddRow(
                 TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
@@ -104,7 +105,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
-                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolve);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolve);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
                 //hFunc(TEvRetryShard, HandleRetry);
                 //IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -115,49 +116,37 @@ private:
         }
     }
 
-    void ResolveShards() {
-        CA_LOG_D("Resolve shards");
-
-        Shards.reset();
-
-        TVector<NScheme::TTypeInfo> keyColumnTypes;
-        for (const auto& column : KeyColumns) {
-            keyColumnTypes.push_back(column.PType);
-        }
-        TVector<TKeyDesc::TColumnOp> columns;
-        for (const auto& column : Columns) {
-            columns.push_back(TKeyDesc::TColumnOp { column.Id, TKeyDesc::EColumnOperation::Set, column.PType, 0, 0 });
-        }
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(
-            TableId,
-            TTableRange{TVector<TCell>(KeyColumns.size()), true, {}, true, false},
-            TKeyDesc::ERowOperation::Update,
-            keyColumnTypes,
-            TVector<TKeyDesc::TColumnOp>{}));
-
-        // TODO: invalidate if retry
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+    void ResolveTable() {
+        CA_LOG_D("Resolve table");
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.TableId = TableId;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.SyncVersion = true;
+        request->ResultSet.emplace_back(entry);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
-    void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+    void HandleResolve(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Get()->Request.Get());
         if (ev->Get()->Request->ErrorCount > 0) {
-            return RuntimeError(TStringBuilder() << "Failed to get partitioning for table: "
+            return RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
-        Shards = resultSet[0].KeyDescription->Partitioning;
+        SchemeEntry = resultSet[0];
 
-        CA_LOG_D("Resolved shards: " << Shards->size());
+        // do we need to check usertoken here?
+        CA_LOG_D("Resolved table");
 
         ProcessRows();
     }
 
     void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Get());
         ProcessRows();
         CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
@@ -263,13 +252,13 @@ private:
     }
 
     void PrepareBatchBuilder() {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> tmp;
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
         for (const auto& column : Columns) {
-            tmp.emplace_back(column.Name, column.PType);
+            columns.emplace_back(column.Name, column.PType);
         }
 
         TString err;
-        BatchBuilder.Start(tmp, 0, 0, err);
+        BatchBuilder.Start(columns, 0, 0, err); // TODO: check
     }
 
     void ProcessRows() {
@@ -277,21 +266,60 @@ private:
         SendNewBatchesToShards();
     }
 
+    NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
+            const std::shared_ptr<arrow::RecordBatch>& batch) {
+        struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
+            std::shared_ptr<arrow::RecordBatch> Batch;
+
+            TDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
+                : Batch(batch) {
+            }
+
+            std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
+                return Batch;
+            }
+
+            TString GetSerializedData() const override {
+                return NArrow::SerializeBatchNoCompression(Batch);
+            }
+        };
+
+        return std::make_shared<TDataAccessor>(batch);
+    }
+
     void SplitBatchByShards() {
-        if (!Shards || BatchBuilder.Bytes() == 0) {
+        if (!SchemeEntry || BatchBuilder.Bytes() == 0) {
             return;
         }
 
-        InflightBatches[Shards->back().ShardId].emplace_back();
-        InflightBatches[Shards->back().ShardId].back().Data = std::move(BatchBuilder.Finish());
+        auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(*SchemeEntry);
+        if (!shardsSplitter) {
+            // Shard splitter not implemented for table kind
+        }
+
+        const auto dataAccessor = GetDataAccessor(BatchBuilder.FlushBatch(true));
+        auto initStatus = shardsSplitter->SplitData(*SchemeEntry, *dataAccessor);
+        if (!initStatus.Ok()) {
+            //return ReplyError(initStatus.GetStatus(), initStatus.GetErrorMessage());
+        }
+
+        const auto& splittedData = shardsSplitter->GetSplitData();
+
+        for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
+            for (auto&& shardInfo : infos) {
+                //sumBytes += shardInfo->GetBytes();
+                //rowsCount += shardInfo->GetRowsCount();
+                auto& inflightBatch = InflightBatches[shard].emplace_back();
+                inflightBatch.Data = shardInfo->GetData();
+            }
+        }
     }
 
     void SendNewBatchesToShards() {
-        if (InflightBatches.empty()) {
-            return;
-        }
-        if (InflightBatches.at(Shards->back().ShardId).front().SendAttempts == 0) {
-            SendRequestShard(Shards->back().ShardId);
+        for (const auto& [shardId, batches] : InflightBatches) {
+            if (batches.front().SendAttempts == 0) {
+                SendRequestShard(shardId);
+            }
         }
     }
 
@@ -337,7 +365,7 @@ private:
     const i64 MemoryLimit = 1024 * 1024 * 1024;
     i64 MemoryUsed = 0;
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Shards;
+    std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
     // TODO: move batching + limits
     // TODO: notnull columns (like upload_rows_common_impl.h)

@@ -197,8 +197,8 @@ namespace {
         return range;
     }
 
-    TMaybe<TString> SerializeAddress(const TIpv6Address& addr) {
-	Y_ENSURE(addr.Type() == TIpv6Address::Ipv4 || addr.Type() == TIpv6Address::Ipv6);
+    TString SerializeAddress(const TIpv6Address& addr) {
+        Y_ENSURE(addr.Type() == TIpv6Address::Ipv4 || addr.Type() == TIpv6Address::Ipv6);
         TString res;
         if (addr.Type() == TIpv6Address::Ipv4) {
             auto addr4 = TRawIp4::FromIpAddress(addr);

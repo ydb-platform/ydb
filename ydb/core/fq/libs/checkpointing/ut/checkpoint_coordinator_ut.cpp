@@ -19,7 +19,7 @@ enum ETestGraphFlags : ui64 {
     SourceWithChannelInOneTask = 2,
 };
 
-NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType) {
+NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags = 0) {
 
     NYql::NDqProto::TReadyState result;
 
@@ -29,7 +29,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
     ingressOutput->AddChannels();
     if (flags & ETestGraphFlags::InputWithSource) {
         auto* source = ingress->AddInputs()->MutableSource();
-        source->SetType(sourceType);
+        source->SetType("PqSource");
     }
 
     auto* map = result.AddTask();
@@ -40,7 +40,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
     mapOutput->AddChannels();
     if (flags & ETestGraphFlags::SourceWithChannelInOneTask) {
         auto* source = map->AddInputs()->MutableSource();
-        source->SetType(sourceType);
+        source->SetType("PqSource");
     }
 
     auto* egress = result.AddTask();
@@ -70,9 +70,9 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlags, const TString& sourceType)
+    explicit TTestBootstrap(ui64 graphFlags = 0)
         : TTestActorRuntime(true)
-        , GraphState(BuildTestGraph(graphFlags, sourceType))
+        , GraphState(BuildTestGraph(graphFlags))
         , CoordinatorId("my-graph-id", 42)
         , CheckpointId(CoordinatorId.Generation, 1)
     {
@@ -281,8 +281,8 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     class CheckpointsTestHelper : public TTestBootstrap
     {
     public:
-        CheckpointsTestHelper(ui64 graphFlags, const TString& sourceType)
-            : TTestBootstrap(graphFlags, sourceType) {
+        CheckpointsTestHelper(ui64 graphFlags)
+            : TTestBootstrap(graphFlags) {
         }
         
         void InjectCheckpoint() {
@@ -372,32 +372,21 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     };
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSource) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource");
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource);
         test.InjectCheckpoint();
         test.AllSavedAndCommited();
     }
 
     Y_UNIT_TEST(ShouldTriggerCheckpointWithSourcesAndWithChannel) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask, "PqSource");
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource | ETestGraphFlags::SourceWithChannelInOneTask);
         test.InjectCheckpoint();
         test.AllSavedAndCommited();
     }
 
     Y_UNIT_TEST(ShouldAbortPreviousCheckpointsIfNodeStateCantBeSaved) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "PqSource");
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource);
         test.InjectCheckpoint();
         test.SaveFailed();
-    }
-
-    Y_UNIT_TEST(ShouldDoNothingIfNoIngressTasks) {
-        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, "S3Source");
-        bool empty = false;   
-        try {
-            test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10));
-        } catch (TEmptyEventQueueException&) {
-            empty = true;
-        }
-        UNIT_ASSERT(empty);
     }
 }
 

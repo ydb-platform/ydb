@@ -5,7 +5,7 @@ import yatest.common
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
-from ydb.tests.tools.docker_compose_helpers.endpoint_determiner import EndpointDeterminer
+from ydb.library.yql.providers.generic.connector.tests.utils.docker_compose import EndpointDeterminer
 
 
 @dataclass

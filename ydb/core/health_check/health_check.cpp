@@ -230,6 +230,7 @@ public:
         TVector<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
+        THashMap<TNodeId, ui32> RestartsPerPeriod;
         ui64 StorageQuota;
         ui64 StorageUsage;
     };
@@ -1056,6 +1057,7 @@ public:
                             TString path(itFilterDomainKey->second);
                             TDatabaseState& state(DatabaseState[path]);
                             state.ComputeNodeIds.emplace_back(hiveStat.GetNodeId());
+                            state.RestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
                         }
                     }
                 }

@@ -100,6 +100,9 @@ void TestOneWrite(TString value, TString expectedTrace) {
     TTestEnvironment env(8);
     env.Prepare();
 
+    TControlWrapper control;
+    env.Runtime->GetAppData().Icb->RegisterSharedControl(control, "TracingControls.KeyValue.ExecuteTransaction.MaxRatePerMinute");
+    control.Reset(1, 0, 1'000'000);
     env.DoKVRequest(CreateWrite("key", std::move(value)));
 
     UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());

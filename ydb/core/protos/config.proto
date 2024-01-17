@@ -1266,7 +1266,15 @@ message TImmediateControlsConfig {
             }];
         }
 
-        optional TSamplingControls KeyValue = 1;
+        message TKeyValue {
+            optional TSamplingControls Read = 1;
+            optional TSamplingControls ReadRange = 2;
+            optional TSamplingControls ExecuteTransaction = 3;
+            optional TSamplingControls GetStorageChannelStatus = 4;
+            optional TSamplingControls AcquireLock = 5;
+        }
+
+        optional TKeyValue KeyValue = 1;
     }
 
     optional TDataShardControls DataShardControls = 1;

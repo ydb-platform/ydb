@@ -80,6 +80,8 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TSamplingControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTracingControls.TKeyValue")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TKeyValue::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,

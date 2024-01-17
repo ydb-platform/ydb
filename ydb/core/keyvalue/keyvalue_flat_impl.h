@@ -8,7 +8,7 @@
 #include "keyvalue_simple_db_flat.h"
 #include "keyvalue_state.h"
 
-#include <ydb/core/control/common_controls/tracing_control.h>
+#include <ydb/core/keyvalue/keyvalue_traces_sampler.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -285,7 +285,7 @@ protected:
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
-    TTracingControl TracingControl;
+    TKeyValueTracingControl TracingControl;
 
     void OnDetach(const TActorContext &ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
@@ -323,27 +323,27 @@ protected:
     // gRPC
 
     void Handle(TEvKeyValue::TEvRead::TPtr &ev) {
-        TracingControl.SampleThrottle(ev->TraceId);
+        TracingControl.HandleTracing(TKeyValueTracingControl::ERequestType::READ, ev->TraceId);
         State.OnEvReadRequest(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvReadRange::TPtr &ev) {
-        TracingControl.SampleThrottle(ev->TraceId);
+        TracingControl.HandleTracing(TKeyValueTracingControl::ERequestType::READ_RANGE, ev->TraceId);
         State.OnEvReadRangeRequest(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvExecuteTransaction::TPtr &ev) {
-        TracingControl.SampleThrottle(ev->TraceId);
+        TracingControl.HandleTracing(TKeyValueTracingControl::ERequestType::EXECUTE_TRANSACTION, ev->TraceId);
         State.OnEvExecuteTransaction(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev) {
-        TracingControl.SampleThrottle(ev->TraceId);
+        TracingControl.HandleTracing(TKeyValueTracingControl::ERequestType::GET_STORAGE_CHANNEL_STATUS, ev->TraceId);
         State.OnEvGetStorageChannelStatus(ev, TActivationContext::AsActorContext(), Info());
     }
 
     void Handle(TEvKeyValue::TEvAcquireLock::TPtr &ev) {
-        TracingControl.SampleThrottle(ev->TraceId);
+        TracingControl.HandleTracing(TKeyValueTracingControl::ERequestType::ACQUIRE_LOCK, ev->TraceId);
         State.OnEvAcquireLock(ev, TActivationContext::AsActorContext(), Info());
     }
 
@@ -494,7 +494,7 @@ public:
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , TracingControl(AppData()->Icb, AppData()->TimeProvider, AppData()->RandomProvider, "TracingControls.KeyValue")
+        , TracingControl(AppData()->Icb, AppData()->TimeProvider, AppData()->RandomProvider)
     {
         TAutoPtr<TTabletCountersBase> counters(
         new TProtobufTabletCounters<

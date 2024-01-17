@@ -12,6 +12,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 
 namespace NKikimr {
@@ -79,8 +80,10 @@ private:
 
         CA_LOG_D("SendData: " << dataSize << "  " << finished);
         //EgressStats.Resume();
-
+        
         AddToInputQueue(std::move(data));
+        Finished = finished;
+
         ProcessRows();
     }
 
@@ -107,6 +110,7 @@ private:
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolve);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNewTxId);
                 //hFunc(TEvRetryShard, HandleRetry);
                 //IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 //IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
@@ -147,7 +151,6 @@ private:
 
     void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Get());
-        ProcessRows();
         CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
         CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
@@ -180,10 +183,12 @@ private:
             Send(
                 MakePipePeNodeCacheID(false),
                 new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true));
+        } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            // duplicate completed for duplicate writes
+            InflightBatches.at(ev->Get()->Record.GetOrigin()).pop_front();
         }
-        if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
-        }
+
+        ProcessRows();
     }
 
     void NotifyCAResume() {
@@ -264,6 +269,10 @@ private:
     void ProcessRows() {
         SplitBatchByShards();
         SendNewBatchesToShards();
+
+        if (Finished && IsInflightBatchesEmpty()) {
+            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        }
     }
 
     NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
@@ -311,16 +320,31 @@ private:
                 //rowsCount += shardInfo->GetRowsCount();
                 auto& inflightBatch = InflightBatches[shard].emplace_back();
                 inflightBatch.Data = shardInfo->GetData();
+
+                RequestNewTxId();
             }
         }
     }
 
     void SendNewBatchesToShards() {
-        for (const auto& [shardId, batches] : InflightBatches) {
-            if (batches.front().SendAttempts == 0) {
-                SendRequestShard(shardId);
+        for (auto& [shardId, batches] : InflightBatches) {
+            if (!batches.empty() && batches.front().SendAttempts == 0) {
+                if (const auto txId = AllocateTxId(); txId) {
+                    batches.front().TxId = *txId;
+                    SendRequestShard(shardId);
+                }
             }
         }
+    }
+
+    bool IsInflightBatchesEmpty() {
+        for (const auto& [shardId, batches] : InflightBatches) {
+            CA_LOG_D("CHECK ::::: > " << shardId << " " << batches.size());
+            if (!batches.empty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void SendRequestShard(const ui64 shardId) {
@@ -328,7 +352,7 @@ private:
         ++inflightBatch.SendAttempts;
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            std::get<ui64>(TxId), NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            inflightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
             .AddDataToPayload(TString(inflightBatch.Data));
 
@@ -345,6 +369,25 @@ private:
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
     }
+
+    void HandleNewTxId(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        FreeTxIds.push_back(ev->Get()->TxId);
+        ProcessRows();
+    }
+
+    void RequestNewTxId() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+    }
+
+    std::optional<ui64> AllocateTxId() {
+        if (FreeTxIds.empty()) {
+            return std::nullopt;
+        }
+        const ui64 result = FreeTxIds.back();
+        FreeTxIds.pop_back();
+        return result;
+    }
+
 
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
@@ -374,8 +417,12 @@ private:
     struct TInflightBatch {
         TString Data;
         ui32 SendAttempts = 0;
+        ui64 TxId = 0;
     };
     THashMap<ui64, std::deque<TInflightBatch>> InflightBatches;
+    bool Finished = false;
+
+    std::vector<ui64> FreeTxIds;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

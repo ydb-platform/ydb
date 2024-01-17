@@ -5345,18 +5345,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CREATE TABLE `/Root/TestSrc` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
-                Col3 Int32,
+                Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             );
 
             CREATE TABLE `/Root/TestDst` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
-                Col3 Int32,
+                Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -5365,7 +5365,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto client = kikimr.GetQueryClient();
         auto prepareResult = client.ExecuteQuery(R"(
             REPLACE INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
-                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12);
+                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test4", 13);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
 
@@ -5381,7 +5381,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
         TString output = StreamResultToYson(it);
-        CompareYson(output, R"([[1u;["test1"];[10]];[2u;["test2"];[11]];[3u;["test3"];[12]]])");
+        CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;["test4"];13]])");
     }
 }
 

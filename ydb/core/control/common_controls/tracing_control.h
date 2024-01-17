@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/control/immediate_control_board_sampler.h>
 #include <ydb/core/control/immediate_control_board_throttler.h>
 
@@ -8,14 +8,8 @@ namespace NKikimr {
 
 class TTracingControl {
 public:
-    TTracingControl(TIntrusivePtr<TControlBoard>& icb, TString controlDomain)
-        : Sampler(SamplingPPM)
-        , Throttler(MaxRatePerMinute, MaxBurst)
-    {
-        icb->RegisterSharedControl(SamplingPPM, controlDomain + ".SamplingPPM");
-        icb->RegisterSharedControl(MaxRatePerMinute, controlDomain + ".MaxRatePerMinute");
-        icb->RegisterSharedControl(MaxBurst, controlDomain + ".MaxBurst");
-    }
+    TTracingControl(TIntrusivePtr<TControlBoard>& icb, TIntrusivePtr<ITimeProvider> timeProvider,
+            TIntrusivePtr<IRandomProvider>& randomProvider, TString controlDomain);
 
     void SampleThrottle(NWilson::TTraceId& traceId) {
         if (!traceId && Sampler.Sample()) {

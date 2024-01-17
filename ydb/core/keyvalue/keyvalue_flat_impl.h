@@ -494,7 +494,7 @@ public:
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , TracingControl(AppData()->Icb, "TracingControls.KeyValue")
+        , TracingControl(AppData()->Icb, AppData()->TimeProvider, AppData()->RandomProvider, "TracingControls.KeyValue")
     {
         TAutoPtr<TTabletCountersBase> counters(
         new TProtobufTabletCounters<

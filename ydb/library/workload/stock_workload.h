@@ -10,8 +10,9 @@ namespace NYdbWorkload {
 
 class TStockWorkloadParams final: public TWorkloadParams {
 public:
-    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType) override;
+    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TString GetWorkloadName() const override;
     size_t ProductCount = 0;
     size_t Quantity = 0;
     size_t OrderCount = 0;
@@ -33,13 +34,13 @@ public:
     TVector<std::string> GetCleanPaths() const override;
 
     TQueryInfoList GetWorkload(int type) override;
-    TVector<std::string> GetSupportedWorkloadTypes() const override;
+    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
     enum class EType {
-        InsertRandomOrder /* "add-rand-order" */,
-        SubmitRandomOrder /* "put-rand-order" */,
-        SubmitSameOrder /* "put-same-order" */,
-        GetRandomCustomerHistory /* "rand-user-hist" */,
-        GetCustomerHistory /* "user-hist" */
+        InsertRandomOrder,
+        SubmitRandomOrder,
+        SubmitSameOrder,
+        GetRandomCustomerHistory,
+        GetCustomerHistory
     };
 
 private:

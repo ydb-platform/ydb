@@ -80,9 +80,9 @@ public:
     virtual void Config(TConfig& config) override;
 
 protected:
-    TString Key;
     NYdbWorkload::TWorkloadParams::ECommandType CommandType;
     THolder<NYdbWorkload::TWorkloadParams> Params;
+    int Type = 0;
 };
 
 class TWorkloadCommandInit : public TWorkloadCommandBase {
@@ -94,10 +94,8 @@ public:
 
 class TWorkloadCommandRun : public TWorkloadCommandBase {
 public:
-    TWorkloadCommandRun(const TString& name, const TString& key, int type);
+    TWorkloadCommandRun(const TString& key, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual int Run(TConfig& config) override;
-private:
-    int Type;
 };
 
 class TWorkloadCommandClean : public TWorkloadCommandBase {

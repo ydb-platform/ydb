@@ -191,12 +191,13 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
 }
 
 
-TVector<std::string> TKvWorkloadGenerator::GetSupportedWorkloadTypes() const {
-    auto names = GetEnumNames<EType>();
-    TVector<std::string> result;
-    for (const auto& [value, name] : names) {
-        result.emplace_back(name.c_str());
-    }
+TVector<IWorkloadQueryGenerator::TWorkloadType> TKvWorkloadGenerator::GetSupportedWorkloadTypes() const {
+    TVector<TWorkloadType> result;
+    result.emplace_back(static_cast<int>(EType::UpsertRandom), "upsert", "Upsert random rows into table");
+    result.emplace_back(static_cast<int>(EType::InsertRandom), "insert", "Insert random rows into table");
+    result.emplace_back(static_cast<int>(EType::SelectRandom), "select", "Select rows matching primary key(s)");
+    result.emplace_back(static_cast<int>(EType::ReadRowsRandom), "read-rows", "ReadRows rows matching primary key(s)");
+    result.emplace_back(static_cast<int>(EType::Mixed), "mixed", "Writes and SELECT/ReadsRows rows randomly, verifies them");
     return result;
 }
 
@@ -486,7 +487,7 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
     return result;
 }
 
-void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType) {
+void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     opts.SetFreeArgsNum(0);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
@@ -514,20 +515,46 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
     case TWorkloadParams::ECommandType::Run:
         opts.AddLongOption("max-first-key", "Maximum value of a first primary key")
             .DefaultValue((ui64)KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
-        opts.AddLongOption("len", "String len")
-            .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
-        opts.AddLongOption("cols", "Number of columns")
-            .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
         opts.AddLongOption("int-cols", "Number of int columns")
             .DefaultValue((ui64)KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
         opts.AddLongOption("key-cols", "Number of key columns")
             .DefaultValue((ui64)KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
-        opts.AddLongOption("change-partitions-size", "Apply random changes of AUTO_PARTITIONING_PARTITION_SIZE_MB setting")
-            .DefaultValue((ui64)KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE).StoreResult(&MixedChangePartitionsSize);
-        opts.AddLongOption("do-select", "Do SELECT operations")
-            .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_SELECT).StoreResult(&MixedDoSelect);
-        opts.AddLongOption("do-read-rows", "Do ReadRows operations")
-            .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_READ_ROWS).StoreResult(&MixedDoReadRows);
+        switch (static_cast<TKvWorkloadGenerator::EType>(workloadType)) {
+        case TKvWorkloadGenerator::EType::UpsertRandom:
+            opts.AddLongOption("len", "String len")
+                .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
+            opts.AddLongOption("cols", "Number of columns to upsert")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows to upsert")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            break;
+        case TKvWorkloadGenerator::EType::InsertRandom:
+            opts.AddLongOption("len", "String len")
+                .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
+            opts.AddLongOption("cols", "Number of columns to insert")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows to insert")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            break;
+        case TKvWorkloadGenerator::EType::SelectRandom:
+        case TKvWorkloadGenerator::EType::ReadRowsRandom:
+            opts.AddLongOption("cols", "Number of columns to select for a single query")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows to select for a single query")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            break;
+        case TKvWorkloadGenerator::EType::Mixed:
+            opts.AddLongOption("len", "String len")
+                .DefaultValue((ui64)KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
+            opts.AddLongOption("cols", "Number of columns")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("change-partitions-size", "Apply random changes of AUTO_PARTITIONING_PARTITION_SIZE_MB setting")
+                .DefaultValue((ui64)KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE).StoreResult(&MixedChangePartitionsSize);
+            opts.AddLongOption("do-select", "Do SELECT operations")
+                .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_SELECT).StoreResult(&MixedDoSelect);
+            opts.AddLongOption("do-read-rows", "Do ReadRows operations")
+                .DefaultValue((ui64)KvWorkloadConstants::MIXED_DO_READ_ROWS).StoreResult(&MixedDoReadRows);
+        }
         break;
     case TWorkloadParams::ECommandType::Clean:
         break;
@@ -536,6 +563,10 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
 
 THolder<IWorkloadQueryGenerator> TKvWorkloadParams::CreateGenerator() const {
     return MakeHolder<TKvWorkloadGenerator>(this);
+}
+
+TString TKvWorkloadParams::GetWorkloadName() const {
+    return "Key-Value";
 }
 
 }

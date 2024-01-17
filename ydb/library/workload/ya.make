@@ -6,9 +6,6 @@ SRCS(
     workload_factory.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(kv_workload.h)
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(stock_workload.h)
-
 PEERDIR(
     library/cpp/getopt
     ydb/public/api/protos

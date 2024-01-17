@@ -1211,9 +1211,6 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         EndWriteTxs(resp, ctx);
         break;
-    case PERSIST_WRITEID_COOKIE:
-        EndPersistWriteId(resp, ctx);
-        break;
     default:
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
                     << " Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -2525,7 +2522,7 @@ void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 response
     } else {
         GetOwnershipRequests.push_back({responseCookie, req, sender});
 
-        TryPersistWriteId(ctx);
+        TryWriteTxs(ctx);
     }
 }
 
@@ -3232,77 +3229,6 @@ bool TPersQueue::CanProcessDeleteTxs() const
     return !DeleteTxs.empty();
 }
 
-void TPersQueue::TryPersistWriteId(const TActorContext& ctx)
-{
-    if (PendingPersistWriteId) {
-        return;
-    }
-
-    if (GetOwnershipRequests.empty()) {
-        return;
-    }
-
-    BeginPersistWriteId(ctx);
-}
-
-void TPersQueue::BeginPersistWriteId(const TActorContext& ctx)
-{
-    Y_ABORT_UNLESS(!PendingPersistWriteId);
-    Y_ABORT_UNLESS(!GetOwnershipRequests.empty());
-
-    Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
-
-    for (auto& request : GetOwnershipRequests) {
-        ui64 writeId = request.Request.GetWriteId();
-        ui32 partitionId = request.Request.GetPartition();
-        ui32 shadowPartitionId = NextShadowPartitionId++;
-
-        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
-
-        AddShadowPartition(shadowPartitionId);
-    }
-
-    HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
-    GetOwnershipRequests.clear();
-
-    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-    request->Record.SetCookie(PERSIST_WRITEID_COOKIE);
-
-    AddCmdWriteTabletTxWrites(request->Record);
-
-    PendingPersistWriteId = true;
-
-    ctx.Send(ctx.SelfID, request.Release());
-}
-
-void TPersQueue::EndPersistWriteId(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
-{
-    Y_ABORT_UNLESS(PendingPersistWriteId);
-
-    bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK);
-    if (ok) {
-        for (auto& result : resp.GetWriteResult()) {
-            if (result.GetStatus() != NKikimrProto::OK) {
-                ok = false;
-                break;
-            }
-        }
-    }
-
-    if (!ok) {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-            "Tablet " << TabletID() << " SelfId " << ctx.SelfID << " TxWrites write error: " << resp.DebugString());
-
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-        return;
-    }
-
-    ForwardGetOwnershipToShadowPartitions(ctx);
-
-    PendingPersistWriteId = false;
-    TryPersistWriteId(ctx);
-}
-
 void TPersQueue::SubscribeWriteId(ui64 writeId,
                                   const TActorContext& ctx)
 {
@@ -3312,8 +3238,6 @@ void TPersQueue::SubscribeWriteId(ui64 writeId,
 
 void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(!HandleGetOwnershipRequestParams.empty());
-
     for (auto& params : HandleGetOwnershipRequestParams) {
         ui64 writeId = params.Request.GetWriteId();
         ui32 partitionId = params.Request.GetPartition();
@@ -3335,11 +3259,35 @@ void TPersQueue::ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx)
     HandleGetOwnershipRequestParams.clear();
 }
 
+bool TPersQueue::CanProcessGetOwnershipQueue() const
+{
+    return !GetOwnershipRequests.empty();
+}
+
+void TPersQueue::ProcessGetOwnershipQueue()
+{
+    Y_ABORT_UNLESS(!GetOwnershipRequests.empty());
+    Y_ABORT_UNLESS(HandleGetOwnershipRequestParams.empty());
+
+    for (auto& request : GetOwnershipRequests) {
+        ui64 writeId = request.Request.GetWriteId();
+        ui32 partitionId = request.Request.GetPartition();
+        ui32 shadowPartitionId = NextShadowPartitionId++;
+
+        TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
+
+        AddShadowPartition(shadowPartitionId);
+    }
+
+    HandleGetOwnershipRequestParams = std::move(GetOwnershipRequests);
+    GetOwnershipRequests.clear();
+}
+
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!WriteTxsInProgress);
 
-    if (!CanProcessProposeTransactionQueue() && !CanProcessPlanStepQueue() && !CanProcessWriteTxs() && !CanProcessDeleteTxs()) {
+    if (!CanProcessProposeTransactionQueue() && !CanProcessPlanStepQueue() && !CanProcessWriteTxs() && !CanProcessDeleteTxs() && !CanProcessGetOwnershipQueue()) {
         return;
     }
 
@@ -3352,6 +3300,10 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
     ProcessConfigTx(ctx, request.Get());
+    AddCmdWriteTabletTxWrites(request->Record);
+
+    ProcessGetOwnershipQueue();
+    AddCmdWriteTabletTxWrites(request->Record);
 
     WriteTxsInProgress = true;
 
@@ -3385,6 +3337,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
+    ForwardGetOwnershipToShadowPartitions(ctx);
 
     WriteTxsInProgress = false;
 

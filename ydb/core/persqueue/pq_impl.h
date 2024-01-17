@@ -35,7 +35,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
-        PERSIST_WRITEID_COOKIE = 6,
     };
 
     void CreatedHook(const TActorContext& ctx) override;
@@ -303,6 +302,7 @@ private:
     void ProcessConfigTx(const TActorContext& ctx,
                          TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
+    void ProcessGetOwnershipQueue();
     void AddCmdWriteTabletTxWrites(NKikimrClient::TKeyValueRequest& request);
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
@@ -415,6 +415,7 @@ private:
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
+    bool CanProcessGetOwnershipQueue() const;
 
     ui64 GetGeneration();
     void DestroySession(TPipeInfo& pipeInfo);
@@ -449,11 +450,6 @@ private:
                                               const NKikimrClient::TPersQueuePartitionRequest& req,
                                               const TActorContext& ctx);
 
-    void TryPersistWriteId(const TActorContext& ctx);
-    void BeginPersistWriteId(const TActorContext& ctx);
-    void EndPersistWriteId(const NKikimrClient::TResponse& resp,
-                           const TActorContext& ctx);
-
     void ForwardGetOwnershipToShadowPartitions(const TActorContext& ctx);
 
     struct TReserveBytesRequestParams {
@@ -464,7 +460,6 @@ private:
 
     TDeque<TReserveBytesRequestParams> GetOwnershipRequests;
     TDeque<TReserveBytesRequestParams> HandleGetOwnershipRequestParams;
-    bool PendingPersistWriteId = false;
 
     TPartitionInfo& GetPartitionInfo(ui32 partitionId);
     void AddShadowPartition(ui32 shadowPartitionId);

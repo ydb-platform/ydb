@@ -1066,9 +1066,6 @@ class GnuToolchainOptions(ToolchainOptions):
             if self.target.is_armv7 and self.target.armv7_float_abi == 'softfp':
                 return 'ubuntu-18'
 
-            if self.target.is_powerpc:
-                return 'ubuntu-14'
-
             # Default OS SDK for Linux builds
             return 'ubuntu-14'
 

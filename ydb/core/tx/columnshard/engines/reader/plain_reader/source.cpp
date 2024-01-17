@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
@@ -115,16 +116,16 @@ bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSou
     return true;
 }
 
-void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& /*columns*/) {
-    if (!!GetStageData().GetTable()) {
-        return;
+void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+    if (!GetStageData().GetTable()) {
+        Y_ABORT_UNLESS(GetStageData().GetBlobs().size() == 1);
+        auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
+        auto batch = NArrow::DeserializeBatch(bData, GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion()));
+        Y_ABORT_UNLESS(batch);
+        batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSpecialColumns(batch, CommittedBlob.GetSnapshot());
+        MutableStageData().AddBatch(batch);
     }
-    Y_ABORT_UNLESS(GetStageData().GetBlobs().size() == 1);
-    auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
-    auto batch = NArrow::DeserializeBatch(bData, GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion()));
-    Y_ABORT_UNLESS(batch);
-    batch = GetContext()->GetReadMetadata()->GetIndexInfo().AddSpecialColumns(batch, CommittedBlob.GetSnapshot());
-    MutableStageData().AddBatch(batch);
+    MutableStageData().SyncTableColumns(columns->GetSchema()->fields());
 }
 
 }

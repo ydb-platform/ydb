@@ -23,6 +23,8 @@ public:
 
     }
 
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields);
+
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
         return UseFilter ? Filter : nullptr;
     }

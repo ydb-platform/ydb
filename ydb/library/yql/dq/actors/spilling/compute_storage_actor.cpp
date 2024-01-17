@@ -73,22 +73,11 @@ public:
 
         if (!SavedBlobs_.contains(blobId)) return std::nullopt;
 
-        auto promise = NThreading::NewPromise<TRope>();
+        auto res = LoadingBlobs_.emplace(NextBlobId, NThreading::NewPromise<TRope>());
 
-        auto loadedIt = LoadedBlobs_.find(blobId);
-        if (loadedIt != LoadedBlobs_.end()) {
-            YQL_ENSURE(loadedIt->second.size() != 0);
-            blob.Swap(loadedIt->second);
-            LoadedBlobs_.erase(loadedIt);
-            return true;
-        }
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
-        auto result = LoadingBlobs_.emplace(blobId);
-        if (result.second) {
-            Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
-        }
-
-        return false;
+        return res.first->second.GetFuture();
     }
 
 protected:
@@ -149,13 +138,19 @@ private:
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
-        if (LoadingBlobs_.erase(msg.BlobId) != 1) {
-            LOG_E("[TEvReadResult] unexpected, blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+        auto it = LoadingBlobs_.find(msg.BlobId);
+        if (it == LoadingBlobs_.end()) {
+            LOG_E("Got unexpected TEvReadResult, blobId: " << msg.BlobId);
+
+            Error_ = "Internal error";
+
+            Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
-        LoadedBlobs_[msg.BlobId].Swap(msg.Blob);
-        YQL_ENSURE(LoadedBlobs_[msg.BlobId].size() != 0);
+        TRope res(std::move(msg.Blob.Data()));
+
+        it->second.SetValue(std::move(res));
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
@@ -176,9 +171,7 @@ private:
     ui32 StoredBlobsCount_ = 0;
     ui64 StoredBlobsSize_ = 0;
 
-    TSet<ui64> LoadingBlobs_;
-    TMap<ui64, TBuffer> LoadedBlobs_;
-    TMap<IDqComputeStorageActor::TKey, std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>> WritingBlobs_;
+    TMap<IDqComputeStorageActor::TKey, NThreading::TPromise<TRope>> LoadingBlobs_;
 
     TMaybe<TString> Error_;
 

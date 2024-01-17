@@ -21,7 +21,6 @@ SRCS(
     immediate_control_board_wrapper.h
     immediate_control_board_throttler.h
     immediate_control_board_sampler.h
-    immediate_control_board_sampler.cpp
 )
 
 END()

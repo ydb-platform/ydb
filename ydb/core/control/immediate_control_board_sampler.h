@@ -6,7 +6,10 @@ namespace NKikimr {
 
 class TSampler {
 public:
-    TSampler(TControlWrapper& samplingPPM);
+    TSampler(TControlWrapper& samplingPPM, ui64 seed)
+        : SamplingPPM(samplingPPM)
+        , Rng(seed)
+    {}
 
     bool Sample() {
         return Rng() % 1'000'000 < SamplingPPM;

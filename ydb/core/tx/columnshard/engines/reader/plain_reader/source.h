@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
@@ -18,6 +19,7 @@ namespace NKikimr::NOlap::NPlainReader {
 class TFetchingInterval;
 class TPlainReadData;
 class IFetchTaskConstructor;
+class IFetchingStep;
 
 class IDataSource {
 private:
@@ -25,6 +27,8 @@ private:
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NIndexedReader::TSortableBatchPosition, Finish);
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
+    YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
+    std::optional<ui32> RecordsCount;
     YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     bool MergingStartedFlag = false;
@@ -32,21 +36,38 @@ private:
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;
 
-    std::shared_ptr<TFilterStageData> FilterStageData;
-    std::shared_ptr<TFetchStageData> FetchStageData;
-
-    std::optional<TFetchingPlan> FetchingPlan;
+    std::shared_ptr<TFetchedData> StageData;
 
     TAtomic FilterStageFlag = 0;
+    bool IsReadyFlag = false;
 
     bool IsAborted() const {
         return AbortedFlag;
     }
 
-    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) = 0;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
     virtual void DoAbort() = 0;
 public:
+    void SetIsReady();
+
+    bool IsEmptyData() const {
+        return GetStageData().IsEmpty();
+    }
+
+    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+        if (columns->IsEmpty()) {
+            return;
+        }
+        DoAssembleColumns(columns);
+    }
+
+    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) {
+        AFL_VERIFY(columns);
+        return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+    void InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive);
+
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.ExtractSortingPosition();
     }
@@ -55,11 +76,6 @@ public:
     }
 
     virtual ui64 GetRawBytes(const std::set<ui32>& columnIds) const = 0;
-
-    const TFetchingPlan& GetFetchingPlan() const {
-        Y_ABORT_UNLESS(FetchingPlan);
-        return *FetchingPlan;
-    }
 
     bool IsMergingStarted() const {
         return MergingStartedFlag;
@@ -87,35 +103,37 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    std::shared_ptr<arrow::RecordBatch> GetBatch() const {
-        if (!FilterStageData || !FetchStageData) {
-            return nullptr;
-        }
-        return NArrow::MergeColumns({FilterStageData->GetBatch(), FetchStageData->GetBatch()});
-    }
-
     bool IsDataReady() const {
-        return !!FilterStageData && !!FetchStageData;
+        return IsReadyFlag;
     }
 
-    const TFilterStageData& GetFilterStageData() const {
-        Y_ABORT_UNLESS(FilterStageData);
-        return *FilterStageData;
+    const TFetchedData& GetStageData() const {
+        AFL_VERIFY(StageData);
+        return *StageData;
     }
 
-    void InitFetchingPlan(const TFetchingPlan& fetchingPlan, const std::shared_ptr<IDataSource>& sourcePtr);
+    TFetchedData& MutableStageData() {
+        AFL_VERIFY(StageData);
+        return *StageData;
+    }
 
-    void InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch
-        , const std::shared_ptr<IDataSource>& sourcePtr);
-    void InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& batch);
+    ui32 GetRecordsCount() const {
+        AFL_VERIFY(RecordsCount);
+        return *RecordsCount;
+    }
 
     void RegisterInterval(TFetchingInterval& interval);
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
+    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, 
+        const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
+        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount
+    )
         : SourceIdx(sourceIdx)
         , Start(start)
         , Finish(finish)
         , Context(context)
+        , RecordSnapshotMax(recordSnapshotMax)
+        , RecordsCount(recordsCount)
     {
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
@@ -137,8 +155,11 @@ private:
         const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
         const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) override;
-    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) override;
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override {
+        auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchema(Portion->GetMinSnapshot());
+        MutableStageData().AddBatch(Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs()).AssembleTable());
+    }
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -162,7 +183,7 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context,
         const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
-        : TBase(sourceIdx, context, start, finish)
+        : TBase(sourceIdx, context, start, finish, portion->RecordSnapshotMax(), portion->GetRecordsCount())
         , Portion(portion) {
 
     }
@@ -173,20 +194,14 @@ private:
     using TBase = IDataSource;
     TCommittedBlob CommittedBlob;
     bool ReadStarted = false;
-    bool ResultReady = false;
 
-    void DoFetch(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual void DoAbort() override {
 
     }
 
-    virtual void DoStartFilterStage(const std::shared_ptr<IDataSource>& sourcePtr) override {
-        DoFetch(sourcePtr);
-    }
-
-    virtual void DoStartFetchStage(const std::shared_ptr<IDataSource>& sourcePtr) override {
-        DoFetch(sourcePtr);
-    }
+    virtual bool DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr,
+        const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "commit");
@@ -204,7 +219,7 @@ public:
 
     TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context,
         const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish)
-        : TBase(sourceIdx, context, start, finish)
+        : TBase(sourceIdx, context, start, finish, committed.GetSnapshot(), {})
         , CommittedBlob(committed) {
 
     }

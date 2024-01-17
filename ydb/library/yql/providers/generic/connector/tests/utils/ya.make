@@ -7,7 +7,6 @@ PY_SRCS(
     comparator.py
     database.py
     dqrun.py
-    docker_compose.py
     generate.py
     kqprun.py
     log.py
@@ -21,6 +20,7 @@ PY_SRCS(
 PEERDIR(
     ydb/library/yql/providers/generic/connector/api/common
     ydb/public/api/protos
+    ydb/tests/tools/docker_compose_helpers
     yt/python/yt/yson
 )
 

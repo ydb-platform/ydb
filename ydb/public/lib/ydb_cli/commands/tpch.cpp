@@ -226,6 +226,10 @@ void TTpchCommandInit::Config(TConfig& config) {
         .Optional()
         .DefaultValue("1")
         .StoreResult(&Scale);
+    config.Opts->AddLongOption('b', "bucket", "S3 bucket with TPC-H dataset")
+        .Optional()
+        .DefaultValue("")
+        .StoreResult(&Bucket);
 };
 
 void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
@@ -264,13 +268,13 @@ int TTpchCommandInit::Run(TConfig& config) {
     } else if (StoreType == "s3") {
         storageType = R"(DATA_SOURCE = "_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )";
         notNull = "NOT NULL";
-        createExternalDataSource = R"(
+        createExternalDataSource = fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE `_tpc_s3_external_source` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="https://storage.yandexcloud.net/tpc/",
+                LOCATION="https://storage.yandexcloud.net/{}/",
                 AUTH_METHOD="NONE"
             );
-        )";
+        )", Bucket);
         external = "EXTERNAL";
         partitioning = "--";
         primaryKey = "--";

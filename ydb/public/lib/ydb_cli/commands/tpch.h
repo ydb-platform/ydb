@@ -18,6 +18,7 @@ private:
     TString TablesPath;
     TString StoreType;
     TString Scale;
+    TString Bucket;
 };
 
 class TTpchCommandClean : public NYdb::NConsoleClient::TYdbCommand {

@@ -277,7 +277,7 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
                 used = true;
             } else if (insertMode) {
                 // In case of insert new row absent input column will contains NULL value (or forbidden in case of NOT NULL)
-                // NULL != NULL and NULL != "any other values" so we can just skip uniq check.
+                // NULL != NULL and NULL != "any other value" so we can just skip uniq check.
                 skip = true;
                 continue;
             }

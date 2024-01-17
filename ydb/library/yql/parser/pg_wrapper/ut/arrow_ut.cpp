@@ -106,6 +106,48 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     }
 }
 
+Y_UNIT_TEST(PgConvertDate32Date) {
+    TArenaMemoryContext arena;
+
+    arrow::Date32Builder builder;
+    builder.Append(10227);
+    builder.AppendNull();
+    builder.Append(11323);
+    builder.Append(10227);
+    builder.Append(10958);
+    builder.Append(11688);
+
+    std::shared_ptr<arrow::Array> array;
+    builder.Finish(&array);
+
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+    auto* targetType = NKikimr::NMiniKQL::TPgType::Create(DATEOID, typeEnv);
+
+    auto converter = BuildPgColumnConverter(std::shared_ptr<arrow::DataType>(new arrow::Date32Type), targetType);
+    auto result = converter(array);
+    const auto& data = result->data();
+    UNIT_ASSERT_VALUES_EQUAL(result->length(), 6);
+
+    const char* expected[] = {
+        "1998-01-01", nullptr, "2001-01-01", "1998-01-01", "2000-01-02", "2002-01-01"
+    };
+
+    NUdf::TFixedSizeBlockReader<ui64, true> reader;
+    for (int i = 0; i < 6; i++) {
+        if (result->IsNull(i)) {
+            UNIT_ASSERT(expected[i] == nullptr);
+        } else {
+            auto item = reader.GetItem(*data, i).As<Datum>();
+            UNIT_ASSERT(expected[i] != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(
+                TString(DatumGetCString(DirectFunctionCall1(date_out, item))),
+                expected[i]
+            );
+        }
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(TArrowUtilsTests)
 
 } // namespace NYql

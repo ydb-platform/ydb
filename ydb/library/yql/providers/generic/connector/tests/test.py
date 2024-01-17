@@ -159,7 +159,11 @@ def test_select_datetime(
 
 
 @pytest.mark.parametrize("runner_type", runners, ids=runners_ids)
-@pytest.mark.parametrize("test_case", tc_collection.get('select_pg_schema'), ids=tc_collection.ids('select_pg_schema'))
+@pytest.mark.parametrize(
+    "test_case",
+    tc_collection.get('select_positive_postgresql_schema'),
+    ids=tc_collection.ids('select_positive_postgresql_schema'),
+)
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("postgresql_client")
 def test_select_pg_schema(

@@ -13208,6 +13208,20 @@
             "uri": "https://{canondata_backend}/1773845/118c740ff9ea824c1b2998c5bad993b2a2276f6e/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_locks_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg_catalog-pg_set_config]": [
+        {
+            "checksum": "0b00c0ffc35339caa3a22beb1e12d9af",
+            "size": 1776,
+            "uri": "https://{canondata_backend}/1942173/1ce1eb52fea966081c3286eec52d5acc98c048a6/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_set_config_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg_catalog-pg_set_config_commit]": [
+        {
+            "checksum": "8f4536c9243a0a083e4bd355461525c6",
+            "size": 1860,
+            "uri": "https://{canondata_backend}/1942173/1ce1eb52fea966081c3286eec52d5acc98c048a6/resource.tar.gz#test_sql2yql.test_pg_catalog-pg_set_config_commit_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg_catalog-pg_shdescription]": [
         {
             "checksum": "3c2389e9a1d831db2944939e11919590",

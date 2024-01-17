@@ -321,6 +321,7 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
             .Table(read.Table())
             .LookupKeys(readIndexTable.Ptr())
             .Columns(read.Columns())
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
     } else {
         return Build<TKqlLookupTable>(ctx, read.Pos())
@@ -365,6 +366,7 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
                     .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                     .LookupKeys(lookupIndex.LookupKeys())
                     .Columns(lookupIndex.Columns())
+                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                     .Done();
             }
 
@@ -382,12 +384,14 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
                 .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
                 .Columns(keyColumnsList)
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
 
             return Build<TKqlStreamLookupTable>(ctx, node.Pos())
                 .Table(lookupIndex.Table())
                 .LookupKeys(lookupIndexTable.Ptr())
                 .Columns(lookupIndex.Columns())
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
         }
 
@@ -424,6 +428,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
                 .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                 .LookupKeys(streamLookupIndex.LookupKeys())
                 .Columns(streamLookupIndex.Columns())
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
         }
 
@@ -433,12 +438,14 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
             .Columns(keyColumnsList)
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
 
         return Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(streamLookupIndex.Table())
             .LookupKeys(lookupIndexTable.Ptr())
             .Columns(streamLookupIndex.Columns())
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
     }
 

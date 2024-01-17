@@ -19,7 +19,7 @@
 
 ### Запись через Kafka Java SDK
 
-В этом примере приведен фрагмент кода для записи в топик через Kafka API.
+В этом примере приведен фрагмент кода для записи в топик через [Kafka API](https://kafka.apache.org/documentation/).
 
   ```java
   String HOST = "ydb:9093";

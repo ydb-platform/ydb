@@ -9,12 +9,12 @@ from utils.database import Database
 from utils.log import make_logger
 from utils.schema import Schema
 from utils.settings import Settings
+from utils.runner import Runner
 from utils.sql import format_values_for_bulk_sql_insert
 
 import test_cases.select_missing_database
 import test_cases.select_missing_table
 import test_cases.select_positive_common
-import utils.dqrun as dqrun
 
 LOGGER = make_logger(__name__)
 
@@ -29,7 +29,7 @@ def prepare_table(
     dbTable = f"{database.name}.{table_name}"
 
     # create database
-    create_database_stmt = database.create(data_source_pb2.CLICKHOUSE)
+    create_database_stmt = database.create()
     LOGGER.debug(create_database_stmt)
     client.command(create_database_stmt)
 
@@ -60,7 +60,7 @@ def prepare_table(
 def select_positive(
     tmp_path: Path,
     settings: Settings,
-    dqrun_runner: dqrun.Runner,
+    runner: Runner,
     client: Client,
     test_case: test_cases.select_positive_common.TestCase,
 ):
@@ -88,7 +88,7 @@ def select_positive(
         {where_statement}
         {order_by_expression}
     """
-    result = dqrun_runner.run(
+    result = runner.run(
         test_dir=tmp_path,
         script=yql_script,
         generic_settings=test_case.generic_settings,
@@ -107,7 +107,7 @@ def select_positive(
 def select_missing_database(
     tmp_path: Path,
     settings: Settings,
-    dqrun_runner: dqrun.Runner,
+    runner: Runner,
     test_case: test_cases.select_missing_database.TestCase,
 ):
     # select table from the database that does not exist
@@ -115,24 +115,24 @@ def select_missing_database(
         SELECT *
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
-    result = dqrun_runner.run(
+    result = runner.run(
         test_dir=tmp_path,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_database_msg(data_source_pb2.CLICKHOUSE) in result.stderr, result.stderr
+    assert test_case.database.missing_database_msg() in result.stderr, result.stderr
 
 
 def select_missing_table(
     tmp_path: Path,
     settings: Settings,
-    dqrun_runner: dqrun.Runner,
+    runner: Runner,
     client: Client,
     test_case: test_cases.select_missing_table.TestCase,
 ):
     # create database, but don't create table
-    create_database_stmt = test_case.database.create(data_source_pb2.CLICKHOUSE)
+    create_database_stmt = test_case.database.create()
     LOGGER.debug(create_database_stmt)
     client.command(create_database_stmt)
 
@@ -140,10 +140,10 @@ def select_missing_table(
         SELECT *
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
-    result = dqrun_runner.run(
+    result = runner.run(
         test_dir=tmp_path,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
 
-    assert test_case.database.missing_table_msg(data_source_pb2.CLICKHOUSE) in result.stderr, result.stderr
+    assert test_case.database.missing_table_msg() in result.stderr, result.stderr

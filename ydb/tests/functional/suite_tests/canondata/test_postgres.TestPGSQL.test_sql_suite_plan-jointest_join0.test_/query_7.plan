@@ -48,12 +48,13 @@
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Condition": "hundred,ten = t2.hundred,t3.ten",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 12
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 10
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -79,12 +80,13 @@
                                                                         "Node Type": "InnerJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
+                                                                                "Condition": "thousand = unique2",
                                                                                 "Inputs": [
                                                                                     {
                                                                                         "InternalOperatorId": 1
                                                                                     },
                                                                                     {
-                                                                                        "Other": "ConstantExpression"
+                                                                                        "ExternalPlanNodeId": 4
                                                                                     }
                                                                                 ],
                                                                                 "Name": "InnerJoin (MapJoin)"

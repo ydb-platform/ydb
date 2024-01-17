@@ -4,6 +4,8 @@
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
 #include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/api/dynamic_table_transaction_mixin.h>
+#include <yt/yt/client/api/queue_transaction_mixin.h>
 
 #include <library/cpp/testing/gtest_extensions/gtest_extensions.h>
 
@@ -12,7 +14,9 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMockTransaction
-    : public ITransaction
+    : public virtual ITransaction
+    , public TDynamicTableTransactionMixin
+    , public TQueueTransactionMixin
 {
 public:
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
@@ -33,7 +37,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (
+    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options), (override));
 
@@ -195,6 +199,7 @@ public:
     MOCK_METHOD(void, SubscribeAborted, (const TAbortedHandler& callback), (override));
     MOCK_METHOD(void, UnsubscribeAborted, (const TAbortedHandler& callback), (override));
 
+    using TQueueTransactionMixin::AdvanceConsumer;
     MOCK_METHOD(TFuture<void>, AdvanceConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,

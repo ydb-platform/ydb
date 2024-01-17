@@ -4,8 +4,7 @@
 
 package runtime
 
-import _ "unsafe"
-// for go:linkname
+import _ "unsafe" // for go:linkname
 
 //go:linkname boring_runtime_arg0 crypto/internal/boring.runtime_arg0
 func boring_runtime_arg0() string {

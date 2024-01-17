@@ -399,6 +399,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                                 .Table(read.Table())
                                 .Columns(read.Columns())
                                 .LookupKeys(keys)
+                                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                                 .Done();
                         }
                     } else {

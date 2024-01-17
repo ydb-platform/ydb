@@ -10,6 +10,11 @@ on:
         required: true
         default: main
         description: "Git branch/tag revision to build"
+      dockerfile_branch:
+        type: string
+        required: true
+        default: main
+        description: "Git branch for getting Dockerfile"
       image_tag:
         type: string
         required: true
@@ -19,20 +24,19 @@ on:
         type: string
         required: true
         default: main
-        description: "Git branch/tag revision to builld local_ydb"
+        description: "Git branch/tag revision to build local_ydb"
 
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
     steps:
-      - name: Checkout .github and local_ydb
+      - name: Checkout .github
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ inputs.dockerfile_branch || 'main' }}
           path: main
           sparse-checkout: |
             .github
-            ydb/public/tools/local_ydb/
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,7 +51,7 @@ jobs:
         run: |
           echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Set up Docker Buildx
+      - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v2
 
       - name: Log in to the Container registry
@@ -82,5 +86,3 @@ jobs:
           provenance: false
           cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
           cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
-          secrets: |
-            "ccache_remote_storage=${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}"

@@ -1,8 +1,8 @@
 #include "kafka_read_session_actor.h"
 
 namespace NKafka {
-
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
+static constexpr TDuration LOCK_PARTITION_DELAY = TDuration::Seconds(3);
 static const TString SUPPORTED_ASSIGN_STRATEGY = "roundrobin";
 static const TString SUPPORTED_JOIN_GROUP_PROTOCOL = "consumer";
 
@@ -35,6 +35,20 @@ void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActo
         CloseReadSession(ctx);
         return;
     }
+
+    for (auto& topicToPartitions: NewPartitionsToLockOnTime) {
+        auto& partitions = topicToPartitions.second;
+        for (auto partitionsIt = partitions.begin(); partitionsIt != partitions.end(); ) {
+            if (partitionsIt->LockOn >= ctx.Now()) {
+                TopicPartitions[topicToPartitions.first].ToLock.emplace(partitionsIt->PartitionId);
+                NeedRebalance = true;
+                partitionsIt = partitions.erase(partitionsIt);
+            } else {
+                ++partitionsIt;
+            }
+        }
+    }
+
     Schedule(WAKEUP_INTERVAL, new TEvKafka::TEvWakeup());
 }
 
@@ -423,6 +437,10 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
     );
     
     TopicsToConverter = topicHandler->GetReadTopicsList(TopicsToReadNames, false, Context->DatabasePath);
+    if (!TopicsToConverter.IsValid) {
+        SendJoinGroupResponseFail(ctx, JoinGroupCorellationId, INVALID_REQUEST, TStringBuilder() << "topicsToConverter is not valid");
+        return;
+    }
     
     ctx.Register(new NGRpcProxy::V1::TReadInitAndAuthActor(
         ctx, ctx.SelfID, GroupId, Cookie, Session, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeSchemeCacheID(), nullptr, Context->UserToken, TopicsToConverter,
@@ -448,8 +466,9 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
         TopicsInfo[internalName] = NGRpcProxy::TTopicHolder::FromTopicInfo(t);
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
-        // savnik: metering mode
     }
+
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         topicInfo.PipeClient = CreatePipeClient(topicInfo.TabletID, ctx);
@@ -485,7 +504,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
 
     auto& req = request->Record;
     req.SetSession(Session);
-    req.SetClientNode(Context->ClientId);
+    req.SetClientNode(Context->KafkaClient);
     ActorIdToProto(pipe, req.MutablePipeClient());
     req.SetClientId(GroupId);
 
@@ -496,7 +515,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
     NTabletPipe::SendData(ctx, pipe, request.Release());
 }
 
-void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext&) {
+void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     KAFKA_LOG_D("partition lock is coming from PQRB topic# " << record.GetTopic() <<  ", partition# " << record.GetPartition());
     
@@ -527,8 +546,10 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
         return;
     }
 
-    TopicPartitions[name].ToLock.emplace(record.GetPartition());
-    NeedRebalance = true;
+    TNewPartitionToLockInfo partitionToLock;
+    partitionToLock.LockOn = ctx.Now() + LOCK_PARTITION_DELAY;
+    partitionToLock.PartitionId = record.GetPartition();
+    NewPartitionsToLockOnTime[name].push_back(partitionToLock);
 }
 
 void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
@@ -551,12 +572,22 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
         return;
     }
 
+    auto newPartitionsToLockIt = NewPartitionsToLockOnTime.find(pathIt->second->GetInternalName());
+    auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
+
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
     Y_ABORT_UNLESS(topicPartitionsIt != TopicPartitions.end());
-    Y_ABORT_UNLESS(record.GetCount() <= topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size());
+    Y_ABORT_UNLESS(record.GetCount() <= topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size() + newPartitionsToLockCount);
 
     for (ui32 c = 0; c < record.GetCount(); ++c) {   
         // if some partition not locked yet, then release it without rebalance
+        if (newPartitionsToLockCount > 0) {
+            newPartitionsToLockCount--;
+            InformBalancerAboutPartitionRelease(topicInfoIt->first, newPartitionsToLockIt->second.back().PartitionId, ctx);
+            newPartitionsToLockIt->second.pop_back();
+            continue;
+        }
+
         if (!topicPartitionsIt->second.ToLock.empty()) {
             auto partitionToReleaseIt = topicPartitionsIt->second.ToLock.begin();
             topicPartitionsIt->second.ToLock.erase(partitionToReleaseIt);

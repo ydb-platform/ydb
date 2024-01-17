@@ -186,16 +186,18 @@ class Factory:
         for param in params:
             (select_what, data_out, data_source_kinds) = param
 
+            test_case_name = f'column_selection_{select_what}'
+
             for data_source_kind in data_source_kinds:
                 test_case = TestCase(
                     data_in=data_in,
                     data_source_kind=data_source_kind,
-                    database=Database.make_for_data_source_kind(data_source_kind),
+                    database=Database(test_case_name, data_source_kind),
                     select_what=select_what,
                     select_where=None,
                     schema=schema,
                     data_out_=data_out,
-                    name=f'column_selection_{EDataSourceKind.Name(data_source_kind)}_{select_what}',
+                    name=test_case_name,
                     pragmas=dict(),
                 )
 
@@ -238,17 +240,19 @@ class Factory:
         data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
         data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
 
+        test_case_name = 'large_table'
+
         test_cases = []
         for data_source_kind in data_source_kinds:
             tc = TestCase(
-                name='large_table',
+                name=test_case_name,
                 data_source_kind=data_source_kind,
                 data_in=data_in,
                 data_out_=data_in,
                 select_what=SelectWhat.asterisk(schema.columns),
                 select_where=None,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
+                database=Database(test_case_name, data_source_kind),
                 pragmas=dict(),
             )
 
@@ -275,7 +279,6 @@ class Factory:
                 continue
             for protocol in protocols[base_tc.data_source_kind]:
                 tc = replace(base_tc)
-                tc.name += f'_{EProtocol.Name(protocol)}'
                 tc.protocol = protocol
                 test_cases.append(tc)
 

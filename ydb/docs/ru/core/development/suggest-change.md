@@ -138,8 +138,8 @@ cd ~/ydbwork
 cd ~/ydbwork/ydb
 ```
 ```
-git config user.name "Marco Polo"
-git config user.email "marco@ydb.tech"
+git config --global user.name "Marco Polo"
+git config --global user.email "marco@ydb.tech"
 ```
 
 ## Работа над изменением {#feature}

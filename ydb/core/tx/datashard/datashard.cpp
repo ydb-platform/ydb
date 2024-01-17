@@ -2662,8 +2662,8 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
 
         ctx.Send(ev->Sender, result.release());
-        IncCounter(COUNTER_PREPARE_OVERLOADED);
-        IncCounter(COUNTER_PREPARE_COMPLETE);
+        IncCounter(COUNTER_WRITE_OVERLOADED);
+        IncCounter(COUNTER_WRITE_COMPLETE);
         return true;
     }
 

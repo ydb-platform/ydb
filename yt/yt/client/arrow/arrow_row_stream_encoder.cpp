@@ -510,7 +510,7 @@ void SerializeStringLikeColumn(
                 startIndex,
                 endIndex,
                 GetTypedValues<ui32>(dstRef));
-         });
+        });
 
     context->AddBuffer(
         stringsSize,
@@ -519,7 +519,7 @@ void SerializeStringLikeColumn(
                 dstRef.Begin(),
                 stringData.Begin() + startOffset,
                 stringsSize);
-         });
+        });
 }
 
 void SerializeBooleanColumn(
@@ -547,7 +547,7 @@ void SerializeBooleanColumn(
                 column->StartIndex,
                 column->StartIndex + column->ValueCount,
                 dstRef);
-         });
+        });
 }
 
 void SerializeNullColumn(

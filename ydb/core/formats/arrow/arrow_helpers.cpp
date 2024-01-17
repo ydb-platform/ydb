@@ -363,7 +363,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceSortedBatches(const std::v
 }
 
 // Check if the permutation doesn't reorder anything
-bool IsNoOp(const arrow::UInt64Array& permutation) {
+bool IsTrivial(const arrow::UInt64Array& permutation, const ui64 originalLength) {
+    if ((ui64)permutation.length() != originalLength) {
+        return false;
+    }
     for (i64 i = 0; i < permutation.length(); ++i) {
         if (permutation.Value(i) != (ui64)i) {
             return false;
@@ -376,7 +379,7 @@ std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordB
                                             const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
     Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
-    auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
+    auto res = IsTrivial(*permutation, batch->num_rows()) ? batch : arrow::compute::Take(batch, permutation);
     Y_ABORT_UNLESS(res.ok());
     return (*res).record_batch();
 }

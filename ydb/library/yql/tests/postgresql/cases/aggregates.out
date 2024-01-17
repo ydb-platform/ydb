@@ -53,6 +53,67 @@ SELECT stddev_pop('nan'::numeric), stddev_samp('nan'::numeric);
         NaN |            
 (1 row)
 
+-- verify correct results for null and NaN inputs
+select sum(null::int4) from generate_series(1,3);
+ sum 
+-----
+    
+(1 row)
+
+select sum(null::int8) from generate_series(1,3);
+ sum 
+-----
+    
+(1 row)
+
+select sum(null::numeric) from generate_series(1,3);
+ sum 
+-----
+    
+(1 row)
+
+select sum(null::float8) from generate_series(1,3);
+ sum 
+-----
+    
+(1 row)
+
+select avg(null::int4) from generate_series(1,3);
+ avg 
+-----
+    
+(1 row)
+
+select avg(null::int8) from generate_series(1,3);
+ avg 
+-----
+    
+(1 row)
+
+select avg(null::numeric) from generate_series(1,3);
+ avg 
+-----
+    
+(1 row)
+
+select avg(null::float8) from generate_series(1,3);
+ avg 
+-----
+    
+(1 row)
+
+select sum('NaN'::numeric) from generate_series(1,3);
+ sum 
+-----
+ NaN
+(1 row)
+
+select avg('NaN'::numeric) from generate_series(1,3);
+ avg 
+-----
+ NaN
+(1 row)
+
 SELECT sum(x::numeric), avg(x::numeric), var_pop(x::numeric)
 FROM (VALUES ('1'), ('infinity')) v(x);
    sum    |   avg    | var_pop 

@@ -160,6 +160,9 @@ public:
             ui32 fromGeneration;
             if (channel->History.empty()) {
                 fromGeneration = 0;
+            } else if (channel->History.back().GroupID == group->GetGroupID()) {
+                // We decided to keep the group the same
+                continue;
             } else {
                 needToIncreaseGeneration = true;
                 fromGeneration = tablet->KnownGeneration + 1;
@@ -249,6 +252,9 @@ public:
                         db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
+                }
+                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
                 }
                 newTabletState = ETabletState::ReadyToWork;
             }

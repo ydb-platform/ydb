@@ -38,7 +38,7 @@
 #endif
 
 #ifdef USE_NSS
-#include <nspr.h>
+#error #include <nspr.h>
 #error #include <plarenas.h>
 #endif
 

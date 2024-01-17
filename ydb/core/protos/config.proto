@@ -53,7 +53,7 @@ message TActorSystemConfig {
 
     enum EActorSystemProfile {
         DEFAULT = 1;
-        LOW_CPU_CONSUMPTION = 2;   
+        LOW_CPU_CONSUMPTION = 2;
         LOW_LATENCY = 3;
     }
 
@@ -1323,6 +1323,12 @@ message THiveConfig {
         HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
     }
 
+    enum EHiveChannelBalanceStrategy {
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
     enum EHiveNodeSelectStrategy {
         HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
         HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
@@ -1400,6 +1406,8 @@ message THiveConfig {
     optional double MinCounterScatterToBalance = 65 [default = 0.02];
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
 }
 
 message TColumnShardConfig {
@@ -1424,6 +1432,7 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
 }
 
 message TSchemeShardConfig {

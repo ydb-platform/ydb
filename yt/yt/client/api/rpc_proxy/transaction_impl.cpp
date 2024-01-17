@@ -556,12 +556,12 @@ TFuture<TVersionedLookupRowsResult> TTransaction::VersionedLookupRows(
         PatchTransactionTimestamp(options));
 }
 
-TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookupRows(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {
     ValidateActive();
-    return Client_->MultiLookup(
+    return Client_->MultiLookupRows(
         subrequests,
         PatchTransactionTimestamp(options));
 }

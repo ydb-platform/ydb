@@ -142,9 +142,10 @@
                                                                 "ExternalPlanNodeId": 16
                                                             },
                                                             {
-                                                                "Other": "ConstantExpression"
+                                                                "ExternalPlanNodeId": 14
                                                             }
                                                         ],
+                                                        "Condition": "Group = Group",
                                                         "Name": "LeftJoin (MapJoin)"
                                                     }
                                                 ],

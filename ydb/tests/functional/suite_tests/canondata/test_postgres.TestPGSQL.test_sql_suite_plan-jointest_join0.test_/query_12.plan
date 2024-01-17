@@ -41,12 +41,13 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "_equijoin_column_0 = unique2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 12
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -107,12 +108,13 @@
                                                         "Node Type": "LeftJoin (MapJoin)",
                                                         "Operators": [
                                                             {
+                                                                "Condition": "unique1 = thousand",
                                                                 "Inputs": [
                                                                     {
                                                                         "ExternalPlanNodeId": 10
                                                                     },
                                                                     {
-                                                                        "Other": "ConstantExpression"
+                                                                        "ExternalPlanNodeId": 8
                                                                     }
                                                                 ],
                                                                 "Name": "LeftJoin (MapJoin)"

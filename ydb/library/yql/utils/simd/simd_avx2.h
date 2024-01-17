@@ -77,6 +77,10 @@ struct TSimd8 {
         crc = _mm_crc32_u64(crc, *((ui64*) &this->Value + 3));
         return crc;
     }
+    
+    inline void Add64(const TSimd8<T>& another) {
+        Value = _mm256_add_epi64(Value, another.Value);
+    }
 
     inline int ToBitMask() const {
         return _mm256_movemask_epi8(this->Value);

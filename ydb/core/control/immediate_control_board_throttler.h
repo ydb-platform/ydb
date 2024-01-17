@@ -16,11 +16,11 @@ public:
     {}
 
     bool Throttle() {
-        auto maxRatePerMinute = MaxRatePerMinute;
-        auto maxBurst = MaxBurst;
+        auto maxRatePerMinute = static_cast<i64>(MaxRatePerMinute);
+        auto maxBurst = static_cast<i64>(MaxBurst);
         auto maxTotal = maxRatePerMinute + maxBurst;
+        CurrentBurst = std::min(CurrentBurst, maxTotal);
         if (maxRatePerMinute == 0) {
-            CurrentBurst = 0;
             return true;
         }
 
@@ -29,7 +29,7 @@ public:
             return true;
         }
 
-        const auto deltaBetweenSends = TDuration::Minutes(1) / MaxRatePerMinute;
+        const auto deltaBetweenSends = TDuration::Minutes(1) / maxRatePerMinute;
         UpdateStats(now, deltaBetweenSends);
 
         if (CurrentBurst < maxTotal) {
@@ -47,6 +47,9 @@ private:
         Y_ABORT_UNLESS(decrease >= 0);
         CurrentBurst -= decrease;
         LastUpdate += decrease * deltaBetweenSends;
+        if (CurrentBurst == 0) {
+            LastUpdate = now;
+        }
     }
 
     TIntrusivePtr<ITimeProvider> TimeProvider;

@@ -441,7 +441,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
-       .ValueOrThrow();
+        .ValueOrThrow();
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }

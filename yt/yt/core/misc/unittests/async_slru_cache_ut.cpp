@@ -695,7 +695,7 @@ TEST(TAsyncSlruGhostCacheTest, Lookups)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 6; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -736,7 +736,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveConstructCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -799,7 +799,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveAssignCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;

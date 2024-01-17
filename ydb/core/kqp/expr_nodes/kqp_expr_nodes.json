@@ -262,12 +262,23 @@
             ]
         },
         {
+            "Name": "TKqlInsertOnConflictUpdateRows",
+            "Base": "TKqlUpsertRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlInsertOnConflictUpdateRows"},
+            "Children": [
+                {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+            ]
+        },
+        {
             "Name": "TKqlUpsertRowsIndex",
             "Base": "TKqlUpsertRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlUpsertRowsIndex"},
             "Children": [
                 {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {
@@ -558,6 +569,15 @@
             "Name": "TKqpOlapXor",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "KqpOlapXor"}
+        },
+        {
+            "Name": "TKqpOlapFilterUnaryOp",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple", "Name": "KqpOlapFilterUnaryOp"},
+            "Children": [
+                {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Arg", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TKqpOlapFilterBinaryOp",

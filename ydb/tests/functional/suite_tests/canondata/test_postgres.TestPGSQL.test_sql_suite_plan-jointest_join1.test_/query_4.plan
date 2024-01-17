@@ -42,12 +42,13 @@
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Condition": "j = k",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

@@ -110,4 +110,10 @@ ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
     return *id;
 }
 
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
+    auto result = GetFieldByColumnId(columnId);
+    AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId);
+    return result;
+}
+
 }

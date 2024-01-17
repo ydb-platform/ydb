@@ -12,10 +12,12 @@
 #include <util/stream/buffer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
 namespace NYT::NFormats {
 
@@ -29,138 +31,144 @@ namespace {
 void ThrowOnError(const arrow::Status& status)
 {
     if (!status.ok()) {
-        THROW_ERROR_EXCEPTION("%Qlv", status.message());
+        THROW_ERROR_EXCEPTION("Arrow error occurred: %Qv", status.message());
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ArraySimpleVisitor
+class TArraySimpleVisitor
     : public arrow::TypeVisitor
 {
 public:
-    ArraySimpleVisitor(
+    TArraySimpleVisitor(
         int columnId,
-        const std::shared_ptr<arrow::Array>& array,
-        const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
-        TUnversionedRowValues& rowValues)
+        std::shared_ptr<arrow::Array> array,
+        std::shared_ptr<TChunkedOutputStream> bufferForStringLikeValues,
+        TUnversionedRowValues* rowValues)
         : ColumnId_(columnId)
-        , Array_(array)
-        ,  bufferForStringLikeValues_( bufferForStringLikeValues)
+        , Array_(std::move(array))
+        , BufferForStringLikeValues_(std::move(bufferForStringLikeValues))
         , RowValues_(rowValues)
-    { };
+    { }
 
     // Signed int types.
-    arrow::Status Visit(const arrow::Int8Type&) override
+    arrow::Status Visit(const arrow::Int8Type& /*type*/) override
     {
         return ParseInt64<arrow::Int8Array>();
     }
 
-    arrow::Status Visit(const arrow::Int16Type&) override
+    arrow::Status Visit(const arrow::Int16Type& /*type*/) override
     {
         return ParseInt64<arrow::Int16Array>();
     }
 
-    arrow::Status Visit(const arrow::Int32Type&) override
+    arrow::Status Visit(const arrow::Int32Type& /*type*/) override
     {
         return ParseInt64<arrow::Int32Array>();
     }
 
-    arrow::Status Visit(const arrow::Int64Type&) override
+    arrow::Status Visit(const arrow::Int64Type& /*type*/) override
     {
         return ParseInt64<arrow::Int64Array>();
     }
 
-    arrow::Status Visit(const arrow::Date32Type&) override
+    arrow::Status Visit(const arrow::Date32Type& /*type*/) override
     {
         return ParseInt64<arrow::Date32Array>();
     }
 
-    arrow::Status Visit(const arrow::Time32Type&) override
+    arrow::Status Visit(const arrow::Time32Type& /*type*/) override
     {
         return ParseInt64<arrow::Time32Array>();
     }
 
-    arrow::Status Visit(const arrow::Date64Type&) override
+    arrow::Status Visit(const arrow::Date64Type& /*type*/) override
     {
         return ParseInt64<arrow::Date64Array>();
     }
 
-    arrow::Status Visit(const arrow::Time64Type&) override
+    arrow::Status Visit(const arrow::Time64Type& /*type*/) override
     {
         return ParseInt64<arrow::Time64Array>();
     }
 
-    arrow::Status Visit(const arrow::TimestampType&) override
+    arrow::Status Visit(const arrow::TimestampType& /*type*/) override
     {
         return ParseInt64<arrow::TimestampArray>();
     }
 
     // Unsigned int types.
-    arrow::Status Visit(const arrow::UInt8Type&) override
+    arrow::Status Visit(const arrow::UInt8Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt8Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt16Type&) override
+    arrow::Status Visit(const arrow::UInt16Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt16Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt32Type&) override
+    arrow::Status Visit(const arrow::UInt32Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt32Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt64Type&) override
+    arrow::Status Visit(const arrow::UInt64Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt64Array>();
     }
 
     // Float types.
-    arrow::Status Visit(const arrow::HalfFloatType&) override
+    arrow::Status Visit(const arrow::HalfFloatType& /*type*/) override
     {
         return ParseDouble<arrow::HalfFloatArray>();
     }
 
-    arrow::Status Visit(const arrow::FloatType&) override
+    arrow::Status Visit(const arrow::FloatType& /*type*/) override
     {
         return ParseDouble<arrow::FloatArray>();
     }
 
-    arrow::Status Visit(const arrow::DoubleType&) override
+    arrow::Status Visit(const arrow::DoubleType& /*type*/) override
     {
         return ParseDouble<arrow::DoubleArray>();
     }
 
     // String types.
-    arrow::Status Visit(const arrow::StringType&) override
+    arrow::Status Visit(const arrow::StringType& /*type*/) override
     {
-        return ParseString<arrow::StringArray>();
+        return ParseStringLikeArray<arrow::StringArray>();
     }
 
-    arrow::Status Visit(const arrow::BinaryType&) override
+    arrow::Status Visit(const arrow::BinaryType& /*type*/) override
     {
-        return ParseString<arrow::BinaryArray>();
+        return ParseStringLikeArray<arrow::BinaryArray>();
     }
 
     // Boolean type.
-    arrow::Status Visit(const arrow::BooleanType&) override
+    arrow::Status Visit(const arrow::BooleanType& /*type*/) override
     {
         return ParseBoolean();
     }
 
     // Null type.
-    arrow::Status Visit(const arrow::NullType&) override
+    arrow::Status Visit(const arrow::NullType& /*type*/) override
     {
         return ParseNull();
     }
 
 private:
+    const i64 ColumnId_;
+
+    std::shared_ptr<arrow::Array> Array_;
+    std::shared_ptr<TChunkedOutputStream> BufferForStringLikeValues_;
+    TUnversionedRowValues* RowValues_;
+
     template <typename ArrayType>
     arrow::Status ParseInt64()
     {
-        auto makeUnversionedValue = [] (int64_t value, int64_t columnId) {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedInt64Value(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
@@ -170,7 +178,7 @@ private:
     template <typename ArrayType>
     arrow::Status ParseUInt64()
     {
-        auto makeUnversionedValue = [] (int64_t value, int64_t columnId) {
+        auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedUint64Value(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
@@ -180,7 +188,7 @@ private:
     template <typename ArrayType>
     arrow::Status ParseDouble()
     {
-        auto makeUnversionedValue = [] (double value, int64_t columnId) {
+        auto makeUnversionedValue = [] (double value, i64 columnId) {
             return MakeUnversionedDoubleValue(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
@@ -188,36 +196,36 @@ private:
     }
 
     template <typename ArrayType, typename FuncType>
-    void ParseSimpleNumeric(FuncType makeUnversionedValue)
+    void ParseSimpleNumeric(FuncType makeUnversionedValueFunc)
     {
-        auto intArray = std::static_pointer_cast<ArrayType>(Array_);
-        for (int rowIndex = 0; rowIndex < intArray->length(); rowIndex++) {
-            if (intArray->IsNull(rowIndex)) {
-                RowValues_[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+        auto array = std::static_pointer_cast<ArrayType>(Array_);
+        for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
+            if (array->IsNull(rowIndex)) {
+                (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
-                RowValues_[rowIndex] = makeUnversionedValue(intArray->Value(rowIndex), ColumnId_);
+                (*RowValues_)[rowIndex] = makeUnversionedValueFunc(array->Value(rowIndex), ColumnId_);
             }
         }
     }
 
     template <typename ArrayType>
-    arrow::Status ParseString()
+    arrow::Status ParseStringLikeArray()
     {
-        auto stringArray = std::static_pointer_cast<ArrayType>(Array_);
-        for (int rowIndex = 0; rowIndex < stringArray->length(); rowIndex++) {
-            if (stringArray->IsNull(rowIndex)) {
-                RowValues_[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+        auto array = std::static_pointer_cast<ArrayType>(Array_);
+        for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
+            if (array->IsNull(rowIndex)) {
+                (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
-                auto stringElement = stringArray->GetView(rowIndex);
-                char* buffer =  bufferForStringLikeValues_->Preallocate(stringElement.size());
+                auto element = array->GetView(rowIndex);
+                char* buffer = BufferForStringLikeValues_->Preallocate(element.size());
                 std::memcpy(
                     buffer,
-                    stringElement.data(),
-                    stringElement.size());
-                bufferForStringLikeValues_->Advance(stringElement.size());
-                auto value = TStringBuf(buffer, stringElement.size());
+                    element.data(),
+                    element.size());
+                BufferForStringLikeValues_->Advance(element.size());
+                auto value = TStringBuf(buffer, element.size());
 
-                RowValues_[rowIndex] = MakeUnversionedStringValue(value, ColumnId_);
+                (*RowValues_)[rowIndex] = MakeUnversionedStringValue(value, ColumnId_);
             }
         }
         return arrow::Status::OK();
@@ -225,12 +233,12 @@ private:
 
     arrow::Status ParseBoolean()
     {
-        auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(Array_);
-        for (int rowIndex = 0; rowIndex < boolArray->length(); rowIndex++) {
-            if (boolArray->IsNull(rowIndex)) {
-                RowValues_[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+        auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
+        for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
+            if (array->IsNull(rowIndex)) {
+                (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
-                RowValues_[rowIndex] = MakeUnversionedBooleanValue(boolArray->Value(rowIndex), ColumnId_);
+                (*RowValues_)[rowIndex] = MakeUnversionedBooleanValue(array->Value(rowIndex), ColumnId_);
             }
         }
         return arrow::Status::OK();
@@ -238,160 +246,163 @@ private:
 
     arrow::Status ParseNull()
     {
-        auto nullArray = std::static_pointer_cast<arrow::NullArray>(Array_);
-        for (int rowIndex = 0; rowIndex < nullArray->length(); rowIndex++) {
-            RowValues_[rowIndex] = MakeUnversionedNullValue(ColumnId_);
+        auto array = std::static_pointer_cast<arrow::NullArray>(Array_);
+        for (int rowIndex = 0; rowIndex < array->length(); rowIndex++) {
+            (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
         }
         return arrow::Status::OK();
     }
-
-private:
-    const int64_t ColumnId_;
-    const std::shared_ptr<arrow::Array>& Array_;
-    std::shared_ptr<TChunkedOutputStream>  bufferForStringLikeValues_;
-    TUnversionedRowValues& RowValues_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ArrayCompositeVisitor
+class TArrayCompositeVisitor
     : public arrow::TypeVisitor
 {
 public:
-    ArrayCompositeVisitor(
+    TArrayCompositeVisitor(
         const std::shared_ptr<arrow::Array>& array,
         NYson::TCheckedInDebugYsonTokenWriter* writer,
         int rowIndex)
         : RowIndex_(rowIndex)
         , Array_(array)
         , Writer_(writer)
-    { };
+    {
+        YT_VERIFY(writer != nullptr);
+    }
 
     // Signed integer types.
-    arrow::Status Visit(const arrow::Int8Type&) override
+    arrow::Status Visit(const arrow::Int8Type& /*type*/) override
     {
         return ParseInt64<arrow::Int8Array>();
     }
 
-    arrow::Status Visit(const arrow::Int16Type&) override
+    arrow::Status Visit(const arrow::Int16Type& /*type*/) override
     {
         return ParseInt64<arrow::Int16Array>();
     }
 
-    arrow::Status Visit(const arrow::Int32Type&) override
+    arrow::Status Visit(const arrow::Int32Type& /*type*/) override
     {
         return ParseInt64<arrow::Int32Array>();
     }
 
-    arrow::Status Visit(const arrow::Int64Type&) override
+    arrow::Status Visit(const arrow::Int64Type& /*type*/) override
     {
         return ParseInt64<arrow::Int64Array>();
     }
 
-    arrow::Status Visit(const arrow::Date32Type&) override
+    arrow::Status Visit(const arrow::Date32Type& /*type*/) override
     {
         return ParseInt64<arrow::Date32Array>();
     }
 
-    arrow::Status Visit(const arrow::Time32Type&) override
+    arrow::Status Visit(const arrow::Time32Type& /*type*/) override
     {
         return ParseInt64<arrow::Time32Array>();
     }
 
-    arrow::Status Visit(const arrow::Date64Type&) override
+    arrow::Status Visit(const arrow::Date64Type& /*type*/) override
     {
         return ParseInt64<arrow::Date64Array>();
     }
 
-    arrow::Status Visit(const arrow::Time64Type&) override
+    arrow::Status Visit(const arrow::Time64Type& /*type*/) override
     {
         return ParseInt64<arrow::Time64Array>();
     }
 
-    arrow::Status Visit(const arrow::TimestampType&) override
+    arrow::Status Visit(const arrow::TimestampType& /*type*/) override
     {
         return ParseInt64<arrow::TimestampArray>();
     }
 
     // Unsigned integer types.
-    arrow::Status Visit(const arrow::UInt8Type&) override
+    arrow::Status Visit(const arrow::UInt8Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt8Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt16Type&) override
+    arrow::Status Visit(const arrow::UInt16Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt16Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt32Type&) override
+    arrow::Status Visit(const arrow::UInt32Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt32Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt64Type&) override
+    arrow::Status Visit(const arrow::UInt64Type& /*type*/) override
     {
         return ParseUInt64<arrow::UInt64Array>();
     }
 
     // Float types.
-    arrow::Status Visit(const arrow::HalfFloatType&) override
+    arrow::Status Visit(const arrow::HalfFloatType& /*type*/) override
     {
         return ParseDouble<arrow::HalfFloatArray>();
     }
 
-    arrow::Status Visit(const arrow::FloatType&) override
+    arrow::Status Visit(const arrow::FloatType& /*type*/) override
     {
         return ParseDouble<arrow::FloatArray>();
     }
 
-    arrow::Status Visit(const arrow::DoubleType&) override
+    arrow::Status Visit(const arrow::DoubleType& /*type*/) override
     {
         return ParseDouble<arrow::DoubleArray>();
     }
 
     // Binary types.
-    arrow::Status Visit(const arrow::StringType&) override
+    arrow::Status Visit(const arrow::StringType& /*type*/) override
     {
-        return ParseString<arrow::StringArray>();
+        return ParseStringLikeArray<arrow::StringArray>();
     }
-    arrow::Status Visit(const arrow::BinaryType&) override
+
+    arrow::Status Visit(const arrow::BinaryType& /*type*/) override
     {
-        return ParseString<arrow::BinaryArray>();
+        return ParseStringLikeArray<arrow::BinaryArray>();
     }
 
     // Boolean types.
-    arrow::Status Visit(const arrow::BooleanType&) override
+    arrow::Status Visit(const arrow::BooleanType& /*type*/) override
     {
         return ParseBoolean();
     }
 
     // Null types.
-    arrow::Status Visit(const arrow::NullType&) override
+    arrow::Status Visit(const arrow::NullType& /*type*/) override
     {
         return ParseNull();
     }
 
     // Complex types.
-    arrow::Status Visit(const arrow::ListType&) override
+    arrow::Status Visit(const arrow::ListType& /*type*/) override
     {
         return ParseList();
     }
 
-    arrow::Status Visit(const arrow::MapType&) override
+    arrow::Status Visit(const arrow::MapType& /*type*/) override
     {
         return ParseMap();
     }
-    arrow::Status Visit(const arrow::StructType&) override
+
+    arrow::Status Visit(const arrow::StructType& /*type*/) override
     {
         return ParseStruct();
     }
 
 private:
+    const int RowIndex_;
+
+    std::shared_ptr<arrow::Array> Array_;
+    NYson::TCheckedInDebugYsonTokenWriter* Writer_ = nullptr;
+
     template <typename ArrayType>
     arrow::Status ParseInt64()
     {
-        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, int64_t value) {
+        auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryInt64(value);
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
@@ -421,35 +432,34 @@ private:
     template <typename ArrayType, typename FuncType>
     void ParseComplexNumeric(FuncType writeNumericValue)
     {
-        auto intArray = std::static_pointer_cast<ArrayType>(Array_);
-        if (intArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<ArrayType>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
-            writeNumericValue(Writer_, intArray->Value(RowIndex_));
+            writeNumericValue(Writer_, array->Value(RowIndex_));
         }
     }
 
     template <typename ArrayType>
-    arrow::Status ParseString()
+    arrow::Status ParseStringLikeArray()
     {
-        auto stringArray = std::static_pointer_cast<ArrayType>(Array_);
-        if (stringArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<ArrayType>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
-            auto stringElement = stringArray->GetView(RowIndex_);
-            auto value = TStringBuf(stringElement.data(), stringElement.size());
-            Writer_->WriteBinaryString(value);
+            auto element = array->GetView(RowIndex_);
+            Writer_->WriteBinaryString(TStringBuf(element.data(), element.size()));
         }
         return arrow::Status::OK();
     }
 
     arrow::Status ParseBoolean()
     {
-        auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(Array_);
-        if (boolArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
-            Writer_->WriteBinaryBoolean(boolArray->Value(RowIndex_));
+            Writer_->WriteBinaryBoolean(array->Value(RowIndex_));
         }
         return arrow::Status::OK();
     }
@@ -462,17 +472,16 @@ private:
 
     arrow::Status ParseList()
     {
-        auto listArray = std::static_pointer_cast<arrow::ListArray>(Array_);
-        if (listArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<arrow::ListArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBeginList();
 
-            auto column = listArray->value_slice(RowIndex_);
-
-            for (int RowIndex_ = 0; RowIndex_ < column->length(); RowIndex_++) {
-                ArrayCompositeVisitor visitor(column, Writer_, RowIndex_);
-                ThrowOnError(column->type()->Accept(&visitor));
+            auto listValue = array->value_slice(RowIndex_);
+            for (int offset = 0; offset < listValue->length(); ++offset) {
+                TArrayCompositeVisitor visitor(listValue, Writer_, offset);
+                ThrowOnError(listValue->type()->Accept(&visitor));
 
                 Writer_->WriteItemSeparator();
             }
@@ -484,29 +493,31 @@ private:
 
     arrow::Status ParseMap()
     {
-        auto mapArray = std::static_pointer_cast<arrow::MapArray>(Array_);
-        if (mapArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<arrow::MapArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
-            auto mapArrayElement = std::static_pointer_cast<arrow::StructArray>(mapArray->value_slice(RowIndex_));
+            auto element = std::static_pointer_cast<arrow::StructArray>(
+                array->value_slice(RowIndex_));
 
-            auto keyColumn = mapArrayElement->GetFieldByName("key");
-            auto valueColumn = mapArrayElement->GetFieldByName("value");
+            auto keyList = element->GetFieldByName("key");
+            auto valueList = element->GetFieldByName("value");
 
             Writer_->WriteBeginList();
-            for (int index = 0; index < keyColumn->length(); index++) {
+
+            for (int offset = 0; offset < keyList->length(); ++offset) {
                 Writer_->WriteBeginList();
 
-                ArrayCompositeVisitor keyVisitor(keyColumn, Writer_, index);
+                TArrayCompositeVisitor keyVisitor(keyList, Writer_, offset);
+                ThrowOnError(keyList->type()->Accept(&keyVisitor));
 
-                ThrowOnError(keyColumn->type()->Accept(&keyVisitor));
+                Writer_->WriteItemSeparator();
+
+                TArrayCompositeVisitor valueVisitor(valueList, Writer_, offset);
+                ThrowOnError(valueList->type()->Accept(&valueVisitor));
 
                 Writer_->WriteItemSeparator();
 
-                ArrayCompositeVisitor valueVisitor(valueColumn, Writer_, index);
-                ThrowOnError(valueColumn->type()->Accept(&valueVisitor));
-
-                Writer_->WriteItemSeparator();
                 Writer_->WriteEndList();
                 Writer_->WriteItemSeparator();
             }
@@ -518,38 +529,34 @@ private:
 
     arrow::Status ParseStruct()
     {
-        auto structArray = std::static_pointer_cast<arrow::StructArray>(Array_);
-
-        if (structArray->IsNull(RowIndex_)) {
+        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBeginList();
-            for (int elementIndex = 0; elementIndex < structArray->num_fields(); elementIndex++) {
-                auto elementColumn = structArray->field(elementIndex);
-                ArrayCompositeVisitor elementVisitor(elementColumn, Writer_, RowIndex_);
-                ThrowOnError(elementColumn->type()->Accept(&elementVisitor));
+
+            for (int offset = 0; offset < array->num_fields(); ++offset) {
+                auto element = array->field(offset);
+                TArrayCompositeVisitor visitor(element, Writer_, RowIndex_);
+                ThrowOnError(element->type()->Accept(&visitor));
 
                 Writer_->WriteItemSeparator();
             }
+
             Writer_->WriteEndList();
         }
         return arrow::Status::OK();
     }
-
-private:
-    const int RowIndex_;
-    std::shared_ptr<arrow::Array> Array_;
-    NYson::TCheckedInDebugYsonTokenWriter* Writer_ = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void CheckArrowType(
     const std::shared_ptr<arrow::DataType>& arrowType,
-    const std::initializer_list<arrow::Type::type>& allowedTypes)
+    std::initializer_list<arrow::Type::type> allowedTypes)
 {
     if (std::find(allowedTypes.begin(), allowedTypes.end(), arrowType->id()) == allowedTypes.end()) {
-        THROW_ERROR_EXCEPTION("Unexpected arrow type %Qlv",
+        THROW_ERROR_EXCEPTION("Unexpected arrow type %Qv",
             arrowType->name());
     }
 }
@@ -671,7 +678,12 @@ void CheckMatchingArrowTypes(
 
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
-            CheckArrowType(column->type(), {arrow::Type::NA, arrow::Type::DICTIONARY});
+            CheckArrowType(
+                column->type(),
+                {
+                    arrow::Type::NA,
+                    arrow::Type::DICTIONARY
+                });
             break;
 
         case ESimpleLogicalValueType::Uuid:
@@ -706,7 +718,7 @@ void PrepareArrayForSimpleLogicalType(
         auto dictionaryValuesColumn = dictionaryColumn->dictionary();
         CheckMatchingArrowTypes(columnType, dictionaryValuesColumn);
 
-        ArraySimpleVisitor visitor(columnId, dictionaryValuesColumn,  bufferForStringLikeValues, dictionaryValues);
+        TArraySimpleVisitor visitor(columnId, dictionaryValuesColumn, bufferForStringLikeValues, &dictionaryValues);
         ThrowOnError(dictionaryColumn->dictionary()->type()->Accept(&visitor));
 
         for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
@@ -717,14 +729,14 @@ void PrepareArrayForSimpleLogicalType(
             }
         }
     } else {
-        ArraySimpleVisitor visitor(columnId, column,  bufferForStringLikeValues, rowsValues[columnIndex]);
+        TArraySimpleVisitor visitor(columnId, column, bufferForStringLikeValues, &rowsValues[columnIndex]);
         ThrowOnError(column->type()->Accept(&visitor));
     }
 }
 
 void PrepareArrayForComplexType(
-    TLogicalTypePtr denullifiedLogicalType,
-    const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
+    const TLogicalTypePtr& denullifiedLogicalType,
+    const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow::Array>& column,
     std::vector<TUnversionedRowValues>& rowsValues,
     int columnIndex,
@@ -766,18 +778,18 @@ void PrepareArrayForComplexType(
             break;
 
         default:
-            THROW_ERROR_EXCEPTION("Unexpected arrow type in complex type %Qlv", column->type()->name());
+            THROW_ERROR_EXCEPTION("Unexpected arrow type in complex type %Qv", column->type()->name());
     }
 
     if (column->type()->id() == arrow::Type::BINARY) {
         TUnversionedRowValues stringValues(rowsValues[columnIndex].size());
-        ArraySimpleVisitor visitor(columnId, column,  bufferForStringLikeValues, stringValues);
+        TArraySimpleVisitor visitor(columnId, column, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
         for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
             if (column->IsNull(offset)) {
                 rowsValues[columnIndex][offset] = MakeUnversionedNullValue(columnId);
             } else {
-                rowsValues[columnIndex][offset] =  MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                rowsValues[columnIndex][offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
             }
         }
     } else {
@@ -789,7 +801,7 @@ void PrepareArrayForComplexType(
                 TBufferOutput out(valueBuffer);
                 NYson::TCheckedInDebugYsonTokenWriter writer(&out);
 
-                ArrayCompositeVisitor visitor(column, &writer, rowIndex);
+                TArrayCompositeVisitor visitor(column, &writer, rowIndex);
 
                 ThrowOnError(column->type()->Accept(&visitor));
 
@@ -811,8 +823,8 @@ void PrepareArrayForComplexType(
 }
 
 void PrepareArray(
-    TLogicalTypePtr denullifiedLogicalType,
-    const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
+    const TLogicalTypePtr& denullifiedLogicalType,
+    const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow::Array>& column,
     std::vector<TUnversionedRowValues>& rowsValues,
     int columnIndex,
@@ -849,52 +861,65 @@ void PrepareArray(
             break;
 
         case ELogicalMetatype::Tagged:
+            // Denullified type should not contain tagged type.
+            YT_ABORT();
             break;
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class ListenerState {
+enum class EListenerState
+{
     EOS,
     RecordBatch,
-    InProgress
+    InProgress,
+    Empty,
 };
 
-class Listener
+class TListener
     : public arrow::ipc::Listener
 {
 public:
-    Listener(IValueConsumer* valueConsumer)
+    explicit TListener(IValueConsumer* valueConsumer)
         : Consumer_(valueConsumer)
     { }
 
     arrow::Status OnEOS() override
     {
-        CurrentState_ = ListenerState::EOS;
+        CurrentState_ = EListenerState::EOS;
         return arrow::Status::OK();
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override
     {
-        CurrentState_ = ListenerState::RecordBatch;
+        CurrentState_ = EListenerState::RecordBatch;
 
         struct TArrowParserTag
         { };
-        auto  bufferForStringLikeValues = std::make_shared<TChunkedOutputStream>(
+
+        auto bufferForStringLikeValues = std::make_shared<TChunkedOutputStream>(
             GetRefCountedTypeCookie<TArrowParserTag>(),
             256_KB,
             1_MB);
 
-        std::vector<TUnversionedRowValues> rowsValues(batch->num_columns(), TUnversionedRowValues(batch->num_rows()));
-        for (int columnIndex = 0; columnIndex < batch->num_columns(); columnIndex++) {
-            const auto columnId = Consumer_->GetNameTable()->GetIdOrRegisterName(batch->column_name(columnIndex));
-            auto columnSchema = Consumer_->GetSchema()->FindColumn(batch->column_name(columnIndex));
-            const auto columnType = columnSchema ? columnSchema->LogicalType() : OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any));
+        auto numColumns = batch->num_columns();
+        auto numRows = batch->num_rows();
+        std::vector<TUnversionedRowValues> rowsValues(numColumns, TUnversionedRowValues(numRows));
 
-            const auto denullifiedLogicalType = DenullifyLogicalType(columnType);
+        for (int columnIndex = 0; columnIndex < numColumns; ++columnIndex) {
+            auto columnName = batch->column_name(columnIndex);
+
+            auto columnId = Consumer_->GetNameTable()->GetIdOrRegisterName(columnName);
+            auto columnSchema = Consumer_->GetSchema()->FindColumn(columnName);
+
+            auto columnType = columnSchema
+                ? columnSchema->LogicalType()
+                : OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any));
+            auto denullifiedColumnType = DenullifyLogicalType(columnType);
+
             PrepareArray(
-                denullifiedLogicalType,
+                denullifiedColumnType,
                 bufferForStringLikeValues,
                 batch->column(columnIndex),
                 rowsValues,
@@ -902,9 +927,9 @@ public:
                 columnId);
         }
 
-        for (int rowIndex = 0; rowIndex < batch->num_rows(); rowIndex++) {
+        for (int rowIndex = 0; rowIndex < numRows; ++rowIndex) {
             Consumer_->OnBeginRow();
-            for (int columnIndex = 0; columnIndex < batch->num_columns(); columnIndex++) {
+            for (int columnIndex = 0; columnIndex < numColumns; ++columnIndex) {
                 Consumer_->OnValue(rowsValues[columnIndex][rowIndex]);
             }
             Consumer_->OnEndRow();
@@ -914,20 +939,21 @@ public:
 
     void Reset()
     {
-        CurrentState_ = ListenerState::InProgress;
+        CurrentState_ = EListenerState::InProgress;
     }
 
-    ListenerState GetState()
+    EListenerState GetState()
     {
         return CurrentState_;
     }
 
 private:
-    ListenerState CurrentState_ = ListenerState::InProgress;
-    IValueConsumer* Consumer_;
+    IValueConsumer* const Consumer_;
+
+    EListenerState CurrentState_ = EListenerState::InProgress;
 };
 
-std::shared_ptr<arrow::Buffer> MakeBuffer(const char* data, int64_t size)
+std::shared_ptr<arrow::Buffer> MakeBuffer(const char* data, i64 size)
 {
     arrow::BufferBuilder bufferBuilder;
     ThrowOnError(bufferBuilder.Reserve(size));
@@ -944,55 +970,56 @@ class TArrowParser
 {
 public:
     TArrowParser(IValueConsumer* valueConsumer)
-    {
-        Listener_ = std::make_shared<Listener>(valueConsumer);
-        Decoder_ = std::make_shared<arrow::ipc::StreamDecoder>(Listener_);
-    }
+        : Listener_(std::make_shared<TListener>(valueConsumer))
+        , Decoder_(std::make_shared<arrow::ipc::StreamDecoder>(Listener_))
+    { }
 
     void Read(TStringBuf data) override
     {
-        int64_t restDataSize = data.Size();
-        auto currentPtr = data.Data();
-        while (restDataSize > 0) {
-            auto nextRequiredSize = Decoder_->next_required_size();
-
-            auto currentSize = std::min(reinterpret_cast<int64_t>(nextRequiredSize), restDataSize);
+        i64 restSize = data.Size();
+        const char* currentPtr = data.Data();
+        while (restSize > 0) {
+            i64 nextRequiredSize = Decoder_->next_required_size();
+            auto currentSize = std::min(nextRequiredSize, restSize);
 
             ThrowOnError(Decoder_->Consume(MakeBuffer(currentPtr, currentSize)));
 
             LastState_ = Listener_->GetState();
 
             switch (LastState_) {
-                case ListenerState::InProgress:
+                case EListenerState::InProgress:
                     break;
 
-                case ListenerState::EOS:
+                case EListenerState::EOS:
                     Decoder_ = std::make_shared<arrow::ipc::StreamDecoder>(Listener_);
                     Listener_->Reset();
                     break;
 
-                case ListenerState::RecordBatch:
+                case EListenerState::RecordBatch:
                     Listener_->Reset();
                     break;
+
+                case EListenerState::Empty:
+                    YT_ABORT();
             }
 
             currentPtr += currentSize;
-            restDataSize -= currentSize;
+            restSize -= currentSize;
         }
     }
 
     void Finish() override
     {
-        if (LastState_ == ListenerState::InProgress) {
+        if (LastState_ == EListenerState::InProgress) {
             THROW_ERROR_EXCEPTION("Unexpected end of stream");
         }
     }
 
-
 private:
-    std::shared_ptr<Listener> Listener_;
+    const std::shared_ptr<TListener> Listener_;
+
     std::shared_ptr<arrow::ipc::StreamDecoder> Decoder_;
-    ListenerState LastState_;
+    EListenerState LastState_ = EListenerState::Empty;
 };
 
 } // namespace

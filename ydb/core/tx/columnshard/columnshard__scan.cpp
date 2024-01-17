@@ -878,8 +878,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     const auto& scanId = record.GetScanId();
     const auto& snapshot = record.GetSnapshot();
 
-    TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId());
-    TRowVersion maxReadVersion = GetMaxReadVersion();
+    NOlap::TSnapshot readVersion(snapshot.GetStep(), snapshot.GetTxId());
+    NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
 
     LOG_S_DEBUG("EvScan txId: " << txId
         << " scanId: " << scanId
@@ -889,7 +889,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
 
     if (maxReadVersion < readVersion) {
         WaitingScans.emplace(readVersion, std::move(ev));
-        WaitPlanStep(readVersion.Step);
+        WaitPlanStep(readVersion.GetPlanStep());
         return;
     }
 

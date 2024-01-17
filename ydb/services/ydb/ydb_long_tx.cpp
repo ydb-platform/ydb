@@ -28,7 +28,6 @@ void TGRpcYdbLongTxService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST(CommitTx, CommitTransaction, DoLongTxCommitRPC)
     ADD_REQUEST(RollbackTx, RollbackTransaction, DoLongTxRollbackRPC)
     ADD_REQUEST(Write, Write, DoLongTxWriteRPC)
-    ADD_REQUEST(Read, Read, DoLongTxReadRPC)
 #undef ADD_REQUEST
 }
 

@@ -225,8 +225,9 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options)
     return New<THedgingClient>(options, CreateDummyPenaltyProvider());
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptions& options,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return New<THedgingClient>(options, penaltyProvider);
 }
@@ -241,9 +242,10 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const I
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache));
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config,
-                                          const IClientsCachePtr& clientsCache,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientConfig& config,
+    const IClientsCachePtr& clientsCache,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache), penaltyProvider);
 }

@@ -471,6 +471,10 @@ void TNodeInfo::ActualizeNodeStatistics(TInstant now) {
     Hive.ActualizeRestartStatistics(*Statistics.MutableRestartTimestamp(), barierTime.MilliSeconds());
 }
 
+ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
+    return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
+}
+
 TString TNodeInfo::GetLogPrefix() const {
     return Hive.GetLogPrefix();
 }

@@ -13,7 +13,6 @@ import (
 	"runtime"
 	"syscall"
 	_ "unsafe" // for go:linkname
-
 )
 
 const _UTIME_OMIT = unix.UTIME_OMIT

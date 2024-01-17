@@ -1142,6 +1142,6 @@ SET TimeZone to 'UTC';
 <sql-statement>
 SELECT '2011-03-27 00:00:00 Europe/Moscow'::timestamptz;
 </sql-statement>
-pgrun: /storage/d/arcc/mount/1/a0a05244-a249bf61-ec2999f5-6661a47b/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
+pgrun: /-S/ydbwork/ydb/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
 pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
 ?? at ??:0:0

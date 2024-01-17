@@ -1314,7 +1314,7 @@ void ValidateReadTimestamp(TTimestamp timestamp)
 void ValidateGetInSyncReplicasTimestamp(TTimestamp timestamp)
 {
     if (timestamp != SyncLastCommittedTimestamp &&
-       (timestamp < MinTimestamp || timestamp > MaxTimestamp))
+        (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
         THROW_ERROR_EXCEPTION("Invalid GetInSyncReplicas timestamp %x", timestamp);
     }

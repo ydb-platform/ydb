@@ -5,8 +5,8 @@ PY_SRCS(
 )
 
 PEERDIR(
+    build/plugins/lib/test_const
     contrib/python/PyYAML
-    devtools/ya/test/const
     library/python/fs
     library/python/testing/recipe
 )

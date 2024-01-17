@@ -17,7 +17,7 @@ namespace NYT::NYTree {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TYPathRequest
-   : public NRpc::IClientRequest
+    : public NRpc::IClientRequest
 {
 public:
     //! Enables tagging requests with arbitrary payload.

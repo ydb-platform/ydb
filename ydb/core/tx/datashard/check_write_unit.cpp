@@ -41,7 +41,6 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
     Y_ABORT_UNLESS(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
@@ -50,8 +49,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
     }
 
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
     Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());

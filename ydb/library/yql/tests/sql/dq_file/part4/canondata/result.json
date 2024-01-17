@@ -671,6 +671,28 @@
         }
     ],
     "test.test[expr-int_literals_negative_typed-default.txt-Results]": [],
+    "test.test[expr-list_indexof-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/995452/b1f2dabe2f59f069a24ebbb0bcf5d5b69f26631e/resource.tar.gz#test.test_expr-list_indexof-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[expr-list_indexof-default.txt-Debug]": [
+        {
+            "checksum": "9968f0a681b374cf69e8272c94c136ad",
+            "size": 1178,
+            "uri": "https://{canondata_backend}/995452/b1f2dabe2f59f069a24ebbb0bcf5d5b69f26631e/resource.tar.gz#test.test_expr-list_indexof-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-list_indexof-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/995452/b1f2dabe2f59f069a24ebbb0bcf5d5b69f26631e/resource.tar.gz#test.test_expr-list_indexof-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[expr-list_indexof-default.txt-Results]": [],
     "test.test[expr-list_to_from_tuple-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",
@@ -1033,9 +1055,9 @@
     ],
     "test.test[join-inmem_with_set_key_any-off-Debug]": [
         {
-            "checksum": "108e71b345a5dbd62d42a9936f758e9e",
-            "size": 1877,
-            "uri": "https://{canondata_backend}/1900335/a5a16b7313d07b162a608c1abeab1e68e6175117/resource.tar.gz#test.test_join-inmem_with_set_key_any-off-Debug_/opt.yql_patched"
+            "checksum": "c2de537418fc84da5cdfe9500c5fbc70",
+            "size": 2923,
+            "uri": "https://{canondata_backend}/1937492/3cc712c3196f7027398ddcbbf6597f57ccd7dfeb/resource.tar.gz#test.test_join-inmem_with_set_key_any-off-Debug_/opt.yql_patched"
         }
     ],
     "test.test[join-inmem_with_set_key_any-off-Plan]": [
@@ -1047,9 +1069,9 @@
     ],
     "test.test[join-inmem_with_set_key_any-off-Results]": [
         {
-            "checksum": "34b5409f9fb03a14e181cac68fd98576",
-            "size": 766,
-            "uri": "https://{canondata_backend}/1900335/a5a16b7313d07b162a608c1abeab1e68e6175117/resource.tar.gz#test.test_join-inmem_with_set_key_any-off-Results_/results.txt"
+            "checksum": "0582e4d9579caca2aff4bb94c2dda229",
+            "size": 830,
+            "uri": "https://{canondata_backend}/1937492/3cc712c3196f7027398ddcbbf6597f57ccd7dfeb/resource.tar.gz#test.test_join-inmem_with_set_key_any-off-Results_/results.txt"
         }
     ],
     "test.test[join-inner_trivial--Analyze]": [
@@ -2131,6 +2153,28 @@
         }
     ],
     "test.test[pg-tpch-q09-default.txt-Results]": [],
+    "test.test[pg_catalog-pg_set_config-default.txt-Analyze]": [
+        {
+            "checksum": "4eaabd8e0d2437ccd8ba8311ee9b195d",
+            "size": 1357,
+            "uri": "https://{canondata_backend}/1937001/ceb29095b5e35ed4cc1eb104072815b0be7ac715/resource.tar.gz#test.test_pg_catalog-pg_set_config-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config-default.txt-Debug]": [
+        {
+            "checksum": "c0fc5bdb405f341292917207a1a9b077",
+            "size": 800,
+            "uri": "https://{canondata_backend}/1937001/ceb29095b5e35ed4cc1eb104072815b0be7ac715/resource.tar.gz#test.test_pg_catalog-pg_set_config-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config-default.txt-Plan]": [
+        {
+            "checksum": "4eaabd8e0d2437ccd8ba8311ee9b195d",
+            "size": 1357,
+            "uri": "https://{canondata_backend}/1937001/ceb29095b5e35ed4cc1eb104072815b0be7ac715/resource.tar.gz#test.test_pg_catalog-pg_set_config-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_set_config-default.txt-Results]": [],
     "test.test[produce-reduce_all-default.txt-Analyze]": [
         {
             "checksum": "9bd46d79daaa9520002fc1a9f8ead7ad",

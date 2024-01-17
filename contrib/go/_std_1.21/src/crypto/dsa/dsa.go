@@ -14,10 +14,11 @@
 package dsa
 
 import (
-	"crypto/internal/randutil"
 	"errors"
 	"io"
 	"math/big"
+
+	"crypto/internal/randutil"
 )
 
 // Parameters represents the domain parameters for a key. These parameters can

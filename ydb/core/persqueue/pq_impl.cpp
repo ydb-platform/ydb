@@ -2477,20 +2477,16 @@ void TPersQueue::HandleGetOwnershipRequestForShadowPartition(const ui64 response
 
     if (TxWrites.contains(writeId) && TxWrites[writeId].Partitions.contains(partitionId)) {
         ui32 shadowPartitionId = TxWrites[writeId].Partitions[partitionId];
+        Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+        TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
 
-        if (ShadowPartitions.contains(shadowPartitionId)) {
-            TPartitionInfo& partition = ShadowPartitions.at(shadowPartitionId);
+        if (partition.InitDone) {
+            const TActorId& actorId = partition.Actor;
+            TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
 
-            if (partition.InitDone) {
-                const TActorId& actorId = partition.Actor;
-                TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
-
-                HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
-            } else {
-                partition.GetOwnershipRequests.emplace_back(responseCookie, req, sender);
-            }
+            HandleGetOwnershipRequest(responseCookie, actorId, req, ctx, pipeClient, sender);
         } else {
-            Y_ABORT_UNLESS(ShadowPartitions.contains(shadowPartitionId));
+            partition.GetOwnershipRequests.emplace_back(responseCookie, req, sender);
         }
     } else {
         GetOwnershipRequests.push_back({responseCookie, req, sender});

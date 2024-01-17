@@ -46,7 +46,8 @@ namespace {
         return addr;
     }
 
-    TMaybe<TString> SerializeAddress(const TIpv6Address& addr) {
+    TString SerializeAddress(const TIpv6Address& addr) {
+        Y_ENSURE(addr.Type() == TIpv6Address::Ipv4 || addr.Type() == TIpv6Address::Ipv6);
         TString res;
         ui128 x = addr;
         if (addr.Type() == TIpv6Address::Ipv4) {
@@ -69,16 +70,16 @@ namespace {
                 ui8(x >> 8 & 0xff), ui8(x & 0xff)
             };
             res = TString(reinterpret_cast<const char *>(&addr6), sizeof addr6);
-        } else {
-            return Nothing();
         }
         return res;
     }
 
     SIMPLE_STRICT_UDF(TFromString, TOptionalString(TAutoMapString)) {
         TIpv6Address addr = TIpv6Address::FromString(args[0].AsStringRef());
-        auto res = SerializeAddress(addr);
-        return res ? valueBuilder->NewString(res.GetRef()) : TUnboxedValue();
+        if (addr.Type() != TIpv6Address::Ipv4 && addr.Type() != TIpv6Address::Ipv6) {
+            return TUnboxedValue();
+        }
+        return valueBuilder->NewString(SerializeAddress(addr));
     }
 
     SIMPLE_UDF(TToString, char*(TAutoMapString)) {
@@ -124,7 +125,7 @@ namespace {
         } else if (ref.Size() == 4) {
             TIpv6Address addr4 = DeserializeAddress(ref);
             auto addr6 = TIpv6Address(ui128(addr4) | ui128(0xFFFF) << 32, TIpv6Address::Ipv6);
-            return valueBuilder->NewString(SerializeAddress(addr6).GetRef());
+            return valueBuilder->NewString(SerializeAddress(addr6));
         } else {
             ythrow yexception() << "Incorrect size of input, expected "
             << "4 or 16, got " << ref.Size();
@@ -154,7 +155,7 @@ namespace {
             << "4 or 16, got " << ref.Size();
         }
         TIpv6Address beg = LowerBoundForPrefix(addr, subnetSize);
-        return valueBuilder->NewString(SerializeAddress(beg).GetRef());
+        return valueBuilder->NewString(SerializeAddress(beg));
     }
 
 #define EXPORTED_IP_BASE_UDF \

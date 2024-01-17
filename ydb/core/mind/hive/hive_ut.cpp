@@ -2856,8 +2856,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRestartComplete, 4); // should actually be less than 4
-            runtime.DispatchEvents(options, TDuration::Seconds(10));
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvStorageBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Minutes(1));
         }
 
         UNIT_ASSERT_VALUES_UNEQUAL(getGroup(tabletA), getGroup(tabletB));

@@ -30,6 +30,7 @@ struct TEvPrivate {
         EvStartStorageBalancer,
         EvRestartCancelled,
         EvProcessStorageBalancer,
+        EvStorageBalancerOut,
         EvEnd
     };
 
@@ -107,6 +108,8 @@ struct TEvPrivate {
     };
 
     struct TEvProcessStorageBalancer : TEventLocal<TEvProcessStorageBalancer, EvProcessStorageBalancer> {};
+
+    struct TEvStorageBalancerOut : TEventLocal<TEvStorageBalancerOut, EvStorageBalancerOut> {};
 };
 
 } // NHive

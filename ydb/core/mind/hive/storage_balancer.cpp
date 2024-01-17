@@ -66,6 +66,7 @@ protected:
         Stats.LastRunMovements = Reassigns;
         Stats.IsRunningNow = false;
         Hive->RemoveSubActor(this);
+        Send(Hive->SelfId(), new TEvPrivate::TEvStorageBalancerOut());
         return IActor::PassAway();
     }
 

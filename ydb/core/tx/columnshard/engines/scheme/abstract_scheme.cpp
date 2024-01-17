@@ -115,5 +115,3 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
     AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId)("schema", DebugString());
     return result;
 }
-
-}

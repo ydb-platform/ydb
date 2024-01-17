@@ -335,6 +335,17 @@ namespace {
         return valueBuilder->NewString(SerializeAddress(beg));
     }
 
+    SIMPLE_UDF(TGetSubnetByMask, char*(TAutoMapString, TAutoMapString)) {
+        const auto refBase = args[0].AsStringRef();
+        const auto refMask = args[1].AsStringRef();
+        TIpv6Address addrBase = DeserializeAddress(refBase);
+        TIpv6Address addrMask = DeserializeAddress(refMask);
+        if (addrBase.Type() != addrMask.Type()) {
+            ythrow yexception() << "Base and mask differ in length";
+        }
+        return valueBuilder->NewString(SerializeAddress(TIpv6Address(ui128(addrBase) & ui128(addrMask), addrBase.Type())));
+    }
+
 #define EXPORTED_IP_BASE_UDF \
     TFromString, \
     TSubnetFromString, \
@@ -345,5 +356,6 @@ namespace {
     TIsEmbeddedIPv4, \
     TConvertToIPv6, \
     TGetSubnet, \
-    TSubnetMatch
+    TSubnetMatch, \
+    TGetSubnetByMask
 }

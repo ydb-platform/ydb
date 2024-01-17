@@ -117,6 +117,5 @@ message TSchemeQuota {
 
 enum EServerlessComputeResourcesMode {
     SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED = 0;
-    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED = 1;     // using nodes that serve resources domain
-    SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED = 2;  // using nodes that serve self domain
+    SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE = 1;
 }

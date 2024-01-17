@@ -6015,7 +6015,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(foundTablet);
     }
 
-    Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
+    Y_UNIT_TEST(TestDomainNodeSelectionPolicy) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
 
@@ -6071,7 +6071,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6091,113 +6091,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 1); // started in object domain
 
-        {
-            auto ev = MakeHolder<TEvHive::TEvUpdateDomain>();
-            ev->Record.SetTxId(++txId);
-            ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
-            ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
-            runtime.SendToPipe(hiveTablet, sender, ev.Release());
-            TAutoPtr<IEventHandle> handle;
-            TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetOrigin(), hiveTablet);
-        }
-
-        // restart to kick tablet
-        SendKillLocal(runtime, 1);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
-        CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
-
-        MakeSureTabletIsUp(runtime, dummyTabletId, 0);
-        AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
-
-        SendKillLocal(runtime, 0);
-        runtime.SimulateSleep(TDuration::Seconds(1));
-        MakeSureTabletIsDown(runtime, dummyTabletId, 0); // can't start because there are no allowed domain nodes
-    }
-
-    Y_UNIT_TEST(TestResetServerlessComputeResourcesMode) {
-        TTestBasicRuntime runtime(2, false);
-        Setup(runtime, true);
-
-        const ui64 hiveTablet = MakeDefaultHiveID(0);
-        const ui64 testerTablet = MakeDefaultHiveID(1);
-        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
-        MakeSureTabletIsUp(runtime, hiveTablet, 0); // root hive good
-        MakeSureTabletIsUp(runtime, TTestTxConfig::SchemeShard, 0); // root ss good
-
-        TActorId sender = runtime.AllocateEdgeActor(0);
-        InitSchemeRoot(runtime, sender);
-
-        // Create subdomain
-        ui32 txId = 100;
-        TSubDomainKey subdomainKey;
-        do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
-            modifyScheme->Record.SetTxId(++txId);
-            auto* transaction = modifyScheme->Record.AddTransaction();
-            transaction->SetWorkingDir("/dc-1");
-            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
-            auto* subdomain = transaction->MutableSubDomain();
-            subdomain->SetName("tenant1");
-            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
-            TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
-            if (reply) {
-                subdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
-                UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
-                break;
-            }
-        } while (true);
-
-        // Start local for subdomain
-        SendKillLocal(runtime, 1);
-        CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
-        
-        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
-        createTablet->Record.AddAllowedDomains();
-        createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
-        createTablet->Record.MutableAllowedDomains(0)->SetPathId(1);
-        createTablet->Record.MutableObjectDomain()->SetSchemeShard(subdomainKey.GetSchemeShard());
-        createTablet->Record.MutableObjectDomain()->SetPathId(subdomainKey.GetPathId());
-        ui64 dummyTabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
-        
-        MakeSureTabletIsUp(runtime, dummyTabletId, 0);
-        AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
-
-        {
-            auto ev = MakeHolder<TEvHive::TEvUpdateDomain>();
-            ev->Record.SetTxId(++txId);
-            ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
-            ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
-            runtime.SendToPipe(hiveTablet, sender, ev.Release());
-            TAutoPtr<IEventHandle> handle;
-            TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetOrigin(), hiveTablet);
-        }
-
-        // restart to kick tablet
-        SendKillLocal(runtime, 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
-        CreateLocal(runtime, 0);
-        
-        MakeSureTabletIsUp(runtime, dummyTabletId, 0);
-        AssertTabletStartedOnNode(runtime, dummyTabletId, 1); // started in object domain
-
-        // reset ServerlessComputeResourcesMode
         {
             auto ev = MakeHolder<TEvHive::TEvUpdateDomain>();
             ev->Record.SetTxId(++txId);
@@ -6222,6 +6115,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
+
+        SendKillLocal(runtime, 0);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0); // can't start because there are no allowed domain nodes
     }
 }
 

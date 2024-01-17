@@ -500,11 +500,9 @@ public:
         }
 
         switch (domainInfo->ServerlessComputeResourcesMode) {
-            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
+            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE:
                 return false;
-            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
-                return true;
-            default:
+            case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED:
                 return true;
         } 
     }

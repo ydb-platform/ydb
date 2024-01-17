@@ -274,9 +274,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
 
         switch (input.GetServerlessComputeResourcesMode()) {
             case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED:
-                return paramError("can not set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED");
-            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED:
-            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+            case EServerlessComputeResourcesMode::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE:
                 break; // ok
             default:
                 return paramError("unknown ServerlessComputeResourcesMode");
@@ -287,7 +285,11 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
             return paramError("ServerlessComputeResourcesMode can be changed only for serverless");
         }
 
-        serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode() != input.GetServerlessComputeResourcesMode();
+        if (input.GetServerlessComputeResourcesMode()) {
+            serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode() != input.GetServerlessComputeResourcesMode();
+        } else {
+            serverlessComputeResourcesModeChanged = current->GetServerlessComputeResourcesMode().Defined();
+        }
     }
 
     delta->CoordinatorsAdded = coordinatorsAdded;

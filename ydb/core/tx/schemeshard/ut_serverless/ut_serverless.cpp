@@ -353,8 +353,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             env.TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0", serverlessComputeResourcesMode, sharedHive);
         };
 
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
+        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
@@ -421,19 +421,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         // Try to change ServerlessComputeResourcesMode not on serverless database
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE
                 Name: "SharedDB"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
-        );
-
-        // Try to set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-            R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
-                Name: "ServerLess0"
-            )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
         );
     }
 
@@ -501,7 +492,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE
                 Name: "ServerLess0"
             )",
             {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}

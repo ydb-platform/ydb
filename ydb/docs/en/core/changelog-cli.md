@@ -20,7 +20,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * **_(Experimental)_** In the `ydb table query explain` command, the `--collect-diagnostics` option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 
-* In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, specifying the type of queries used.
+* In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, which allows to specify which type of queries to use.
 
 * Added column of median benchmark execution time in the statistics table in the command [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
 

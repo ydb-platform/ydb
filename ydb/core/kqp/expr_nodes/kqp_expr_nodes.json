@@ -180,21 +180,10 @@
         {
             "Name": "TKqlStreamLookupTable",
             "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"}
-        },
-        {
-            "Name": "TKqlStreamIdxLookupJoin",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqlStreamIdxLookupJoin"},
+            "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"},
             "Children": [
-                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
-                {"Index": 1, "Name": "LeftLabel", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "RightTable", "Type": "TKqpTable"},
-                {"Index": 3, "Name": "RightColumns", "Type": "TCoAtomList"},
-                {"Index": 4, "Name": "RightLabel", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "JoinType", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "LookupStrategy", "Type": "TCoAtom"}
             ]
-
         },
         {
             "Name": "TKqlSequencer",
@@ -469,15 +458,25 @@
             ]
         },
         {
-            "Name": "TKqpIndexLookupJoin",
+            "Name": "TKqlIndexLookupJoinBase",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpIndexLookupJoin"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "JoinType", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TKqlIndexLookupJoin",
+            "Base": "TKqlIndexLookupJoinBase",
+            "Match": {"Type": "Callable", "Name": "KqlIndexLookupJoin"}
+        },
+        {
+            "Name": "TKqpIndexLookupJoin",
+            "Base": "TKqlIndexLookupJoinBase",
+            "Match": {"Type": "Callable", "Name": "KqpIndexLookupJoin"}
         },
         {
             "Name": "TKqpCnSequencer",

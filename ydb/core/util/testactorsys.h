@@ -102,12 +102,12 @@ class TTestActorSystem {
 
     struct TMailboxInfo {
         TMailboxHeader Header{TMailboxType::Simple};
-        ui64 ActorLocalId = 1;
     };
 
     const ui32 MaxNodeId;
     std::map<TInstant, std::deque<TScheduleItem>> ScheduleQ;
     TInstant Clock = TInstant::Zero();
+    ui64 ActorLocalId = 1;
     std::unordered_map<TMailboxId, TMailboxInfo, THash<std::tuple<ui32, ui32, ui32>>> Mailboxes;
     TProgramShouldContinue ProgramShouldContinue;
     TAppData AppData;
@@ -473,11 +473,11 @@ public:
         // register actor in mailbox
         const auto& it = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId)).first;
         TMailboxInfo& mbox = it->second;
-        mbox.Header.AttachActor(mbox.ActorLocalId, actor);
+        mbox.Header.AttachActor(ActorLocalId, actor);
 
         // generate actor id
-        const TActorId actorId(nodeId, poolId, mbox.ActorLocalId, mboxId);
-        ++mbox.ActorLocalId;
+        const TActorId actorId(nodeId, poolId, ActorLocalId, mboxId);
+        ++ActorLocalId;
         if (OwnLogPriority >= NActors::NLog::EPrio::Info) {
             *LogStream << "[TestActorSystem] Register actor \"" << name << "\" with id " << actorId.ToString() << Endl;
             RegisterActorName(actorId, name);

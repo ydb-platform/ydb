@@ -29,8 +29,8 @@ struct TPeriodicExecutorOptions
 
 struct TRetryingPeriodicExecutorOptions
 {
-    TPeriodicExecutorOptions PeriodicOptions;
-    TExponentialBackoffOptions BackoffOptions;
+    TPeriodicExecutorOptions Periodic;
+    TExponentialBackoffOptions BackoffStrategy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

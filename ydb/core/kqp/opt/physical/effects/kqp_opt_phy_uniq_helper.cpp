@@ -276,7 +276,7 @@ TVector<TUniqBuildHelper::TUniqCheckNodes> TUniqBuildHelper::Prepare(const TCoAr
                 // Skip check if no input for index update
                 used = true;
             } else if (insertMode) {
-                // In case of insert new row absent input column will contains NULL value (or forbidden in case of NOT NULL)
+                // In case of insert, 'column' will contain NULL for the new PK (or query will fail in case of NOT NULL)
                 // NULL != NULL and NULL != "any other value" so we can just skip uniq check.
                 skip = true;
                 continue;

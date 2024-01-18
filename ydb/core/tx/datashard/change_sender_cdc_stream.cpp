@@ -8,6 +8,8 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -288,7 +290,7 @@ class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
     , public TBaseChangeSender
     , public IChangeSenderResolver
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     struct TPQPartitionInfo {
         ui32 PartitionId;

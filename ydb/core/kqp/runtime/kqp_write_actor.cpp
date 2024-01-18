@@ -231,18 +231,17 @@ private:
             YQL_ENSURE(!batchesQueue.empty());
 
             if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
+                const bool needToResume = (GetFreeSpace() <= 0);
+
                 MemoryInflight -= batchesQueue.front().Data.size();
                 batchesQueue.pop_front();
+                if (needToResume && GetFreeSpace() > 0) {
+                    Callbacks->ResumeExecution();
+                }
             }
         }
 
         ProcessRows();
-    }
-
-    void NotifyCAResume() {
-        if (GetFreeSpace() > 0) {
-            Callbacks->ResumeExecution();
-        }
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -354,6 +353,8 @@ private:
             return;
         }
 
+        const bool needToResume = (GetFreeSpace() <= 0);
+
         auto shardsSplitter = NKikimr::NEvWrite::IShardsSplitter::BuildSplitter(*SchemeEntry);
         YQL_ENSURE(shardsSplitter);
 
@@ -369,14 +370,17 @@ private:
 
         for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
             for (auto&& shardInfo : infos) {
-                //sumBytes += shardInfo->GetBytes();
-                //rowsCount += shardInfo->GetRowsCount();
                 auto& inflightBatch = InflightBatches[shard].emplace_back();
                 inflightBatch.Data = shardInfo->GetData();
+                YQL_ENSURE(!inflightBatch.Data.empty());
                 MemoryInflight += inflightBatch.Data.size();
 
                 RequestNewTxId();
             }
+        }
+
+        if (needToResume && GetFreeSpace() > 0) {
+            Callbacks->ResumeExecution();
         }
     }
 

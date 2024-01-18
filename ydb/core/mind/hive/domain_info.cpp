@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NHive {
 
 ENodeSelectionPolicy TDomainInfo::GetNodeSelectionPolicy() const {
-    if (!ServerlessComputeResourcesMode) {
+    if (ServerlessComputeResourcesMode.Empty()) {
         return ENodeSelectionPolicy::Default;
     }
 

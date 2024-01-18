@@ -499,7 +499,11 @@ public:
             return false;
         }
 
-        switch (domainInfo->ServerlessComputeResourcesMode) {
+        if (domainInfo->ServerlessComputeResourcesMode.Empty()) {
+            return true;
+        }
+        
+        switch (*domainInfo->ServerlessComputeResourcesMode) {
             case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE:
                 return false;
             case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:

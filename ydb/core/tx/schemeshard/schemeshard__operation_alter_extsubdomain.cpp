@@ -769,7 +769,7 @@ public:
             event->Record.MutableDomainKey()->SetSchemeShard(pathId.OwnerId);
             event->Record.MutableDomainKey()->SetPathId(pathId.LocalPathId);
             const auto& serverlessComputeResourcesMode = subDomain->GetServerlessComputeResourcesMode();
-            if (serverlessComputeResourcesMode) {
+            if (serverlessComputeResourcesMode.Defined()) {
                 event->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
             }
 

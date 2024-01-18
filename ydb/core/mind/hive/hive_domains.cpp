@@ -51,7 +51,7 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             Domains[key].Path = path;
             if (entry.DomainInfo) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
-                if (entry.DomainInfo->ServerlessComputeResourcesMode && Domains[key].ServerlessComputeResourcesMode.Empty()) {
+                if (Domains[key].ServerlessComputeResourcesMode.Empty()) {
                     Domains[key].ServerlessComputeResourcesMode = entry.DomainInfo->ServerlessComputeResourcesMode;
                 }
             }
@@ -69,7 +69,7 @@ void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
     const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
     TDomainInfo& domainInfo = Domains[subdomainKey];
-    if (ev->Get()->Record.GetServerlessComputeResourcesMode() != NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED) {
+    if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
         domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
     } else {
         domainInfo.ServerlessComputeResourcesMode.Clear();

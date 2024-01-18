@@ -81,7 +81,6 @@ public:
         , TableId(Settings.GetTable().GetOwnerId(), Settings.GetTable().GetTableId())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
-        Y_UNUSED(Settings, Counters, LogPrefix, TxId, TableId);
         EgressStats.Level = args.StatsLevel;
 
         BuildColumns();
@@ -116,7 +115,7 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MemoryLimit - MemoryUsed;
+        return MemoryLimit - (MemoryInflight + BatchBuilder->Bytes());
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 dataSize, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -141,7 +140,6 @@ private:
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ true);
-                // MemoryUsed += cells[index].Size();
             }
             BatchBuilder->AddRow(
                 TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
@@ -152,11 +150,11 @@ private:
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleWrite);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolve);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
-                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNewTxId);
-                hFunc(TEvPrivate::TEvShardRequestTimeout, HandleTimeout);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+                hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             }
@@ -177,7 +175,7 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
-    void HandleResolve(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ErrorCount > 0) {
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
@@ -194,7 +192,7 @@ private:
         ProcessRows();
     }
 
-    void HandleWrite(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+    void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
         CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
@@ -229,9 +227,13 @@ private:
                 new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-            // TODO: fix it using some cookie in EvWrite.
-            // Can loose data here. Duplicate completed for duplicate writes.
-            InflightBatches.at(ev->Get()->Record.GetOrigin()).pop_front();
+            auto& batchesQueue = InflightBatches.at(ev->Get()->Record.GetOrigin());
+            YQL_ENSURE(!batchesQueue.empty());
+
+            if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
+                MemoryInflight -= batchesQueue.front().Data.size();
+                batchesQueue.pop_front();
+            }
         }
 
         ProcessRows();
@@ -371,6 +373,7 @@ private:
                 //rowsCount += shardInfo->GetRowsCount();
                 auto& inflightBatch = InflightBatches[shard].emplace_back();
                 inflightBatch.Data = shardInfo->GetData();
+                MemoryInflight += inflightBatch.Data.size();
 
                 RequestNewTxId();
             }
@@ -432,7 +435,7 @@ private:
         ++inflightBatch.SendAttempts;
     }
 
-    void HandleTimeout(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
+    void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         if (!InflightBatches.contains(ev->Get()->ShardId)) {
             return;
         }
@@ -446,7 +449,7 @@ private:
         SendRequestShard(ev->Get()->ShardId);
     }
 
-    void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         if (!InflightBatches.contains(ev->Get()->TabletId)) {
             return;
@@ -454,13 +457,13 @@ private:
         SendRequestShard(ev->Get()->TabletId);
     }
 
-    void HandleNewTxId(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         FreeTxIds.push_back(ev->Get()->TxId);
         ProcessRows();
     }
 
     void RequestNewTxId() {
-        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Send(TxProxyId, new TEvTxUserProxy::TEvAllocateTxId);
     }
 
     std::optional<ui64> AllocateTxId() {
@@ -472,6 +475,7 @@ private:
         return result;
     }
 
+    NActors::TActorId TxProxyId = MakeTxProxyID();
     NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 
     TString LogPrefix;
@@ -490,9 +494,6 @@ private:
     TVector<TSysTables::TTableColumnInfo> Columns;
     std::vector<ui32> ColumnIds;
 
-    const i64 MemoryLimit = 1024 * 1024 * 1024;
-    i64 MemoryUsed = 0;
-
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
@@ -504,6 +505,9 @@ private:
     };
     THashMap<ui64, std::deque<TInflightBatch>> InflightBatches;
     bool Finished = false;
+
+    const i64 MemoryLimit = 1_GB;
+    i64 MemoryInflight = 0;
 
     std::vector<ui64> FreeTxIds;
 };

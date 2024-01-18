@@ -228,13 +228,6 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table, const 
             .Body<TCoToFlow>()
                 .Input(expr)
                 .Build()
-            //.Body<TKqpTableSinkOutput>()
-            //    .Input<TCoToFlow>()
-            //        .Input(expr)
-            //        .Build()
-            //    .Columns(columns)
-            //    .Settings().Build()
-            //    .Build()
             .Build()
         .Outputs<TDqStageOutputsList>()
             .Add<TDqSink>()
@@ -337,11 +330,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Program()
                 .Args(program.Args())
                 .Body(input)
-                //.Body<TKqpTableSinkOutput>()
-                //    .Input(input)
-                //    .Columns(node.Columns())
-                //    .Settings().Build()
-                //    .Build()
                 .Build()
             .Outputs<TDqStageOutputsList>()
                 .Add<TDqSink>()
@@ -360,8 +348,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .Build()
             .Settings().Build()
             .Done();
-
-        //TODO: check inplace????
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
             .Stage(stageInput.Cast().Ptr())

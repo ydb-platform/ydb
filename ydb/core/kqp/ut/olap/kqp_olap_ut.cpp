@@ -5261,8 +5261,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(output, R"([[10u;]])");
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     Y_UNIT_TEST(DuplicatesInIncomingBatch) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TKikimrSettings runnerSettings;
@@ -5332,7 +5330,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
     }
 
-    Y_UNIT_TEST(OlapUpsert_Simple) {
+    Y_UNIT_TEST(OlapReplace_Simple) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -5365,23 +5363,44 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto client = kikimr.GetQueryClient();
         auto prepareResult = client.ExecuteQuery(R"(
             REPLACE INTO `/Root/TestSrc` (Col1, Col2, Col3) VALUES
-                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test4", 13);
+                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
 
-        const TString sql = R"(
-            REPLACE INTO `/Root/TestDst`
-            SELECT * FROM `/Root/TestSrc`
-        )";
-        auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+        {
+            const TString sql = R"(
+                REPLACE INTO `/Root/TestDst`
+                SELECT * FROM `/Root/TestSrc`
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
-        auto it = client.StreamExecuteQuery(R"(
-            SELECT * FROM `/Root/TestDst` ORDER BY Col1, Col2, Col3;
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-        TString output = StreamResultToYson(it);
-        CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;["test4"];13]])");
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/TestDst` ORDER BY Col1, Col2, Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])");
+        }
+
+        {
+            // Missing Nullable column
+            const TString sql = R"(
+                REPLACE INTO `/Root/TestDst`
+                SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/TestSrc`
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/TestDst` ORDER BY Col1, Col2, Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
+        }
     }
 }
 

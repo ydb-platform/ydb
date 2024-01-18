@@ -1568,6 +1568,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TAuditWriterInitializer(runConfig));
     }
 
+    if (serviceMask.EnableLongTxService) {
+        sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) {
         sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
     }

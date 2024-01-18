@@ -904,6 +904,12 @@ namespace Tests {
         }
 
         {
+            IActor* longTxService = NLongTxService::CreateLongTxService();
+            TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx);
+            Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);
+        }
+
+        {
             IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
             TActorId sequenceProxyId = Runtime->Register(sequenceProxy, nodeIdx);
             Runtime->RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, nodeIdx);

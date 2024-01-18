@@ -89,7 +89,6 @@ public:
         return DoSaveBlobBatch(std::move(blobBatch), db);
     }
 
-    // Deletes the blob that was previously permanently saved
     virtual void DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
     virtual void DeleteBlobOnComplete(const TUnifiedBlobId& blobId) = 0;
 };

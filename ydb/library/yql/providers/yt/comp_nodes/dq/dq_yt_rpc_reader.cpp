@@ -84,11 +84,19 @@ void TParallelFileInputState::Finish() {
     MkqlReader_.Finish();
 }
 
+void TParallelFileInputState::CheckError() const {
+    if (!InnerState_->Error.IsOK()) {
+        Cerr << "YT RPC Reader exception:\n";
+        InnerState_->Error.ThrowOnError();
+    }
+}
+
 bool TParallelFileInputState::RunNext() {
     while (true) {
         size_t InputIdx = 0;
         {
             std::lock_guard lock(InnerState_->Lock);
+            CheckError();
             if (InnerState_->CurrentInputIdx == RawInputs_.size() && InnerState_->CurrentInflight == 0 && InnerState_->Results.empty() && !MkqlReader_.IsValid()) {
                 return false;
             }
@@ -186,10 +194,7 @@ bool TParallelFileInputState::NextValue() {
         TResult result;
         {
             std::lock_guard lock(InnerState_->Lock);
-            if (!InnerState_->Error.IsOK()) {
-                Cerr << "YT RPC Reader exception:\n";
-                InnerState_->Error.ThrowOnError();
-            }
+            CheckError();
             if (InnerState_->Results.empty()) {
                 continue;
             }

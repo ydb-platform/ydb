@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022-09-04)
+VERSION(2022-12-06)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/28f4245b6779303896e15d52fe59592e824e840f.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/96d63993dd3698bbf2d6a83c035cd05faed7317b.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -219,6 +219,7 @@ SRCS(
     src/legacy_pointer_safety.cpp
     src/locale.cpp
     src/memory.cpp
+    src/memory_resource.cpp
     src/mutex.cpp
     src/mutex_destructor.cpp
     src/optional.cpp

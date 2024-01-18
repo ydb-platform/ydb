@@ -1252,7 +1252,7 @@ public:
     void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
-        TSelfCheckContext rrContext(&context, "UPTIME");
+        TSelfCheckContext rrContext(&context, "NODE UPTIME");
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
         } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
@@ -1320,7 +1320,7 @@ public:
                 auto& computeNode = *computeStatus.add_nodes();
                 FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
-            context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::NodeState});
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node

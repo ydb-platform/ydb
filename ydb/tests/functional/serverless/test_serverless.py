@@ -539,10 +539,10 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeExclusive"
     )
-    serverless_db_dedicated_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
+    serverless_db_exclusive_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
 
-    assert_that(serverless_db_dedicated_endpoints, not_none())
-    assert_that(serverless_db_dedicated_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
+    assert_that(serverless_db_exclusive_endpoints, not_none())
+    assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
 
 
 def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):

@@ -532,16 +532,6 @@
             ]
         },
         {
-            "Name": "TKqpTableSinkOutput",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpTableSinkOutput"},
-            "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "Settings", "Type": "TExprList", "Optional": true}
-            ]
-        },
-        {
             "Name": "TKqpTableSink",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DataSink"},

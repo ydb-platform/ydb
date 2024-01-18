@@ -414,7 +414,7 @@ private:
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
             Settings.GetTable().GetTableId(),
-            1/* // TODO: Settings.GetTable().GetSchemaVersion()*/,
+            1, // TODO: Settings.GetTable().GetVersion()
             ColumnIds,
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);

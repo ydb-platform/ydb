@@ -323,6 +323,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     YQL_CLOG(INFO, ProviderKqp) << "#### dqUnion.Output().Stage(): " << KqpExprToPrettyString(dqUnion.Output().Stage(), ctx);
     YQL_CLOG(INFO, ProviderKqp) << "#### program: " << KqpExprToPrettyString(program, ctx);
     YQL_CLOG(INFO, ProviderKqp) << "#### input: " << KqpExprToPrettyString(input, ctx);
+    YQL_CLOG(INFO, ProviderKqp) << "#### TABLE: " << KqpExprToPrettyString(node.Table(), ctx);
 
     if (sinkEffect) {
         stageInput = Build<TDqStage>(ctx, node.Pos())

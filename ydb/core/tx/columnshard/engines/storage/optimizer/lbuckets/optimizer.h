@@ -366,7 +366,7 @@ public:
                 break;
             }
             result.emplace_back(i);
-            currentSize += i->GetBlobBytes();
+            currentSize += i->GetRawBytes();
         }
         if (result.size() < sorted.size()) {
             separatePoint = sorted[result.size()]->IndexKeyStart();

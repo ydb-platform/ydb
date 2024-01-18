@@ -1721,6 +1721,20 @@
             "uri": "https://{canondata_backend}/1871182/6b10ad6d9884e5faf3a77187ffb9b38b59b46458/resource.tar.gz#test_sql2yql.test_aggregate-aggrs_no_grouping_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-aggrs_no_grouping_via_map]": [
+        {
+            "checksum": "7178378193cad6646eb2f56f88968771",
+            "size": 13576,
+            "uri": "https://{canondata_backend}/1937367/1251b8b408ef167749e32c6a9872574193aac10c/resource.tar.gz#test_sql2yql.test_aggregate-aggrs_no_grouping_via_map_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-aggrs_no_grouping_via_map_compact]": [
+        {
+            "checksum": "15eccd38936bf65cdd85fc025e0925e2",
+            "size": 15566,
+            "uri": "https://{canondata_backend}/1937367/1251b8b408ef167749e32c6a9872574193aac10c/resource.tar.gz#test_sql2yql.test_aggregate-aggrs_no_grouping_via_map_compact_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-avg_and_sum]": [
         {
             "checksum": "79739198f6ebccd1e0310d5b7422d4e6",
@@ -19065,6 +19079,20 @@
             "checksum": "c8707aa0c7dfb11d123200dd01beb076",
             "size": 1473,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_aggregate-aggrs_no_grouping_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-aggrs_no_grouping_via_map]": [
+        {
+            "checksum": "87bcd0d25dab9d63694caf1e3e940bbd",
+            "size": 1515,
+            "uri": "https://{canondata_backend}/1937367/1251b8b408ef167749e32c6a9872574193aac10c/resource.tar.gz#test_sql_format.test_aggregate-aggrs_no_grouping_via_map_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-aggrs_no_grouping_via_map_compact]": [
+        {
+            "checksum": "91723a562d00c7c5a22088dad5b2e4ee",
+            "size": 1539,
+            "uri": "https://{canondata_backend}/1937367/1251b8b408ef167749e32c6a9872574193aac10c/resource.tar.gz#test_sql_format.test_aggregate-aggrs_no_grouping_via_map_compact_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-avg_and_sum]": [

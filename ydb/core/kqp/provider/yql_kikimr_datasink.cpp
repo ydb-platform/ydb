@@ -614,8 +614,7 @@ public:
             return true;
         }
 
-        // TODO: insert???
-        if (mode != "upsert" && mode != "replace") {
+        if (mode != "replace") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables"));
             return false;
         }

@@ -448,7 +448,6 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TVector<TExprBase>& builtEffects)
 {
-    YQL_CLOG(INFO, ProviderKqp) << "TEST: EFFECTS: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputs;
     TVector<TExprBase> newEffects;
@@ -460,10 +459,8 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
         TMaybeNode<TExprBase> newEffect;
         bool sinkEffect = false;
         YQL_ENSURE(effect.Maybe<TKqlEffectBase>());
-        YQL_CLOG(INFO, ProviderKqp) << "#### EFFECT: " << KqpExprToPrettyString(effect, ctx);
         if (effect.Maybe<TKqlTableEffect>()) {
             TMaybeNode<TExprBase> input;
-            //TODO: do we need it???
             TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
                 .Name("inputArg")
                 .Done();
@@ -650,7 +647,6 @@ TAutoPtr<IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrusivePtr
         }
 
         output = result.Cast().Ptr();
-        YQL_CLOG(INFO, ProviderKqp) << "#### RESULT: " << KqpExprToPrettyString(*output, ctx);
         return TStatus(TStatus::Repeat, true);
     });
 }

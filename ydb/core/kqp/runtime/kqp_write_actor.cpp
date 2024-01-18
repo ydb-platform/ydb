@@ -16,6 +16,7 @@
 #include <util/generic/singleton.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
 
+
 namespace {
     struct TWriteActorBackoffSettings {
         TDuration StartRetryDelay = TDuration::MilliSeconds(100);
@@ -42,6 +43,7 @@ namespace {
         return delay;
     }
 }
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -118,7 +120,7 @@ private:
         return MemoryLimit - (MemoryInflight + BatchBuilder->Bytes());
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 dataSize, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
 
         EgressStats.Resume();

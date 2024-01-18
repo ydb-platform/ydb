@@ -5480,14 +5480,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto prepareResult = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/ColumnShard` (Col1, Col2) VALUES (1u, 1)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("is not supported for olap tables"),
+                prepareResult.GetIssues().ToString());
         }
 
         { 
             auto prepareResult = client.ExecuteQuery(R"(
                 INSERT INTO `/Root/ColumnShard` (Col1, Col2) VALUES (2u, 2)
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+            UNIT_ASSERT(!prepareResult.IsSuccess());
+            UNIT_ASSERT_C(
+                prepareResult.GetIssues().ToString().Contains("is not supported for olap tables"),
+                prepareResult.GetIssues().ToString());
         }
 
         {

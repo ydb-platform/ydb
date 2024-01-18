@@ -1675,14 +1675,13 @@ private:
         if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
             return false;
         }
-        // all reads datashard OR all reads columnshard
-        // datashard write => all ops datashard ==is=olap== no datashard write
-        //for (const auto &tableOp : stage.GetTableOps()) {
-        //    if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) { 
-        //        return false;
-        //    }
-        //}
-        Y_UNUSED(queryType, stage);
+
+        for (const auto &tableOp : stage.GetTableOps()) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
+                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
+                return false;
+            }
+        }
         return true;
     }
 

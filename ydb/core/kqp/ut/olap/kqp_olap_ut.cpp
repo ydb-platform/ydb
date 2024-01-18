@@ -5533,6 +5533,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([])");
         }
+
+        // TODO: test error replace into data from column
     }
 }
 

@@ -62,4 +62,6 @@ namespace NWilson {
         Data->Sent = true;
     }
 
+    const TSpan TSpan::Empty;
+
 } // NWilson

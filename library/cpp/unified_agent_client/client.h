@@ -40,8 +40,8 @@ namespace NUnifiedAgent {
         // TLog instance for client library's own logs.
         //
         // Default: TLoggerOperator<TGlobalLog>::Log()
-        TClientParameters& SetLog(TLog& log) {
-            Log = log;
+        TClientParameters& SetLog(TLog log) {
+            Log = std::move(log);
             return *this;
         }
 

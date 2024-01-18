@@ -13,6 +13,7 @@
 
 #include <yt/yt/core/yson/async_consumer.h>
 #include <yt/yt/core/yson/attribute_consumer.h>
+#include <yt/yt/core/yson/list_verb_lazy_yson_consumer.h>
 #include <yt/yt/core/yson/null_consumer.h>
 #include <yt/yt/core/yson/ypath_designated_consumer.h>
 #include <yt/yt/core/yson/writer.h>
@@ -89,6 +90,17 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void CheckProducedNonEmptyData(const TString& data)
+{
+    if (data.empty()) {
+        THROW_ERROR_EXCEPTION(
+            NRpc::EErrorCode::Unavailable,
+            "Producer returned an empty result; please contact developers for further assistance");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TFromProducerYPathService
     : public TYPathServiceBase
     , public TSupportsGet
@@ -157,7 +169,6 @@ private:
         YT_ABORT();
     }
 
-
     TYsonString BuildStringFromProducer()
     {
         if (CachePeriod_ != TDuration()) {
@@ -173,9 +184,7 @@ private:
         writer.Flush();
 
         const auto& str = stream.Str();
-        if (str.empty()) {
-            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::Unavailable, "No data is available");
-        }
+        CheckProducedNonEmptyData(str);
 
         auto result = TYsonString(str);
 
@@ -299,9 +308,7 @@ private:
         }
 
         auto str = stream.Str();
-        if (str.empty()) {
-            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::Unavailable, "No data is available");
-        }
+        CheckProducedNonEmptyData(str);
 
         return TYsonString(std::move(str));
     }
@@ -359,11 +366,6 @@ private:
             return;
         }
 
-        IAttributeDictionaryPtr options;
-        if (request->has_options()) {
-            options = NYTree::FromProto(request->options());
-        }
-
         context->SetRequestInfo();
         auto yson = BuildStringFromProducer();
         response->set_value(yson.ToString());
@@ -390,9 +392,7 @@ private:
         }
 
         auto str = stream.Str();
-        if (str.empty()) {
-            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::Unavailable, "No data is available");
-        }
+        CheckProducedNonEmptyData(str);
 
         response->set_value(std::move(str));
         context->Reply();
@@ -405,36 +405,43 @@ private:
         ExecuteVerb(node, context->GetUnderlyingContext());
     }
 
-    void ListSelf(TReqList* /*request*/, TRspList* /*response*/, const TCtxListPtr& context) override
+    void ListSelf(TReqList* request, TRspList* response, const TCtxListPtr& context) override
     {
-        // Execute fallback.
-        auto node = BuildNodeFromProducer();
-        ExecuteVerb(node, context->GetUnderlyingContext());
+        ListRecursive("", request, response, context);
     }
 
     void ListRecursive(const TYPath& path, TReqList* request, TRspList* response, const TCtxListPtr& context) override
     {
-        context->SetRequestInfo();
-
-        auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
-        auto consumer = CreateYPathDesignatedConsumer(path, EMissingPathMode::ThrowError, builder.get());
-        Producer_.Run(consumer.get());
-        auto node = builder->EndTree();
-
-        auto innerRequest = TYPathProxy::List("");
-        if (request->has_limit()) {
-            innerRequest->set_limit(request->limit());
+        if (request->has_attributes())  {
+            // Execute fallback.
+            auto node = BuildNodeFromProducer();
+            ExecuteVerb(node, context->GetUnderlyingContext());
+            return;
         }
 
-        ExecuteVerb(node, innerRequest)
-            .Subscribe(BIND([=] (const TErrorOr<TYPathProxy::TRspListPtr> resultOrError) {
-                if (resultOrError.IsOK()) {
-                    response->set_value(resultOrError.Value()->value());
-                    context->Reply();
-                } else {
-                    context->Reply(resultOrError);
-                }
-            }));
+        context->SetRequestInfo();
+
+        auto limit = request->has_limit()
+            ? std::optional(request->limit())
+            : std::nullopt;
+
+        TStringStream stream;
+        TBufferedBinaryYsonWriter writer(&stream);
+        TListVerbLazyYsonConsumer lazyConsumer(&writer, limit);
+        if (path.empty()) {
+            Producer_.Run(&lazyConsumer);
+        } else {
+            auto consumer = CreateYPathDesignatedConsumer(path, EMissingPathMode::ThrowError, &lazyConsumer);
+            Producer_.Run(consumer.get());
+        }
+        writer.Flush();
+
+        auto str = stream.Str();
+        CheckProducedNonEmptyData(str);
+
+        response->set_value(std::move(str));
+
+        context->Reply();
     }
 
     void ListAttribute(const TYPath& /*path*/, TReqList* /*request*/, TRspList* /*response*/, const TCtxListPtr& context) override
@@ -470,9 +477,7 @@ private:
         writer.Flush();
 
         auto str = stream.Str();
-        if (str.empty()) {
-            THROW_ERROR_EXCEPTION(NRpc::EErrorCode::Unavailable, "No data is available");
-        }
+        CheckProducedNonEmptyData(str);
 
         return TYsonString(std::move(str));
     }

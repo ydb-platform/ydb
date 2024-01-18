@@ -46,9 +46,10 @@ dependencies {
 {%         if targets|selectattr("app_main_class") -%}
 {%             if library.excludes.consumer is defined %}
     implementation({{ classpath }}) {
-{%                 for exclude in library.excludes.consumer -%}
-{%                     set classpath_parts = exclude.classpath.split(':') -%}
-        exclude group: '{{ classpath_parts[0] }}', module: '{{ classpath_parts[1] }}'
+{%                 for exclude in library.excludes.consumer if exclude.classpath -%}
+{%                     set classpath = exclude.classpath|replace('"','') -%}
+{%                     set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%                 endfor -%}
     }
 {%             else -%}

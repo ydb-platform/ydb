@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -24,6 +24,7 @@
 #include "tool_setup.h"
 
 #include "tool_cfgable.h"
+#include "tool_formparse.h"
 #include "tool_main.h"
 
 #include "memdebug.h" /* keep this as LAST include */
@@ -53,11 +54,13 @@ static void free_config_fields(struct OperationConfig *config)
   Curl_safefree(config->useragent);
   Curl_safefree(config->altsvc);
   Curl_safefree(config->hsts);
+  Curl_safefree(config->haproxy_clientip);
   curl_slist_free_all(config->cookies);
   Curl_safefree(config->cookiejar);
   curl_slist_free_all(config->cookiefiles);
 
   Curl_safefree(config->postfields);
+  Curl_safefree(config->query);
   Curl_safefree(config->referer);
 
   Curl_safefree(config->headerfile);
@@ -89,6 +92,8 @@ static void free_config_fields(struct OperationConfig *config)
 
   Curl_safefree(config->netrc_file);
   Curl_safefree(config->output_dir);
+  Curl_safefree(config->proto_str);
+  Curl_safefree(config->proto_redir_str);
 
   urlnode = config->url_list;
   while(urlnode) {
@@ -104,6 +109,7 @@ static void free_config_fields(struct OperationConfig *config)
   config->url_get = NULL;
   config->url_out = NULL;
 
+  Curl_safefree(config->ipfs_gateway);
   Curl_safefree(config->doh_url);
   Curl_safefree(config->cipher_list);
   Curl_safefree(config->proxy_cipher_list);
@@ -132,13 +138,12 @@ static void free_config_fields(struct OperationConfig *config)
   Curl_safefree(config->engine);
   Curl_safefree(config->etag_save_file);
   Curl_safefree(config->etag_compare_file);
+  Curl_safefree(config->ssl_ec_curves);
   Curl_safefree(config->request_target);
   Curl_safefree(config->customrequest);
   Curl_safefree(config->krblevel);
-
   Curl_safefree(config->oauth_bearer);
   Curl_safefree(config->sasl_authzid);
-
   Curl_safefree(config->unix_socket_path);
   Curl_safefree(config->writeout);
   Curl_safefree(config->proto_default);

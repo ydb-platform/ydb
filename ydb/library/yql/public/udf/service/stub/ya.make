@@ -3,7 +3,7 @@ LIBRARY()
 PROVIDES(YqlServicePolicy)
 
 SRCS(
-    udf_service.cpp
+    GLOBAL udf_service.cpp
 )
 
 PEERDIR(

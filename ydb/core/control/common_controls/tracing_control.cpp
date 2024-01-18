@@ -37,7 +37,7 @@ TTracingControl::TTracingControl(TIntrusivePtr<TControlBoard>& icb, TIntrusivePt
         icb->RegisterSharedControl(control, controlDomain + "." + name);
     }
 
-    Sampler = TSampler(samplingPPM, randomProvider->GenRand64());
+    Sampler = TSampler(std::move(samplingPPM), randomProvider->GenRand64());
     Throttler = TThrottler(std::move(maxRatePerMinute), std::move(maxBurst), std::move(timeProvider));
 }
 

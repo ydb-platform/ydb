@@ -1874,9 +1874,10 @@ private:
             }
         }
 
+        const auto disableOptimizers = State_->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
         const bool canUseMapInsteadOfReduce = keySelectorLambda.Body().Ref().IsComplete() &&
             partByKey.SortDirections().Maybe<TCoVoid>() &&
-            State_->Types->OptimizerFlags.contains(to_lower(ToString("PartitionByConstantKeysViaMap")));
+            disableOptimizers.contains("PartitionByConstantKeysViaMapReduce");
 
         if (canUseMapInsteadOfReduce) {
             YQL_ENSURE(!canUseReduce);
@@ -2565,7 +2566,7 @@ private:
             settingsBuilder
                 .Add()
                     .Name().Value(ToString(EYtSettingType::JobCount)).Build()
-                    .Value(TExprBase(ctx.NewAtom(node.Pos(), "1", TNodeFlags::Default)))
+                    .Value(TExprBase(ctx.NewAtom(node.Pos(), 1u)))
                 .Build();
 
             auto result = Build<TYtMap>(ctx, node.Pos())

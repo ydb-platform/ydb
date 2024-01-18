@@ -318,23 +318,23 @@
     "test.test[aggregate-aggregate_with_lambda--Results]": [],
     "test.test[aggregate-aggrs_no_grouping_via_map_compact-default.txt-Analyze]": [
         {
-            "checksum": "6897d5892e31430b3cfcda4973d48d02",
-            "size": 5487,
-            "uri": "https://{canondata_backend}/1814674/4ada1e29e9771da01d2a22d71dc425700ffa6a5f/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Analyze_/plan.txt"
+            "checksum": "7ec0b77d45f8c1c95538df9b98d538eb",
+            "size": 5493,
+            "uri": "https://{canondata_backend}/1777230/a97ee3227d27cacdc966530fa6d636c72275674d/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Analyze_/plan.txt"
         }
     ],
     "test.test[aggregate-aggrs_no_grouping_via_map_compact-default.txt-Debug]": [
         {
-            "checksum": "90af41f20b34db49b041bdc637803192",
-            "size": 15008,
-            "uri": "https://{canondata_backend}/1814674/4ada1e29e9771da01d2a22d71dc425700ffa6a5f/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Debug_/opt.yql_patched"
+            "checksum": "5fca02221201daaff531b2bbf6186150",
+            "size": 15048,
+            "uri": "https://{canondata_backend}/1777230/a97ee3227d27cacdc966530fa6d636c72275674d/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[aggregate-aggrs_no_grouping_via_map_compact-default.txt-Plan]": [
         {
-            "checksum": "6897d5892e31430b3cfcda4973d48d02",
-            "size": 5487,
-            "uri": "https://{canondata_backend}/1814674/4ada1e29e9771da01d2a22d71dc425700ffa6a5f/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Plan_/plan.txt"
+            "checksum": "7ec0b77d45f8c1c95538df9b98d538eb",
+            "size": 5493,
+            "uri": "https://{canondata_backend}/1777230/a97ee3227d27cacdc966530fa6d636c72275674d/resource.tar.gz#test.test_aggregate-aggrs_no_grouping_via_map_compact-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[aggregate-aggrs_no_grouping_via_map_compact-default.txt-Results]": [],

@@ -1086,6 +1086,9 @@ public:
                         auto dataType = actualType->Cast<TDataExprType>();
                         SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
 
+                        ::NKikimrIndexBuilder::TColumnBuildSetting* columnBuild = nullptr;
+                        bool hasDefaultValue = false;
+                        bool hasNotNull = false;
                         if (columnTuple.Size() > 2) {
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                             for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
@@ -1094,11 +1097,29 @@ public:
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
-                                    auto columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                                    if (columnBuild == nullptr) {
+                                        columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                                    }
+
                                     columnBuild->SetColumnName(TString(columnName));
                                     FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), *columnBuild->mutable_default_from_literal());
+                                    hasDefaultValue = true;
+                                } else if (constraint.Name().Value() == "not_null") {
+                                    if (columnBuild == nullptr) {
+                                        columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                                    }
+
+                                    columnBuild->SetNotNull(true);
+                                    hasNotNull = true;
                                 }
                             }
+                        }
+
+                        if (hasNotNull && !hasDefaultValue) {
+                            ctx.AddError(
+                                TIssue(ctx.GetPosition(columnTuple.Pos()),
+                                    "Cannot add not null column with default value"));
+                            return SyncError();
                         }
 
                         if (columnTuple.Size() > 3) {
@@ -1111,6 +1132,12 @@ public:
 
                             for (auto family : families) {
                                 add_column->set_family(TString(family.Value()));
+                            }
+
+                            if (columnBuild) {
+                                for (auto family : families) {
+                                    columnBuild->SetFamily(TString(family.Value()));
+                                }
                             }
                         }
                     }

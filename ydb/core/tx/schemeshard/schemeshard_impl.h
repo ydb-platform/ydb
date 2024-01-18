@@ -271,6 +271,7 @@ public:
     bool EnableStatistics = false;
     bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
+    bool EnableAddColumsWithDefaults = false;
 
     TShardDeleter ShardDeleter;
 

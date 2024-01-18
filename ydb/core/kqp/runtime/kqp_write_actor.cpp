@@ -119,7 +119,6 @@ private:
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 dataSize, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
-        Y_UNUSED(dataSize, finished);
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
 
         EgressStats.Resume();
@@ -325,7 +324,7 @@ private:
         SplitBatchByShards();
         SendNewBatchesToShards();
 
-        if (Finished && IsInflightBatchesEmpty()) {
+        if (Finished && SchemeEntry && IsInflightBatchesEmpty()) {
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
     }

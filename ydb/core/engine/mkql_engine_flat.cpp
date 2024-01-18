@@ -758,14 +758,13 @@ public:
         return EResult::Ok;
     }
 
-    EResult ValidateKeys(TValidationInfo& validationInfo) override {
+    EResult ValidateKeys(const TValidationInfo& validationInfo) const override {
         EResult result = EResult::Ok;
 
-        std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
-        for (auto& validKey : validationInfo.Keys) {
+        for (const auto& validKey : validationInfo.Keys) {
             TKeyDesc * key = validKey.Key.get();
 
-            bool valid = Settings.Host->IsValidKey(*key, maxSnapshotTime);
+            bool valid = Settings.Host->IsValidKey(*key);
 
             if (valid) {
                 auto curSchemaVersion = Settings.Host->GetTableSchemaVersion(key->TableId);
@@ -800,7 +799,7 @@ public:
         return result;
     }
 
-    EResult Validate(TValidationInfo& validationInfo) override {
+    EResult ExtractKeys(TValidationInfo& validationInfo) override {
         Y_ABORT_UNLESS(!IsProgramValidated, "Validate is already called");
         Y_ABORT_UNLESS(ProgramPerOrigin.size() == 1, "One program must be added to engine");
         Y_ABORT_UNLESS(Settings.Host, "Host is not set");

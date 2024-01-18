@@ -99,7 +99,7 @@ public:
     ui64 GetShardId() const override;
     const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
     bool IsReadonly() const override;
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
+    bool IsValidKey(TKeyDesc& key) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
@@ -120,7 +120,7 @@ public:
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;
 
-    virtual std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const = 0;
+    virtual std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) const = 0;
 
     void SetPeriodicCallback(TPeriodicCallback&& callback) override;
     void ExecPeriodicCallback() { if (PeriodicCallback) { PeriodicCallback();} }

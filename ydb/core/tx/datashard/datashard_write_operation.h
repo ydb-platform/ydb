@@ -62,16 +62,16 @@ public:
         return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET;
     }
     bool RequireWrites() const {
-        return TxInfo().HasWrites() || !Immediate();
+        return ValidationInfo.HasWrites() || !Immediate();
     }
     bool HasWrites() const {
-        return TxInfo().HasWrites();
+        return ValidationInfo.HasWrites();
     }
     bool HasLockedWrites() const {
         return HasWrites() && LockTxId();
     }
     bool HasDynamicWrites() const {
-        return TxInfo().DynKeysCount != 0;
+        return ValidationInfo.DynKeysCount != 0;
     }
 
     IDataShardUserDb* GetUserDb() {
@@ -112,35 +112,35 @@ public:
     }
 
     bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, ui64 tabletId, const TActorContext& ctx);
+    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry);
 
-    ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
+    ui32 ExtractKeys();
+    bool ValidateKeys();
 
     ui32 KeysCount() const {
-        return TxInfo().WritesCount;
+        return ValidationInfo.WritesCount;
     }
 
     void ReleaseTxData();
 
     bool IsTxInfoLoaded() const {
-        return TxInfo().Loaded;
+        return ValidationInfo.Loaded;
     }
 
     bool HasOutReadsets() const {
-        return TxInfo().HasOutReadsets;
+        return ValidationInfo.HasOutReadsets;
     }
     bool HasInReadsets() const {
-        return TxInfo().HasInReadsets;
+        return ValidationInfo.HasInReadsets;
     }
-
-    const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const {
-        return UserDb.GetTxInfo();
-    }
-
 private:
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
     TDataShardUserDb UserDb;
+
+    const ui64 TabletId;
+    const TActorContext& Ctx;
+
+    YDB_READONLY_DEF(NMiniKQL::IEngineFlat::TValidationInfo, ValidationInfo);
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 
@@ -193,11 +193,11 @@ public:
     }
 
     ui32 ExtractKeys() {
-        return WriteTx ? WriteTx->ExtractKeys(false) : 0;
+        return WriteTx ? WriteTx->ExtractKeys() : 0;
     }
 
-    bool ReValidateKeys() {
-        return WriteTx ? WriteTx->ReValidateKeys() : true;
+    bool ValidateKeys() {
+        return WriteTx ? WriteTx->ValidateKeys() : true;
     }
 
     void MarkAsUsingSnapshot() {
@@ -228,8 +228,8 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
-    void DbStoreArtifactFlags(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreLocksAccessLog(NTable::TDatabase& txcDb);
+    void DbStoreArtifactFlags(NTable::TDatabase& txcDb);
 
     ui64 GetMemoryConsumption() const;
 
@@ -249,17 +249,13 @@ public:
     void BuildExecutionPlan(bool loaded) override;
 
     bool HasKeysInfo() const override {
-        return WriteTx ? WriteTx->TxInfo().Loaded : false;
+        return WriteTx ? WriteTx->GetValidationInfo().Loaded : false;
     }
 
     const NMiniKQL::IEngineFlat::TValidationInfo& GetKeysInfo() const override {
-        if (WriteTx) {
-            Y_ABORT_UNLESS(WriteTx->TxInfo().Loaded);
-            return WriteTx->TxInfo();
-        }
-        // For scheme tx global reader and writer flags should
-        // result in all required dependencies.
-        return TOperation::GetKeysInfo();
+        Y_ABORT_UNLESS(WriteTx);
+        Y_ABORT_UNLESS(WriteTx->GetValidationInfo().Loaded);
+        return WriteTx->GetValidationInfo();
     }
 
     ui64 LockTxId() const override {
@@ -301,7 +297,7 @@ public:
         return std::move(WriteResult);
     }
 
-    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg, ui64 tabletId);
+    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
 private:
@@ -312,6 +308,9 @@ private:
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
     TValidatedWriteTx::TPtr WriteTx;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
+
+    const ui64 TabletId;
+    const TActorContext& Ctx;
 
     YDB_READONLY_DEF(ui64, ArtifactFlags);
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);

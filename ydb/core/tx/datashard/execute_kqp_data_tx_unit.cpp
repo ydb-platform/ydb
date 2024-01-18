@@ -106,7 +106,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     ui64 tabletId = DataShard.TabletID();
     const TValidatedDataTx::TPtr& dataTx = tx->GetDataTx();
 
-    if (op->IsImmediate() && !dataTx->ReValidateKeys()) {
+    if (op->IsImmediate() && !dataTx->ValidateKeys()) {
         // Immediate transactions may be reordered with schema changes and become invalid
         Y_ABORT_UNLESS(!dataTx->Ready());
         op->SetAbortedFlag();
@@ -467,7 +467,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
     dataTx.ResetCollectedChanges();
 
     ui64 pageFaultCount = tx.IncrementPageFaultCount();
-    dataTx.GetKqpComputeCtx().PinPages(dataTx.TxInfo().Keys, pageFaultCount);
+    dataTx.GetKqpComputeCtx().PinPages(dataTx.GetValidationInfo().Keys, pageFaultCount);
 
     tx.ReleaseTxData(txc, ctx);
     return EExecutionStatus::Restart;

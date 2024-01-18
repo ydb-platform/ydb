@@ -64,7 +64,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
             Y_ABORT_UNLESS(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
-            EngineBay.TxInfo().AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
+            ValidationInfo.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                 tx.GetTableId().GetTableId()), {}, range.ToTableRange(), info->KeyColumnTypes, typeRegistry);
         } else {
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
@@ -140,7 +140,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                     }
                 }
 
-                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
+                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, ValidationInfo);
 
                 for (auto& output : task.GetOutputs()) {
                     for (auto& channel : output.GetChannels()) {
@@ -156,8 +156,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
-            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), typeRegistry, EngineBay);
-            EngineBay.TxInfo().SetLoaded();
+            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), typeRegistry, ValidationInfo);
+            ValidationInfo.SetLoaded();
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
 
@@ -209,7 +209,7 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-    EResult result = EngineBay.Validate();
+    EResult result = EngineBay.ExtractKeys(ValidationInfo);
     if (allowErrors) {
         if (result != EResult::Ok) {
             ErrStr = EngineBay.GetEngine()->GetErrors();
@@ -222,19 +222,19 @@ ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
     return KeysCount();
 }
 
-bool TValidatedDataTx::ReValidateKeys()
+bool TValidatedDataTx::ValidateKeys()
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys();
+        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(ValidationInfo);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
             ErrCode = ConvertErrCode(result);
             return false;
         }
     } else {
-        EResult result = EngineBay.ReValidateKeys();
+        EResult result = EngineBay.ValidateKeys(ValidationInfo);
         if (result != EResult::Ok) {
             ErrStr = EngineBay.GetEngine()->GetErrors();
             ErrCode = ConvertErrCode(result);

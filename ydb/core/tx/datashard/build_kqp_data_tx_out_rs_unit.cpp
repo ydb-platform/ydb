@@ -155,7 +155,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
     ui64 pageFaultCount = tx.IncrementPageFaultCount();
-    dataTx.GetKqpComputeCtx().PinPages(dataTx.TxInfo().Keys, pageFaultCount);
+    dataTx.GetKqpComputeCtx().PinPages(dataTx.GetValidationInfo().Keys, pageFaultCount);
 
     tx.ReleaseTxData(txc, ctx);
     return EExecutionStatus::Restart;

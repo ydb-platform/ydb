@@ -229,8 +229,8 @@ public:
 
     //-- datashard interface
     virtual EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly = false) noexcept = 0;
-    virtual EResult ValidateKeys(TValidationInfo& validationInfo) = 0;
-    virtual EResult Validate(TValidationInfo& validationInfo) = 0;
+    virtual EResult ValidateKeys(const TValidationInfo& validationInfo) const = 0;
+    virtual EResult ExtractKeys(TValidationInfo& validationInfo) = 0;
 
     virtual EResult PrepareOutgoingReadsets() = 0;
     virtual ui32 GetOutgoingReadsetsCount() const noexcept = 0;

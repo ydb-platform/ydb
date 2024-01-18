@@ -281,9 +281,9 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
     return ret;
 }
 
-std::tuple<IEngineFlat::EResult, TString> TKqpDatashardComputeContext::ValidateKeys()
+std::tuple<IEngineFlat::EResult, TString> TKqpDatashardComputeContext::ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) const
 {
-    return EngineHost.ValidateKeys();
+    return EngineHost.ValidateKeys(validationInfo);
 }
 
 static void BuildRowImpl(const TDbTupleRef& dbTuple, const THolderFactory& holderFactory,

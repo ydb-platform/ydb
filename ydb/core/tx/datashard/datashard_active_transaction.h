@@ -149,13 +149,15 @@ public:
 
     bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
     bool RequirePrepare() const { return ErrCode == NKikimrTxDataShard::TError::SNAPSHOT_NOT_READY_YET; }
-    bool RequireWrites() const { return TxInfo().HasWrites() || !Immediate(); }
-    bool HasWrites() const { return TxInfo().HasWrites(); }
+    bool RequireWrites() const { return ValidationInfo.HasWrites() || !Immediate(); }
+    bool HasWrites() const { return ValidationInfo.HasWrites(); }
     bool HasLockedWrites() const { return HasWrites() && LockTxId(); }
-    bool HasDynamicWrites() const { return TxInfo().DynKeysCount != 0; }
+    bool HasDynamicWrites() const { return ValidationInfo.DynKeysCount != 0; }
 
     // TODO: It's an expensive operation (Precharge() inside). We need avoid it.
-    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const { return EngineBay.CalcSizes(needsTotalKeysSize); }
+    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const {
+        return EngineBay.CalcSizes(ValidationInfo, needsTotalKeysSize);
+    }
 
     ui64 GetMemoryAllocated() const {
         if (!IsKqpDataTx() && GetEngine())
@@ -265,10 +267,10 @@ public:
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
 
     ui32 ExtractKeys(bool allowErrors);
-    bool ReValidateKeys();
+    bool ValidateKeys();
 
     ui64 GetTxSize() const { return TxSize; }
-    ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }
+    ui32 KeysCount() const { return ValidationInfo.ReadsCount + ValidationInfo.WritesCount; }
 
     void SetTxCacheUsage(ui64 val) { TxCacheUsage = val; }
     ui64 GetTxCacheUsage() const { return TxCacheUsage; }
@@ -276,20 +278,21 @@ public:
     void ReleaseTxData();
     bool IsTxDataReleased() const { return IsReleased; }
 
-    bool IsTxInfoLoaded() const { return TxInfo().Loaded; }
+    bool IsTxInfoLoaded() const { return ValidationInfo.Loaded; }
 
     bool IsTxReadOnly() const { return IsReadOnly; }
 
-    bool HasOutReadsets() const { return TxInfo().HasOutReadsets; }
-    bool HasInReadsets() const { return TxInfo().HasInReadsets; }
+    bool HasOutReadsets() const { return ValidationInfo.HasOutReadsets; }
+    bool HasInReadsets() const { return ValidationInfo.HasInReadsets; }
 
-    const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const { return EngineBay.TxInfo(); }
+    const NMiniKQL::IEngineFlat::TValidationInfo& GetValidationInfo() const { return ValidationInfo; }
 
 private:
     TStepOrder StepTxId_;
     TString TxBody;
     TActorId Source_;
     TEngineBay EngineBay;
+    NMiniKQL::IEngineFlat::TValidationInfo ValidationInfo;
     NKikimrTxDataShard::TDataTransaction Tx;
     NKikimrTxDataShard::TError::EKind ErrCode;
     TString ErrStr;
@@ -475,9 +478,9 @@ public:
         return 0;
     }
 
-    bool ReValidateKeys() {
+    bool ValidateKeys() {
         if (DataTx && (DataTx->ProgramSize() || DataTx->IsKqpDataTx()))
-            return DataTx->ReValidateKeys();
+            return DataTx->ValidateKeys();
         return true;
     }
 
@@ -538,7 +541,7 @@ public:
     bool HasKeysInfo() const override
     {
         if (DataTx) {
-            return DataTx->TxInfo().Loaded;
+            return DataTx->GetValidationInfo().Loaded;
         }
 
         return false;
@@ -547,8 +550,8 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo &GetKeysInfo() const override
     {
         if (DataTx) {
-            Y_ABORT_UNLESS(DataTx->TxInfo().Loaded);
-            return DataTx->TxInfo();
+            Y_ABORT_UNLESS(DataTx->GetValidationInfo().Loaded);
+            return DataTx->GetValidationInfo();
         }
         Y_DEBUG_ABORT_UNLESS(IsSchemeTx() || IsSnapshotTx() || IsDistributedEraseTx() || IsCommitWritesTx(),
             "Unexpected access to invalidated keys: non-scheme tx %" PRIu64, GetTxId());

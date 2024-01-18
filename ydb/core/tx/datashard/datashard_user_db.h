@@ -76,7 +76,7 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     bool IsValidKey(TKeyDesc& key) const;
-    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const;
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& txInfo) const;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const;
     bool IsPathErased(const TTableId& tableId) const;
 private:
@@ -115,7 +115,6 @@ public:
 private:
     class TReadTxObserver;
 
-
     absl::flat_hash_set<ui64> CommittedLockChanges;
     absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
     absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
@@ -125,8 +124,6 @@ private:
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
 
 public:
-    NMiniKQL::IEngineFlat::TValidationInfo& GetTxInfo();
-    const NMiniKQL::IEngineFlat::TValidationInfo& GetTxInfo() const;
     ui64 GetStep() const;
     ui64 GetTxId() const;
     void SetWriteVersion(TRowVersion writeVersion);
@@ -139,7 +136,6 @@ private:
     NTable::TDatabase& Db;
 
     TDataShardChangeGroupProvider ChangeGroupProvider;
-    NMiniKQL::IEngineFlat::TValidationInfo TxInfo;
     YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
     YDB_ACCESSOR_DEF(ui64, LockTxId);
     YDB_ACCESSOR_DEF(ui32, LockNodeId);

@@ -53,7 +53,7 @@ public:
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters() { return EngineHost.GetCounters(); }
 
-    std::tuple<IEngineFlat::EResult, TString> ValidateKeys();
+    std::tuple<IEngineFlat::EResult, TString> ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) const;
 
     bool IsTabletNotReady() const { return TabletNotReady; }
 

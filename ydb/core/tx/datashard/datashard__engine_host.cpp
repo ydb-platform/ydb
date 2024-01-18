@@ -293,14 +293,12 @@ public:
         return UserDb.GetVolatileCommitOrdered();
     }
 
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
-        Y_UNUSED(maxSnapshotTime);
-
+    bool IsValidKey(TKeyDesc& key) const override {
         return UserDb.IsValidKey(key);
     }
 
-    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const override {
-        return UserDb.ValidateKeys();
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) const override {
+        return UserDb.ValidateKeys(validationInfo);
     }
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -534,14 +532,13 @@ TEngineBay::~TEngineBay() {
     }
 }
 
-TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
+TEngineBay::TSizes TEngineBay::CalcSizes(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo, bool needsTotalKeysSize) const {
     Y_ABORT_UNLESS(EngineHost);
 
-    auto& info = TxInfo();
     TSizes outSizes;
     TVector<const TKeyDesc*> readKeys;
-    readKeys.reserve(info.ReadsCount);
-    for (const TValidatedKey& validKey : info.Keys) {
+    readKeys.reserve(validationInfo.ReadsCount);
+    for (const TValidatedKey& validKey : validationInfo.Keys) {
         if (validKey.IsWrite)
             continue;
 
@@ -565,20 +562,6 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
 
     outSizes.ReadSize = EngineHost->CalculateReadSize(readKeys);
     return outSizes;
-}
-
-NMiniKQL::IEngineFlat::TValidationInfo& TEngineBay::TxInfo() {
-    Y_ABORT_UNLESS(EngineHost);
-
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-    return host->GetUserDb().GetTxInfo();
-}
-
-const NMiniKQL::IEngineFlat::TValidationInfo& TEngineBay::TxInfo() const {
-    Y_ABORT_UNLESS(EngineHost);
-
-    const auto* host = static_cast<const TDataShardEngineHost*>(EngineHost.Get());
-    return host->GetUserDb().GetTxInfo();
 }
 
 void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {

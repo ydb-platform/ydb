@@ -29,7 +29,6 @@ class TLockedWriteLimitException : public yexception {};
 ///
 class TEngineBay : TNonCopyable {
 public:
-    using TValidationInfo = NMiniKQL::IEngineFlat::TValidationInfo;
     using TValidatedKey = NMiniKQL::IEngineFlat::TValidatedKey;
     using EResult = NMiniKQL::IEngineFlat::EResult;
     using TEngineHostCounters = NMiniKQL::TEngineHostCounters;
@@ -51,17 +50,17 @@ public:
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
-    EResult Validate() {
-        if (TxInfo().Loaded)
+    EResult ExtractKeys(NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) {
+        if (validationInfo.Loaded)
             return EResult::Ok;
         Y_ABORT_UNLESS(Engine);
-        return Engine->Validate(TxInfo());
+        return Engine->ExtractKeys(validationInfo);
     }
 
-    EResult ReValidateKeys() {
-        Y_ABORT_UNLESS(TxInfo().Loaded);
+    EResult ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) {
+        Y_ABORT_UNLESS(validationInfo.Loaded);
         Y_ABORT_UNLESS(Engine);
-        return Engine->ValidateKeys(TxInfo());
+        return Engine->ValidateKeys(validationInfo);
     }
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
@@ -81,9 +80,7 @@ public:
         EngineHost.Reset();
     }
 
-    TValidationInfo& TxInfo();
-    const TValidationInfo& TxInfo() const;
-    TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
+    TEngineBay::TSizes CalcSizes(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo, bool needsTotalKeysSize) const;
 
     void SetWriteVersion(TRowVersion writeVersion);
     void SetReadVersion(TRowVersion readVersion);

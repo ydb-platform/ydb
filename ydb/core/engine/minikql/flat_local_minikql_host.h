@@ -18,11 +18,12 @@ public:
     {}
 
 private:
-    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const override
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) const override
     {
+        Y_UNUSED(validationInfo);
         return {NMiniKQL::IEngineFlat::EResult::Ok, ""};
-    } 
-    
+    }
+
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override
     {
         Y_UNUSED(row);

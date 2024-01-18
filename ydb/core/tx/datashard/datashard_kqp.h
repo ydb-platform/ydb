@@ -16,9 +16,9 @@ bool KqpValidateTransaction(const ::google::protobuf::RepeatedPtrField<::NYql::N
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay);
+    const TActorContext& ctx, NMiniKQL::IEngineFlat::TValidationInfo& validationInfo);
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, const NScheme::TTypeRegistry& typeRegistry, TEngineBay& engineBay);
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, const NScheme::TTypeRegistry& typeRegistry, NMiniKQL::IEngineFlat::TValidationInfo& validationInfo);
 
 NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
     const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner);

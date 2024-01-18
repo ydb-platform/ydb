@@ -305,7 +305,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                     return MakeResponse(engine.Get(), ctx);
 
                 IEngineFlat::TValidationInfo validationInfo;
-                EngineResultStatusCode = engine->Validate(validationInfo);
+                EngineResultStatusCode = engine->ExtractKeys(validationInfo);
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 

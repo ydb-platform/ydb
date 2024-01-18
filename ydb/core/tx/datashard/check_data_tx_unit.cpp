@@ -162,7 +162,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        for (const auto& key : dataTx->TxInfo().Keys) {
+        for (const auto& key : dataTx->GetValidationInfo().Keys) {
             if (key.IsWrite && DataShard.IsUserTable(key.Key->TableId)) {
                 ui64 keySize = 0;
                 for (const auto& cell : key.Key->Range.From) {

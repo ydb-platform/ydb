@@ -363,7 +363,7 @@ template <bool Read>
 void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind,
     const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, NMiniKQL::IEngineFlat::TValidationInfo& validationInfo)
 {
     if (Read) {
         Y_ABORT_UNLESS(readMeta);
@@ -388,10 +388,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
                 if constexpr (Read) {
-                    engineBay.TxInfo().AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
+                    validationInfo.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
                         tableInfo->KeyColumnTypes, typeRegistry, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.TxInfo().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                    validationInfo.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                         GetColumnWrites(*writeMeta), typeRegistry, writeMeta->GetIsPureEraseOp());
                 }
             }
@@ -406,10 +406,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                     << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
 
                 if constexpr (Read) {
-                    engineBay.TxInfo().AddReadRange(tableId,  GetColumns(*readMeta), tablePoint.ToTableRange(),
+                    validationInfo.AddReadRange(tableId,  GetColumns(*readMeta), tablePoint.ToTableRange(),
                         tableInfo->KeyColumnTypes, typeRegistry, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.TxInfo().AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes,
+                    validationInfo.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes,
                         GetColumnWrites(*writeMeta), typeRegistry, writeMeta->GetIsPureEraseOp());
                 }
             }
@@ -427,10 +427,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
             if constexpr (Read) {
-                engineBay.TxInfo().AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
+                validationInfo.AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
                     tableInfo->KeyColumnTypes, typeRegistry, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.TxInfo().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                validationInfo.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), typeRegistry, writeMeta->GetIsPureEraseOp());
             }
 
@@ -443,10 +443,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
 
             if constexpr (Read) {
-                engineBay.TxInfo().AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
+                validationInfo.AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
                     tableInfo->KeyColumnTypes, typeRegistry, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.TxInfo().AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
+                validationInfo.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), typeRegistry, writeMeta->GetIsPureEraseOp());
             }
 
@@ -459,24 +459,22 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, NMiniKQL::IEngineFlat::TValidationInfo& validationInfo)
 {
     auto& tableMeta = meta.GetTable();
     auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
         tableMeta.GetSchemaVersion());
 
     for (auto& read : meta.GetReads()) {
-        KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr,
-            typeRegistry, ctx, engineBay);
+        KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr, typeRegistry, ctx, validationInfo);
     }
 
     if (meta.HasWrites()) {
-        KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr,
-            &meta.GetWrites(), typeRegistry, ctx, engineBay);
+        KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr, &meta.GetWrites(), typeRegistry, ctx, validationInfo);
     }
 }
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, const NScheme::TTypeRegistry& typeRegistry, TEngineBay& engineBay) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, const NScheme::TTypeRegistry& typeRegistry, NMiniKQL::IEngineFlat::TValidationInfo& validationInfo) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -494,10 +492,10 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
         if (sysLocks.IsMyKey(lockKey)) {
             auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
             if (NeedValidateLocks(locks.GetOp())) {
-                engineBay.TxInfo().AddReadRange(sysLocksTableId, {}, point, lockRowType, typeRegistry);
+                validationInfo.AddReadRange(sysLocksTableId, {}, point, lockRowType, typeRegistry);
             }
             if (NeedEraseLocks(locks.GetOp())) {
-                engineBay.TxInfo().AddWriteRange(sysLocksTableId, point, lockRowType, {}, typeRegistry, /* isPureEraseOp */ true);
+                validationInfo.AddWriteRange(sysLocksTableId, point, lockRowType, {}, typeRegistry, /* isPureEraseOp */ true);
             }
         }
     }

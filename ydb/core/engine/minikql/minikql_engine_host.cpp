@@ -72,8 +72,7 @@ bool TEngineHost::IsReadonly() const {
 }
 
 
-bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const {
-    Y_UNUSED(maxSnapshotTime);
+bool TEngineHost::IsValidKey(TKeyDesc& key) const {
     ui64 localTableId = LocalTableId(key.TableId);
     return Scheme.IsValidKey(localTableId, key);
 }

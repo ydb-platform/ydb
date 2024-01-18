@@ -255,9 +255,9 @@ bool TDataShardUserDb::IsValidKey(TKeyDesc& key) const {
     return Db.GetScheme().IsValidKey(localTableId, key);
 }
 
-std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TDataShardUserDb::ValidateKeys() const 
+std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TDataShardUserDb::ValidateKeys(const NMiniKQL::IEngineFlat::TValidationInfo& txInfo) const 
 {
-    for (auto& validKey : TxInfo.Keys) {
+    for (const auto& validKey : txInfo.Keys) {
         TKeyDesc* key = validKey.Key.get();
 
         bool valid = IsValidKey(*key);
@@ -319,14 +319,6 @@ bool TDataShardUserDb::IsPathErased(const TTableId& tableId) const {
 
 bool TDataShardUserDb::HasRemovedTx(ui32 table, ui64 txId) const {
     return Db.HasRemovedTx(table, txId);
-}
-
-NMiniKQL::IEngineFlat::TValidationInfo& TDataShardUserDb::GetTxInfo() {
-    return TxInfo;
-}
-
-const NMiniKQL::IEngineFlat::TValidationInfo& TDataShardUserDb::GetTxInfo() const {
-    return TxInfo;
 }
 
 ui64 TDataShardUserDb::GetStep() const {

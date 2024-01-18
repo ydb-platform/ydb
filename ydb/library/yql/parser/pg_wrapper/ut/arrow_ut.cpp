@@ -13,15 +13,8 @@ extern "C" {
 namespace {
 
 template <bool IsFixedSizeReader>
-void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* reader) {
+void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* reader, auto out_fun) {
     const auto& data = result->data();
-
-    Datum (*out_fun)(PG_FUNCTION_ARGS);
-    if constexpr (IsFixedSizeReader) {
-        out_fun = date_out;
-    } else {
-        out_fun = numeric_out;
-    }
 
     for (int i = 0; i < data->length; i++) {
         if (result->IsNull(i)) {
@@ -89,7 +82,7 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     };
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    checkResult<false>(expected, result, &reader);
+    checkResult<false>(expected, result, &reader, numeric_out);
 }
 
 Y_UNIT_TEST(PgConvertNumericInt) {
@@ -113,7 +106,7 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     };
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    checkResult<false>(expected, result, &reader);
+    checkResult<false>(expected, result, &reader, numeric_out);
 }
 
 Y_UNIT_TEST(PgConvertDate32Date) {
@@ -143,7 +136,7 @@ Y_UNIT_TEST(PgConvertDate32Date) {
     };
 
     NUdf::TFixedSizeBlockReader<ui64, true> reader;
-    checkResult<true>(expected, result, &reader);
+    checkResult<true>(expected, result, &reader, date_out);
 }
 
 } // Y_UNIT_TEST_SUITE(TArrowUtilsTests)

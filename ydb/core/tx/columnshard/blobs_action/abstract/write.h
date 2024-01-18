@@ -31,7 +31,7 @@ protected:
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) = 0;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool success) = 0;
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
 public:
@@ -79,8 +79,8 @@ public:
         return DoOnExecuteTxAfterWrite(self, dbBlobs, success);
     }
 
-    void OnCompleteTxAfterWrite(NColumnShard::TColumnShard& self) {
-        return DoOnCompleteTxAfterWrite(self);
+    void OnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool success) {
+        return DoOnCompleteTxAfterWrite(self, success);
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);

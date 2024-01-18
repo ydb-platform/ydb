@@ -741,7 +741,7 @@ private:
 
         bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
 
-        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState) != nullptr;
+        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState) == nullptr;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {

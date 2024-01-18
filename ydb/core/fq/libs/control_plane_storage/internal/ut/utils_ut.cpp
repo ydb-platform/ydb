@@ -4,49 +4,70 @@
 
 namespace NFq {
 
+namespace {
+void ValidateStats(std::string_view statisticsStr, const std::unordered_map<std::string_view, i64>& expected) {
+    FederatedQuery::Internal::QueryInternal internal;
+    auto statisticsPtr = internal.mutable_statistics();
+    PackStatisticsToProtobuf(*statisticsPtr, statisticsStr);
+
+    for (const auto& statsElement : *statisticsPtr) {
+        const auto& name = statsElement.name();
+        auto value = statsElement.value();
+
+        auto it = expected.find(name);
+        UNIT_ASSERT(it != expected.end());
+        UNIT_ASSERT_EQUAL(value, it->second);
+    }
+    UNIT_ASSERT_EQUAL(expected.size(), static_cast<size_t>(statisticsPtr->size()));
+}
+}
+
 Y_UNIT_TEST_SUITE(ParseStats) {
-    Y_UNIT_TEST(ParseV2) {
-        FederatedQuery::Internal::QueryInternal internal;
-        auto statisticsPtr = internal.mutable_statistics();
-        PackStatisticsToProtobuf(*statisticsPtr, R"({"ResultSet":{"01_1_Stage-Source":{"SourceCpuTimeUs":{"sum":"828us","count":1,"avg":"828us","max":"828us","min":"828us"},"Output=3":{"Pop":{"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"FirstMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Bytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8}},"Push":{"LastMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"ResumeMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"FirstMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"PauseMessageMs":{"avg":"11:01:10.81s","sum":"0.00s","count":1,"max":"11:01:10.81s","min":"11:01:10.81s"},"WaitTimeUs":{"sum":"72ms","count":1,"avg":"72ms","max":"72ms","min":"72ms"},"WaitPeriods":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"WaitMessageMs":{"sum":"73ms","count":1,"max":"11:01:10.88s","min":"11:01:10.81s"}}},"MaxMemoryUsage":{"sum":241172480,"count":1,"avg":241172480,"max":241172480,"min":241172480},"TotalDurationMs":{"sum":"00:00:00.09s","count":1},"IngressBytes":{"sum":22,"count":1,"avg":22,"max":22,"min":22},"Tasks":{"sum":1,"count":1},"OutputRows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"IngressRows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"CpuTimeUs":{"sum":"1ms","count":1,"avg":"1ms","max":"1ms","min":"1ms"},"OutputBytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8},"Ingress=S3Source":{"Pop":{"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"FirstMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Bytes":{"sum":17,"count":1,"avg":17,"max":17,"min":17}},"Ingress":{"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"ResumeMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"FirstMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Bytes":{"sum":22,"count":1,"avg":22,"max":22,"min":22},"Splits":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"PauseMessageMs":{"avg":"11:01:10.80s","sum":"0.00s","count":1,"max":"11:01:10.80s","min":"11:01:10.80s"},"WaitTimeUs":{"sum":"86ms","count":1,"avg":"86ms","max":"86ms","min":"86ms"},"WaitPeriods":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"WaitMessageMs":{"sum":"86ms","count":1,"max":"11:01:10.88s","min":"11:01:10.80s"}},"Push":{"LastMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"ResumeMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"FirstMessageMs":{"avg":"11:01:10.88s","sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.88s","min":"11:01:10.88s"},"Bytes":{"sum":17,"count":1,"avg":17,"max":17,"min":17},"PauseMessageMs":{"avg":"11:01:10.80s","sum":"0.00s","count":1,"max":"11:01:10.80s","min":"11:01:10.80s"},"WaitTimeUs":{"sum":"86ms","count":1,"avg":"86ms","max":"86ms","min":"86ms"},"WaitPeriods":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"WaitMessageMs":{"sum":"86ms","count":1,"max":"11:01:10.88s","min":"11:01:10.80s"}}}},"02_3_Collect":{"Output=RESULT":{"Pop":{"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"FirstMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"Bytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8}},"Push":{"LastMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"ResumeMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"FirstMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"PauseMessageMs":{"avg":"11:01:10.81s","sum":"0.00s","count":1,"max":"11:01:10.81s","min":"11:01:10.81s"},"WaitTimeUs":{"sum":"77ms","count":1,"avg":"77ms","max":"77ms","min":"77ms"},"WaitPeriods":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"WaitMessageMs":{"sum":"77ms","count":1,"max":"11:01:10.89s","min":"11:01:10.81s"}}},"MaxMemoryUsage":{"sum":31457280,"count":1,"avg":31457280,"max":31457280,"min":31457280},"TotalDurationMs":{"sum":"00:00:00.08s","count":1},"InputBytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8},"ResultRows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Tasks":{"sum":1,"count":1},"ResultBytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8},"OutputRows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"InputRows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"CpuTimeUs":{"sum":"771us","count":1,"avg":"771us","max":"771us","min":"771us"},"OutputBytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8},"Input=1":{"Pop":{"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"FirstMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"Bytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8}},"Push":{"Rows":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"LastMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"Chunks":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"ResumeMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"FirstMessageMs":{"avg":"11:01:10.89s","sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"ActiveMessageMs":{"sum":"0.00s","count":1,"max":"11:01:10.89s","min":"11:01:10.89s"},"Bytes":{"sum":8,"count":1,"avg":8,"max":8,"min":8},"PauseMessageMs":{"avg":"11:01:10.81s","sum":"0.00s","count":1,"max":"11:01:10.81s","min":"11:01:10.81s"},"WaitTimeUs":{"sum":"77ms","count":1,"avg":"77ms","max":"77ms","min":"77ms"},"WaitPeriods":{"sum":1,"count":1,"avg":1,"max":1,"min":1},"WaitMessageMs":{"sum":"77ms","count":1,"max":"11:01:10.89s","min":"11:01:10.81s"}}}},"MaxMemoryUsage":{"min":31457280,"max":241172480,"avg":136314880,"sum":272629760,"count":2},"CpuTimeUs":{"min":"771us","max":"1ms","avg":"1ms","sum":"2ms","count":2},"SourceCpuTimeUs":{"min":"828us","max":"828us","avg":"828us","sum":"828us","count":1},"InputBytes":{"min":8,"max":8,"avg":8,"sum":8,"count":1},"InputRows":{"min":1,"max":1,"avg":1,"sum":1,"count":1},"OutputBytes":{"min":8,"max":8,"avg":8,"sum":16,"count":2},"OutputRows":{"min":1,"max":1,"avg":1,"sum":2,"count":2},"ResultBytes":{"min":8,"max":8,"avg":8,"sum":8,"count":1},"ResultRows":{"min":1,"max":1,"avg":1,"sum":1,"count":1},"IngressBytes":{"min":22,"max":22,"avg":22,"sum":22,"count":1},"IngressRows":{"min":1,"max":1,"avg":1,"sum":1,"count":1}}})");
 
-        std::unordered_map<std::string_view, i64> expected{
-            {"IngressBytes", 22},
-            {"InputBytes", 8},
-            {"OutputBytes", 16},
-            {"S3Source", 22}};
+    Y_UNIT_TEST(ParseWithSources) {
+        auto v1S3Source = NResource::Find("v1_s3source.json");
+        auto v2S3Source = NResource::Find("v2_s3source.json");
 
-        for (const auto& statsElement : *statisticsPtr) {
-            const auto& name = statsElement.name();
-            auto value = statsElement.value();
+        std::unordered_map<std::string_view, i64> expectedS3Source{
+            {"IngressBytes", 53},
+            {"InputBytes", 30},
+            {"OutputBytes", 60},
+            {"S3Source", 53}};
 
-            auto it = expected.find(name);
-            UNIT_ASSERT(it != expected.end());
-            UNIT_ASSERT_EQUAL(value, it->second);
-        }
-        UNIT_ASSERT_EQUAL(expected.size(), static_cast<size_t>(statisticsPtr->size()));
+        ValidateStats(v1S3Source, expectedS3Source);
+        ValidateStats(v2S3Source, expectedS3Source);
     }
 
-    Y_UNIT_TEST(Parse2SourcesV2) {
-        FederatedQuery::Internal::QueryInternal internal;
-        auto statisticsPtr = internal.mutable_statistics();
-        PackStatisticsToProtobuf(*statisticsPtr, R"({"ResultSet": {"01_1_Stage-Source": {"IngressBytes": {"sum": 24,"count": 1,"avg": 24,"max": 24,"min": 24},"OutputBytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13},"Ingress=S3Source": {"Ingress": {"Bytes": {"sum": 24,"count": 1,"avg": 24,"max": 24,"min": 24}}}},"02_3_Collect": {"Output=5": {"Pop": {"Bytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13}}},"InputBytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13},"OutputBytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13},"Input=1": {"Pop": {"Bytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13}}}},"03_5_InnerJoin (MapJoin)-Source": {"SourceCpuTimeUs": {"sum": "495us","count": 1,"avg": "495us","max": "495us","min": "495us"},"Output=7": {"Pop": {"Bytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18}}},"InputBytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13},"IngressBytes": {"sum": 22,"count": 1,"avg": 22,"max": 22,"min": 22},"OutputBytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18},"Ingress=S3Source": {"Pop": {"Bytes": {"sum": 17,"count": 1,"avg": 17,"max": 17,"min": 17}},"Ingress": {"Bytes": {"sum": 22,"count": 1,"avg": 22,"max": 22,"min": 22}},"Push": {"Bytes": {"sum": 17,"count": 1,"avg": 17,"max": 17,"min": 17}}},"Input=3": {"Pop": {"Bytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13}},"Push": {"Bytes": {"sum": 13,"count": 1,"avg": 13,"max": 13,"min": 13}}}},"04_7_Collect": {"Output=RESULT": {"Pop": {"Bytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18}},"Push": {"Rows": {"sum": 1,"count": 1,"avg": 1,"max": 1,"min": 1}}},"InputBytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18},"OutputBytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18},"Input=5": {"Pop": {"Bytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18}},"Push": {"Bytes": {"sum": 18,"count": 1,"avg": 18,"max": 18,"min": 18}}}},"InputBytes": {"min": 13,"max": 18,"avg": 14,"sum": 44,"count": 3},"OutputBytes": {"min": 13,"max": 18,"avg": 15,"sum": 62,"count": 4},"IngressBytes": {"min": 22,"max": 24,"avg": 23,"sum": 46,"count": 2}}})");
+    Y_UNIT_TEST(ParseJustOutput) {
+        auto v1Output = NResource::Find("v1_output.json");
+        auto v2Output = NResource::Find("v2_output.json");
 
-        std::unordered_map<std::string_view, i64> expected{
-            {"IngressBytes", 46},
-            {"InputBytes", 44},
-            {"OutputBytes", 62},
-            {"S3Source", 46}};
+        std::unordered_map<std::string_view, i64> expectedOutput{{"OutputBytes", 3}};
 
-        for (const auto& statsElement : *statisticsPtr) {
-            const auto& name = statsElement.name();
-            auto value = statsElement.value();
+        ValidateStats(v1Output, expectedOutput);
+        ValidateStats(v2Output, expectedOutput);
+    }
 
-            auto it = expected.find(name);
-            UNIT_ASSERT(it != expected.end());
-            UNIT_ASSERT_EQUAL(value, it->second);
-        }
-        UNIT_ASSERT_EQUAL(expected.size(), static_cast<size_t>(statisticsPtr->size()));
+    Y_UNIT_TEST(ParseMultipleGraphsV1) {
+        auto v1TwoResults = NResource::Find("v1_two_results.json");
+        std::unordered_map<std::string_view, i64> expectedOutput{
+            {"OutputBytes", 129},
+            {"InputBytes", 76},
+            {"IngressBytes", 106},
+            {"S3Source", 106}
+        };
+        ValidateStats(v1TwoResults, expectedOutput);
+    }
+
+    Y_UNIT_TEST(ParseMultipleGraphsV2) {
+        auto v2TwoResults = NResource::Find("v2_two_results.json");
+        std::unordered_map<std::string_view, i64> expectedOutput{
+            {"OutputBytes", 106},
+            {"InputBytes", 53},
+            {"IngressBytes", 106},
+            {"S3Source", 106}
+        };
+        ValidateStats(v2TwoResults, expectedOutput);
     }
 }
 }

@@ -388,11 +388,6 @@ private:
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
-    enum ECacheType {
-        ByUid,
-        ByQuery,
-        ByAst,
-    };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;

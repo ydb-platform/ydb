@@ -1874,10 +1874,9 @@ private:
             }
         }
 
-        const auto disableOptimizers = State_->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
         const bool canUseMapInsteadOfReduce = keySelectorLambda.Body().Ref().IsComplete() &&
             partByKey.SortDirections().Maybe<TCoVoid>() &&
-            disableOptimizers.contains("PartitionByConstantKeysViaMapReduce");
+            State_->Configuration->PartitionByConstantKeysViaMap.Get().GetOrElse(DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP);
 
         if (canUseMapInsteadOfReduce) {
             YQL_ENSURE(!canUseReduce);

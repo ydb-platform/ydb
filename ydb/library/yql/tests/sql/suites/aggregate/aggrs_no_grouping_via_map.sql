@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-pragma yt.DisableOptimizers="PartitionByConstantKeysViaMapReduce";
+pragma yt.PartitionByConstantKeysViaMap;
 select
     count(key) as keyCount,
     count(sub) as subCount,

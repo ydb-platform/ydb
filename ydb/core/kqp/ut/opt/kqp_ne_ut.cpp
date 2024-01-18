@@ -856,14 +856,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM `/Root/TwoShard` WHERE Key = 2;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT(!result.IsSuccess());
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(LocksMultiShard) {
@@ -888,14 +881,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM `/Root/EightShard`;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT(!result.IsSuccess());
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(LocksMultiShardOk) {
@@ -1016,13 +1002,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            Cerr << result.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(BrokenLocksAtROTxSharded) {
@@ -1050,13 +1030,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            Cerr << result.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(BrokenLocksOnUpdate) {

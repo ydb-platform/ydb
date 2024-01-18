@@ -66,14 +66,11 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
 }
 
 Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
-    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool disableSnaphots = true) {
+    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
-        if (disableSnaphots) {
-            serverSettings.SetEnableMvccSnapshotReads(false);
-        }
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
@@ -138,13 +135,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
         ExecSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         WaitTabletBecomesOffline(server, shard2);
-    }
-
-    Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRO) {
-        TestDropTablePlanComesNotTooEarly(
-            "SELECT * FROM `/Root/table-1`; SELECT * FROM `/Root/table-2`;",
-            Ydb::StatusIds::UNAVAILABLE
-        );
     }
 
     Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRW) {
@@ -383,14 +373,11 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         TestAlterProposeRebootMinStep(ERebootOnPropose::SchemeShard);
     }
 
-    void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool disableSnaphots = false) {
+    void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
-        if (disableSnaphots) {
-            serverSettings.SetEnableMvccSnapshotReads(false);
-        }
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(app);
@@ -481,14 +468,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
         ExecSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         WaitTabletBecomesOffline(server, shard2);
-    }
-
-    Y_UNIT_TEST(TestDropTableCompletesQuicklyRO) {
-        TestDropTableCompletesQuickly(
-            "SELECT * FROM `/Root/table-1` UNION ALL SELECT * FROM `/Root/table-2`;",
-            Ydb::StatusIds::SUCCESS,
-            true
-        );
     }
 
     Y_UNIT_TEST(TestDropTableCompletesQuicklyRW) {

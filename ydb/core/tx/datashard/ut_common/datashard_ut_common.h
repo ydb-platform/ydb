@@ -56,7 +56,6 @@ public:
         bool DelayReadSet;
         bool DelayData;
         bool RebootOnDelay;
-        std::optional<bool> Mvcc;
         ui64 ExecutorCacheSize;
 
         TOptions(ui64 firstStep = 0)
@@ -71,7 +70,6 @@ public:
 
         void EnableOutOfOrder(ui32 num = 8) { NumActiveTx = num; }
         void EnableSoftUpdates() { SoftUpdates = true; }
-        void EnableMvcc(std::optional<bool> enabled = {true}) { Mvcc = enabled; }
 
         TString PartConfig() const {
             TString pipelineConfig = Sprintf(R"(PipelineConfig {

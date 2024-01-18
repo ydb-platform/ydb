@@ -388,6 +388,11 @@ private:
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
+    enum ECacheType {
+        ByUid,
+        ByQuery,
+        ByAst,
+    };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
@@ -566,26 +571,25 @@ private:
         if (request.Uid) {
             Counters->ReportCompileRequestGet(dbCounters);
 
-            if (!request.TempTablesState || request.TempTablesState->TempTables.empty()) {
-                auto compileResult = QueryCache.FindByUid(*request.Uid, request.KeepInCache);
-                if (compileResult) {
-                    Y_ENSURE(compileResult->Query);
-                    if (compileResult->Query->UserSid == userSid) {
-                        Counters->ReportQueryCacheHit(dbCounters, true);
+            auto compileResult = QueryCache.FindByUid(*request.Uid, request.KeepInCache);
+            compileResult = WithCache(std::move(compileResult), request.TempTablesState);
+            if (compileResult) {
+                Y_ENSURE(compileResult->Query);
+                if (compileResult->Query->UserSid == userSid) {
+                    Counters->ReportQueryCacheHit(dbCounters, true);
 
-                        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
-                            << ", sender: " << ev->Sender
-                            << ", queryUid: " << *request.Uid);
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
+                        << ", sender: " << ev->Sender
+                        << ", queryUid: " << *request.Uid);
 
-                        ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
-                        return;
-                    } else {
-                        LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
-                            << ", sender: " << ev->Sender
-                            << ", queryUid: " << *request.Uid
-                            << ", expected sid: " <<  compileResult->Query->UserSid
-                            << ", actual sid: " << userSid);
-                    }
+                    ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
+                    return;
+                } else {
+                    LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
+                        << ", sender: " << ev->Sender
+                        << ", queryUid: " << *request.Uid
+                        << ", expected sid: " <<  compileResult->Query->UserSid
+                        << ", actual sid: " << userSid);
                 }
             }
 
@@ -611,19 +615,18 @@ private:
             Y_ENSURE(query.UserSid == userSid);
         }
 
+        auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
+        compileResult = WithCache(std::move(compileResult), request.TempTablesState);
 
-        if (!request.TempTablesState || request.TempTablesState->TempTables.empty()) {
-            auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
-            if (compileResult) {
-                Counters->ReportQueryCacheHit(dbCounters, true);
+        if (compileResult) {
+            Counters->ReportQueryCacheHit(dbCounters, true);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
-                    << ", sender: " << ev->Sender
-                    << ", queryUid: " << compileResult->Uid);
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
+                << ", sender: " << ev->Sender
+                << ", queryUid: " << compileResult->Uid);
 
-                ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
-                return;
-            }
+            ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
+            return;
         }
 
         CollectDiagnostics = request.CollectDiagnostics;
@@ -677,10 +680,8 @@ private:
         auto dbCounters = request.DbCounters;
         Counters->ReportRecompileRequestGet(dbCounters);
 
-        TKqpCompileResult::TConstPtr compileResult = nullptr;
-        if (!request.TempTablesState || request.TempTablesState->TempTables.empty()) {
-            compileResult = QueryCache.FindByUid(request.Uid, false);
-        }
+        TKqpCompileResult::TConstPtr compileResult = QueryCache.FindByUid(request.Uid, false);
+        compileResult = WithCache(std::move(compileResult), request.TempTablesState);
 
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
@@ -745,27 +746,12 @@ private:
 
         bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
 
-        bool hasTempTables = compileRequest.TempTablesState
-            && (!compileRequest.TempTablesState->TempTables.empty());
-        if (compileResult->PreparedQuery) {
-            hasTempTables = compileResult->PreparedQuery->HasTempTables(compileRequest.TempTablesState);
-        }
+        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState) != nullptr;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTables) {
-                    if (QueryCache.FindByUid(compileResult->Uid, false)) {
-                        QueryCache.Replace(compileResult);
-                    } else if (keepInCache) {
-                        if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache())) {
-                            Counters->CompileQueryCacheEvicted->Inc();
-                        }
-                        if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
-                            if (InsertPreparingQuery(compileResult, compileRequest.KeepInCache)) {
-                                Counters->CompileQueryCacheEvicted->Inc();
-                            };
-                        }
-                    }
+                    UpdateQueryCache(compileResult, keepInCache);
                 }
 
                 if (ev->Get()->ReplayMessage) {
@@ -833,25 +819,54 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
+    TKqpCompileResult::TConstPtr WithCache(
+            TKqpCompileResult::TConstPtr cacheResult, TKqpTempTablesState::TConstPtr tempTablesState) {
+        if (!cacheResult) {
+            return nullptr;
+        }
+        if (!cacheResult->PreparedQuery) {
+            return cacheResult;
+        }
+        auto hasTempTables = cacheResult->PreparedQuery->HasTempTables(tempTablesState);
+        if (hasTempTables) {
+            return nullptr;
+        }
+        return cacheResult;
+    }
+
+    void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache) {
+        if (QueryCache.FindByUid(compileResult->Uid, false)) {
+            QueryCache.Replace(compileResult);
+        } else if (keepInCache) {
+            if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache())) {
+                Counters->CompileQueryCacheEvicted->Inc();
+            }
+            if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
+                if (InsertPreparingQuery(compileResult, true)) {
+                    Counters->CompileQueryCacheEvicted->Inc();
+                };
+            }
+        }
+    }
+
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev, const TActorContext& ctx) {
         auto& parseResult = ev->Get()->AstResult;
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
         if (parseResult && parseResult->Ast->IsOk()) {
-            if (!compileRequest.TempTablesState || compileRequest.TempTablesState->TempTables.empty()) {
-                auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.KeepInCache);
-                if (compileResult) {
-                    Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
+            auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.KeepInCache);
+            compileResult = WithCache(std::move(compileResult), compileRequest.TempTablesState);
+            if (compileResult) {
+                Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from ast"
-                        << ", sender: " << compileRequest.Sender
-                        << ", queryUid: " << compileResult->Uid);
+                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from ast"
+                    << ", sender: " << compileRequest.Sender
+                    << ", queryUid: " << compileResult->Uid);
 
-                    compileResult->Ast->PgAutoParamValues = std::move(parseResult->Ast->PgAutoParamValues);
+                compileResult->Ast->PgAutoParamValues = std::move(parseResult->Ast->PgAutoParamValues);
 
-                    ReplyFromCache(compileRequest.Sender, compileResult, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
-                    return;
-                }
+                ReplyFromCache(compileRequest.Sender, compileResult, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                return;
             }
         }
         Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);

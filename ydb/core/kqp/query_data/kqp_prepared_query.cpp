@@ -271,6 +271,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
 }
 
 bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState) const {
+    if (!tempTablesState) {
+        return false;
+    }
     auto tempTables = THashSet<TString>();
     for (const auto& [path, info] : tempTablesState->TempTables) {
         tempTables.insert(path.second + *tempTablesState->SessionId);

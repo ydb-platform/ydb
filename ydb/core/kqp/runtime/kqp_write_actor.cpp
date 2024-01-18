@@ -1,20 +1,20 @@
 #include "kqp_write_actor.h"
 
+#include <util/generic/singleton.h>
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
-#include <ydb/core/tx/tx.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <util/generic/singleton.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 
 namespace {
@@ -42,6 +42,8 @@ namespace {
 
         return delay;
     }
+
+    constexpr i64 kInFlightMemoryLimitPerActor = 1_GB;
 }
 
 
@@ -117,7 +119,7 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MemoryLimit - (MemoryInflight + BatchBuilder->Bytes());
+        return MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes());
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -226,7 +228,7 @@ private:
                 IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
-            auto& batchesQueue = InflightBatches.at(ev->Get()->Record.GetOrigin());
+            auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(!batchesQueue.empty());
 
             if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
@@ -237,7 +239,7 @@ private:
                 EgressStats.Splits++;
                 EgressStats.Resume();
 
-                MemoryInflight -= batchesQueue.front().Data.size();
+                MemoryInFlight -= batchesQueue.front().Data.size();
                 batchesQueue.pop_front();
                 if (needToResume && GetFreeSpace() > 0) {
                     Callbacks->ResumeExecution();
@@ -326,7 +328,7 @@ private:
         SplitBatchByShards();
         SendNewBatchesToShards();
 
-        if (Finished && SchemeEntry && IsInflightBatchesEmpty()) {
+        if (Finished && SchemeEntry && IsInFlightBatchesEmpty()) {
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
     }
@@ -374,10 +376,10 @@ private:
 
         for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
             for (auto&& shardInfo : infos) {
-                auto& inflightBatch = InflightBatches[shard].emplace_back();
-                inflightBatch.Data = shardInfo->GetData();
-                YQL_ENSURE(!inflightBatch.Data.empty());
-                MemoryInflight += inflightBatch.Data.size();
+                auto& inFlightBatch = InFlightBatches[shard].emplace_back();
+                inFlightBatch.Data = shardInfo->GetData();
+                YQL_ENSURE(!inFlightBatch.Data.empty());
+                MemoryInFlight += inFlightBatch.Data.size();
 
                 RequestNewTxId();
             }
@@ -389,7 +391,7 @@ private:
     }
 
     void SendNewBatchesToShards() {
-        for (auto& [shardId, batches] : InflightBatches) {
+        for (auto& [shardId, batches] : InFlightBatches) {
             if (!batches.empty() && batches.front().SendAttempts == 0) {
                 if (const auto txId = AllocateTxId(); txId) {
                     batches.front().TxId = *txId;
@@ -399,8 +401,8 @@ private:
         }
     }
 
-    bool IsInflightBatchesEmpty() const {
-        for (const auto& [shardId, batches] : InflightBatches) {
+    bool IsInFlightBatchesEmpty() const {
+        for (const auto& [shardId, batches] : InFlightBatches) {
             if (!batches.empty()) {
                 return false;
             }
@@ -409,18 +411,18 @@ private:
     }
 
     void SendRequestShard(const ui64 shardId) {
-        auto& inflightBatch = InflightBatches.at(shardId).front();
+        auto& inFlightBatch = InFlightBatches.at(shardId).front();
 
-        if (inflightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
+        if (inFlightBatch.SendAttempts >= BackoffSettings()->MaxWriteAttempts) {
             RuntimeError(
                 TStringBuilder() << "ShardId=" << shardId << " for table '" << Settings.GetTable().GetPath() << "' retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(
-            inflightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            inFlightBatch.TxId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite)
-            .AddDataToPayload(TString(inflightBatch.Data));
+            .AddDataToPayload(TString(inFlightBatch.Data));
 
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
@@ -430,27 +432,27 @@ private:
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
-        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inflightBatch.TxId << ", Size = " << inflightBatch.Data.size());
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inFlightBatch.TxId << ", Size = " << inFlightBatch.Data.size());
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
 
         TlsActivationContext->Schedule(
-            CalculateNextAttemptDelay(inflightBatch.SendAttempts),
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inflightBatch.TxId)));
+            CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.TxId)));
 
-        ++inflightBatch.SendAttempts;
+        ++inFlightBatch.SendAttempts;
     }
 
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
-        if (!InflightBatches.contains(ev->Get()->ShardId)) {
+        if (!InFlightBatches.contains(ev->Get()->ShardId)) {
             return;
         }
-        if (InflightBatches.at(ev->Get()->ShardId).empty()) {
+        if (InFlightBatches.at(ev->Get()->ShardId).empty()) {
             return;
         }
-        if (InflightBatches.at(ev->Get()->ShardId).front().TxId != ev->Get()->TxId) {
+        if (InFlightBatches.at(ev->Get()->ShardId).front().TxId != ev->Get()->TxId) {
             return;
         }
 
@@ -459,7 +461,7 @@ private:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        if (!InflightBatches.contains(ev->Get()->TabletId)) {
+        if (!InFlightBatches.contains(ev->Get()->TabletId)) {
             return;
         }
         SendRequestShard(ev->Get()->TabletId);
@@ -506,16 +508,16 @@ private:
 
     std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
-    struct TInflightBatch {
+    struct TInFlightBatch {
         TString Data;
         ui32 SendAttempts = 0;
         ui64 TxId = 0;
     };
-    THashMap<ui64, std::deque<TInflightBatch>> InflightBatches;
+    THashMap<ui64, std::deque<TInFlightBatch>> InFlightBatches;
     bool Finished = false;
 
-    const i64 MemoryLimit = 1_GB;
-    i64 MemoryInflight = 0;
+    const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
+    i64 MemoryInFlight = 0;
 
     std::vector<ui64> FreeTxIds;
 };

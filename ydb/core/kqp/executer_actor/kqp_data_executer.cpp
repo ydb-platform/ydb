@@ -1671,15 +1671,19 @@ private:
 
         //if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
         //    return true;
+    bool IsAllowedOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
+        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA) {
+            return false;
+        }
+        // all reads datashard OR all reads columnshard
+        // datashard write => all ops datashard ==is=olap== no datashard write
+        //for (const auto &tableOp : stage.GetTableOps()) {
+        //    if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) { 
+        //        return false;
+        //    }
         //}
-        Y_UNUSED(stage, queryType);
-        /*for (const auto &tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange &&
-                tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                return true;
-            }
-        }*/
-        return false;
+        Y_UNUSED(queryType, stage);
+        return true;
     }
 
     void Execute() {
@@ -1711,7 +1715,7 @@ private:
                     }
                 }
 
-                if (stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage)) {
+                if (stageInfo.Meta.IsOlap() && !IsAllowedOperationOnOlap(tx.Body->GetType(), stage)) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,

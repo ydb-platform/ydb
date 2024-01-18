@@ -3,7 +3,6 @@
 #include "change_exchange.h"
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/generic/hash.h>
@@ -51,6 +50,8 @@ struct TEvChangeExchangePrivate {
 class IChangeSender {
 public:
     virtual ~IChangeSender() = default;
+
+    virtual TActorId GetChangeServer() const = 0;
 
     virtual void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) = 0;
     virtual void KillSenders() = 0;
@@ -120,12 +121,12 @@ protected:
             remove.push_back(record.Order);
         }
 
-        ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+        ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
     }
 
     template <>
     void RemoveRecords(TVector<ui64>&& records) {
-        ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
+        ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }
 
     void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) override;
@@ -138,8 +139,7 @@ protected:
     void OnReady(ui64 partitionId) override;
     void OnGone(ui64 partitionId) override;
 
-    explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
-        const TActorId& changeServer, const TPathId& pathId);
+    explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver, const TPathId& pathId);
 
     void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -148,7 +148,6 @@ private:
     IChangeSenderResolver* const Resolver;
 
 protected:
-    const TActorId ChangeServer;
     const TPathId PathId;
 
 private:

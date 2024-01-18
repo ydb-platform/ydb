@@ -704,6 +704,10 @@ class TAsyncIndexChangeSenderMain
         return StateBase(ev);
     }
 
+    TActorId GetChangeServer() const override {
+        return DataShard.ActorId;
+    }
+
     void Resolve() override {
         ResolveIndex();
     }
@@ -794,7 +798,7 @@ public:
 
     explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, dataShard.ActorId, indexPathId)
+        , TBaseChangeSender(this, this, indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , IndexTableVersion(0)

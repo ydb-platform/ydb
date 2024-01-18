@@ -119,7 +119,7 @@ bool TBaseChangeSender::RequestRecords() {
         return false;
     }
 
-    ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRequestRecords(std::move(records)));
+    ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRequestRecords(std::move(records)));
     return true;
 }
 
@@ -431,11 +431,9 @@ void TBaseChangeSender::RemoveRecords() {
     }
 }
 
-TBaseChangeSender::TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
-        const TActorId& changeServer, const TPathId& pathId)
+TBaseChangeSender::TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver, const TPathId& pathId)
     : ActorOps(actorOps)
     , Resolver(resolver)
-    , ChangeServer(changeServer)
     , PathId(pathId)
     , MemLimit(192_KB)
     , MemUsage(0)

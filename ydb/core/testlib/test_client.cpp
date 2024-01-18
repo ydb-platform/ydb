@@ -821,7 +821,7 @@ namespace Tests {
         }
         {
             const auto& appData = Runtime->GetAppData(nodeIdx);
-            IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName).release();
+            IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName, appData.Counters).release();
             TActorId metadataCacheId = Runtime->Register(metadataCache, nodeIdx);
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }

@@ -58,6 +58,7 @@ public:
         if (Y_UNLIKELY(row1 > row2)) {
             row2 = row1; // will not go further than row1
         }
+        TRowId sliceRow2 = row2;
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
         }
@@ -81,6 +82,8 @@ public:
                     key2PageId = level[i].GetShortChild(pos).PageId;
                     // move row2 to the first key > key2
                     row2 = Min(row2, level[i].GetShortChild(pos).RowCount);
+                    // always charge row2, no matter what keys are
+                    row2 = Max(row2, row1);
                 }
                 
                 if (level[i].EndRowId <= row1 || level[i].BeginRowId > row2) {
@@ -105,7 +108,7 @@ public:
         };
 
         const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return HasDataPage(current.GetShortChild(pos).PageId, { });
+                        return HasDataPage(current.GetShortChild(pos).PageId, { });
         };
 
         ready &= TryLoadRoot(meta, level);
@@ -123,8 +126,7 @@ public:
 
         iterateLevel(hasDataPage);
 
-        // TODO: overshot for keys search
-        return {ready, false};
+        return {ready, row2 == sliceRow2};
     }
 
     TResult DoReverse(TCells key1, TCells key2, TRowId row1, TRowId row2, 
@@ -144,9 +146,10 @@ public:
         if (Y_UNLIKELY(row1 >= meta.RowCount)) {
             row1 = meta.RowCount - 1; // start from the last row
         }
-        if (Y_UNLIKELY(row1 < row2)) {
+        if (Y_UNLIKELY(row2 > row1)) {
             row2 = row1; // will not go further than row1
         }
+        TRowId sliceRow2 = row2;
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
         }
@@ -170,6 +173,8 @@ public:
                     // move row2 to the first key > key2
                     if (pos) {
                         row2 = Max(row2, level[i].GetShortChild(pos - 1).RowCount - 1);
+                        // always charge row1, no matter what keys are
+                        row2 = Min(row2, row1);
                     }
                 }
                 
@@ -214,7 +219,7 @@ public:
         iterateLevel(hasDataPage);
 
         // TODO: overshot for keys search
-        return {ready, false};
+        return {ready, row2 == sliceRow2};
     }
 
 private:

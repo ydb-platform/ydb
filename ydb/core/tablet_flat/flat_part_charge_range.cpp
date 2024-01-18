@@ -41,7 +41,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately first key > key2 might be at the start of the next slice
                 TRowId firstRow = pos->Slice.BeginRowId();
                 // Precharge the first row on the next slice
-                CreateCharge(env, *pos->Part, tags, includeHistory)->Do(firstRow, firstRow, keyDefaults, items, bytes);
+                ready &= CreateCharge(env, *pos->Part, tags, includeHistory)->Do(firstRow, firstRow, keyDefaults, items, bytes);
             }
 
             break;
@@ -99,7 +99,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
                 // Unfortunately first key <= key2 might be at the end of the previous slice
                 TRowId lastRow = pos->Slice.EndRowId() - 1;
                 // Precharge the last row on the previous slice
-                CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
+                ready &= CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
             }
 
             break;

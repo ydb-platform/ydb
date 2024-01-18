@@ -1256,7 +1256,7 @@ public:
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
         } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
-            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Node restart frequency is elevated", ETags::Uptime);
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }

@@ -20,16 +20,12 @@ class TChargeBTreeIndex : public ICharge {
         TBtreeIndexNode Node;
         TRowId BeginRowId;
         TRowId EndRowId;
-        TCellsIterable BeginKey;
-        TCellsIterable EndKey;
 
-        TNodeState(TChild meta, TBtreeIndexNode node, TRowId beginRowId, TRowId endRowId, TCellsIterable beginKey, TCellsIterable endKey)
+        TNodeState(TChild meta, TBtreeIndexNode node, TRowId beginRowId, TRowId endRowId)
             : Meta(meta)
             , Node(node)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
-            , BeginKey(beginKey)
-            , EndKey(endKey)
         {
         }
     };
@@ -50,13 +46,15 @@ public:
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
         bool ready = true;
 
-        Y_UNUSED(key1);
-        Y_UNUSED(key2);
-        Y_UNUSED(keyDefaults);
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
+
+        if (meta.LevelCount == 0) {
+            ready &= HasDataPage(meta.PageId, { });
+            return { ready, true };
+        }
 
         if (Y_UNLIKELY(row1 >= meta.RowCount)) {
             return { true, true }; // already out of bounds, nothing to precharge
@@ -68,71 +66,29 @@ public:
             key2 = key1; // will not go further than key1
         }
 
-        TVector<TNodeState> level, nextLevel(Reserve(3));
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
-            if (height == 0) {
-                ready &= TryLoadRoot(meta, nextLevel);
-            } else {
-                for (ui32 i : xrange<ui32>(level.size())) {
-                    TRecIdx from = 0, to = level[i].Node.GetKeysCount();
-                    if (level[i].BeginRowId < row1) {
-                        Y_DEBUG_ABORT_UNLESS(i == 0);
-                        from = level[i].Node.Seek(row1);
-                    }
-                    if (level[i].EndRowId > row2) {
-                        Y_DEBUG_ABORT_UNLESS(i == level.size() - 1);
-                        to = level[i].Node.Seek(row2);
-                    }
-                    for (TRecIdx j : xrange(from, to + 1)) {
-                        ready &= TryLoadNode(level[i], j, nextLevel);
-                    }
-                }
-            }
+        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+        TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
+        TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
-            level.swap(nextLevel);
-            nextLevel.clear();
-        }
-
-        if (!ready) {
-            // some index pages are missing, do not continue
-            return {false, false};
-        }
-
-        if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, { });
-        } else {
-            if (key1) {
-                for (auto it = level.begin(); it != level.end(); it++) {
-                    if (!it->BeginKey.Count() || it->BeginKey.CompareTo(key1, &keyDefaults) <= 0) {
-                        // Y_VERIFY_DEBUG_S(std::distance(level.begin(), it) < 1, "Should have key2 node at the begin");
-                        TRecIdx pos = it->Node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-
-                        // shrink row1 to the first key >= key1
-                        row1 = Max(row1, pos 
-                            ? it->Node.GetShortChild(pos - 1).RowCount 
-                            : it->BeginRowId);
-
-                        // break; //???
-                    }
-                }
-            }
-            if (key2) {
-                for (auto it = level.rbegin(); it != level.rend(); it++) {
-                    if (!it->EndKey.Count() || it->EndKey.CompareTo(key2, &keyDefaults) > 0) {
-                        // Y_VERIFY_DEBUG_S(std::distance(level.rbegin(), it) < 2, "Should have key2 node at the end");
-                        TRecIdx pos = it->Node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                            
-                        // shrink row2 to the first key > key2
-                        row2 = Min(row2, it->Node.GetShortChild(pos).RowCount);
-
-                        // break; //???
-                    }
-                }
-            }
-
+        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
             for (ui32 i : xrange<ui32>(level.size())) {
+                if (level[i].Meta.PageId == key1PageId) {
+                    TRecIdx pos = level[i].Node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key1PageId = level[i].Node.GetShortChild(pos).PageId;
+                    if (pos) {
+                        // move row1 to the first key >= key1
+                        row1 = Max(row1, level[i].Node.GetShortChild(pos - 1).RowCount);
+                    }
+                }
+                if (level[i].Meta.PageId == key2PageId) {
+                    TRecIdx pos = level[i].Node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key2PageId = level[i].Node.GetShortChild(pos).PageId;
+                    // move row2 to the first key > key2
+                    row2 = Min(row2, level[i].Node.GetShortChild(pos).RowCount);
+                }
+                
                 if (level[i].EndRowId <= row1 || level[i].BeginRowId > row2) {
-                    continue; // TODO: ???
+                    continue;
                 }
 
                 TRecIdx from = 0, to = level[i].Node.GetKeysCount();
@@ -143,10 +99,33 @@ public:
                     to = level[i].Node.Seek(row2);
                 }
                 for (TRecIdx j : xrange(from, to + 1)) {
-                    ready &= HasDataPage(level[i].Node.GetShortChild(j).PageId, { });
+                    ready &= tryLoadNext(level[i], j);
                 }
             }
+        };
+
+        const auto tryLoadNode = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return TryLoadNode(current, pos, nextLevel);
+        };
+
+        const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return HasDataPage(current.Node.GetShortChild(pos).PageId, { });
+        };
+
+        ready &= TryLoadRoot(meta, level);
+
+        for (ui32 height = 1; height < meta.LevelCount && ready; height++) {
+            iterateLevel(tryLoadNode);
+            level.swap(nextLevel);
+            nextLevel.clear();
         }
+
+        if (!ready) {
+            // some index pages are missing, do not continue
+            return {false, false};
+        }
+
+        iterateLevel(hasDataPage);
 
         // TODO: overshot for keys search
         return {ready, false};
@@ -231,14 +210,12 @@ private:
     }
 
     bool TryLoadRoot(const TBtreeIndexMeta& meta, TVector<TNodeState>& level) const noexcept {
-        const static TCellsIterable EmptyKey = TCellsIterable(static_cast<const char*>(nullptr), TColumns());
-
         auto page = Env->TryGetPage(Part, meta.PageId);
         if (!page) {
             return false;
         }
 
-        level.emplace_back(meta, TBtreeIndexNode(*page), 0, meta.RowCount, EmptyKey, EmptyKey);
+        level.emplace_back(meta, TBtreeIndexNode(*page), 0, meta.RowCount);
         return true;
     }
 
@@ -255,15 +232,15 @@ private:
         TRowId beginRowId = pos ? current.Node.GetChild(pos - 1).RowCount : current.BeginRowId;
         TRowId endRowId = child.RowCount;
 
-        TCellsIterable beginKey = pos ? current.Node.GetKeyCellsIterable(pos - 1, Scheme.Groups[0].ColsKeyIdx) : current.BeginKey;
-        TCellsIterable endKey = pos < current.Node.GetKeysCount() ? current.Node.GetKeyCellsIterable(pos, Scheme.Groups[0].ColsKeyIdx) : current.EndKey;
-        
-        level.emplace_back(child, TBtreeIndexNode(*page), beginRowId, endRowId, beginKey, endKey);
+        level.emplace_back(child, TBtreeIndexNode(*page), beginRowId, endRowId);
         return true;
     }
 
     int Compare(TCells left, TCells right, const TKeyCellDefaults &keyDefaults) const noexcept
     {
+        Y_DEBUG_ABORT_UNLESS(left, "Empty keys should be handled separately");
+        Y_DEBUG_ABORT_UNLESS(right, "Empty keys should be handled separately");
+
         for (TPos it = 0; it < Min(left.size(), right.size(), keyDefaults.Size()); it++) {
             if (int cmp = CompareTypedCells(left[it], right[it], keyDefaults.Types[it])) {
                 return cmp;

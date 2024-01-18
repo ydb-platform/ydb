@@ -39,7 +39,7 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    void AssertLoadTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
+    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
@@ -112,7 +112,7 @@ namespace {
                 }
                 return TSerializedCellVec(key);
             };
-            auto add = [&](TRowId pageIndex1 /*inclusive*/, TRowId pageIndex2 /*exclusive*/) {
+            auto add = [&](ui32 pageIndex1 /*inclusive*/, ui32 pageIndex2 /*exclusive*/) {
                 TSlice slice;
                 slice.FirstInclusive = true;
                 slice.FirstRowId = pageIndex1 * 2;
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                 TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
                 DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
                 DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
             }
         }
     }
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         Y_UNUSED(bTreeOvershot);
                         Y_UNUSED(flatOvershot);
 
-                        AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                     }
                 }
             }
@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             EReady bTreeReady = Seek(bTree, bTreeEnv, seek, reverse, key, message);
                             EReady flatReady = Seek(flat, flatEnv, seek, reverse, key, message);
                             AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                         }
 
                         for (ui32 steps = 1; steps <= 10; steps++) {
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             EReady bTreeReady = Next(bTree, bTreeEnv, reverse, message);
                             EReady flatReady = Next(flat, flatEnv, reverse, message);
                             AssertEqual(bTree, bTreeReady, flat, flatReady, message);
-                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                         }
                     }
                 }
@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
 
                             TTouchEnv bTreeEnv, flatEnv;
                             
-                            TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
+                            TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
                             for (auto c : key1) {
                                 message << c.AsValue<ui32>() << " ";
                             }
@@ -597,7 +597,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             Charge(btreeRun, tags, bTreeEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
                             Charge(flatRun, tags, flatEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
 
-                            AssertLoadTheSame(part, bTreeEnv, flatEnv, message);
+                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                         }
                     }
                 }

@@ -671,7 +671,7 @@ public:
         return 0;
     }
 
-    static double GetMissing(const NKikimrViewer::TNodeInfo& nodeInfo) {
+    static uint32 GetMissing(const NKikimrViewer::TNodeInfo& nodeInfo) {
         uint32 missing = 0;
         for (const auto& pDisk : nodeInfo.GetPDisks()) {
             if (pDisk.state() != NKikimrBlobStorage::TPDiskState::Normal) {

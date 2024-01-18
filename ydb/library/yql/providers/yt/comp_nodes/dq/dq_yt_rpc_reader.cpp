@@ -1,6 +1,8 @@
 #include "dq_yt_rpc_reader.h"
 #include "dq_yt_rpc_helpers.h"
 
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+
 #include "yt/cpp/mapreduce/common/helpers.h"
 
 #include <yt/yt/library/auth/auth.h>
@@ -96,7 +98,6 @@ bool TParallelFileInputState::RunNext() {
         size_t InputIdx = 0;
         {
             std::lock_guard lock(InnerState_->Lock);
-            CheckError();
             if (InnerState_->CurrentInputIdx == RawInputs_.size() && InnerState_->CurrentInflight == 0 && InnerState_->Results.empty() && !MkqlReader_.IsValid()) {
                 return false;
             }
@@ -128,6 +129,11 @@ bool TParallelFileInputState::RunNext() {
                 Cerr << (TStringBuilder() "Warn: request took: " << elapsed << " mcs)\n");
             }
 #endif
+
+            TFailureInjector::Reach("dq_rpc_reader_read_err_when_empty", [&res_] {
+                res_ = NYT::TErrorOr<NYT::TSharedRef>(NYT::TError("failure injected"));
+            });
+
             if (!res_.IsOK()) {
                 std::lock_guard lock(state->Lock);
                 state->Error = std::move(res_);
@@ -135,6 +141,7 @@ bool TParallelFileInputState::RunNext() {
                 state->WaitPromise.TrySet();
                 return;
             }
+
             auto block = std::move(res_.Value());
             NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
             NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
@@ -168,6 +175,7 @@ bool TParallelFileInputState::NextValue() {
 #ifdef RPC_PRINT_TIME
         print_add(-1);
 #endif
+            CheckError();
             return false;
         }
         if (MkqlReader_.IsValid()) {

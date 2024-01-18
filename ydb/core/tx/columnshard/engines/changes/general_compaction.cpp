@@ -266,4 +266,12 @@ void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSo
     AFL_VERIFY(CheckPoints.emplace(position, include).second || !validationDuplications);
 }
 
+std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {
+    if (AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
+        return std::make_shared<TMemoryPredictorChunkedPolicy>();
+    } else {
+        return std::make_shared<TMemoryPredictorSimplePolicy>();
+    }
+}
+
 }

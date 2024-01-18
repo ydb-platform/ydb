@@ -28,6 +28,50 @@ protected:
 public:
     using TBase::TBase;
 
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
+    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
+    private:
+        ui64 SumMemory = 0;
+    public:
+        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) override {
+            for (auto&& i : portionInfo->GetRecords()) {
+                SumMemory += i.BlobRange.Size;
+                SumMemory += i.GetMeta().GetRawBytesVerified();
+            }
+            return SumMemory;
+        }
+    };
+
+    class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
+    private:
+        ui64 SumMemory = 0;
+        THashMap<ui32, ui64> MaxMemoryByColumnChunk;
+    public:
+        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) override {
+            SumMemory += portionInfo->GetRecordsCount() * 24;
+            for (auto&& i : portionInfo->GetRecords()) {
+                SumMemory += i.BlobRange.Size;
+                SumMemory += i.GetMeta().GetRawBytesVerified();
+                auto it = MaxMemoryByColumnChunk.find(i.GetColumnId());
+                if (it == MaxMemoryByColumnChunk.end()) {
+                    MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
+                } else if (it->second < i.GetMeta().GetRawBytesVerified()) {
+                    SumMemory -= it->second;
+                    it->second = i.GetMeta().GetRawBytesVerified();
+                    SumMemory += it->second;
+                }
+            }
+            return SumMemory;
+        }
+    };
+
+    static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
+
     void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
 
     virtual TString TypeString() const override {

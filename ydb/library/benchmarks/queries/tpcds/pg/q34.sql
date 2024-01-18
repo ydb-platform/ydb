@@ -20,7 +20,7 @@ select c_last_name
     and (case when household_demographics.hd_vehicle_count > 0 
 	then household_demographics.hd_dep_count/ household_demographics.hd_vehicle_count 
 	else null::int4
-	end)::::numeric  > 1.2
+	end)::numeric  > 1.2
     and date_dim.d_year in (1998,1998+1,1998+2)
     and store.s_county in ('Williamson County','Williamson County','Williamson County','Williamson County',
                            'Williamson County','Williamson County','Williamson County','Williamson County')

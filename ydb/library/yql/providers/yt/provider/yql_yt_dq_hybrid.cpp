@@ -76,7 +76,7 @@ private:
         if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U)
             return false;
 
-        return !HasSetting(*operation.Ref().Child(4U), EYtSettingType::NoDq);
+        return !HasSettingsExcept(*operation.Ref().Child(4U), DqOpSupportedSettings);
     }
 
     std::optional<std::array<ui64, 2U>> CanReadHybrid(const TYtSection& section) const {

@@ -116,6 +116,7 @@ Y_DECLARE_FLAGS(EYtSettingTypes, EYtSettingType);
 Y_DECLARE_OPERATORS_FOR_FLAGS(EYtSettingTypes);
 
 constexpr auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique;
+constexpr auto DqOpSupportedSettings = EYtSettingType::Flow | EYtSettingType::JobCount | EYtSettingType::Limit | EYtSettingType::Ordered | EYtSettingType::ReduceBy | EYtSettingType::SortBy;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -91,7 +91,7 @@ public:
                 if (level[i].BeginRowId < row1) {
                     from = level[i].Seek(row1);
                 }
-                if (level[i].EndRowId > row2) {
+                if (level[i].EndRowId > row2 + 1) {
                     to = level[i].Seek(row2);
                 }
                 for (TRecIdx j : xrange(from, to + 1)) {
@@ -131,13 +131,15 @@ public:
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
         bool ready = true;
         
-        Y_UNUSED(key1);
-        Y_UNUSED(key2);
-        Y_UNUSED(keyDefaults);
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
+
+        if (meta.LevelCount == 0) {
+            ready &= HasDataPage(meta.PageId, { });
+            return { ready, true };
+        }
 
         if (Y_UNLIKELY(row1 >= meta.RowCount)) {
             row1 = meta.RowCount - 1; // start from the last row
@@ -145,29 +147,61 @@ public:
         if (Y_UNLIKELY(row1 < row2)) {
             row2 = row1; // will not go further than row1
         }
+        if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
+            key2 = key1; // will not go further than key1
+        }
 
         // level contains nodes in reverse order
-        TVector<TNodeState> level, nextLevel(Reserve(3));
-        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
-            if (height == 0) {
-                ready &= TryLoadRoot(meta, nextLevel);
-            } else {
-                for (ui32 i : xrange<ui32>(level.size())) {
-                    TRecIdx from = level[i].GetKeysCount(), to = 0;
-                    if (level[i].EndRowId > row1) {
-                        Y_DEBUG_ABORT_UNLESS(i == 0);
-                        from = level[i].Seek(row1);
-                    }
-                    if (level[i].BeginRowId < row2) {
-                        Y_DEBUG_ABORT_UNLESS(i == level.size() - 1);
-                        to = level[i].Seek(row2);
-                    }
-                    for (TRecIdx j = from + 1; j > to; j--) {
-                        ready &= TryLoadNode(level[i], j - 1, nextLevel);
+        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+        TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
+        TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
+
+        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
+            for (ui32 i : xrange<ui32>(level.size())) {
+                if (level[i].PageId == key1PageId) {
+                    TRecIdx pos = level[i].SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key1PageId = level[i].GetShortChild(pos).PageId;
+                    // move row1 to the first key <= key1
+                    row1 = Min(row1, level[i].GetShortChild(pos).RowCount - 1);
+                }
+                if (level[i].PageId == key2PageId) {
+                    TRecIdx pos = level[i].SeekReverse(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key2PageId = level[i].GetShortChild(pos).PageId;
+                    // move row2 to the first key > key2
+                    if (pos) {
+                        row2 = Max(row2, level[i].GetShortChild(pos - 1).RowCount - 1);
                     }
                 }
-            }
+                
+                if (level[i].EndRowId <= row2 || level[i].BeginRowId > row1) {
+                    continue;
+                }
 
+                TRecIdx from = level[i].GetKeysCount(), to = 0;
+                if (level[i].EndRowId > row1 + 1) {
+                    from = level[i].Seek(row1);
+                }
+                if (level[i].BeginRowId < row2) {
+                    to = level[i].Seek(row2);
+                }
+                for (TRecIdx j = from + 1; j > to; j--) {
+                    ready &= tryLoadNext(level[i], j - 1);
+                }
+            }
+        };
+
+        const auto tryLoadNode = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return TryLoadNode(current, pos, nextLevel);
+        };
+
+        const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return HasDataPage(current.GetShortChild(pos).PageId, { });
+        };
+
+        ready &= TryLoadRoot(meta, level);
+
+        for (ui32 height = 1; height < meta.LevelCount && ready; height++) {
+            iterateLevel(tryLoadNode);
             level.swap(nextLevel);
             nextLevel.clear();
         }
@@ -177,24 +211,7 @@ public:
             return {false, false};
         }
 
-        if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, { });
-        } else {
-            for (ui32 i : xrange<ui32>(level.size())) {
-                TRecIdx from = level[i].GetKeysCount(), to = 0;
-                if (level[i].EndRowId > row1) {
-                    Y_DEBUG_ABORT_UNLESS(i == 0);
-                    from = level[i].Seek(row1);
-                }
-                if (level[i].BeginRowId < row2) {
-                    Y_DEBUG_ABORT_UNLESS(i == level.size() - 1);
-                    to = level[i].Seek(row2);
-                }
-                for (TRecIdx j = from + 1; j > to; j--) {
-                    ready &= HasDataPage(level[i].GetShortChild(j - 1).PageId, { });
-                }
-            }
-        }
+        iterateLevel(hasDataPage);
 
         // TODO: overshot for keys search
         return {ready, false};

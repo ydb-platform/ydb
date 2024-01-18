@@ -96,7 +96,7 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             // FirstKey <= key2
             if (r.Overshot) {
                 --pos;
-                // Unfortunately first key < key2 might be at the end of the previous slice
+                // Unfortunately first key <= key2 might be at the end of the previous slice
                 TRowId lastRow = pos->Slice.EndRowId() - 1;
                 // Precharge the last row on the previous slice
                 CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);

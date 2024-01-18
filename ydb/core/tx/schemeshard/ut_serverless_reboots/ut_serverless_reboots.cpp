@@ -109,11 +109,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                                    {NLs::PathExist,
                                     NLs::IsExternalSubDomain("ServerLess0"),
-                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED),
+                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED),
                                     NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
                 TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                                    {NLs::PathExist,
-                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
             }
 
             TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
 
             TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
                 R"(
-                    ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+                    ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
                     Name: "ServerLess0"
                 )"
             );
@@ -145,11 +145,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
-                                   {NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+                                   {NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
                 t.TestEnv->TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0",
-                                                                    SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED, sharedHive);
+                                                                    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED, sharedHive);
                 TestTenantSchemeShardSync(t, runtime, tenantSchemeShard, "/MyRoot/ServerLess0",
-                                          ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED));
+                                          ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED));
             }
         });
     }

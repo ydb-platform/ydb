@@ -51,6 +51,9 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             Domains[key].Path = path;
             if (entry.DomainInfo) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
+                if (entry.DomainInfo->ServerlessComputeResourcesMode && Domains[key].ServerlessComputeResourcesMode.Empty()) {
+                    Domains[key].ServerlessComputeResourcesMode = entry.DomainInfo->ServerlessComputeResourcesMode;
+                }
             }
             BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);
             Execute(CreateUpdateDomain(key));

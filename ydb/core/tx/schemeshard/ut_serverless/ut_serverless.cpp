@@ -288,7 +288,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
-                            NLs::ExtractDomainHive(&sharedHive)});
+                            NLs::ExtractDomainHive(&sharedHive),
+                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
 
         TString createData = Sprintf(
             R"(
@@ -324,7 +325,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("ServerLess0"),
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED),
+                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         UNIT_ASSERT(tenantSchemeShard != 0
@@ -333,7 +334,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
         
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
@@ -354,7 +355,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         };
 
         checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED);
+        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
@@ -421,10 +422,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         // Try to change ServerlessComputeResourcesMode not on serverless database
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
                 Name: "SharedDB"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
+        );
+
+        // Try to set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+                Name: "ServerLess0"
+            )",
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
         );
     }
 

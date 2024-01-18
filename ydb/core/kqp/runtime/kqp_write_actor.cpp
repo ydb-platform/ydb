@@ -122,9 +122,7 @@ private:
         Y_UNUSED(dataSize, finished);
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
 
-        CA_LOG_D("SendData: " << dataSize << "  " << finished);
         EgressStats.Resume();
-        
         AddToInputQueue(std::move(data));
         Finished = finished;
 
@@ -187,16 +185,14 @@ private:
 
         YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        CA_LOG_D("Resolved TableId=" << TableId << " ");
+        CA_LOG_D("Resolved TableId=" << TableId);
 
         ProcessRows();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        CA_LOG_D("GotResult: " << ev->Get()->IsError() << " " << ev->Get()->IsPrepared() << " " << ev->Get()->IsComplete() << " :: " << ev->Get()->GetError());
-        CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
-        CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
         if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
             // Until LockIds are supported by columnshards we have to commit each write
             // using separate coordinated transaction. 
             ui64 coordinator = 0;
@@ -228,6 +224,7 @@ private:
                 new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
                 IEventHandle::FlagTrackDelivery);
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
             auto& batchesQueue = InflightBatches.at(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(!batchesQueue.empty());
 
@@ -427,12 +424,12 @@ private:
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
             Settings.GetTable().GetTableId(),
-            1, // TODO: Settings.GetTable().GetVersion()
+            Settings.GetTable().GetVersion() + 1, // TODO: SchemeShard returns wrong version.
             ColumnIds,
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
-        CA_LOG_D("Send EvWrite to ShardID=" << shardId << " TxId=" << inflightBatch.TxId << " data size = " << inflightBatch.Data.size());
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inflightBatch.TxId << ", Size = " << inflightBatch.Data.size());
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),

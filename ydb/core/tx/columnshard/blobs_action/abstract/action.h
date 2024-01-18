@@ -64,12 +64,12 @@ public:
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool success) {
         if (Removing) {
-            Removing->OnCompleteTxAfterRemoving(self);
+            Removing->OnCompleteTxAfterRemoving(self, success);
         }
         if (Writing) {
-            Writing->OnCompleteTxAfterWrite(self);
+            Writing->OnCompleteTxAfterWrite(self, success);
         }
     }
 };
@@ -150,9 +150,9 @@ public:
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool success) {
         for (auto&& i : StorageActions) {
-            i.second.OnCompleteTxAfterAction(self);
+            i.second.OnCompleteTxAfterAction(self, success);
         }
     }
 

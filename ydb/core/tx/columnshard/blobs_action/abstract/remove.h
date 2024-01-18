@@ -20,7 +20,7 @@ private:
 protected:
     virtual void DoDeclareRemove(const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) = 0;
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool success) = 0;
 public:
     IBlobsDeclareRemovingAction(const TString& storageId)
         : TBase(storageId)
@@ -36,8 +36,8 @@ public:
     void OnExecuteTxAfterRemoving(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
         return DoOnExecuteTxAfterRemoving(self, dbBlobs, success);
     }
-    void OnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self) {
-        return DoOnCompleteTxAfterRemoving(self);
+    void OnCompleteTxAfterRemoving(NColumnShard::TColumnShard& self, const bool success) {
+        return DoOnCompleteTxAfterRemoving(self, success);
     }
 };
 

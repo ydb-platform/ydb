@@ -27,7 +27,7 @@ protected:
     }
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) override;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/) override {
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool /*success*/) override {
 
     }
 public:

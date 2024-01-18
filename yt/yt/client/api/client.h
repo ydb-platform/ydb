@@ -67,7 +67,7 @@ struct IClient
     , public IAdminClient
     , public IQueryTrackerClient
     , public IEtcClient
-    , public IBundleControllerClient
+    , public NBundleControllerClient::IBundleControllerClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.

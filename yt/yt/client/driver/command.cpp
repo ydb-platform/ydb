@@ -103,17 +103,4 @@ void TCommandBase::ProduceResponseParameters(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Keep sync with yt/ytlib/scheduler/helpers.cpp.
-TYPath GetNewOperationPath(TGuid operationId)
-{
-    int hashByte = operationId.Parts32[0] & 0xff;
-    return
-        "//sys/operations/" +
-        Format("%02x", hashByte) +
-        "/" +
-        ToYPathLiteral(ToString(operationId));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NDriver

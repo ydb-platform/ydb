@@ -5,12 +5,16 @@
 
 #include <yt/yt/client/api/client_common.h>
 
-namespace NYT::NApi {
+namespace NYT::NBundleControllerClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TGetBundleConfigOptions
-    : public TTimeoutOptions
+    : public NApi::TTimeoutOptions
+{ };
+
+struct TSetBundleConfigOptions
+    : public NApi::TTimeoutOptions
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,14 +24,7 @@ struct TBundleConfigDescriptor
 {
     TString BundleName;
 
-    NBundleControllerClient::TCpuLimitsPtr CpuLimits;
-    NBundleControllerClient::TMemoryLimitsPtr MemoryLimits;
-
-    int RpcProxyCount;
-    NBundleControllerClient::TInstanceResourcesPtr RpcProxyResourceGuarantee;
-
-    int TabletNodeCount;
-    NBundleControllerClient::TInstanceResourcesPtr TabletNodeResourceGuarantee;
+    NBundleControllerClient::TBundleTargetConfigPtr BundleConfig;
 
     REGISTER_YSON_STRUCT(TBundleConfigDescriptor);
 
@@ -45,8 +42,13 @@ struct IBundleControllerClient
     virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) = 0;
+
+    virtual TFuture<void> SetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const TSetBundleConfigOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NApi
+} // namespace NYT::NBundleControllerClient

@@ -21,10 +21,10 @@ template <class T>
 concept CIsEnum = TEnumTraits<T>::IsEnum;
 
 template <class T>
-concept CIsYsonStruct = std::is_base_of_v<TYsonStructBase, T>;
+concept CIsYsonStruct = std::derived_from<T, TYsonStructBase>;
 
 template <class T>
-concept CIsProtobufMessage = std::is_base_of_v<google::protobuf::Message, std::decay_t<T>>;
+concept CIsProtobufMessage = std::derived_from<std::decay_t<T>, google::protobuf::Message>;
 
 template <class T>
 concept CIsNullable = std::is_same_v<T, std::unique_ptr<typename T::value_type>> ||

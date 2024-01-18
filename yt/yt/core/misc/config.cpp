@@ -92,6 +92,9 @@ void THistoricUsageConfig::Register(TRegistrar registrar)
         // TODO(eshcherbin): Adjust.
         .Default(1.0 / (24.0 * 60.0 * 60.0))
         .GreaterThanOrEqual(0.0);
+
+    registrar.Parameter("reset_on_new_parameters", &TThis::ResetOnNewParameters)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -57,10 +57,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableLlvm);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
-    REGISTER_SETTING(*this, OptDisableJoinRewrite);
-    REGISTER_SETTING(*this, OptDisableJoinTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookup);
-    REGISTER_SETTING(*this, OptDisableJoinReverseTableLookupLeftSemi);
     REGISTER_SETTING(*this, OptDisableTopSort);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
@@ -100,22 +96,6 @@ bool TKikimrSettings::SpillingEnabled() const {
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {
     return GetFlagValue(_KqpDisableLlvmForUdfStages.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinRewrite() const {
-    return GetFlagValue(OptDisableJoinRewrite.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinTableLookup() const {
-    return GetFlagValue(OptDisableJoinTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookup() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookup.Get());
-}
-
-bool TKikimrSettings::HasOptDisableJoinReverseTableLookupLeftSemi() const {
-    return GetFlagValue(OptDisableJoinReverseTableLookupLeftSemi.Get());
 }
 
 bool TKikimrSettings::HasOptDisableTopSort() const {

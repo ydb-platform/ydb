@@ -12,7 +12,7 @@ NO_SANITIZE_COVERAGE()
 
 OWNER(somov)
 
-RUN_PYTHON2(
+RUN_PYTHON3(
     generate_symbolizer.py ${CXX_COMPILER}
     STDOUT symbolizer.c
 )

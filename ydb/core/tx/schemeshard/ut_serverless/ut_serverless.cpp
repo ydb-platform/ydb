@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
                             NLs::ExtractDomainHive(&sharedHive),
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED)});
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
 
         TString createData = Sprintf(
             R"(
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("ServerLess0"),
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED),
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared),
                             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
 
         UNIT_ASSERT(tenantSchemeShard != 0
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
-                            NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
         
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
@@ -354,8 +354,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             env.TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0", serverlessComputeResourcesMode, sharedHive);
         };
 
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
-        checkServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+        checkServerlessComputeResourcesMode(EServerlessComputeResourcesModeExclusive);
+        checkServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesModeValidation) {
@@ -422,19 +422,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         // Try to change ServerlessComputeResourcesMode not on serverless database
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeShared
                 Name: "SharedDB"
             )",
             {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "only for serverless" }}
         );
 
-        // Try to set ServerlessComputeResourcesMode to SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+        // Try to set ServerlessComputeResourcesMode to EServerlessComputeResourcesModeUnspecified
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeUnspecified
                 Name: "ServerLess0"
             )",
-            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED" }}
+            {{ TEvSchemeShard::EStatus::StatusInvalidParameter, "EServerlessComputeResourcesModeUnspecified" }}
         );
     }
 
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(
-                ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE
+                ServerlessComputeResourcesMode: EServerlessComputeResourcesModeExclusive
                 Name: "ServerLess0"
             )",
             {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}

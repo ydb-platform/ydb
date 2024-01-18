@@ -9,9 +9,9 @@ ENodeSelectionPolicy TDomainInfo::GetNodeSelectionPolicy() const {
     }
 
     switch (*ServerlessComputeResourcesMode) {
-        case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE:
+        case NKikimrSubDomains::EServerlessComputeResourcesModeExclusive:
             return ENodeSelectionPolicy::PreferObjectDomain;
-        case NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED:
+        case NKikimrSubDomains::EServerlessComputeResourcesModeShared:
             return ENodeSelectionPolicy::Default;
         default:
             return ENodeSelectionPolicy::Default;

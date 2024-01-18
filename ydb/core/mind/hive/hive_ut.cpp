@@ -6015,7 +6015,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(foundTablet);
     }
 
-    Y_UNIT_TEST(TestDomainNodeSelectionPolicy) {
+    Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
 
@@ -6071,7 +6071,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeExclusive);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6096,7 +6096,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeShared);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6177,7 +6177,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeExclusive);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);

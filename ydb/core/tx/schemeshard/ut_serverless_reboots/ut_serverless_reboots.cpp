@@ -109,16 +109,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
                                    {NLs::PathExist,
                                     NLs::IsExternalSubDomain("ServerLess0"),
-                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED),
+                                    NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared),
                                     NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
                 TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                                    {NLs::PathExist,
-                                    NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
+                                    NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
             }
 
             TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
                 R"(
-                    ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE
+                    ServerlessComputeResourcesMode: EServerlessComputeResourcesModeExclusive
                     Name: "ServerLess0"
                 )"
             );
@@ -127,16 +127,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
-                                   {NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE)});
+                                   {NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeExclusive)});
                 t.TestEnv->TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0",
-                                                                    SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE, sharedHive);
+                                                                    EServerlessComputeResourcesModeExclusive, sharedHive);
                 TestTenantSchemeShardSync(t, runtime, tenantSchemeShard, "/MyRoot/ServerLess0",
-                                          ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE));
+                                          ServerlessComputeResourcesMode(EServerlessComputeResourcesModeExclusive));
             }
 
             TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
                 R"(
-                    ServerlessComputeResourcesMode: SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                    ServerlessComputeResourcesMode: EServerlessComputeResourcesModeShared
                     Name: "ServerLess0"
                 )"
             );
@@ -145,11 +145,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLessReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLess0"),
-                                   {NLs::ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED)});
+                                   {NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
                 t.TestEnv->TestServerlessComputeResourcesModeInHive(runtime, "/MyRoot/ServerLess0",
-                                                                    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED, sharedHive);
+                                                                    EServerlessComputeResourcesModeShared, sharedHive);
                 TestTenantSchemeShardSync(t, runtime, tenantSchemeShard, "/MyRoot/ServerLess0",
-                                          ServerlessComputeResourcesMode(SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED));
+                                          ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared));
             }
         });
     }

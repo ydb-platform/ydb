@@ -525,7 +525,7 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+        "EServerlessComputeResourcesModeShared"
     )
     serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
     hostel_db_endpoints = list_endpoints(ydb_hostel_db)
@@ -537,7 +537,7 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE"
+        "EServerlessComputeResourcesModeExclusive"
     )
     serverless_db_dedicated_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
 
@@ -549,7 +549,7 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE"
+        "EServerlessComputeResourcesModeExclusive"
     )
 
     database = ydb_serverless_db_with_exclusive_nodes
@@ -589,7 +589,7 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+        "EServerlessComputeResourcesModeShared"
     )
 
     database = ydb_serverless_db_with_exclusive_nodes
@@ -614,7 +614,7 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_EXCLUSIVE"
+        "EServerlessComputeResourcesModeExclusive"
     )
 
     # Old session keeps work fine with old connections to shared nodes

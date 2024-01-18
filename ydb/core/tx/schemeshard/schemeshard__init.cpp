@@ -1537,7 +1537,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         );
                     } else if (pathId != domainInfo->GetResourcesDomainId()) {
                         domainInfo->SetServerlessComputeResourcesMode(
-                            NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
                         );
                     }
                 }
@@ -1609,7 +1609,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         );
                     } else if (pathId != alter->GetResourcesDomainId()) {
                         alter->SetServerlessComputeResourcesMode(
-                            NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
                         );
                     }
 

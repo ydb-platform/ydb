@@ -11,7 +11,8 @@ extern "C" {
 }
 
 namespace {
-void check_result(const char ** expected, std::shared_ptr<arrow::ArrayData> data) {
+
+void checkResult(const char ** expected, std::shared_ptr<arrow::ArrayData> data) {
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     for (int i = 0; i < data->length; i++) {
@@ -29,7 +30,7 @@ void check_result(const char ** expected, std::shared_ptr<arrow::ArrayData> data
     }
 }
 
-}
+} // namespace {
 
 namespace NYql {
 
@@ -77,7 +78,7 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
         "1.1", "31.37", nullptr, "-1.337", "0"
     };
 
-    check_result(expected, data);
+    checkResult(expected, data);
 }
 
 Y_UNIT_TEST(PgConvertNumericInt) {
@@ -100,7 +101,7 @@ Y_UNIT_TEST(PgConvertNumericInt) {
         "11", "3137", nullptr, "-1337", "0"
     };
 
-    check_result(expected, data);
+    checkResult(expected, data);
 }
 
 Y_UNIT_TEST(PgConvertDate32Date) {
@@ -148,4 +149,3 @@ Y_UNIT_TEST(PgConvertDate32Date) {
 } // Y_UNIT_TEST_SUITE(TArrowUtilsTests)
 
 } // namespace NYql
-

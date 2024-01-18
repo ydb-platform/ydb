@@ -1252,11 +1252,11 @@ public:
     void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
-        TSelfCheckContext rrContext(&context, "NODE UPTIME");
+        TSelfCheckContext rrContext(&context, "NODE_UPTIME");
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
         } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
-            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Node is restarting too often", ETags::Uptime);
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Node restart frequency is elevated", ETags::Uptime);
         } else {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }

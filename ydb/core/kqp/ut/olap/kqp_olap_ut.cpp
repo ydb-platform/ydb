@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     };
 
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool /*withSomeNulls = false*/) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
         TLocalHelper lHelper(kikimr);
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);

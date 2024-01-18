@@ -1,5 +1,6 @@
 #include "utils.h"
 
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
 #include <ydb/core/metering/bill_record.h>
@@ -304,17 +305,7 @@ TString GetPrettyStatistics(const TString& statistics) {
 
 namespace {
 
-const NJson::TJsonValue* GetStatisticsRoot(const NJson::TJsonValue& allStatistics, std::string_view v1Pointer = "Graph=0") {
-    const NJson::TJsonValue* root = nullptr;
-    if (!(root = allStatistics.GetValueByPath("ResultSet"))) {
-        root = allStatistics.GetValueByPath(v1Pointer);
-    }
-    return root;
-}
-
-std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJsonValue& root) {
-    std::unordered_map<TString, i64> aggregatedStats;
-
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
     for (const auto& [stageName, stageStats] : root.GetMap()) {
         if (!stageStats.IsMap()) {
             continue;
@@ -346,42 +337,29 @@ std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJson
             }
         }
     }
-    return aggregatedStats;
 }
 
-void CollectTotalStatistics(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, const NJson::TJsonValue& stats) {
-    const NJson::TJsonValue* root = GetStatisticsRoot(stats, "Graph=0.TaskRunner.Stage=Total");
-    if (!root) {
-        return;
-    }
-
+void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
     using namespace std::string_view_literals;
-    auto field_to_path = {
-        std::make_pair("IngressBytes"sv, "IngressBytes.sum"sv),
+    auto fieldToPath = {
+        std::make_pair(TString{"IngressBytes"}, "IngressBytes.sum"sv),
         {"EgressBytes", "EgressBytes.sum"},
         {"InputBytes", "InputBytes.sum"},
         {"OutputBytes", "OutputBytes.sum"}};
 
-    for (auto [field, path] : field_to_path) {
-        if (auto jsonField = root->GetValueByPath(path)) {
-            auto newValue = dest.Add();
-            newValue->set_name(TString{field});
-            newValue->set_value(jsonField->GetIntegerSafe());
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        bool isV1 = rootKey.find('=') != TString::npos;
+        for (auto [field, path] : fieldToPath) {
+            if (auto jsonField = graph.GetValueByPath(fmt::format("{}{}", (isV1 ? "TaskRunner.Stage=Total." : ""), path))) {
+                aggregatedStatistics[field] += jsonField->GetIntegerSafe();
+            }
         }
     }
 }
 
-void CollectDetalizationStatistics(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, const NJson::TJsonValue& stats) {
-    const NJson::TJsonValue* root = GetStatisticsRoot(stats);
-    if (!root) {
-        return;
-    }
-
-    std::unordered_map<TString, i64> aggregatedStatistics = AggregateStatisticsBySources(*root);
-    for (const auto& [source, ingress] : aggregatedStatistics) {
-        auto newEntry = dest.Add();
-        newEntry->set_name(source);
-        newEntry->set_value(ingress);
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        AggregateStatisticsBySources(graph, aggregatedStatistics);
     }
 }
 }
@@ -392,8 +370,19 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         return;
     }
 
-    CollectTotalStatistics(dest, statsJson);
-    CollectDetalizationStatistics(dest, statsJson);
+    if (!statsJson.IsMap()) {
+        return;
+    }
+
+    std::unordered_map<TString, i64> aggregatedStatistics;
+    CollectTotalStatistics(statsJson, aggregatedStatistics);
+    CollectDetalizationStatistics(statsJson, aggregatedStatistics);
+
+    for (auto [field, stat] : aggregatedStatistics) {
+        auto newStat = dest.Add();
+        newStat->set_name(TString{field});
+        newStat->set_value(stat);
+    }
 }
 
 StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {

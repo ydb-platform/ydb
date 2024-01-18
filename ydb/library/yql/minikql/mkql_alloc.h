@@ -378,15 +378,15 @@ inline void* MKQLAllocWithSize(size_t sz, const EMemorySubPool mPool) {
 }
 
 inline void MKQLFreeWithSize(const void* mem, size_t sz, const EMemorySubPool mPool) noexcept {
-    return MKQLFreeFastWithSize(mem, sz, TlsAllocState, mPool);
+    MKQLFreeFastWithSize(mem, sz, TlsAllocState, mPool);
 }
 
 inline void MKQLRegisterObject(NUdf::TBoxedValue* value) noexcept {
-    return value->Link(TlsAllocState->GetRoot());
+    value->Link(TlsAllocState->GetRoot());
 }
 
 inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
-    return value->Unlink();
+    value->Unlink();
 }
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
@@ -426,7 +426,7 @@ T* AllocateOn(TAllocState* state, Args&&... args)
     static_assert(std::is_base_of<TWithMiniKQLAlloc<T::MemoryPool>, T>::value, "Class must inherit TWithMiniKQLAlloc.");
 }
 
-template <typename Type, enum EMemorySubPool MemoryPool = EMemorySubPool::Default>
+template <typename Type, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 struct TMKQLAllocator
 {
     typedef Type value_type;
@@ -440,10 +440,10 @@ struct TMKQLAllocator
     TMKQLAllocator() noexcept = default;
     ~TMKQLAllocator() noexcept = default;
 
-    template<typename U> TMKQLAllocator(const TMKQLAllocator<U>&) noexcept {}
-    template<typename U> struct rebind { typedef TMKQLAllocator<U> other; };
-    template<typename U> bool operator==(const TMKQLAllocator<U>&) const { return true; }
-    template<typename U> bool operator!=(const TMKQLAllocator<U>&) const { return false; }
+    template<typename U> TMKQLAllocator(const TMKQLAllocator<U, MemoryPool>&) noexcept {}
+    template<typename U> struct rebind { typedef TMKQLAllocator<U, MemoryPool> other; };
+    template<typename U> bool operator==(const TMKQLAllocator<U, MemoryPool>&) const { return true; }
+    template<typename U> bool operator!=(const TMKQLAllocator<U, MemoryPool>&) const { return false; }
 
     static pointer allocate(size_type n, const void* = nullptr)
     {
@@ -452,7 +452,7 @@ struct TMKQLAllocator
 
     static void deallocate(const_pointer p, size_type n) noexcept
     {
-        return MKQLFreeWithSize(p, n * sizeof(value_type), MemoryPool);
+        MKQLFreeWithSize(p, n * sizeof(value_type), MemoryPool);
     }
 };
 
@@ -683,7 +683,7 @@ private:
 
 inline void TBoxedValueWithFree::operator delete(void *mem) noexcept {
     auto size = ((TMkqlPAllocHeader*)mem)->Size + sizeof(TMkqlPAllocHeader);
-    return MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
+    MKQLFreeWithSize(mem, size, EMemorySubPool::Default);
 }
 
 } // NMiniKQL

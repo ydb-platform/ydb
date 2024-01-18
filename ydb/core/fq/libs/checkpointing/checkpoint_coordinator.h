@@ -108,6 +108,7 @@ private:
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
     void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
+    void GraphRun();
 
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {

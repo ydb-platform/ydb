@@ -27,9 +27,9 @@ public:
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
-        float DeviceCriticalOverestimationRatio = 1e6;
-        float DeviceCriticalOverestimationTimeMs = 1e6;
-        float MaxNoResponseDeviceTimeMs = 1e6;
+        ui64 DeviceCriticalOverestimationRatio = 1e6;
+        ui64 DeviceCriticalOverestimationTimeMs = 1e6;
+        ui64 MaxNoResponseDeviceTimeMs = 1e6;
     };
 
 private:

@@ -84,7 +84,7 @@ class TRealBlockDevice : public IBlockDevice {
                                 action->Exec(Device.ActorSystem);
                             } else {
                                 TString errorReason = action->ErrorReason;
-                                auto operationType = action->OperationType;
+                                TCompletionAction::EOperationType operationType = action->OperationType;
                                 action->Release(Device.ActorSystem);
 
                                 if (!stateError) {
@@ -242,7 +242,7 @@ class TRealBlockDevice : public IBlockDevice {
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
-                auto now = HPNow();
+                NHPTimer::STime now = HPNow();
                 action->SubmitTime = now;
 
                 if (op->GetType() == IAsyncIoOperation::EType::PWrite) {
@@ -346,7 +346,7 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
-        std::optional<ui64> CriticalOverestimationBeginsAtCycle = {};
+        ui64 CriticalOverestimationBeginsAtCycle = 0;
 
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
         TRealBlockDevice &Device;
@@ -472,17 +472,17 @@ class TRealBlockDevice : public IBlockDevice {
                     *Device.Mon.DeviceNonperformanceMs = 0ull;
                 }
 
-                if (*Device.Mon.DeviceOverestimationRatio > Device.CriticalOverestimationRatio) {
+                if ((ui64)*Device.Mon.DeviceOverestimationRatio > Device.CriticalOverestimationRatio) {
                     if (CriticalOverestimationBeginsAtCycle) {
-                        float ms = HPMilliSeconds(eventGotAtCycle - *CriticalOverestimationBeginsAtCycle);
+                        ui64 ms = HPMilliSeconds(eventGotAtCycle - CriticalOverestimationBeginsAtCycle);
                         if (ms >= Device.CriticalOverestimationTimeMs) {
                             Device.CriticalOverestimationDetected.store(true);
                         }
                     } else {
-                        CriticalOverestimationBeginsAtCycle.emplace(eventGotAtCycle);
+                        CriticalOverestimationBeginsAtCycle = eventGotAtCycle;
                     }
                 } else {
-                    CriticalOverestimationBeginsAtCycle.reset();
+                    CriticalOverestimationBeginsAtCycle = 0;
                 }
 
                 PrevEstimatedCostNs = *Device.Mon.DeviceEstimatedCostNs;
@@ -577,7 +577,7 @@ class TRealBlockDevice : public IBlockDevice {
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
-                auto now = HPNow();
+                NHPTimer::STime now = HPNow();
                 action->SubmitTime = now;
                 ret = Device.IoContext->Submit(op, Device.SharedCallback.Get());
                 if (ret == EIoResult::Ok) {
@@ -776,17 +776,17 @@ private:
 
     std::optional<TDriveData> DriveData;
 
-    const float CriticalOverestimationRatio = 100;
-    const float CriticalOverestimationTimeMs = 60000;
+    const ui64 CriticalOverestimationRatio;
+    const ui64 CriticalOverestimationTimeMs;
     std::atomic<NHPTimer::STime> FirstActiveRequestTimestamp;
-    const float MaxNoResponseTimeMs = 60000;
+    const ui64 MaxNoResponseTimeMs;
     std::atomic<bool> CriticalOverestimationDetected = false;
 
 public:
     TRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            TIntrusivePtr<TSectorMap> sectorMap, float critOveretimationRatio, float critOveretimationTimeMs,
-            float maxNoResponseTimeMs)
+            TIntrusivePtr<TSectorMap> sectorMap, ui64 critOveretimationRatio, ui64 critOveretimationTimeMs,
+            ui64 maxNoResponseTimeMs)
         : Mon(mon)
         , ActorSystem(nullptr)
         , Path(path)
@@ -909,6 +909,7 @@ protected:
         str << " IsInitialized# " << IsInitialized;
         str << " LastWarning# " << LastWarning.Quote();
         str << " LastErrno# " << IoContext->GetLastErrno();
+        str << " SectorMap# " << SectorMap->ToString();
         return str.Str();
     }
 
@@ -961,12 +962,12 @@ protected:
         }
     }
 
-    void FreeCompletionAction(TCompletionAction *action) {
+    void FreeCompletionAction(TCompletionAction *action, TString errorReason) {
         if (action->FlushAction) {
-            action->FlushAction->ErrorReason = "Failed to submit request in BlockDevice";
+            action->FlushAction->ErrorReason = errorReason;
             action->FlushAction->Release(ActorSystem);
         }
-        action->ErrorReason = "Failed to submit request in BlockDevice";
+        action->ErrorReason = errorReason;
         action->Release(ActorSystem);
     }
 
@@ -1010,7 +1011,7 @@ protected:
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction, "Releasing CompletionAction: BlockDevice isn't initialized");
             return;
         }
         if (data && size) {
@@ -1027,7 +1028,7 @@ protected:
             NWilson::TTraceId *traceId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction, "Releasing CompletionAction: BlockDevice isn't initialized");
             return;
         }
         if (data && size) {
@@ -1043,7 +1044,7 @@ protected:
     void FlushAsync(TCompletionAction *completionAction, TReqId reqId) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            completionAction->Release(ActorSystem);
+            FreeCompletionAction(completionAction, "Releasing CompletionAction: BlockDevice isn't initialized");
             return;
         }
 
@@ -1055,11 +1056,12 @@ protected:
     void NoopAsync(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction, "Releasing CompletionAction: BlockDevice isn't initialized");
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction,
+                    "Releasing CompletionAction: BlockDevice's QuitCounter is blocked");
             return;
         }
 
@@ -1070,11 +1072,12 @@ protected:
     void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId /*reqId*/) override {
         Y_ABORT_UNLESS(completionAction);
         if (!IsInitialized) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction, "Releasing CompletionAction: BlockDevice isn't initialized");
             return;
         }
         if (QuitCounter.IsBlocked()) {
-            FreeCompletionAction(completionAction);
+            FreeCompletionAction(completionAction,
+                    "Releasing CompletionAction: BlockDevice's QuitCounter is blocked");
             return;
         }
 
@@ -1211,7 +1214,7 @@ protected:
             return;
         }
         NHPTimer::STime firstTimestamp = FirstActiveRequestTimestamp.load();
-        if (firstTimestamp && HPMilliSecondsFloat(HPNow() - firstTimestamp) > MaxNoResponseTimeMs) {
+        if (firstTimestamp && HPMilliSeconds(HPNow() - firstTimestamp) > MaxNoResponseTimeMs) {
             BecomeErrorState(TStringBuilder() << "Device didn't respond for longer than " << MaxNoResponseTimeMs
                     << " ms", TEvDeviceError::EErrorType::SLOWDOWN);
         }
@@ -1347,7 +1350,7 @@ public:
     TCachedBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
             TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk,
-            float critOveretimationRatio, float critOveretimationTimeMs, float maxNoResponseTimeMs)
+            ui64 critOveretimationRatio, ui64 critOveretimationTimeMs, ui64 maxNoResponseTimeMs)
         : TRealBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
                 maxQueuedCompletionActions, sectorMap, critOveretimationRatio, critOveretimationTimeMs,
                 maxNoResponseTimeMs)
@@ -1494,7 +1497,7 @@ public:
 IBlockDevice* CreateRealBlockDevice(const TString &path, ui32 pDiskId, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
         TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk,
-        float critOveretimationRatio, float critOveretimationTimeMs, float maxNoResponseTimeMs) {
+        ui64 critOveretimationRatio, ui64 critOveretimationTimeMs, ui64 maxNoResponseTimeMs) {
     return new TCachedBlockDevice(path, pDiskId, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
             maxQueuedCompletionActions, sectorMap, pdisk, critOveretimationRatio, critOveretimationTimeMs,
             maxNoResponseTimeMs);

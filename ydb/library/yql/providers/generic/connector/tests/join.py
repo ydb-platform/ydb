@@ -28,6 +28,7 @@ def join(
         match data_source.kind:
             case EDataSourceKind.CLICKHOUSE:
                 clickhouse.prepare_table(
+                    test_name=test_name,
                     client=clickhouse_client,
                     database=data_source.database,
                     table_name=data_source.database.sql_table_name(data_source.table.name),
@@ -36,6 +37,7 @@ def join(
                 )
             case EDataSourceKind.POSTGRESQL:
                 postgresql.prepare_table(
+                    test_name=test_name,
                     client=postgresql_client,
                     database=data_source.database,
                     table_name=data_source.database.sql_table_name(data_source.table.name),

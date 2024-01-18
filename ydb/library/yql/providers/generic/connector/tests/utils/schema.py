@@ -285,18 +285,23 @@ class SelectWhat:
         return "_".join((str(item) for item in self.items))
 
 
+@dataclass
 class SelectWhere:
     """
-    Represents filter for query
+    Represents filter for query. Can handle dynamic arguments with keywords.
+    Put this into expression if you want:
+
+    * {cluster_name}
+    * {table_name}
     """
 
-    filter_expression: str  # filter expr without WHERE statement
+    expression_: str  # filter expression or a template for it
 
-    def __init__(self, expr):
-        self.filter_expression = expr
-
-    def __str__(self) -> str:
-        return self.filter_expression
+    def render(self, cluster_name: str = None, table_name: str = None) -> str:
+        """
+        Renders expression template into final form.
+        """
+        return self.expression_.format(cluster_name=cluster_name, table_name=table_name)
 
 
 @dataclass

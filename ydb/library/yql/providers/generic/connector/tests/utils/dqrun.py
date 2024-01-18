@@ -9,6 +9,7 @@ from yt import yson
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
+import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
@@ -190,19 +191,19 @@ class DqRunner(Runner):
         LOGGER.debug(script)
 
         # Create file with YQL script
-        script_path = self._make_artifact_path(test_name, 'script.yql')
+        script_path = artifacts.make_path(test_name, 'script.yql')
         with open(script_path, "w") as f:
             f.write(script)
 
         # Create config
-        gateways_conf_path = self._make_artifact_path(test_name, 'gateways.conf')
+        gateways_conf_path = artifacts.make_path(test_name, 'gateways.conf')
         self.gateways_conf_renderer.render(gateways_conf_path, self.settings, generic_settings)
-        fs_conf_path = self._make_artifact_path(test_name, 'fs.conf')
+        fs_conf_path = artifacts.make_path(test_name, 'fs.conf')
         with open(fs_conf_path, "w") as f:
             pass
 
         # Run dqrun
-        result_path = self._make_artifact_path(test_name, 'result.yson')
+        result_path = artifacts.make_path(test_name, 'result.yson')
 
         # For debug add option --trace-opt to args
         cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path} --format="binary" -v 7'
@@ -226,8 +227,8 @@ class DqRunner(Runner):
 
             LOGGER.debug('Resulting schema: %s', schema)
 
-            self._dump_yson(data_out, test_name, "data_out.yson")
-            self._dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
+            artifacts.dump_yson(data_out, test_name, "data_out.yson")
+            artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
         else:
             LOGGER.error(
                 'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
@@ -235,10 +236,10 @@ class DqRunner(Runner):
                 out.stderr.decode('utf-8'),
             )
 
-        with open(self._make_artifact_path(test_name, "dqrun.err"), "w") as f:
+        with open(artifacts.make_path(test_name, "dqrun.err"), "w") as f:
             f.write(out.stderr.decode('utf-8'))
 
-        with open(self._make_artifact_path(test_name, "dqrun.out"), "w") as f:
+        with open(artifacts.make_path(test_name, "dqrun.out"), "w") as f:
             f.write(out.stdout.decode('utf-8'))
 
         return Result(

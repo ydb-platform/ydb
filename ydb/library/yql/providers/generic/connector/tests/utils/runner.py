@@ -2,11 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
-import os
-import json
-
-from yt import yson
-import yatest.common
 
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema, YsonList
@@ -42,20 +37,3 @@ class Runner(ABC):
         :return: Result packed with data suitable for assertion
         """
         pass
-
-    def _make_artifact_path(self, test_name: str, artifact_name: str) -> Path:
-        artifact_path = yatest.common.output_path(f'{test_name}/{artifact_name}')
-        os.makedirs(os.path.dirname(artifact_path), exist_ok=True)
-        return artifact_path
-
-    def _dump_yson(self, obj, test_name: str, filename: str):
-        with open(self._make_artifact_path(test_name, filename), 'wb') as f:
-            f.write(yson.dumps(obj, yson_format='pretty', indent=4))
-
-    def _dump_json(self, obj, test_name: str, filename: str):
-        with open(self._make_artifact_path(test_name, filename), 'w') as f:
-            f.write(json.dumps(obj, indent=4))
-
-    def _dump_str(self, obj, test_name: str, filename: str):
-        with open(self._make_artifact_path(test_name, filename), 'w') as f:
-            f.write(str(obj))

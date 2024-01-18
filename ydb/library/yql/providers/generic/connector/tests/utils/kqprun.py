@@ -9,6 +9,7 @@ import json
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 
+import ydb.library.yql.providers.generic.connector.tests.utils.artifacts as artifacts
 from ydb.library.yql.providers.generic.connector.tests.utils.runner import Result, Runner
 from ydb.library.yql.providers.generic.connector.tests.utils.log import make_logger
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import Schema
@@ -156,20 +157,20 @@ class KqpRunner(Runner):
         LOGGER.debug(script)
 
         # Create file with YQL script
-        script_path = self._make_artifact_path(test_name=test_name, artifact_name='script.yql')
+        script_path = artifacts.make_path(test_name=test_name, artifact_name='script.yql')
         with open(script_path, "w") as f:
             f.write(script)
 
         # Create config
-        app_conf_path = self._make_artifact_path(test_name=test_name, artifact_name='app_conf.txt')
+        app_conf_path = artifacts.make_path(test_name=test_name, artifact_name='app_conf.txt')
         self.app_conf_renderer.render(app_conf_path, settings=self.settings, generic_settings=generic_settings)
 
         # Create scheme
-        scheme_path = self._make_artifact_path(test_name=test_name, artifact_name='scheme.txt')
+        scheme_path = artifacts.make_path(test_name=test_name, artifact_name='scheme.txt')
         self.scheme_renderer.render(scheme_path, settings=self.settings, generic_settings=generic_settings)
 
         # Run kqprun
-        result_path = self._make_artifact_path(test_name=test_name, artifact_name='result.json')
+        result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
         cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full'
@@ -203,8 +204,8 @@ class KqpRunner(Runner):
 
             LOGGER.debug('Schema: %s', schema)
 
-            self._dump_json(data_out, test_name, "data_out.yson")
-            self._dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
+            artifacts.dump_json(data_out, test_name, "data_out.yson")
+            artifacts.dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
 
         else:
             LOGGER.error(
@@ -213,10 +214,10 @@ class KqpRunner(Runner):
                 out.stderr.decode('utf-8'),
             )
 
-        with open(self._make_artifact_path(test_name, "kqprun.err"), "w") as f:
+        with open(artifacts.make_path(test_name, "kqprun.err"), "w") as f:
             f.write(out.stderr.decode('utf-8'))
 
-        with open(self._make_artifact_path(test_name, "kqprun.out"), "w") as f:
+        with open(artifacts.make_path(test_name, "kqprun.out"), "w") as f:
             f.write(out.stdout.decode('utf-8'))
 
         return Result(

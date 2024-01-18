@@ -1,6 +1,8 @@
 import hashlib
+import random
 from dataclasses import dataclass
 from typing import Dict
+import functools
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -27,14 +29,13 @@ class BaseTestCase:
         '''
         return Database(self.name, self.data_source_kind)
 
-    @property
+    @functools.cached_property
     def _table_name(self) -> str:
         '''
-        We cannot use test case name as table name because of special symbols,
-        so we hash it, convert to hex and take first N symbols.
-        Than we optionally add database prefix to it.
+        In general, we cannot use test case name as table name because of special symbols,
+        so we provide a random table name instead.
         '''
-        return 't' + hashlib.sha256(self.name.encode('utf-8')).hexdigest()[:8]
+        return 't' + hashlib.sha256(str(random.randint(0, 65536)).encode('ascii')).hexdigest()[:8]
 
     @property
     def sql_table_name(self) -> str:

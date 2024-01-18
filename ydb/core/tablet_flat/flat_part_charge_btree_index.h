@@ -12,18 +12,15 @@ class TChargeBTreeIndex : public ICharge {
     using TRecIdx = NPage::TRecIdx;
     using TGroupId = NPage::TGroupId;
     using TChild = TBtreeIndexNode::TChild;
-    using TColumns = TBtreeIndexNode::TColumns;
-    using TCellsIterable = TBtreeIndexNode::TCellsIterable;
 
-    struct TNodeState {
-        TChild Meta;
-        TBtreeIndexNode Node;
+    // TODO: store PageId only instead of TChild?
+    struct TNodeState : TBtreeIndexNode, TChild {
         TRowId BeginRowId;
         TRowId EndRowId;
 
-        TNodeState(TChild meta, TBtreeIndexNode node, TRowId beginRowId, TRowId endRowId)
-            : Meta(meta)
-            , Node(node)
+        TNodeState(TSharedData data, TChild meta, TRowId beginRowId, TRowId endRowId)
+            : TBtreeIndexNode(data) 
+            , TChild(meta)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
         {
@@ -35,7 +32,6 @@ public:
         : Part(&part)
         , Scheme(*Part->Scheme)
         , Env(env) {
-        Y_UNUSED(env);
         Y_UNUSED(part);
         Y_UNUSED(tags);
         Y_UNUSED(includeHistory);
@@ -72,31 +68,31 @@ public:
 
         const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
             for (ui32 i : xrange<ui32>(level.size())) {
-                if (level[i].Meta.PageId == key1PageId) {
-                    TRecIdx pos = level[i].Node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                    key1PageId = level[i].Node.GetShortChild(pos).PageId;
+                if (level[i].PageId == key1PageId) {
+                    TRecIdx pos = level[i].Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key1PageId = level[i].GetShortChild(pos).PageId;
                     if (pos) {
                         // move row1 to the first key >= key1
-                        row1 = Max(row1, level[i].Node.GetShortChild(pos - 1).RowCount);
+                        row1 = Max(row1, level[i].GetShortChild(pos - 1).RowCount);
                     }
                 }
-                if (level[i].Meta.PageId == key2PageId) {
-                    TRecIdx pos = level[i].Node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                    key2PageId = level[i].Node.GetShortChild(pos).PageId;
+                if (level[i].PageId == key2PageId) {
+                    TRecIdx pos = level[i].Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                    key2PageId = level[i].GetShortChild(pos).PageId;
                     // move row2 to the first key > key2
-                    row2 = Min(row2, level[i].Node.GetShortChild(pos).RowCount);
+                    row2 = Min(row2, level[i].GetShortChild(pos).RowCount);
                 }
                 
                 if (level[i].EndRowId <= row1 || level[i].BeginRowId > row2) {
                     continue;
                 }
 
-                TRecIdx from = 0, to = level[i].Node.GetKeysCount();
+                TRecIdx from = 0, to = level[i].GetKeysCount();
                 if (level[i].BeginRowId < row1) {
-                    from = level[i].Node.Seek(row1);
+                    from = level[i].Seek(row1);
                 }
                 if (level[i].EndRowId > row2) {
-                    to = level[i].Node.Seek(row2);
+                    to = level[i].Seek(row2);
                 }
                 for (TRecIdx j : xrange(from, to + 1)) {
                     ready &= tryLoadNext(level[i], j);
@@ -109,7 +105,7 @@ public:
         };
 
         const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return HasDataPage(current.Node.GetShortChild(pos).PageId, { });
+            return HasDataPage(current.GetShortChild(pos).PageId, { });
         };
 
         ready &= TryLoadRoot(meta, level);
@@ -157,14 +153,14 @@ public:
                 ready &= TryLoadRoot(meta, nextLevel);
             } else {
                 for (ui32 i : xrange<ui32>(level.size())) {
-                    TRecIdx from = level[i].Node.GetKeysCount(), to = 0;
+                    TRecIdx from = level[i].GetKeysCount(), to = 0;
                     if (level[i].EndRowId > row1) {
                         Y_DEBUG_ABORT_UNLESS(i == 0);
-                        from = level[i].Node.Seek(row1);
+                        from = level[i].Seek(row1);
                     }
                     if (level[i].BeginRowId < row2) {
                         Y_DEBUG_ABORT_UNLESS(i == level.size() - 1);
-                        to = level[i].Node.Seek(row2);
+                        to = level[i].Seek(row2);
                     }
                     for (TRecIdx j = from + 1; j > to; j--) {
                         ready &= TryLoadNode(level[i], j - 1, nextLevel);
@@ -185,17 +181,17 @@ public:
             ready &= HasDataPage(meta.PageId, { });
         } else {
             for (ui32 i : xrange<ui32>(level.size())) {
-                TRecIdx from = level[i].Node.GetKeysCount(), to = 0;
+                TRecIdx from = level[i].GetKeysCount(), to = 0;
                 if (level[i].EndRowId > row1) {
                     Y_DEBUG_ABORT_UNLESS(i == 0);
-                    from = level[i].Node.Seek(row1);
+                    from = level[i].Seek(row1);
                 }
                 if (level[i].BeginRowId < row2) {
                     Y_DEBUG_ABORT_UNLESS(i == level.size() - 1);
-                    to = level[i].Node.Seek(row2);
+                    to = level[i].Seek(row2);
                 }
                 for (TRecIdx j = from + 1; j > to; j--) {
-                    ready &= HasDataPage(level[i].Node.GetShortChild(j - 1).PageId, { });
+                    ready &= HasDataPage(level[i].GetShortChild(j - 1).PageId, { });
                 }
             }
         }
@@ -215,24 +211,24 @@ private:
             return false;
         }
 
-        level.emplace_back(meta, TBtreeIndexNode(*page), 0, meta.RowCount);
+        level.emplace_back(*page, meta, 0, meta.RowCount);
         return true;
     }
 
     bool TryLoadNode(TNodeState& current, TRecIdx pos, TVector<TNodeState>& level) const noexcept {
-        Y_ABORT_UNLESS(pos < current.Node.GetChildrenCount(), "Should point to some child");
+        Y_ABORT_UNLESS(pos < current.GetChildrenCount(), "Should point to some child");
 
-        auto child = current.Node.GetChild(pos);
+        auto child = current.GetChild(pos);
 
         auto page = Env->TryGetPage(Part, child.PageId);
         if (!page) {
             return false;
         }
 
-        TRowId beginRowId = pos ? current.Node.GetChild(pos - 1).RowCount : current.BeginRowId;
+        TRowId beginRowId = pos ? current.GetChild(pos - 1).RowCount : current.BeginRowId;
         TRowId endRowId = child.RowCount;
 
-        level.emplace_back(child, TBtreeIndexNode(*page), beginRowId, endRowId);
+        level.emplace_back(*page, child, beginRowId, endRowId);
         return true;
     }
 

@@ -5312,7 +5312,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             tableInserter.AddRow().Add(1).Add(10);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-        while (csController->GetIndexations().Val() == 0) {
+        while (csController->GetIndexations().Val() < 1) {
             Cout << "Wait indexation..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
@@ -5321,6 +5321,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add(110);
             testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
+        while (csController->GetIndexations().Val() < 2) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
         }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
     }

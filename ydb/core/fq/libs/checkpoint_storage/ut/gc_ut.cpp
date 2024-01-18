@@ -72,7 +72,7 @@ struct TTestRuntime {
         storageConfig.SetToken("");
         storageConfig.SetTablePrefix(TablePrefix);
         auto& stateStorageLimits = *config.MutableStateStorageLimits();
-        stateStorageLimits.SetMaxRowSizeBytes(8000000);
+        stateStorageLimits.SetMaxRowSizeBytes(16000000);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));

@@ -87,7 +87,7 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
     }
 
     if (!limits.GetMaxRowSizeBytes()) {
-        limits.SetMaxRowSizeBytes(8000000);
+        limits.SetMaxRowSizeBytes(16000000);
     }
 
     if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) {

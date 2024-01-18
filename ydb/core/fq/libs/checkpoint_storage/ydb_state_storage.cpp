@@ -167,12 +167,12 @@ struct TContext : public TThrRefBase {
     std::function<void(TFuture<TStatus>)> Callback;    
 
     TContext(
-            const NActors::TActorContext& ctx,
-            const TString& tablePathPrefix,
-            const std::vector<ui64>& taskIds,
-            TString graphId,
-            const TCheckpointId& checkpointId,
-            TMaybe<TSession> session = {})
+        const NActors::TActorContext& ctx,
+        const TString& tablePathPrefix,
+        const std::vector<ui64>& taskIds,
+        TString graphId,
+        const TCheckpointId& checkpointId,
+        TMaybe<TSession> session = {})
         : Ctx(ctx)
         , TablePathPrefix(tablePathPrefix)
         , GraphId(std::move(graphId))
@@ -185,14 +185,14 @@ struct TContext : public TThrRefBase {
     }
 
     TContext(
-            const NActors::TActorContext& ctx,
-            const TString& tablePathPrefix,
-            ui64 taskId,
-            TString graphId,
-            const TCheckpointId& checkpointId,
-            TMaybe<TSession> session = {},
-            const std::list<TString>& rows = {},
-            EStateType type = EStateType::Snapshot)
+        const NActors::TActorContext& ctx,
+        const TString& tablePathPrefix,
+        ui64 taskId,
+        TString graphId,
+        const TCheckpointId& checkpointId,
+        TMaybe<TSession> session = {},
+        const std::list<TString>& rows = {},
+        EStateType type = EStateType::Snapshot)
         : TContext(ctx, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
     {
         Tasks[0].Rows = rows;
@@ -224,24 +224,24 @@ TStatus ProcessRowState(
     TStringBuilder errorMessage;
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    do {
+    auto parse = [&]() {
         if (!parser.TryNextRow()) {
             errorMessage << "Can't get next row";
-            break;
+            return;
         }
         auto taskId = parser.ColumnParser("task_id").GetOptionalUint64();
         if (!taskId) {
             errorMessage << "No task id in result";
-            break;
+            return;
         }
         const auto taskIt = std::find_if(context->Tasks.begin(), context->Tasks.end(), [&](const auto& item) { return item.TaskId == *taskId; });
         if (taskIt == context->Tasks.end()) {
             errorMessage << "Got unexpected task id";
-            break;
+            return;
         }
         taskInfo.Rows.push_back(*parser.ColumnParser("blob").GetOptionalString());
-        //auto type = *parser.ColumnParser("type").GetOptionalUint8();
-    } while(0);
+    };
+    parse();
 
     if (errorMessage) {
         TIssues issues;
@@ -563,11 +563,11 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
                 declare $coordinator_generation as Uint64;
                 declare $seq_no as Uint64;
 
-                SELECT COUNT(*) as cnt FROM ( 
-                    SELECT task_id
+                $tasks = SELECT task_id
                     FROM %s
                     WHERE graph_id = $graph_id AND coordinator_generation = $coordinator_generation and seq_no = $seq_no
-                    GROUP BY task_id);
+                    GROUP BY task_id;
+                SELECT COUNT(*) as cnt FROM $tasks;
             )", prefix.c_str(), StatesTable);
 
             auto future = session.ExecuteDataQuery(

@@ -141,6 +141,7 @@ public:
         SystemTabletState,
         OverloadState,
         SyncState,
+        Uptime,
     };
 
     struct TTenantInfo {
@@ -230,7 +231,7 @@ public:
         TVector<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
-        THashMap<TNodeId, ui32> RestartsPerPeriod;
+        THashMap<TNodeId, ui32> NodeRestartsPerPeriod;
         ui64 StorageQuota;
         ui64 StorageUsage;
     };
@@ -1057,7 +1058,7 @@ public:
                             TString path(itFilterDomainKey->second);
                             TDatabaseState& state(DatabaseState[path]);
                             state.ComputeNodeIds.emplace_back(hiveStat.GetNodeId());
-                            state.RestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
+                            state.NodeRestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
                         }
                     }
                 }
@@ -1251,8 +1252,13 @@ public:
     void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
-        if (databaseState.RestartsPerPeriod[nodeId] > 30) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::NodeState);
+        TSelfCheckContext rrContext(&context, "UPTIME");
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Node is restarting too often", ETags::Uptime);
+        } else {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
 
         auto itNodeSystemState = MergedNodeSystemState.find(nodeId);

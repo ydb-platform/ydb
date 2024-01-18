@@ -25,7 +25,6 @@ struct TTestEnvironment {
     void Prepare() {
         SetupRuntime();
         InitializeRuntime();
-        SetupControls();
 
         Edge = Runtime->AllocateEdgeActor();
         CreateTestBootstrapper(*Runtime,
@@ -36,11 +35,6 @@ struct TTestEnvironment {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
-    }
-
-    void SetupControls() {
-        TControlWrapper control(10, 0, 1'000'000);
-        Runtime->GetAppData().Icb->RegisterSharedControl(control, "TracingControls.KeyValue.MaxRatePerMinute");
     }
 
     void InitializeRuntime() {

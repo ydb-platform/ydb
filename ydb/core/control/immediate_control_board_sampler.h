@@ -6,8 +6,10 @@ namespace NKikimr {
 
 class TSampler {
 public:
-    TSampler(TControlWrapper& samplingPPM, ui64 seed)
-        : SamplingPPM(samplingPPM)
+    TSampler() : Rng(0) {}
+
+    TSampler(TControlWrapper samplingPPM, ui64 seed)
+        : SamplingPPM(std::move(samplingPPM))
         , Rng(seed)
     {}
 
@@ -16,7 +18,7 @@ public:
     }
 
 private:
-    TControlWrapper& SamplingPPM;
+    TControlWrapper SamplingPPM;
     TReallyFastRng32 Rng;
 };
 

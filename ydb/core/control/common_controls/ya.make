@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/wilson
+    ydb/core/protos
 )
 
 SRCS(

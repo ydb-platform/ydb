@@ -7,11 +7,13 @@ namespace NKikimr {
 
 class TThrottler {
 public:
-    TThrottler(TControlWrapper& maxRatePerMinute, TControlWrapper& maxBurst,
+    TThrottler() = default;
+
+    TThrottler(TControlWrapper maxRatePerMinute, TControlWrapper maxBurst,
             TIntrusivePtr<ITimeProvider> timeProvider)
         : TimeProvider(std::move(timeProvider))
-        , MaxRatePerMinute(maxRatePerMinute)
-        , MaxBurst(maxBurst)
+        , MaxRatePerMinute(std::move(maxRatePerMinute))
+        , MaxBurst(std::move(maxBurst))
         , LastUpdate(TimeProvider->Now())
     {}
 
@@ -54,10 +56,10 @@ private:
 
     TIntrusivePtr<ITimeProvider> TimeProvider;
 
-    TControlWrapper& MaxRatePerMinute;
-    TControlWrapper& MaxBurst;
+    TControlWrapper MaxRatePerMinute;
+    TControlWrapper MaxBurst;
 
-    TInstant LastUpdate;
+    TInstant LastUpdate = TInstant::Zero();
     i64 CurrentBurst = 0;
 };
 

@@ -21,10 +21,6 @@ public:
     }
 
 private:
-    TControlWrapper SamplingPPM;
-    TControlWrapper MaxRatePerMinute;
-    TControlWrapper MaxBurst;
-
     TSampler Sampler;
     TThrottler Throttler;
 };

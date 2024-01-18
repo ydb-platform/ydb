@@ -15,7 +15,6 @@ namespace NKikimr::NSchemeShard::NExternalDataSource {
 
 inline TPath::TChecker IsParentPathValid(const TPath& parentPath) {
     auto checks = parentPath.Check();
-    // ReSharper disable once CppExpressionWithoutSideEffects
     checks.NotUnderDomainUpgrade()
         .IsAtLocalSchemeShard()
         .IsResolved()

@@ -76,6 +76,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
         Memory,
         CPU,
         LoadAverage,
+        Missing,
     };
     ESort Sort = ESort::NodeId;
     bool ReverseSort = false;
@@ -168,6 +169,8 @@ public:
                 Sort = ESort::CPU;
             } else if (sort == "LoadAverage") {
                 Sort = ESort::LoadAverage;
+            } else if (sort == "Missing") {
+                Sort = ESort::Missing;
             }
         }
     }
@@ -668,6 +671,16 @@ public:
         return 0;
     }
 
+    static double GetMissing(const NKikimrViewer::TNodeInfo& nodeInfo) {
+        uint32 missing = 0;
+        for (const auto& pDisk : nodeInfo.GetPDisks()) {
+            if (pDisk.state() != NKikimrBlobStorage::TPDiskState::Normal) {
+                missing++;
+            }
+        }
+        return missing;
+    }
+
     void ReplyAndPassAway() {
         NKikimrViewer::TNodesInfo result;
 
@@ -780,6 +793,9 @@ public:
                 case ESort::LoadAverage:
                     SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetLoadAverage(node.GetSystemState());}, ReverseSort);
                     break;
+                case ESort::Missing:
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetMissing(node);}, ReverseSort);
+                    break;
             }
         }
 
@@ -861,7 +877,7 @@ struct TJsonRequestParameters<TJsonNodes> {
                       {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
                       {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
                       {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
+                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage,Missing)","required":false,"type":"string"},
                       {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
                       {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},

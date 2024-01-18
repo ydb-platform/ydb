@@ -144,6 +144,7 @@ private:
 
         if (response.GetCmdGetOwnershipResult().GetRegistered()) {
             // Fast path: the partition ative and already written
+            TThis::SendUpdateRequests(ctx);
             return TThis::ReplyResult(ctx);
         }
 

@@ -113,7 +113,7 @@ protected:
     }
 
     void ScheduleStop() {
-        TThis::Become(&TThis::StateDestroing);
+        TThis::Become(&TThis::StateDestroying);
     }
 
     STATEFN(StateCreateKqpSession) {
@@ -297,7 +297,7 @@ protected:
         TThis::Die(ctx);
     }
 
-    STATEFN(StateDestroing) {
+    STATEFN(StateDestroying) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleDestroy);

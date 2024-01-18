@@ -12,31 +12,33 @@ extern "C" {
 
 namespace {
 
-template <typename T>
-void checkResult(const char ** expected, auto result, auto reader) {
+template <bool IsFixedSizeReader>
+void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* reader) {
     const auto& data = result->data();
+
+    Datum (*out_fun)(PG_FUNCTION_ARGS);
+    if constexpr (IsFixedSizeReader) {
+        out_fun = date_out;
+    } else {
+        out_fun = numeric_out;
+    }
 
     for (int i = 0; i < data->length; i++) {
         if (result->IsNull(i)) {
             UNIT_ASSERT(expected[i] == nullptr);
         } else {
             UNIT_ASSERT(expected[i] != nullptr);
-            if constexpr (std::is_same<T, ui64>::value) {
-                auto item = reader->GetItem(*data, i).template As<Datum>();
 
-                UNIT_ASSERT_VALUES_EQUAL(
-                TString(DatumGetCString(DirectFunctionCall1(date_out, item))),
-                expected[i]
-                );
+            Datum item;
+            if constexpr (IsFixedSizeReader) {
+                item = reader->GetItem(*data, i).template As<Datum>();
             } else {
-                auto item = reader->GetItem(*data, i);
-
-                const char* addr = item.AsStringRef().Data() + sizeof(void*);
-                UNIT_ASSERT_VALUES_EQUAL(
-                    TString(DatumGetCString(DirectFunctionCall1(numeric_out, (Datum)addr))),
-                    expected[i]
-                );
+                item = Datum(reader->GetItem(*data, i).AsStringRef().Data() + sizeof(void*));
             }
+            UNIT_ASSERT_VALUES_EQUAL(
+                TString(DatumGetCString(DirectFunctionCall1(out_fun, item))),
+                expected[i]
+            );
         }
     }
 }
@@ -87,7 +89,7 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     };
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    checkResult<arrow::BinaryType>(expected, result, &reader);
+    checkResult<false>(expected, result, &reader);
 }
 
 Y_UNIT_TEST(PgConvertNumericInt) {
@@ -111,7 +113,7 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     };
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    checkResult<arrow::BinaryType>(expected, result, &reader);
+    checkResult<false>(expected, result, &reader);
 }
 
 Y_UNIT_TEST(PgConvertDate32Date) {
@@ -141,7 +143,7 @@ Y_UNIT_TEST(PgConvertDate32Date) {
     };
 
     NUdf::TFixedSizeBlockReader<ui64, true> reader;
-    checkResult<ui64>(expected, result, &reader);
+    checkResult<true>(expected, result, &reader);
 }
 
 } // Y_UNIT_TEST_SUITE(TArrowUtilsTests)

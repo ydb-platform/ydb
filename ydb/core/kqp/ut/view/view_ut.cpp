@@ -55,20 +55,18 @@ TString ReadWholeFile(const TString& path) {
 }
 
 void ExecuteDataDefinitionQuery(TSession& session, const TString& script) {
-    Cerr << "Executing the following DDL script:\n" << script;
-
     const auto result = session.ExecuteSchemeQuery(script).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.IsSuccess(), "Failed to execute the following DDL script:\n"
+                                          << script << "\nThe issues:\n" << result.GetIssues().ToString());
 }
 
 TDataQueryResult ExecuteDataModificationQuery(TSession& session, const TString& script) {
-    Cerr << "Executing the following DML script:\n" << script;
-
     const auto result = session.ExecuteDataQuery(
             script,
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()
         ).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.IsSuccess(), "Failed to execute the following DML script:\n"
+                                          << script << "\nThe issues:\n" << result.GetIssues().ToString());
 
     return result;
 }

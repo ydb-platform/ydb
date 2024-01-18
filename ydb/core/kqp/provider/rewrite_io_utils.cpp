@@ -52,14 +52,6 @@ void AddChild(const TExprNode::TPtr& parent, const TExprNode::TPtr& newChild) {
     parent->ChangeChildrenInplace(std::move(childrenToChange));
 }
 
-void ChangeChild(const TExprNode::TPtr& parent, ui32 index, const TExprNode::TPtr& newChild) {
-    YQL_ENSURE(parent->ChildrenSize() > index);
-
-    auto childrenToChange = parent->ChildrenList();
-    childrenToChange[index] = newChild;
-    parent->ChangeChildrenInplace(std::move(childrenToChange));
-}
-
 TExprNode::TPtr FindSavedQueryGraph(const TExprNode::TPtr& carrier) {
     if (carrier->ChildrenSize() == 0) {
         return nullptr;
@@ -72,17 +64,18 @@ void SaveQueryGraph(const TExprNode::TPtr& carrier, TExprContext& ctx, const TEx
     AddChild(carrier, ctx.NewCallable(payload->Pos(), QueryGraphNodeSignature, {payload}));
 }
 
-void InsertExecutionOrderDependencies(const TExprNode::TPtr& queryGraph, const TExprNode::TPtr& worldBefore) {
-    VisitExpr(
-        queryGraph,
-        nullptr,
-        [&worldBefore](const TExprNode::TPtr& node) {
-            if (node->ChildrenSize() > 0 && node->Child(0)->IsWorld()) {
-                ChangeChild(node, 0, worldBefore);
-            }
-            return true;
-        }
-    );
+void InsertExecutionOrderDependencies(
+    TExprNode::TPtr& queryGraph,
+    const TExprNode::TPtr& worldBefore,
+    TExprContext& ctx
+) {
+    const auto initialWorldOfTheQuery = FindNode(queryGraph, [](const TExprNode::TPtr& node) {
+        return node->IsWorld();
+    });
+    if (!initialWorldOfTheQuery) {
+        return;
+    }
+    queryGraph = ctx.ReplaceNode(std::move(queryGraph), *initialWorldOfTheQuery, worldBefore);
 }
 
 bool CheckTopLevelness(const TExprNode::TPtr& candidateRead, const TExprNode::TPtr& queryGraph) {
@@ -146,7 +139,7 @@ TExprNode::TPtr RewriteReadFromView(
         YQL_CLOG(TRACE, ProviderKqp) << "Expression graph of the query stored in the view:\n"
                                      << NCommon::ExprToPrettyString(ctx, *queryGraph);
 
-        InsertExecutionOrderDependencies(queryGraph, worldBeforeThisRead);
+        InsertExecutionOrderDependencies(queryGraph, worldBeforeThisRead, ctx);
         SaveQueryGraph(readNode.Ptr(), ctx, queryGraph);
     }
 

@@ -123,7 +123,7 @@ private:
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
 
         CA_LOG_D("SendData: " << dataSize << "  " << finished);
-        //EgressStats.Resume();
+        EgressStats.Resume();
         
         AddToInputQueue(std::move(data));
         Finished = finished;
@@ -197,7 +197,8 @@ private:
         CA_LOG_D("TxId > " << ev->Get()->Record.GetTxId());
         CA_LOG_D("Steps > [" << ev->Get()->Record.GetMinStep() << " , " << ev->Get()->Record.GetMaxStep() << "]");
         if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
-            // Until LockIds are supported by columnshards we have to commit each write using separate transaction. 
+            // Until LockIds are supported by columnshards we have to commit each write
+            // using separate coordinated transaction. 
             ui64 coordinator = 0;
             if (ev->Get()->Record.DomainCoordinatorsSize()) {
                 auto domainCoordinators = TCoordinators(TVector<ui64>(
@@ -232,6 +233,11 @@ private:
 
             if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
                 const bool needToResume = (GetFreeSpace() <= 0);
+
+                EgressStats.Bytes += batchesQueue.front().Data.size();
+                EgressStats.Chunks++;
+                EgressStats.Splits++;
+                EgressStats.Resume();
 
                 MemoryInflight -= batchesQueue.front().Data.size();
                 batchesQueue.pop_front();

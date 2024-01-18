@@ -171,6 +171,7 @@ struct TKikimrEvents : TEvents {
         ES_TABLE_CREATOR,
         ES_PQ_PARTITION_CHOOSER,
         ES_GRAPH,
+        ES_REPLICATION_SERVICE,
     };
 };
 

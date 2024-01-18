@@ -310,17 +310,36 @@ public:
     }
 };
 
+class TClientCommandTenantQuotasBase {
+    uint64_t DataSizeHardQuota;
+    uint64_t DataSizeSoftQuota;
+public:
+    void Config(auto& config) {
+        config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
+            .OptionalArgument("NUM").StoreResult(&DataSizeHardQuota);
+        config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
+            .OptionalArgument("NUM").StoreResult(&DataSizeSoftQuota);
+    }
+
+    void Parse(auto& config, auto& gRpcRequest)
+    {
+        if (config.ParseResult->Has("data-size-hard-quota"))
+            gRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
+        if (config.ParseResult->Has("data-size-soft-quota"))
+            gRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);
+    }
+};
+
 class TClientCommandTenantCreate
     : public TTenantClientGRpcCommand<Ydb::Cms::V1::CmsService,
                                       Ydb::Cms::CreateDatabaseRequest,
                                       Ydb::Cms::CreateDatabaseResponse,
                                       decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase),
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase> {
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase>,
+                                      TClientCommandTenantQuotasBase {
     TVector<TString> Attributes;
     bool Shared = false;
     bool Serverless = false;
-    uint64_t DataSizeHardQuota;
-    uint64_t DataSizeSoftQuota;
 
 public:
     TClientCommandTenantCreate()
@@ -330,15 +349,12 @@ public:
     void Config(TConfig &config) override
     {
         TTenantClientGRpcCommand::Config(config);
+        TClientCommandTenantQuotasBase::Config(config);
 
         config.Opts->AddLongOption("no-tx", "Disable tenant services for database")
             .NoArgument();
         config.Opts->AddLongOption("attr", "Attach attribute name=value to database")
             .RequiredArgument("NAME=VALUE").AppendTo(&Attributes);
-        config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
-            .RequiredArgument("NUM").StoreResult(&DataSizeHardQuota);
-        config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
-            .RequiredArgument("NUM").StoreResult(&DataSizeSoftQuota);
         config.Opts->AddLongOption("shared", "Create a shared database")
             .NoArgument().StoreTrue(&Shared);
         config.Opts->AddLongOption("serverless", "Create a serverless database (free arg must specify shared database for resources)")
@@ -350,6 +366,7 @@ public:
     void Parse(TConfig& config) override
     {
         TTenantClientGRpcCommand::Parse(config);
+        TClientCommandTenantQuotasBase::Parse(config, GRpcRequest);
 
         GRpcRequest.set_path(config.Tenant);
         if (config.ParseResult->Has("no-tx"))
@@ -384,12 +401,6 @@ public:
             protoPool.set_unit_kind(pool.first);
             protoPool.set_count(pool.second);
         }
-
-        if (config.ParseResult->Has("data-size-hard-quota"))
-            GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
-
-        if (config.ParseResult->Has("data-size-soft-quota"))
-            GRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);
     }
 };
 
@@ -625,10 +636,8 @@ class TClientCommandTenantChangeQuotas
                                       Ydb::Cms::AlterDatabaseRequest,
                                       Ydb::Cms::AlterDatabaseResponse,
                                       decltype(&Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase),
-                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase> {
-
-    uint64_t DataSizeHardQuota;
-    uint64_t DataSizeSoftQuota;
+                                      &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase>,
+                                      TClientCommandTenantQuotasBase {
 public:
     TClientCommandTenantChangeQuotas()
         : TTenantClientGRpcCommand("change", {}, "Change data size quotas for database")
@@ -636,22 +645,14 @@ public:
 
     void Config(TConfig& config) override {
         TTenantClientGRpcCommand::Config(config);
+        TClientCommandTenantQuotasBase::Config(config);
         config.SetFreeArgsMin(0);
-        config.Opts->AddLongOption("data-size-hard-quota", "A maximum data size in bytes, new data will be rejected when exceeded")
-            .RequiredArgument("NUM").StoreResult(&DataSizeHardQuota);
-        config.Opts->AddLongOption("data-size-soft-quota", "Data size in bytes (lower than data_size_hard_quota), at this value new data ingestion is re-enabled again")
-            .RequiredArgument("NUM").StoreResult(&DataSizeSoftQuota);
     }
 
     void Parse(TConfig& config) override
     {
         TTenantClientGRpcCommand::Parse(config);
-
-        if (config.ParseResult->Has("data-size-hard-quota"))
-            GRpcRequest.mutable_database_quotas()->set_data_size_hard_quota(DataSizeHardQuota);
-
-        if (config.ParseResult->Has("data-size-soft-quota"))
-            GRpcRequest.mutable_database_quotas()->set_data_size_soft_quota(DataSizeSoftQuota);
+        TClientCommandTenantQuotasBase::Parse(config, GRpcRequest);
     }
 };
 

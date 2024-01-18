@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Sequence
 
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
@@ -38,7 +37,6 @@ def prepare_table(
     LOGGER.debug(check_table_stmt)
     res = client.command(check_table_stmt)
     assert res in (0, 1), res
-
     if res == 1:
         # no need to create table
         return
@@ -58,11 +56,11 @@ def prepare_table(
 
 
 def select_positive(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_positive_common.TestCase,
 ):
     prepare_table(
         client=client,
@@ -89,7 +87,7 @@ def select_positive(
         {order_by_expression}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -105,10 +103,10 @@ def select_positive(
 
 
 def select_missing_database(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_database.TestCase,
     settings: Settings,
     runner: Runner,
-    test_case: test_cases.select_missing_database.TestCase,
 ):
     # select table from the database that does not exist
     yql_script = f"""
@@ -116,7 +114,7 @@ def select_missing_database(
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -125,11 +123,11 @@ def select_missing_database(
 
 
 def select_missing_table(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_missing_table.TestCase,
 ):
     # create database, but don't create table
     create_database_stmt = test_case.database.create()
@@ -141,7 +139,7 @@ def select_missing_table(
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )

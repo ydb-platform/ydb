@@ -1,11 +1,10 @@
-from pathlib import Path
 from typing import Sequence
 
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
 from utils.comparator import data_outs_equal
 from utils.database import Database
-from utils.log import make_logger
+from utils.log import make_logger, debug_with_limit
 from utils.postgresql import Client
 from utils.schema import Schema
 from utils.settings import Settings
@@ -31,13 +30,13 @@ def prepare_table(
     # create database
     with client.get_cursor("postgres") as (conn, cur):
         database_exists_stmt = database.exists()
-        LOGGER.debug(database_exists_stmt)
+        debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
             create_database_stmt = database.create()
-            LOGGER.debug(create_database_stmt)
+            debug_with_limit(LOGGER, create_database_stmt)
             cur.execute(create_database_stmt)
 
         conn.commit()
@@ -51,7 +50,7 @@ def prepare_table(
         else:
             check_table_stmt = f"SELECT EXISTS(SELECT * FROM information_schema.tables WHERE table_name='{table_name}' AND table_schema='{pg_schema}')"
 
-        LOGGER.debug(check_table_stmt)
+        debug_with_limit(LOGGER, check_table_stmt)
         cur.execute(check_table_stmt)
 
         if cur.fetchone()[0]:
@@ -61,12 +60,12 @@ def prepare_table(
         if pg_schema:
             # create schema
             create_schema_stmt = f"CREATE SCHEMA IF NOT EXISTS {pg_schema}"
-            LOGGER.debug(create_schema_stmt)
+            debug_with_limit(LOGGER, create_schema_stmt)
             cur.execute(create_schema_stmt)
             table_name = f"{pg_schema}.{table_name}"
 
         create_table_stmt = f"CREATE TABLE {table_name} ({schema.yql_column_list(data_source_pb2.POSTGRESQL)})"
-        LOGGER.debug(create_table_stmt)
+        debug_with_limit(LOGGER, create_table_stmt)
         cur.execute(create_table_stmt)
 
         values = format_values_for_bulk_sql_insert(data_in)
@@ -74,19 +73,21 @@ def prepare_table(
         insert_stmt = f"INSERT INTO {table_name} ({schema.columns.names_with_commas}) VALUES {values}"
         # TODO: these logs may be too big when working with big tables,
         # dump insert statement via yatest into file.
-        LOGGER.debug(insert_stmt)
-        cur.execute(insert_stmt)
+        debug_with_limit(LOGGER, insert_stmt)
 
+        cur.execute(insert_stmt)
         conn.commit()
         cur.close()
 
+    LOGGER.debug("Test table data initialized")
+
 
 def select_positive(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_positive_common.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_positive_common.TestCase,
 ):
     prepare_table(
         client=client,
@@ -106,9 +107,8 @@ def select_positive(
         FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
         {where_statement}
     """
-    LOGGER.debug(yql_script)
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -124,10 +124,10 @@ def select_positive(
 
 
 def select_missing_database(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_positive_common.TestCase,
     settings: Settings,
     runner: Runner,
-    test_case: test_cases.select_missing_database.TestCase,
 ):
     # select table from database that does not exist
 
@@ -135,9 +135,8 @@ def select_missing_database(
         SELECT *
         FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
     """
-    LOGGER.debug(yql_script)
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -146,22 +145,22 @@ def select_missing_database(
 
 
 def select_missing_table(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_positive_common.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_missing_table.TestCase,
 ):
     # create database but don't create table
     with client.get_cursor("postgres") as (conn, cur):
         database_exists_stmt = test_case.database.exists()
-        LOGGER.debug(database_exists_stmt)
+        debug_with_limit(LOGGER, database_exists_stmt)
         cur.execute(database_exists_stmt)
 
         # database doesn't exist
         if not cur.fetchone():
             create_database_stmt = test_case.database.create()
-            LOGGER.debug(create_database_stmt)
+            debug_with_limit(LOGGER, create_database_stmt)
             cur.execute(create_database_stmt)
 
         conn.commit()
@@ -172,9 +171,8 @@ def select_missing_table(
         SELECT *
         FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
     """
-    LOGGER.debug(yql_script)
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -183,11 +181,11 @@ def select_missing_table(
 
 
 def select_pg_schema(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_positive_common.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_positive_postgresql_schema.TestCase,
 ):
     prepare_table(
         client=client,
@@ -203,9 +201,8 @@ def select_pg_schema(
         SELECT {test_case.select_what.yql_select_names}
         FROM {settings.postgresql.cluster_name}.{test_case.qualified_table_name}
     """
-    LOGGER.debug(yql_script)
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )

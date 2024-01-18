@@ -16,12 +16,12 @@ LOGGER = make_logger(__name__)
 
 
 def join(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.join.TestCase,
     settings: Settings,
     runner: Runner,
     clickhouse_client: clickhouse.Client,
     postgresql_client: utils.postgresql.Client,
-    test_case: test_cases.join.TestCase,
 ):
     # prepare tables
     for data_source in test_case.data_sources:
@@ -48,7 +48,7 @@ def join(
     # run join
     yql_script = test_case.make_sql(settings)
 
-    result = runner.run(test_dir=tmp_path, script=yql_script, generic_settings=test_case.generic_settings)
+    result = runner.run(test_name=test_name, script=yql_script, generic_settings=test_case.generic_settings)
 
     assert result.returncode == 0, result.stderr
 

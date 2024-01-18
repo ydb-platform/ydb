@@ -4,8 +4,6 @@ from typing import Final
 
 import jinja2
 
-import yatest.common
-
 from yt import yson
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EProtocol
@@ -188,23 +186,23 @@ class DqRunner(Runner):
         self.dqrun_path = dqrun_path
         self.settings = settings
 
-    def run(self, test_dir: Path, script: str, generic_settings: GenericSettings) -> Result:
+    def run(self, test_name: str, script: str, generic_settings: GenericSettings) -> Result:
         LOGGER.debug(script)
 
         # Create file with YQL script
-        script_path = test_dir.joinpath('script.yql')
+        script_path = self._make_artifact_path(test_name, 'script.yql')
         with open(script_path, "w") as f:
             f.write(script)
 
         # Create config
-        gateways_conf_path = test_dir.joinpath('gateways.conf')
+        gateways_conf_path = self._make_artifact_path(test_name, 'gateways.conf')
         self.gateways_conf_renderer.render(gateways_conf_path, self.settings, generic_settings)
-        fs_conf_path = test_dir.joinpath('fs.conf')
+        fs_conf_path = self._make_artifact_path(test_name, 'fs.conf')
         with open(fs_conf_path, "w") as f:
             pass
 
         # Run dqrun
-        result_path = test_dir.joinpath('result.yson')
+        result_path = self._make_artifact_path(test_name, 'result.yson')
 
         # For debug add option --trace-opt to args
         cmd = f'{self.dqrun_path} -s -p {script_path} --fs-cfg={fs_conf_path} --gateways-cfg={gateways_conf_path} --result-file={result_path} --format="binary" -v 7'
@@ -213,9 +211,9 @@ class DqRunner(Runner):
         data_out = None
         data_out_with_types = None
         schema = None
-        unique_suffix = test_dir.name
 
         if out.returncode == 0:
+            LOGGER.info('Execution succeeded: ')
             # Parse output
             with open(result_path, 'r') as f:
                 result = yson.loads(f.read().encode('ascii'))
@@ -226,23 +224,21 @@ class DqRunner(Runner):
             schema = Schema.from_yson(result[0]['Write'][0]['Type'][1][1])
             data_out_with_types = [schema.cast_row(row) for row in data_out]
 
-            LOGGER.debug('Schema: %s', schema)
-            LOGGER.debug('Data out: %s', data_out)
-            LOGGER.debug('Data out with types: %s', data_out_with_types)
-        else:
-            LOGGER.error('STDOUT: ')
-            for line in out.stdout.decode('utf-8').splitlines():
-                LOGGER.error(line)
-            LOGGER.error('STDERR: ')
-            for line in out.stderr.decode('utf-8').splitlines():
-                LOGGER.error(line)
+            LOGGER.debug('Resulting schema: %s', schema)
 
-        err_file = yatest.common.output_path(f'dqrun-{unique_suffix}.err')
-        with open(err_file, "w") as f:
+            self._dump_yson(data_out, test_name, "data_out.yson")
+            self._dump_str(data_out_with_types, test_name, "data_out_with_types.yson")
+        else:
+            LOGGER.error(
+                'Execution failed:\n\nSTDOUT: %s\n\nSTDERR: %s\n\n',
+                out.stdout.decode('utf-8'),
+                out.stderr.decode('utf-8'),
+            )
+
+        with open(self._make_artifact_path(test_name, "dqrun.err"), "w") as f:
             f.write(out.stderr.decode('utf-8'))
 
-        out_file = yatest.common.output_path(f'dqrun-{unique_suffix}.out')
-        with open(out_file, "w") as f:
+        with open(self._make_artifact_path(test_name, "dqrun.out"), "w") as f:
             f.write(out.stdout.decode('utf-8'))
 
         return Result(

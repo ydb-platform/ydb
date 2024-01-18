@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -27,7 +27,7 @@
 #include <curl/curl.h>
 
 #include "formdata.h"
-#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)
+#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_FORM_API)
 
 #if defined(HAVE_LIBGEN_H) && defined(HAVE_BASENAME)
 #include <libgen.h>
@@ -59,7 +59,7 @@
  *
  * AddHttpPost()
  *
- * Adds a HttpPost structure to the list, if parent_post is given becomes
+ * Adds an HttpPost structure to the list, if parent_post is given becomes
  * a subpost of parent_post instead of a direct list element.
  *
  * Returns newly allocated HttpPost on success and NULL if malloc failed.
@@ -135,15 +135,13 @@ static struct FormInfo *AddFormInfo(char *value,
 {
   struct FormInfo *form_info;
   form_info = calloc(1, sizeof(struct FormInfo));
-  if(form_info) {
-    if(value)
-      form_info->value = value;
-    if(contenttype)
-      form_info->contenttype = contenttype;
-    form_info->flags = HTTPPOST_FILENAME;
-  }
-  else
+  if(!form_info)
     return NULL;
+  if(value)
+    form_info->value = value;
+  if(contenttype)
+    form_info->contenttype = contenttype;
+  form_info->flags = HTTPPOST_FILENAME;
 
   if(parent_form_info) {
     /* now, point our 'more' to the original 'more' */
@@ -199,7 +197,7 @@ static struct FormInfo *AddFormInfo(char *value,
  * CURL_FORMADD_MEMORY         if the allocation of a FormInfo struct failed
  * CURL_FORMADD_UNKNOWN_OPTION if an unknown option was used
  * CURL_FORMADD_INCOMPLETE     if the some FormInfo is not complete (or error)
- * CURL_FORMADD_MEMORY         if a HttpPost struct cannot be allocated
+ * CURL_FORMADD_MEMORY         if an HttpPost struct cannot be allocated
  * CURL_FORMADD_MEMORY         if some allocation for string copying failed.
  * CURL_FORMADD_ILLEGAL_ARRAY  if an illegal option is used in an array
  *
@@ -605,9 +603,9 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
            app passed in a bad combo, so we better check for that first. */
         if(form->name) {
           /* copy name (without strdup; possibly not null-terminated) */
-          form->name = Curl_memdup(form->name, form->namelength?
-                                   form->namelength:
-                                   strlen(form->name) + 1);
+          form->name = Curl_strndup(form->name, form->namelength?
+                                    form->namelength:
+                                    strlen(form->name));
         }
         if(!form->name) {
           return_value = CURL_FORMADD_MEMORY;
@@ -717,10 +715,10 @@ int curl_formget(struct curl_httppost *form, void *arg,
   CURLcode result;
   curl_mimepart toppart;
 
-  Curl_mime_initpart(&toppart, NULL); /* default form is empty */
+  Curl_mime_initpart(&toppart); /* default form is empty */
   result = Curl_getformdata(NULL, &toppart, form, NULL);
   if(!result)
-    result = Curl_mime_prepare_headers(&toppart, "multipart/form-data",
+    result = Curl_mime_prepare_headers(NULL, &toppart, "multipart/form-data",
                                        NULL, MIMESTRATEGY_FORM);
 
   while(!result) {
@@ -789,6 +787,20 @@ static CURLcode setname(curl_mimepart *part, const char *name, size_t len)
   res = curl_mime_name(part, zname);
   free(zname);
   return res;
+}
+
+/* wrap call to fseeko so it matches the calling convention of callback */
+static int fseeko_wrapper(void *stream, curl_off_t offset, int whence)
+{
+#if defined(HAVE_FSEEKO) && defined(HAVE_DECL_FSEEKO)
+  return fseeko(stream, (off_t)offset, whence);
+#elif defined(HAVE__FSEEKI64)
+  return _fseeki64(stream, (__int64)offset, whence);
+#else
+  if(offset > LONG_MAX)
+    return -1;
+  return fseek(stream, (long)offset, whence);
+#endif
 }
 
 /*
@@ -876,8 +888,7 @@ CURLcode Curl_getformdata(struct Curl_easy *data,
                compatibility: use of "-" pseudo file name should be avoided. */
             result = curl_mime_data_cb(part, (curl_off_t) -1,
                                        (curl_read_callback) fread,
-                                       CURLX_FUNCTION_CAST(curl_seek_callback,
-                                                           fseek),
+                                       fseeko_wrapper,
                                        NULL, (void *) stdin);
           }
           else
@@ -943,7 +954,7 @@ int curl_formget(struct curl_httppost *form, void *arg,
 void curl_formfree(struct curl_httppost *form)
 {
   (void)form;
-  /* does nothing HTTP is disabled */
+  /* Nothing to do. */
 }
 
 #endif  /* if disabled */

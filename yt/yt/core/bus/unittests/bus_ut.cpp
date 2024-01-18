@@ -78,20 +78,21 @@ class TReplying42BusHandler
     : public IMessageHandler
 {
 public:
-    TReplying42BusHandler(int numParts)
-        : NumPartsExpecting(numParts)
+    explicit TReplying42BusHandler(int numParts)
+        : NumPartsExpecting_(numParts)
     { }
 
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus) noexcept override
     {
-        EXPECT_EQ(NumPartsExpecting, std::ssize(message));
+        EXPECT_EQ(NumPartsExpecting_, std::ssize(message));
         auto replyMessage = Serialize("42");
-        YT_UNUSED_FUTURE(replyBus->Send(replyMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+        YT_UNUSED_FUTURE(replyBus->Send(replyMessage));
     }
+
 private:
-    int NumPartsExpecting;
+    const int NumPartsExpecting_;
 };
 
 class TChecking42BusHandler
@@ -99,7 +100,7 @@ class TChecking42BusHandler
 {
 public:
     explicit TChecking42BusHandler(int numRepliesWaiting)
-        : NumRepliesWaiting(numRepliesWaiting)
+        : NumRepliesWaiting_(numRepliesWaiting)
     { }
 
     void WaitUntilDone()
@@ -108,9 +109,8 @@ public:
     }
 
 private:
-    std::atomic<int> NumRepliesWaiting;
+    std::atomic<int> NumRepliesWaiting_;
     NThreading::TEvent Event_;
-
 
     void HandleMessage(
         TSharedRefArray message,
@@ -119,11 +119,10 @@ private:
         auto value = Deserialize(message);
         EXPECT_EQ("42", value);
 
-        if (--NumRepliesWaiting == 0) {
+        if (--NumRepliesWaiting_ == 0) {
             Event_.NotifyAll();
         }
     }
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -159,7 +158,7 @@ public:
 
         std::vector<TFuture<void>> results;
         for (int i = 0; i < numRequests; ++i) {
-            auto result = bus->Send(message, NBus::TSendOptions(level));
+            auto result = bus->Send(message, {.TrackingLevel = level});
             if (result) {
                 results.push_back(result);
             }
@@ -204,7 +203,7 @@ TEST_F(TBusTest, OK)
     auto client = CreateBusClient(TBusClientConfig::CreateTcp(Address));
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full))
+    auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full})
         .Get();
     EXPECT_TRUE(result.IsOK());
     server->Stop()
@@ -230,7 +229,7 @@ TEST_F(TBusTest, Terminate)
     EXPECT_EQ(terminated.Get().GetCode(), error.GetCode());
     bus->Terminate(TError(TErrorCode(12345), "Ignored"));
 
-    auto result = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+    auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(result.IsSet());
     EXPECT_EQ(result.Get().GetCode(), error.GetCode());
 
@@ -277,7 +276,7 @@ TEST_F(TBusTest, Failed)
     auto client = CreateBusClient(TBusClientConfig::CreateTcp(Format("localhost:%v", port)));
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full)).Get();
+    auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}).Get();
     EXPECT_FALSE(result.IsOK());
 }
 
@@ -291,7 +290,7 @@ TEST_F(TBusTest, BlackHole)
     auto client = CreateBusClient(config);
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto options = TSendOptions(EDeliveryTrackingLevel::Full);
+    auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
 
     bus->Send(message, options)
         .Get()
@@ -315,7 +314,7 @@ TEST_F(TBusTest, SendCancel)
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(4, 16_MB);
 
-    auto options = NBus::TSendOptions(EDeliveryTrackingLevel::Full);
+    auto options = TSendOptions{.TrackingLevel = EDeliveryTrackingLevel::Full};
     options.EnableSendCancelation = true;
 
     for (int i = 0; i < 16; i++) {

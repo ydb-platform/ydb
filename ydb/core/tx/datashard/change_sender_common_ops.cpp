@@ -82,7 +82,7 @@ void TBaseChangeSender::KillSenders() {
     }
 }
 
-void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
+void TBaseChangeSender::EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
     for (auto& record : records) {
         Y_VERIFY_S(PathId == record.PathId, "Unexpected record's path id"
             << ": expected# " << PathId
@@ -117,7 +117,7 @@ bool TBaseChangeSender::RequestRecords() {
         return false;
     }
 
-    ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRequestRecords(std::move(records)));
+    ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRequestRecords(std::move(records)));
     return true;
 }
 
@@ -290,7 +290,7 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
     }
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new NChangeExchange::TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
 }
 
 void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {

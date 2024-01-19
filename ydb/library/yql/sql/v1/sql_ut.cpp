@@ -6134,12 +6134,30 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
     Y_UNIT_TEST(CreateViewSimple) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
-                CREATE VIEW TheView WITH (security_invoker = true) AS SELECT 1;
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
             )"
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewNoSecurityInvoker) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'AS' : syntax error");
+    }
+
+    Y_UNIT_TEST(CreateViewSecurityInvokerTurnedOff) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = FALSE) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "SECURITY_INVOKER option must be explicitly enabled");
+    }
+    
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6148,7 +6166,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
                     USE plato;
-                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                    CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                 path,
                 query
@@ -6176,7 +6194,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
                     USE plato;
-                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                    CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                 path,
                 query
@@ -6213,6 +6231,50 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
             }
         };
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(CreateViewWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                PRAGMA TablePathPrefix='/PathPrefix';
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(DropViewWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                PRAGMA TablePathPrefix='/PathPrefix';
+                DROP VIEW TheView;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
+            }
+        };
+
         TWordCountHive elementStat = { {"Write!"} };
         VerifyProgram(res, elementStat, verifyLine);
 

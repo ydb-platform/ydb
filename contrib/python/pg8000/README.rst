@@ -11,7 +11,7 @@ pg8000
 pg8000 is a pure-`Python <https://www.python.org/>`_
 `PostgreSQL <http://www.postgresql.org/>`_ driver that complies with
 `DB-API 2.0 <http://www.python.org/dev/peps/pep-0249/>`_. It is tested on Python
-versions 3.8+, on CPython and PyPy, and PostgreSQL versions 11+. pg8000's name comes
+versions 3.8+, on CPython and PyPy, and PostgreSQL versions 12+. pg8000's name comes
 from the belief that it is probably about the 8000th PostgreSQL interface for Python.
 pg8000 is distributed under the BSD 3-clause license.
 
@@ -275,9 +275,7 @@ PostgreSQL `notices
 <https://www.postgresql.org/docs/current/static/plpgsql-errors-and-messages.html>`_ are
 stored in a deque called ``Connection.notices`` and added using the ``append()``
 method. Similarly there are ``Connection.notifications`` for `notifications
-<https://www.postgresql.org/docs/current/static/sql-notify.html>`_ and
-``Connection.parameter_statuses`` for changes to the server configuration. Here's an
-example:
+<https://www.postgresql.org/docs/current/static/sql-notify.html>`_. Here's an example:
 
 >>> import pg8000.native
 >>>
@@ -289,6 +287,26 @@ example:
 >>>
 >>> con.notifications[0]
 (..., 'aliens_landed', '')
+>>>
+>>> con.close()
+
+
+Parameter Statuses
+``````````````````
+
+`Certain parameter values are reported by the server automatically at connection startup or whenever
+their values change
+<https://www.postgresql.org/docs/current/libpq-status.html#LIBPQ-PQPARAMETERSTATUS>`_ and pg8000
+stores the latest values in a dict called ``Connection.parameter_statuses``. Here's an example where
+we set the ``aplication_name`` parameter and then read it from the ``parameter_statuses``:
+
+>>> import pg8000.native
+>>>
+>>> con = pg8000.native.Connection(
+...     "postgres", password="cpsnow", application_name='AGI')
+>>>
+>>> con.parameter_statuses['application_name']
+'AGI'
 >>>
 >>> con.close()
 
@@ -639,7 +657,7 @@ the server:
 >>>
 >>> con.run("SELECT :v IS NULL", v=None)
 Traceback (most recent call last):
-pg8000.exceptions.DatabaseError: {'S': 'ERROR', 'V': 'ERROR', 'C': '42P18', 'M': 'could not determine data type of parameter $1', 'F': 'postgres.c', 'L': '...', 'R': 'exec_parse_message'}
+pg8000.exceptions.DatabaseError: {'S': 'ERROR', 'V': 'ERROR', 'C': '42P18', 'M': 'could not determine data type of parameter $1', 'F': 'postgres.c', 'L': '...', 'R': '...'}
 >>>
 >>> con.close()
 
@@ -861,7 +879,7 @@ the ``replication`` keyword when creating a connection:
 ...    'postgres', password="cpsnow", replication="database")
 >>>
 >>> con.run("IDENTIFY_SYSTEM")
-[['...', 1, '0/...', 'postgres']]
+[['...', 1, '.../...', 'postgres']]
 >>>
 >>> con.close()
 
@@ -2211,6 +2229,14 @@ Run ``tox`` to make sure all tests pass, then update the release notes, then do:
 
 Release Notes
 -------------
+
+Version 1.30.4, 2024-01-03
+``````````````````````````
+
+- Add support for more range and multirange types.
+
+- Make the ``Connection.parameter_statuses`` property a ``dict`` rather than a ``dequeue``.
+
 
 Version 1.30.3, 2023-10-31
 ``````````````````````````

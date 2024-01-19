@@ -67,6 +67,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
         }
         TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 10);
     }
+    Y_UNIT_TEST(InitiallyAcqured) {
+        {
+            TScopedAlloc alloc(__LOCATION__);
+            UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
+            {
+                auto guard = Guard(alloc);
+                UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
+        }
+        {
+            TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), false, false);
+            UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
+            {
+                auto guard = Guard(alloc);
+                UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
+        }
+    }
 }
 
 }

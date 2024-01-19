@@ -285,10 +285,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         env.TestWaitNotification(runtime, txId);
 
         ui64 sharedHive = 0;
+        ui64 sharedDbSchemeShard = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::IsExternalSubDomain("SharedDB"),
                             NLs::ExtractDomainHive(&sharedHive),
+                            NLs::ExtractTenantSchemeshard(&sharedDbSchemeShard),
+                            NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
+
+        UNIT_ASSERT(sharedHive != 0
+                    && sharedHive != (ui64)-1
+                    && sharedHive != TTestTxConfig::Hive);
+        UNIT_ASSERT(sharedDbSchemeShard != 0
+                    && sharedDbSchemeShard != (ui64)-1
+                    && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
+                    
+        TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
+                           {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
 
         TString createData = Sprintf(

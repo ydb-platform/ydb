@@ -88,6 +88,7 @@ message TDomainDescription {
     optional uint64 ShardsLimit = 9;
 
     optional TDomainKey ResourcesDomainKey = 10;
+    optional fixed64 SharedHive = 22;
     optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 23;
 
     optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
@@ -103,7 +104,6 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
-    optional fixed64 SharedHive = 22;
 }
 
 message TSchemeQuotas {

@@ -155,7 +155,7 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
 
 @pytest.fixture(scope='module')
 def ydb_serverless_db_with_exclusive_nodes(ydb_cluster, ydb_root, ydb_hostel_db):
-    database_name = os.path.join(ydb_root, "serverless_with_nodes")
+    database_name = os.path.join(ydb_root, "serverless_with_exclusive_nodes")
 
     with ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database_name, ydb_hostel_db):
         yield database_name

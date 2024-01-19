@@ -341,7 +341,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #define REGISTER_YSON_STRUCT(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and fields. Must be
-//! supplemented by DEFINE_YSON_STRUCT.
+//! supplemented by DEFINE_YSON_STRUCT_LITE.
 #define DECLARE_YSON_STRUCT_LITE(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and define them inplace.
@@ -349,6 +349,9 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 
 //! Define Yson Struct auxiliary methods out of class.
 #define DEFINE_YSON_STRUCT(TStruct)
+
+//! Define non-ref-counted Yson Struct auxiliary methods out of class.
+#define DEFINE_YSON_STRUCT_LITE(TStruct)
 
 //! Define non-ref-counted Yson external serializer methods and fields.
 #define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)

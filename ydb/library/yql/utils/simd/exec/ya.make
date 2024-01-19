@@ -28,4 +28,5 @@ RECURSE(
     pack_tuple
     tuples_to_bucket
     stream_store
+    add_columns
 )

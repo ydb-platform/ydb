@@ -5,6 +5,7 @@ from typing import Dict
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
+from ydb.library.yql.providers.generic.connector.tests.utils.data_source_kind import data_source_kind_alias
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import GenericSettings
 
 
@@ -14,6 +15,12 @@ class BaseTestCase:
     database: Database
     data_source_kind: EDataSourceKind.ValueType
     pragmas: Dict[str, str]
+
+    def __post_init__(self):
+        '''
+        Automatically assign suffix with data source kind to every test case.
+        '''
+        self.name += f'_{data_source_kind_alias(self.data_source_kind)}'
 
     @property
     def _table_name(self) -> str:

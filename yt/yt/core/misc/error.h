@@ -342,7 +342,7 @@ struct TErrorAdaptor
 // Make these to correctly forward TError to Wrap call.
 template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TErrorLike>> &&
+        std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
         std::constructible_from<TError, TArgs...>
 void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args);
 

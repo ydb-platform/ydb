@@ -146,7 +146,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, Config);
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

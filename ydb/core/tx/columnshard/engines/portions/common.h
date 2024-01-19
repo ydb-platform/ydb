@@ -8,6 +8,14 @@ private:
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY(ui16, Chunk, 0);
 public:
+    ui32 GetEntityId() const {
+        return ColumnId;
+    }
+
+    ui32 GetChunkIdx() const {
+        return Chunk;
+    }
+
     TChunkAddress(const ui32 columnId, const ui16 chunk)
         : ColumnId(columnId)
         , Chunk(chunk) {

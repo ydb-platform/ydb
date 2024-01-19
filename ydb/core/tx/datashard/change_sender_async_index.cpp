@@ -7,6 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
@@ -325,7 +327,7 @@ class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
     , public TBaseChangeSender
     , public IChangeSenderResolver
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {

@@ -2,6 +2,7 @@
 
 #include <arrow/array.h>
 #include <arrow/array/builder_binary.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
 extern "C" {
 #include "utils/numeric.h"
@@ -10,6 +11,7 @@ extern "C" {
 namespace NYql {
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
+TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);
 
 template<typename T>
 std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Array>& value) {

@@ -190,6 +190,54 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
         }
     }
 
+    Y_UNIT_TEST(InsertFkPartialColumnSet) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                INSERT INTO `/Root/MultiShardIndexed` (key, value) VALUES
+                (1173915, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+            const TString expected = R"([[#;[1173915u]];[[1000000000u];[1u]];[[2000000000u];[2u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceFkPartialColumnSet) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, value) VALUES
+                (1173915, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+            const TString expected = R"([[#;[1173915u]];[[1000000000u];[1u]];[[2000000000u];[2u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
     Y_UNIT_TEST(ReplaceFkAlreadyExist) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);

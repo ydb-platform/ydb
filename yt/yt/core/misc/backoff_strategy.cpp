@@ -7,6 +7,19 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+double BackoffStrategyDefaultRandomGenerator()
+{
+    // StdNormalRandom is unlikely to produce a value outside of [-Max, Max] range.
+    constexpr double Max = 7.0;
+    return std::clamp(StdNormalRandom<double>() / Max, -1.0, +1.0);
+}
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 TConstantBackoffOptions::operator TExponentialBackoffOptions() const
 {
     return TExponentialBackoffOptions{
@@ -39,7 +52,7 @@ bool TBackoffStrategy::Next()
         Backoff_ = std::min(Backoff_ * Options_.BackoffMultiplier, Options_.MaxBackoff);
         ApplyJitter();
     }
-    return ++InvocationIndex_ < Options_.InvocationCount;
+    return ++InvocationIndex_ <= Options_.InvocationCount;
 }
 
 int TBackoffStrategy::GetInvocationIndex() const
@@ -59,11 +72,10 @@ TDuration TBackoffStrategy::GetBackoff() const
 
 void TBackoffStrategy::ApplyJitter()
 {
-    BackoffWithJitter_ = ::NYT::ApplyJitter(Backoff_, Options_.BackoffJitter, [] {
-        // StdNormalRandom is unlikely to produce a value outside of [-Max, Max] range.
-        constexpr double Max = 7.0;
-        return std::clamp(StdNormalRandom<double>() / Max, -1.0, +1.0);
-    });
+    BackoffWithJitter_ = ::NYT::ApplyJitter(
+        Backoff_,
+        Options_.BackoffJitter,
+        &NDetail::BackoffStrategyDefaultRandomGenerator);
 }
 
 void TBackoffStrategy::UpdateOptions(const TExponentialBackoffOptions& newOptions)
@@ -72,5 +84,68 @@ void TBackoffStrategy::UpdateOptions(const TExponentialBackoffOptions& newOption
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TRelativeConstantBackoffStrategy::TRelativeConstantBackoffStrategy(
+    TConstantBackoffOptions options)
+    : Options_(options)
+    , BackoffWithJitter_(TDuration::Zero())
+    , LastInvocationTime_(TInstant::Zero())
+{ }
+
+bool TRelativeConstantBackoffStrategy::IsOverBackoff(TInstant now) const
+{
+    auto deadline = GetBackoffDeadline();
+
+    return
+        deadline == TInstant::Zero() ||
+        now >= deadline;
+}
+
+void TRelativeConstantBackoffStrategy::RecordInvocation()
+{
+    DoRecordInvocation(TInstant::Now());
+}
+
+bool TRelativeConstantBackoffStrategy::RecordInvocationIfOverBackoff(TInstant now)
+{
+    if (IsOverBackoff(now)) {
+        DoRecordInvocation(now);
+        return true;
+    }
+
+    return false;
+}
+
+TInstant TRelativeConstantBackoffStrategy::GetLastInvocationTime() const
+{
+    return LastInvocationTime_;
+}
+
+TInstant TRelativeConstantBackoffStrategy::GetBackoffDeadline() const
+{
+    return LastInvocationTime_ != TInstant::Zero() ?
+        LastInvocationTime_ + BackoffWithJitter_ :
+        TInstant::Zero();
+}
+
+void TRelativeConstantBackoffStrategy::Restart()
+{
+    LastInvocationTime_ = TInstant::Zero();
+    BackoffWithJitter_ = TDuration::Zero();
+}
+
+void TRelativeConstantBackoffStrategy::UpdateOptions(TConstantBackoffOptions newOptions)
+{
+    Options_ = newOptions;
+}
+
+void TRelativeConstantBackoffStrategy::DoRecordInvocation(TInstant now)
+{
+    LastInvocationTime_ = now;
+    BackoffWithJitter_ = ::NYT::ApplyJitter(
+        Options_.Backoff,
+        Options_.BackoffJitter,
+        &NDetail::BackoffStrategyDefaultRandomGenerator);
+}
 
 } // namespace NYT

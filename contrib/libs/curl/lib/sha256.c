@@ -5,8 +5,8 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2017, Florin Petriuc, <petriuc.florin@gmail.com>
- * Copyright (C) 2018 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Florin Petriuc, <petriuc.florin@gmail.com>
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -25,7 +25,8 @@
 
 #include "curl_setup.h"
 
-#ifndef CURL_DISABLE_CRYPTO_AUTH
+#if !defined(CURL_DISABLE_AWS) || !defined(CURL_DISABLE_DIGEST_AUTH) \
+    || defined(USE_LIBSSH2)
 
 #include "warnless.h"
 #include "curl_sha256.h"
@@ -57,6 +58,34 @@
 #endif
 #endif /* USE_MBEDTLS */
 
+#if defined(USE_OPENSSL_SHA256)
+
+/* When OpenSSL or wolfSSL is available we use their SHA256-functions. */
+#if defined(USE_OPENSSL)
+#include <openssl/evp.h>
+#elif defined(USE_WOLFSSL)
+#error #include <wolfssl/openssl/evp.h>
+#endif
+
+#elif defined(USE_GNUTLS)
+#error #include <nettle/sha.h>
+#elif defined(USE_MBEDTLS)
+#error #include <mbedtls/sha256.h>
+#elif (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
+              (__MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)) || \
+      (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && \
+              (__IPHONE_OS_VERSION_MAX_ALLOWED >= 20000))
+#include <CommonCrypto/CommonDigest.h>
+#define AN_APPLE_OS
+#elif defined(USE_WIN32_CRYPTO)
+#include <wincrypt.h>
+#endif
+
+/* The last 3 #include files should be in this order */
+#include "curl_printf.h"
+#include "curl_memory.h"
+#include "memdebug.h"
+
 /* Please keep the SSL backend-specific #if branches in this order:
  *
  * 1. USE_OPENSSL
@@ -71,20 +100,6 @@
 
 #if defined(USE_OPENSSL_SHA256)
 
-/* When OpenSSL or wolfSSL is available is available we use their
- * SHA256-functions.
- */
-#if defined(USE_OPENSSL)
-#include <openssl/evp.h>
-#elif defined(USE_WOLFSSL)
-#error #include <wolfssl/openssl/evp.h>
-#endif
-
-#include "curl_memory.h"
-
-/* The last #include file should be: */
-#include "memdebug.h"
-
 struct sha256_ctx {
   EVP_MD_CTX *openssl_ctx;
 };
@@ -96,7 +111,10 @@ static CURLcode my_sha256_init(my_sha256_ctx *ctx)
   if(!ctx->openssl_ctx)
     return CURLE_OUT_OF_MEMORY;
 
-  EVP_DigestInit_ex(ctx->openssl_ctx, EVP_sha256(), NULL);
+  if(!EVP_DigestInit_ex(ctx->openssl_ctx, EVP_sha256(), NULL)) {
+    EVP_MD_CTX_destroy(ctx->openssl_ctx);
+    return CURLE_FAILED_INIT;
+  }
   return CURLE_OK;
 }
 
@@ -114,13 +132,6 @@ static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 }
 
 #elif defined(USE_GNUTLS)
-
-#error #include <nettle/sha.h>
-
-#include "curl_memory.h"
-
-/* The last #include file should be: */
-#include "memdebug.h"
 
 typedef struct sha256_ctx my_sha256_ctx;
 
@@ -143,13 +154,6 @@ static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 }
 
 #elif defined(USE_MBEDTLS)
-
-#error #include <mbedtls/sha256.h>
-
-#include "curl_memory.h"
-
-/* The last #include file should be: */
-#include "memdebug.h"
 
 typedef mbedtls_sha256_context my_sha256_ctx;
 
@@ -183,18 +187,7 @@ static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 #endif
 }
 
-#elif (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
-              (__MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)) || \
-      (defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && \
-              (__IPHONE_OS_VERSION_MAX_ALLOWED >= 20000))
-
-#include <CommonCrypto/CommonDigest.h>
-
-#include "curl_memory.h"
-
-/* The last #include file should be: */
-#include "memdebug.h"
-
+#elif defined(AN_APPLE_OS)
 typedef CC_SHA256_CTX my_sha256_ctx;
 
 static CURLcode my_sha256_init(my_sha256_ctx *ctx)
@@ -217,8 +210,6 @@ static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 
 #elif defined(USE_WIN32_CRYPTO)
 
-#include <wincrypt.h>
-
 struct sha256_ctx {
   HCRYPTPROV hCryptProv;
   HCRYPTHASH hHash;
@@ -231,9 +222,14 @@ typedef struct sha256_ctx my_sha256_ctx;
 
 static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
-  if(CryptAcquireContext(&ctx->hCryptProv, NULL, NULL, PROV_RSA_AES,
-                         CRYPT_VERIFYCONTEXT | CRYPT_SILENT)) {
-    CryptCreateHash(ctx->hCryptProv, CALG_SHA_256, 0, 0, &ctx->hHash);
+  if(!CryptAcquireContext(&ctx->hCryptProv, NULL, NULL, PROV_RSA_AES,
+                         CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
+    return CURLE_OUT_OF_MEMORY;
+
+  if(!CryptCreateHash(ctx->hCryptProv, CALG_SHA_256, 0, 0, &ctx->hHash)) {
+    CryptReleaseContext(ctx->hCryptProv, 0);
+    ctx->hCryptProv = 0;
+    return CURLE_FAILED_INIT;
   }
 
   return CURLE_OK;
@@ -546,4 +542,4 @@ const struct HMAC_params Curl_HMAC_SHA256[] = {
 };
 
 
-#endif /* CURL_DISABLE_CRYPTO_AUTH */
+#endif /* AWS, DIGEST, or libSSH2 */

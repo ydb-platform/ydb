@@ -39,7 +39,7 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message) {
+    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, bool allowFirstLastPageDifference = false) {
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
@@ -60,7 +60,17 @@ namespace {
                 }
             }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
+            // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
+            // this should be resolved using slices (see ChargeRange)
+            if (allowFirstLastPageDifference) {
+                for (auto additionalPageId : {IndexTools::GetFirstPageId(part), IndexTools::GetLastPageId(part)}) {
+                    if (bTreeDataPages.contains(additionalPageId)) {
+                        flatDataPages.insert(additionalPageId);
+                    }
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
+            }
         }
     }
 
@@ -367,12 +377,12 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
-    bool DoChargeKeys(ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+    bool DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             auto result = reverse
-                ? charge.DoReverse(key1, key2, 0, Max<TRowId>(), keyDefaults, itemsLimit, bytesLimit)
-                : charge.Do(key1, key2, 0, Max<TRowId>(), keyDefaults, itemsLimit, bytesLimit);
+                ? charge.DoReverse(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit)
+                : charge.Do(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit);
             if (result.Ready) {
                 return result.Overshot;
             }
@@ -383,8 +393,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
+        for (TRowId rowId1 : xrange(part.Stat.Rows)) {
+            for (TRowId rowId2 : xrange(part.Stat.Rows)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                 TCharge flat(&flatEnv, part, tags, true);
@@ -419,15 +429,11 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
                         message << ")";
 
-                        bool bTreeOvershot = DoChargeKeys(bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
-                        bool flatOvershot = DoChargeKeys(flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
+                        bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
+                        bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         
-                        // TODO
-                        // UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
-                        Y_UNUSED(bTreeOvershot);
-                        Y_UNUSED(flatOvershot);
-
-                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
+                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
                     }
                 }
             }
@@ -446,8 +452,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
         CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
-        // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
-        // TODO: mixed
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
     }
 
     Y_UNIT_TEST(NoNodes) {

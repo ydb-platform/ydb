@@ -187,6 +187,20 @@ namespace NTest {
 
             return index.GetRecord();
         }
+
+        inline TPageId GetFirstPageId(const TPartStore& part) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+            index.Seek(0);
+            return index.GetPageId();
+        }
+
+        inline TPageId GetLastPageId(const TPartStore& part) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+            index.Seek(index.GetEndRowId() - 1);
+            return index.GetPageId();
+        }
     }
 
 }}}

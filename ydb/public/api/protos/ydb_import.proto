@@ -61,6 +61,8 @@ message ImportFromS3Settings {
 
     // Region to use in requests
     string region = 9;
+
+    bool disable_virtual_addressing = 10;
 }
 
 message ImportFromS3Result {

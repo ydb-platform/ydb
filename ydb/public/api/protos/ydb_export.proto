@@ -114,6 +114,8 @@ message ExportToS3Settings {
 
     // Region to use in requests
     string region = 11;
+
+    bool disable_virtual_addressing = 12;
 }
 
 message ExportToS3Result {

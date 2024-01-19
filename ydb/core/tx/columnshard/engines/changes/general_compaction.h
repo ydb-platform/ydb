@@ -42,7 +42,7 @@ public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
             for (auto&& i : portionInfo.GetRecords()) {
                 SumMemory += i.BlobRange.Size;
-                SumMemory += i.GetMeta().GetRawBytesVerified();
+                SumMemory += 2 * i.GetMeta().GetRawBytesVerified();
             }
             return SumMemory;
         }
@@ -51,6 +51,7 @@ public:
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
         ui64 SumMemory = 0;
+        ui32 PortionsCount = 0;
         THashMap<ui32, ui64> MaxMemoryByColumnChunk;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
@@ -58,13 +59,15 @@ public:
             for (auto&& i : portionInfo.GetRecords()) {
                 SumMemory += i.BlobRange.Size;
                 auto it = MaxMemoryByColumnChunk.find(i.GetColumnId());
+                ++PortionsCount;
                 if (it == MaxMemoryByColumnChunk.end()) {
                     it = MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified()).first;
+                    SumMemory += it->second * PortionsCount;
                 } else if (it->second < i.GetMeta().GetRawBytesVerified()) {
-                    SumMemory -= it->second;
+                    SumMemory -= it->second * (PortionsCount - 1);
                     it->second = i.GetMeta().GetRawBytesVerified();
+                    SumMemory += it->second * PortionsCount;
                 }
-                SumMemory += it->second;
             }
             return SumMemory;
         }

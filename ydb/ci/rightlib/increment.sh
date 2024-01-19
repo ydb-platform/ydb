@@ -1,26 +1,18 @@
-# Usage: cherrypick.sh <source_ydblib_repo_root> <target_ydb_repo_root>
-# Expects previous github SHA in <target_ydb_repo_root>/library_import.txt
-# Will loop through the commits in the source repo after previous SHA, and cherry-pick is to the target.
+# Usage: cherrypick.sh <ydb_repo_root>
+# Expects previous github SHA in <ydb_repo_root>/library_import.txt
+# Reads new commits from the 'rightlib' branch, cheery-picks them to a new branch, and creates PR
 
 set -e
 set -o pipefail
 
-LIB_ROOT=$1
-if [ -z "${LIB_ROOT}" ]; then
-  echo "Source lib root must be provided as a first free arg"
+ROOT=$1
+if [ -z "${ROOT}" ]; then
+  echo "YDB repo root must be provided as a first free arg"
   exit 1
 fi
-echo "Source library root: ${LIB_ROOT}"
-newsha=$(cd ${LIB_ROOT} && git rev-parse HEAD)
-echo "Source current commit sha: $newsha"
+echo "YDB repo root: ${ROOT}"
 
-MAIN_ROOT=$2
-if [ -z "${MAIN_ROOT}" ]; then
-  echo "Target main root must be provided as a second free arg"
-  exit 1
-fi
-echo "Target Main root: ${MAIN_ROOT}"
-shapath="${MAIN_ROOT}/library_import.txt"
+shapath="${ROOT}/library/rightlib_sha.txt"
 prevsha=$(cat ${shapath}) || true
 if [ -z "${prevsha}" ]; then
   echo "File ${shapath} not found, which must contain previous completed import commit SHA"
@@ -28,10 +20,13 @@ if [ -z "${prevsha}" ]; then
 fi
 echo "Previous sha: ${prevsha}"
 
-list=$(cd ${LIB_ROOT} && git log ${prevsha}..HEAD --pretty=oneline --no-decorate | awk '{print $1}')
+newsha=$(cd ${ROOT} && git rev-parse rightlib)
+echo "Rightlib current commit sha: $newsha"
+
+list=$(cd ${ROOT} && git log ${prevsha}..rightlib --reverse --pretty=oneline --no-decorate | awk '{print $1}')
 for sha in $list;do
   echo $sha
-  (cd ${MAIN_ROOT} && git --git-dir=${LIB_ROOT}/.git format-patch -k -1 --stdout $sha | git am -3 -k)
+  (cd ${ROOT} && git cherry-pick $sha)
   echo "---"
 done
 

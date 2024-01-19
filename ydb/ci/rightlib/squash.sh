@@ -1,4 +1,4 @@
-# Usage: increment.sh <source_ydblib_repo_root> <target_ydb_repo_root>
+# Usage: squash.sh <source_ydblib_repo_root> <target_ydb_repo_root>
 
 set -e
 set -o pipefail

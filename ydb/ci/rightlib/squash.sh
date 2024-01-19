@@ -1,6 +1,4 @@
 # Usage: increment.sh <source_ydblib_repo_root> <target_ydb_repo_root>
-# Expects previous github SHA in <target_ydb_repo_root>/contrib/ydb/git_sha.txt
-# Will get/patch only files changed since that commit
 
 set -e
 set -o pipefail
@@ -11,6 +9,8 @@ if [ -z "${LIB_ROOT}" ]; then
   exit 1
 fi
 echo "Source library root: ${LIB_ROOT}"
+sha=$(cd ${LIB_ROOT} && git rev-parse HEAD)
+echo "Source commit sha: $sha"
 
 MAIN_ROOT=$2
 if [ -z "${MAIN_ROOT}" ]; then
@@ -19,7 +19,12 @@ if [ -z "${MAIN_ROOT}" ]; then
 fi
 echo "Target Main root: ${MAIN_ROOT}"
 
-rsync -r $LIB_ROOT/ya $LIB_ROOT/build $LIB_ROOT/certs $LIB_ROOT/cmake $LIB_ROOT/contrib $LIB_ROOT/library $LIB_ROOT/scripts $LIB_ROOT/tools $LIB_ROOT/util $LIB_ROOT/vendor $LIB_ROOT/yt $MAIN_ROOT \
+sharel="library/rightlib_sha.txt"
+shaabs="${MAIN_ROOT}/${sharel}"
+echo "Sha file: ${shaabs}"
+echo $sha > ${shaabs}
+
+rsync -r $LIB_ROOT/ya $LIB_ROOT/build $LIB_ROOT/certs $LIB_ROOT/cmake $LIB_ROOT/contrib $LIB_ROOT/library $LIB_ROOT/tools $LIB_ROOT/util $LIB_ROOT/vendor $LIB_ROOT/yt $MAIN_ROOT \
   --filter '- **/a.yaml' --filter '- **/.arcignore' --filter '- **/.yandex_meta/' --filter '- contrib/ydb/' --filter '- build/internal/' --filter '- build/ext_mapping.conf.json' \
-  --filter '- **/CMakeLists*.txt' --delete
+  --filter '- **/CMakeLists*.txt' --filter "- ${sharel}" --delete
 

@@ -1,8 +1,11 @@
 #pragma once
-#include "defs.h"
+
 #include <ydb/library/actors/util/rc_buf.h>
-#include <util/generic/intrlist.h>
+
 #include <util/generic/hash.h>
+#include <util/generic/intrlist.h>
+#include <util/generic/map.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NPDisk {

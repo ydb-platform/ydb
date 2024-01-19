@@ -1,6 +1,1 @@
-namespace NKikimr {
-namespace NPDisk {
-
-} // NPDisk
-} // NKikimr
-
+#include "blobstorage_pdisk.h"

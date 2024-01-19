@@ -1,6 +1,7 @@
 #pragma once
-#include "defs.h"
+
 #include <ydb/core/util/queue_oneone_inplace.h>
+
 #include <util/system/condvar.h>
 #include <library/cpp/threading/queue/mpsc_vinfarr_obstructive.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>

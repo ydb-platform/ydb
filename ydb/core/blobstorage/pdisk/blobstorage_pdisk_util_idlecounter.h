@@ -1,6 +1,5 @@
 #pragma once
 
-#include "defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_mon.h"
 

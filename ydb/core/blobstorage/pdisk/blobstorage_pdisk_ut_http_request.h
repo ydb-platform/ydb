@@ -1,5 +1,8 @@
 #pragma once
-#include "defs.h"
+
+#include <library/cpp/cgiparam/cgiparam.h>
+#include <library/cpp/http/io/headers.h>
+#include <library/cpp/monlib/service/service.h>
 
 namespace NKikimr {
 

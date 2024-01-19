@@ -1,7 +1,4 @@
 #pragma once
-#include "defs.h"
-#include "blobstorage_pdisk_defs.h"
-
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice.h>
 

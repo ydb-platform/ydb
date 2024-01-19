@@ -1,7 +1,6 @@
 #pragma once
-#include "defs.h"
+
 #include "blobstorage_pdisk.h"
-#include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_internal_interface.h"
@@ -9,8 +8,9 @@
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/library/pdisk_io/buffers.h>
 #include <ydb/library/schlab/schine/job_kind.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span_stack.h>

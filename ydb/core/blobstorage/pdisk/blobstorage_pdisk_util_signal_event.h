@@ -1,7 +1,5 @@
 #pragma once
 
-#include "defs.h"
-
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>
 

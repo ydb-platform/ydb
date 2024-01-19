@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     library/cpp/unified_agent_client
     ydb/core/base
+    library/cpp/messagebus
 )
 
 YQL_LAST_ABI_VERSION()

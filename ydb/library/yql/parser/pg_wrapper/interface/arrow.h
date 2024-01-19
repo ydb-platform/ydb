@@ -1,7 +1,10 @@
 #pragma once
 #include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/public/udf/arrow/block_item.h>
-#include <arrow/datum.h>
+#include <arrow/type_fwd.h>
+
+namespace NYql::NUdf {
+    class TBlockItem;
+}
 
 namespace NYql {
 

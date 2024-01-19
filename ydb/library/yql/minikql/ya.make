@@ -68,6 +68,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/tz
+    ydb/library/yql/public/udf/arrow
     ydb/library/yql/utils
     ydb/library/yql/core/sql_types
     ydb/library/uuid

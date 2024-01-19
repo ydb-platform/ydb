@@ -1,12 +1,14 @@
 #pragma once
-#include "defs.h"
 
-#include "blobstorage_pdisk_ut.h"
-#include "blobstorage_pdisk_ut_base_test.h"
-#include "blobstorage_pdisk_ut_http_request.h"
 #include "blobstorage_pdisk_chunk_id_formatter.h"
+#include "blobstorage_pdisk_ut_base_test.h"
+#include "blobstorage_pdisk_ut_defs.h"
+#include "blobstorage_pdisk_ut_http_request.h"
+
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/random/mersenne64.h>
+#include <util/random/entropy.h>
 
 namespace NKikimr {
 

@@ -1,7 +1,9 @@
 #pragma once
-#include "defs.h"
+
 #include <ydb/core/protos/drivemodel.pb.h>
-#include <cmath>
+
+#include <util/generic/hash.h>
+#include <util/generic/list.h>
 
 namespace NKikimr {
 namespace NPDisk {

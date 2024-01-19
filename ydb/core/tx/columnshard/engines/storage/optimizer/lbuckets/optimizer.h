@@ -363,7 +363,7 @@ public:
         std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         for (auto&& i : sorted) {
             result.emplace_back(i);
-            if (predictor->AddPortion(i) > sizeLimit && result.size() > 1) {
+            if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
                 break;
             }
         }

@@ -24,6 +24,8 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);
     REGISTER_SETTING(*this, UseRuntimeListing);
     REGISTER_SETTING(*this, FileQueueBatchSizeLimit);
+    REGISTER_SETTING(*this, FileQueueBatchObjectCountLimit);
+    REGISTER_SETTING(*this, FileQueuePrefetchSize);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

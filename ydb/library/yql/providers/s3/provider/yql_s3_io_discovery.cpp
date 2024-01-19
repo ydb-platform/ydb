@@ -836,7 +836,7 @@ private:
                 return false;
             }
 
-            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+            // auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
 
             for (auto& req : reqs) {
                 RequestsByNode_[read.Raw()].push_back(req);
@@ -849,12 +849,15 @@ private:
                             std::vector<NS3Lister::TDirectoryListEntry>{1}};
                         entries.Directories.back().Path = req.S3Request.Pattern;
                         future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
-                    } else if (!req.Options.IsPartitionedDataset && req.FilePattern == "*" && useRuntimeListing) {
-                        NS3Lister::TListEntries entries{
-                            std::vector<NS3Lister::TObjectListEntry>{0},
-                            std::vector<NS3Lister::TDirectoryListEntry>{1}};
-                        entries.Directories.back().Path = req.S3Request.Prefix;
-                        future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
+                    // } else if (!req.Options.IsPartitionedDataset && useRuntimeListing) {
+                    //     NS3Lister::TListEntries entries{
+                    //         std::vector<NS3Lister::TObjectListEntry>{0},
+                    //         std::vector<NS3Lister::TDirectoryListEntry>{1}};
+                    //     if (req.S3Request.PatternType == NS3Lister::ES3PatternType::) {
+                    //         entries.Directories.back().Path = req.S3Request.Prefix;
+                    //     }
+                    //     entries.Directories.back().Path = req.S3Request.Prefix;
+                    //     future = NThreading::MakeFuture<NS3Lister::TListResult>(std::move(entries));
                     } else {
                         future = ListingStrategy_->List(req.S3Request, req.Options);
                     }

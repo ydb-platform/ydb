@@ -407,8 +407,18 @@ public:
             auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
-            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(4'000'000);
+            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1'000'000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
+
+            NDq::TS3ReadActorFactoryConfig readActorConfig;
+            
+            auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(readActorConfig.MaxInflight);
+            srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
+            
+            auto maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+
+            auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get().GetOrElse(maxTasksPerStage * srcDesc.GetParallelDownloadCount() * 2);
+            srcDesc.MutableSettings()->insert({"fileQueuePrefetchSize", ToString(fileQueuePrefetchSize)});
 
             if (useRuntimeListing) {
                 TPathList paths;
@@ -422,8 +432,6 @@ public:
                     paths.insert(paths.end(), pathsChunk.begin(), pathsChunk.end());
                 }
 
-                NDq::TS3ReadActorFactoryConfig readActorConfig;
-
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -435,8 +443,6 @@ public:
                         fileSizeLimit = readActorConfig.BlockFileSizeLimit;
                     }
                 }
-
-                auto maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
 
                 TString pathPattern = "*";
                 auto pathPatternVariant = NS3Lister::ES3PatternVariant::FilePattern;
@@ -465,11 +471,12 @@ public:
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
                     0ul,
                     paths,
-                    maxTasksPerStage * readActorConfig.MaxInflight * 2,
+                    fileQueuePrefetchSize,
                     fileSizeLimit,
                     useRuntimeListing,
                     maxTasksPerStage,
                     fileQueueBatchSizeLimit,
+                    fileQueueBatchObjectCountLimit,
                     State_->Gateway,
                     connect.Url,
                     GetAuthInfo(State_->CredentialsFactory, connect.Token),

@@ -3922,7 +3922,6 @@ template bool EnsureNewSeqType<false, false, true>(const TExprNode& node, TExprC
 template bool EnsureNewSeqType<true, true, true>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
 template bool EnsureNewSeqType<false, true, true>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
 template bool EnsureNewSeqType<false, true, false>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
-template bool EnsureNewSeqType<false, false, false>(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationNode** itemType);
 
 bool EnsureAnySeqType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {

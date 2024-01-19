@@ -80,7 +80,6 @@ public:
         , Callbacks(args.Callback)
         , Counters(counters)
         , TypeEnv(args.TypeEnv)
-        , Alloc(args.Alloc)
         , TxId(args.TxId)
         , TableId(Settings.GetTable().GetOwnerId(), Settings.GetTable().GetTableId())
     {
@@ -101,10 +100,6 @@ public:
 
 private:
     virtual ~TKqpWriteActor() {
-    }
-
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
-        return TypeEnv.BindAllocator();
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -140,7 +135,7 @@ private:
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
-                    /* copy */ true);
+                    /* copy */ false);
             }
             BatchBuilder->AddRow(
                 TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
@@ -250,80 +245,6 @@ private:
         ProcessRows();
     }
 
-    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        NYql::TIssue issue(message);
-        for (const auto& i : subIssues) {
-            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-        }
-
-        NYql::TIssues issues;
-        issues.AddIssue(std::move(issue));
-
-        Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
-    }
-
-    void PassAway() override {
-        TActorBootstrapped<TKqpWriteActor>::PassAway();
-    }
-
-    void BuildColumns() {
-        KeyColumns.reserve(Settings.KeyColumnsSize());
-        i32 number = 0;
-        for (const auto& column : Settings.GetKeyColumns()) {
-            KeyColumns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
-        }
-
-        ColumnIds.reserve(Settings.ColumnsSize());
-        Columns.reserve(Settings.ColumnsSize());
-        number = 0;
-        for (const auto& column : Settings.GetColumns()) {
-            ColumnIds.push_back(column.GetId());
-            Columns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
-        }
-    }
-
-    void PrepareBatchBuilder() {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
-        for (const auto& column : Columns) {
-            columns.emplace_back(column.Name, column.PType);
-        }
-        std::set<std::string> notNullColumns;
-        for (const auto& column : Settings.GetColumns()) {
-            if (column.GetNotNull()) {
-                notNullColumns.insert(column.GetName());
-            }
-        }
-
-        BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>(arrow::Compression::UNCOMPRESSED, notNullColumns);
-
-        TString err;
-        if (!BatchBuilder->Start(columns, 0, 0, err)) {
-            RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
-        }
-    }
-
     void ProcessRows() {
         SplitBatchByShards();
         SendNewBatchesToShards();
@@ -331,27 +252,6 @@ private:
         if (Finished && SchemeEntry && IsInFlightBatchesEmpty()) {
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         }
-    }
-
-    NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
-            const std::shared_ptr<arrow::RecordBatch>& batch) const {
-        struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
-            std::shared_ptr<arrow::RecordBatch> Batch;
-
-            TDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
-                : Batch(batch) {
-            }
-
-            std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
-                return Batch;
-            }
-
-            TString GetSerializedData() const override {
-                return NArrow::SerializeBatchNoCompression(Batch);
-            }
-        };
-
-        return std::make_shared<TDataAccessor>(batch);
     }
 
     void SplitBatchByShards() {
@@ -485,6 +385,102 @@ private:
         return result;
     }
 
+    void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        NYql::TIssue issue(message);
+        for (const auto& i : subIssues) {
+            issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+        }
+
+        NYql::TIssues issues;
+        issues.AddIssue(std::move(issue));
+
+        Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
+    }
+
+    void PassAway() override {
+        TActorBootstrapped<TKqpWriteActor>::PassAway();
+    }
+
+    void BuildColumns() {
+        KeyColumns.reserve(Settings.KeyColumnsSize());
+        i32 number = 0;
+        for (const auto& column : Settings.GetKeyColumns()) {
+            KeyColumns.emplace_back(
+                column.GetName(),
+                column.GetId(),
+                NScheme::TTypeInfo {
+                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                    column.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                        : nullptr
+                },
+                column.GetTypeInfo().GetPgTypeMod(),
+                number++
+            );
+        }
+
+        ColumnIds.reserve(Settings.ColumnsSize());
+        Columns.reserve(Settings.ColumnsSize());
+        number = 0;
+        for (const auto& column : Settings.GetColumns()) {
+            ColumnIds.push_back(column.GetId());
+            Columns.emplace_back(
+                column.GetName(),
+                column.GetId(),
+                NScheme::TTypeInfo {
+                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                    column.GetTypeId() == NScheme::NTypeIds::Pg
+                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                        : nullptr
+                },
+                column.GetTypeInfo().GetPgTypeMod(),
+                number++
+            );
+        }
+    }
+
+    void PrepareBatchBuilder() {
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
+        for (const auto& column : Columns) {
+            columns.emplace_back(column.Name, column.PType);
+        }
+        std::set<std::string> notNullColumns;
+        for (const auto& column : Settings.GetColumns()) {
+            if (column.GetNotNull()) {
+                notNullColumns.insert(column.GetName());
+            }
+        }
+
+        BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>(arrow::Compression::UNCOMPRESSED, notNullColumns);
+
+        TString err;
+        if (!BatchBuilder->Start(columns, 0, 0, err)) {
+            RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+        }
+    }
+
+    NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor::TPtr GetDataAccessor(
+            const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        struct TDataAccessor : public NKikimr::NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
+            std::shared_ptr<arrow::RecordBatch> Batch;
+
+            TDataAccessor(const std::shared_ptr<arrow::RecordBatch>& batch)
+                : Batch(batch) {
+            }
+
+            std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
+                return Batch;
+            }
+
+            TString GetSerializedData() const override {
+                return NArrow::SerializeBatchNoCompression(Batch);
+            }
+        };
+
+        return std::make_shared<TDataAccessor>(batch);
+    }
+
+
     NActors::TActorId TxProxyId = MakeTxProxyID();
     NActors::TActorId PipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 
@@ -495,7 +491,6 @@ private:
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
     TIntrusivePtr<TKqpCounters> Counters;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;

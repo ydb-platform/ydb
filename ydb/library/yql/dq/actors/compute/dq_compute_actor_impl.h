@@ -1683,7 +1683,6 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .Alloc = TaskRunner->GetAllocatorPtr(),
                         .RandomProvider = TaskRunner ? TaskRunner->GetRandomProvider() : nullptr
                     });
             } catch (const std::exception& ex) {

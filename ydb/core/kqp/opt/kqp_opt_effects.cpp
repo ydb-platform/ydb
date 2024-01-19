@@ -283,7 +283,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
     sinkEffect = kqpCtx.IsGenericQuery() && table.Metadata->Kind == EKikimrTableKind::Olap;
-    YQL_CLOG(INFO, ProviderKqp) << "#### SINK EFFECT: " << static_cast<int>(sinkEffect);
 
     TKqpUpsertRowsSettings settings;
     if (node.Settings()) {
@@ -318,12 +317,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto stage = dqUnion.Output().Stage();
     auto program = stage.Program();
     auto input = program.Body();
-
-    YQL_CLOG(INFO, ProviderKqp) << "#### DQUNION: " << KqpExprToPrettyString(dqUnion, ctx);
-    YQL_CLOG(INFO, ProviderKqp) << "#### dqUnion.Output().Stage(): " << KqpExprToPrettyString(dqUnion.Output().Stage(), ctx);
-    YQL_CLOG(INFO, ProviderKqp) << "#### program: " << KqpExprToPrettyString(program, ctx);
-    YQL_CLOG(INFO, ProviderKqp) << "#### input: " << KqpExprToPrettyString(input, ctx);
-    YQL_CLOG(INFO, ProviderKqp) << "#### TABLE: " << KqpExprToPrettyString(node.Table(), ctx);
 
     if (sinkEffect) {
         stageInput = Build<TDqStage>(ctx, node.Pos())

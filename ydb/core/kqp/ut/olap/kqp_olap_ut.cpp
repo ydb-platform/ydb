@@ -5063,7 +5063,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         UNIT_ASSERT(!result.IsSuccess());
         std::string errorMsg = result.GetIssues().ToString();
-        UNIT_ASSERT_C(errorMsg.find("Data manipulation queries do not support column shard tables.") != std::string::npos, errorMsg);
+        UNIT_ASSERT_C(errorMsg.find("Write mode 'insert_abort' is not supported for olap tables.") != std::string::npos, errorMsg);
     }
 
     Y_UNIT_TEST(Olap_InsertFailsOnGenericQuery) {
@@ -5083,7 +5083,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         UNIT_ASSERT(!result.IsSuccess());
         std::string errorMsg = result.GetIssues().ToString();
-        UNIT_ASSERT_C(errorMsg.find("Data manipulation queries do not support column shard tables.") != std::string::npos, errorMsg);
+        UNIT_ASSERT_C(errorMsg.find("Write mode 'insert_abort' is not supported for olap tables.") != std::string::npos, errorMsg);
     }
 
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {

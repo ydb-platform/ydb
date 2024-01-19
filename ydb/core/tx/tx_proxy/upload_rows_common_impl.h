@@ -1039,6 +1039,9 @@ private:
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
+                if (keyRange->TableId.SchemaVersion) {
+                    ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
+                }
                 for (const auto& fd : KeyColumnPositions) {
                     ev->Record.MutableRowScheme()->AddKeyColumnIds(fd.ColId);
                 }

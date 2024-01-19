@@ -359,7 +359,7 @@ Pear,15,33'''
     @pytest.mark.parametrize("kikimr", [{"compute": 3}], indirect=True)
     def test_write_result(self, kikimr, s3, client, yq_version):
 
-        pytest.skip("Test is not stable in OSS")
+        # pytest.skip("Test is not stable in OSS")
 
         resource = boto3.resource(
             "s3",

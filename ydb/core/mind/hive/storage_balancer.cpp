@@ -162,10 +162,13 @@ public:
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM>(channels, metricToBalance);
+            break;
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST>(channels, metricToBalance);
+            break;
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM>(channels, metricToBalance);
+            break;
         }
         for (size_t i = 0; i < channels.size() && Operations.size() < Settings.NumReassigns; ++i) {
             const auto& channel = channels[i];

@@ -93,7 +93,6 @@ bool TDbWrapper::LoadColumns(const std::function<void(const NOlap::TPortionInfo&
     }
     return true;
 }
-}
 
 void TDbWrapper::WriteCounter(ui32 counterId, ui64 value) {
     NIceDb::TNiceDb db(Database);

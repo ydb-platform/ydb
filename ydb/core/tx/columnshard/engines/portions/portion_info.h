@@ -25,6 +25,12 @@ private:
     std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
     ui64 DeprecatedGranuleId = 0;
 public:
+    std::vector<TColumnRecord> Records;
+
+    const std::vector<TColumnRecord>& GetRecords() const {
+        return Records;
+    }
+
     ui64 GetPathId() const {
         return PathId;
     }
@@ -116,8 +122,6 @@ public:
     TPortionMeta& MutableMeta() {
         return Meta;
     }
-
-    std::vector<TColumnRecord> Records;
 
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
         for (auto&& i : Records) {

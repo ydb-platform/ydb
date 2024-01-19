@@ -108,6 +108,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnId(const std::string& name) const;

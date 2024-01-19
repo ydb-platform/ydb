@@ -271,7 +271,7 @@ public:
             storageClass = Aws::S3::Model::StorageClass::STANDARD;
         }
 
-        request.WithStorageClastorageClass(storageClass);
+        request.WithStorageClass(storageClass);
         return TBase::PrepareRequest(ev);
     }
 }; // TPutInputStreamContext

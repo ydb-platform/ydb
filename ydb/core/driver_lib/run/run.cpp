@@ -996,6 +996,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
 
+    std::vector<TString> hostnamePatterns;
+    if (runConfig.AppConfig.HasQueryServiceConfig()) {
+        const auto& patterns = runConfig.AppConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        hostnamePatterns = {patterns.begin(), patterns.end()};
+    }
+    AppData->ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(hostnamePatterns);
+
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
         : nullptr;

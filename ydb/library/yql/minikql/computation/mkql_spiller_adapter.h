@@ -14,7 +14,7 @@ namespace NKikimr::NMiniKQL {
 ///When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(NYql::NDq::IDqComputeStorageActor::TPtr spiller, const TMultiType* type, size_t sizeLimit)
+    TWideUnboxedValuesSpillerAdapter(NYql::NDq::IDqComputeStorageActor* spiller, const TMultiType* type, size_t sizeLimit)
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
@@ -78,7 +78,7 @@ public:
     }
 
 private:
-    NYql::NDq::IDqComputeStorageActor::TPtr Spiller;
+    NYql::NDq::IDqComputeStorageActor* Spiller;
     const TMultiType* const ItemType;
     const size_t SizeLimit;
     TValuePackerTransport<false> Packer;

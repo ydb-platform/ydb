@@ -6,10 +6,11 @@
 
 namespace NYql::NDq {
 
-class IDqComputeStorageActor
+class IDqComputeStorageActor :
+                               public TAtomicRefCount<IDqComputeStorageActor>
 {
 public:
-    using TPtr = std::shared_ptr<IDqComputeStorageActor>;
+    using TPtr = TIntrusivePtr<IDqComputeStorageActor>;
     using TKey = ui64;
 
     virtual ~IDqComputeStorageActor() = default;
@@ -25,6 +26,6 @@ public:
     virtual NThreading::TFuture<void> Delete(TKey key) = 0;
 };
 
-IDqComputeStorageActor::TPtr CreateDqComputeStorageActor(TTxId txId);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, NActors::TActorSystem* actorSystem);
 
 } // namespace NYql::NDq

@@ -36,11 +36,13 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
 {
     using TBase = TActorBootstrapped<TDqComputeStorageActor>;
 public:
-    TDqComputeStorageActor(TTxId txId)
-        : TxId_(txId)
+    TDqComputeStorageActor(TTxId txId, TActorSystem* actorSystem)
+        : TxId_(txId), 
+        ActorSystem_(actorSystem)
     {}
 
     void Bootstrap() {
+        return;
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ComputeId: " << 1998,
             SelfId(), true);
         SpillingActorId_ = Register(spillingActor);
@@ -53,12 +55,13 @@ public:
         return this;
     }
 
+
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
         FailOnError();
 
         ui64 size = blob.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+        SendEvent(new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
         auto res = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>()));
         WritingBlobsSize_ += size;
@@ -75,7 +78,7 @@ public:
 
         auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+        SendEvent(new TEvDqSpilling::TEvRead(blobId, false));
 
         return res.first->second.GetFuture();
     }
@@ -87,7 +90,7 @@ public:
 
         auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        SendEvent(new TEvDqSpilling::TEvRead(blobId, true));
         BlobsToRemoveAfterRead_.emplace(blobId);
 
         return res.first->second.GetFuture();
@@ -101,7 +104,7 @@ public:
         promise.SetValue();
 
 
-        if (!SavedBlobs_.contains(blobId)) promise.GetFuture();
+        if (!SavedBlobs_.contains(blobId)) return promise.GetFuture();
 
         // TODO: actual delete
         return promise.GetFuture();
@@ -109,14 +112,14 @@ public:
 
 protected:
     void PassAway() override {
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        SendEvent(new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
     void FailOnError() {
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SendEvent(new TEvents::TEvPoison);
         }
     }
 
@@ -144,7 +147,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SendEvent(new TEvents::TEvPoison);
             return;
         }
 
@@ -171,7 +174,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SendEvent(new TEvents::TEvPoison);
             return;
         }
 
@@ -197,6 +200,24 @@ private:
     }
 
     protected:
+
+    template<typename T> void SendEvent(T* event) {
+        auto selfActorId = SelfId();
+        if (ActorSystem_) {
+            ActorSystem_->Send(
+                new IEventHandle(
+                    SpillingActorId_,
+                    selfActorId,
+                    event,
+                    /*flags=*/0,
+                    /*cookie*/0
+                )
+            );
+        } else {
+            selfActorId.Send(SpillingActorId_, event);
+        }
+    }
+
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
@@ -214,12 +235,13 @@ private:
 
     IDqComputeStorageActor::TKey NextBlobId = 0;
 
+    TActorSystem* ActorSystem_ = nullptr;
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor::TPtr CreateDqComputeStorageActor(TTxId txId) {
-    return std::make_shared<TDqComputeStorageActor>(txId);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, TActorSystem* actorSystem) {
+    return new TDqComputeStorageActor(txId, actorSystem);
 }
 
 } // namespace NYql::NDq

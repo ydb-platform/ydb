@@ -4,7 +4,7 @@
 #include "change_exchange_helpers.h"
 
 #include <ydb/core/base/appdata.h>
-
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
@@ -61,7 +61,7 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) = 0;
     virtual void RemoveRecords() = 0;
 
-    virtual void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
+    virtual void EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
     virtual void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) = 0;
     virtual void ForgetRecords(TVector<ui64>&& records) = 0;
     virtual void OnReady(ui64 partitionId) = 0;
@@ -79,8 +79,8 @@ public:
 };
 
 class TBaseChangeSender: public IChangeSender {
-    using TEnqueuedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
-    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TEnqueuedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TRequestedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     struct TSender {
         TActorId ActorId;
@@ -124,19 +124,19 @@ protected:
             remove.push_back(record.Order);
         }
 
-        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+        ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
     }
 
     template <>
     void RemoveRecords(TVector<ui64>&& records) {
-        ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
+        ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }
 
     void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) override;
     void KillSenders() override;
     void RemoveRecords() override;
 
-    void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
+    void EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
     void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) override;
     void ForgetRecords(TVector<ui64>&& records) override;
     void OnReady(ui64 partitionId) override;

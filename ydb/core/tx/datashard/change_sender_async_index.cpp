@@ -115,13 +115,13 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
 
     STATEFN(StateWaitingRecords) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvChangeExchange::TEvRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvChangeExchange::TEvRecords::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
@@ -738,17 +738,17 @@ class TAsyncIndexChangeSenderMain
         return new TAsyncIndexChangeSenderShard(SelfId(), DataShard, partitionId, IndexTablePathId, TagMap);
     }
 
-    void Handle(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
-    void Handle(TEvChangeExchange::TEvRecords::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
-    void Handle(TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         ForgetRecords(std::move(ev->Get()->Records));
     }
@@ -771,7 +771,7 @@ class TAsyncIndexChangeSenderMain
         PassAway();
     }
 
-    void AutoRemove(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+    void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         RemoveRecords(std::move(ev->Get()->Records));
     }
@@ -804,9 +804,9 @@ public:
 
     STFUNC(StateBase) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvChangeExchange::TEvEnqueueRecords, Handle);
-            hFunc(TEvChangeExchange::TEvRecords, Handle);
-            hFunc(TEvChangeExchange::TEvForgetRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
@@ -817,7 +817,7 @@ public:
 
     STFUNC(StatePendingRemove) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);

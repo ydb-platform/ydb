@@ -233,7 +233,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new TEvChangeExchange::TEvRecords(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
         size_t forgotten = 0;
@@ -246,7 +246,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Forget " << records.size() << " change records"
                 << ": to# " << to
                 << ", at tablet# " << Self->TabletID());
-            ctx.Send(to, new TEvChangeExchange::TEvForgetRecords(std::move(records)));
+            ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvForgetRecords(std::move(records)));
         }
 
         size_t left = Accumulate(Self->ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
@@ -408,7 +408,7 @@ private:
 }; // TTxChangeExchangeSplitAck
 
 /// Request
-void TDataShard::Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
         return sum + kv.second.size();
@@ -428,7 +428,7 @@ void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActor
 }
 
 /// Remove
-void TDataShard::Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsToRemove.insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRemoveChangeRecords(ctx);
 }

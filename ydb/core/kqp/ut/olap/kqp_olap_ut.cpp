@@ -5412,7 +5412,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
         }
 
-        /*{
+        {
             // column -> column
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard2`
@@ -5429,7 +5429,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(
                 output,
                 R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
-        }*/
+        }
     }
 
     Y_UNIT_TEST(OlapReplace_Simple) {
@@ -5533,8 +5533,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([])");
         }
-
-        // TODO: test error replace into data from column
     }
 }
 

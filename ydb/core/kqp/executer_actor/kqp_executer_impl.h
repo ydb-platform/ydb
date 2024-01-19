@@ -1365,6 +1365,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
+                        BuildSinks(stage, task);
                     }
                 }
 
@@ -1392,6 +1393,7 @@ protected:
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
+                        BuildSinks(stage, task);
                     }
                 }
             }

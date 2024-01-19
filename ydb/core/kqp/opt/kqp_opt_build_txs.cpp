@@ -125,7 +125,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         TKqpPhyTxSettings txSettings;
-        txSettings.Type = EPhysicalTxType::Data;
+        YQL_ENSURE(QueryType != EKikimrQueryType::Scan);
+        txSettings.Type = GetPhyTxType(false);
         txSettings.WithEffects = true;
 
         auto tx = Build<TKqpPhysicalTx>(ctx, inputExpr->Pos())

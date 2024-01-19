@@ -1715,7 +1715,7 @@ private:
                 }
 
                 if (stageInfo.Meta.IsOlap() && !IsAllowedOperationOnOlap(tx.Body->GetType(), stage)) {
-                    auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
+                    auto error = TStringBuilder() << "Only replace data manipulation queries are supported by column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));

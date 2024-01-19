@@ -7,7 +7,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A simple base class that implements IClient and delegates
-//! all calls to an underlying instance.
+//! all calls to the underlying instance.
 class TDelegatingClient
     : public IClient
 {
@@ -37,7 +37,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options = {}) override;
 
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) override;
 
@@ -619,9 +619,14 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options) override;
 
-    virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
+    virtual TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
-        const TGetBundleConfigOptions& options = {}) override;
+        const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
+
+    virtual TFuture<void> SetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
 protected:
     const IClientPtr Underlying_;

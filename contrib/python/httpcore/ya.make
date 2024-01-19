@@ -2,15 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(0.18.0)
+VERSION(1.0.2)
 
 LICENSE(BSD-3-Clause)
 
 PEERDIR(
-    contrib/python/anyio
     contrib/python/certifi
     contrib/python/h11
-    contrib/python/sniffio
 )
 
 NO_LINT()

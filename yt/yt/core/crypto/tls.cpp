@@ -409,7 +409,7 @@ private:
         // NB: We should check for an error here, because Underylying_ might have failed already, and then
         // we will loop on SSL_ERROR_WANT_READ forever.
         if (HandshakeInProgress_ && Error_.IsOK()) {
-           int sslResult = SSL_do_handshake(Ssl_);
+            int sslResult = SSL_do_handshake(Ssl_);
             if (sslResult == 1) {
                 HandshakeInProgress_ = false;
             } else {
@@ -427,7 +427,7 @@ private:
         }
 
         if (HandshakeInProgress_) {
-           return;
+            return;
         }
 
         // Second condition acts as a poor-man backpressure.

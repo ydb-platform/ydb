@@ -17,7 +17,7 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
-    Y_UNIT_TEST(CreateExternalTable) {
+    Y_UNIT_TEST(ExternalTableDdl) {
         enum EEx {
             Empty,
             IfExists,

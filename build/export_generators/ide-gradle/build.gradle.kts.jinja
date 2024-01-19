@@ -100,6 +100,52 @@ tasks.test {
     }
 }
 
+{% set runs = targets|selectattr("runs") -%}
+{% if runs -%}
+{%     for run in runs -%}
+tasks.build.dependsOn(
+    task<JavaExec>("runJavaProgram") {
+        group = "build"
+        description = "Code generation by rub java program"
+
+        mainClass.set(mainClass)
+{%         if run.classpath -%}
+        classpath = "{{ run.classpath }}"
+{%         else -%}
+        classpath = sourceSets.main.get().runtimeClasspath
+{%         endif -%}
+{%         if run.args -%}
+{#             for arg in run.args #}
+        args = "{{ run.args }}"
+{%         endif -%}
+{%         if run.in_dir -%}
+{%             for dir in run.in_dir -%}
+        inputs.files(fileTree("{{ dir }}"))
+{%             endfor -%}
+{%         endif -%}
+{%         if run.in -%}
+{%             for file in run.in -%}
+        inputs.files("{{ file }}")
+{%             endfor -%}
+{%         endif -%}
+{%         if run.out_dir -%}
+{%             for dir in run.out_dir -%}
+        outputs.dir("{{ dir }}")
+{%             endfor -%}
+{#
+    Не использованы аттрибуты
+    run-cwd="str"
+    run-in_dirs_inputs="list"
+    run-in_noparse="list"
+    run-out_dir="list"
+    run-tool="list"
+#}
+{%         endif -%}
+    }
+)
+{%     endfor -%}
+{% endif -%}
+
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")

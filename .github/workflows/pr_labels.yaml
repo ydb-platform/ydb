@@ -1,0 +1,50 @@
+name: PR-labels
+on: 
+  pull_request_target:
+    branches:
+      - 'main'
+    types:
+      - 'opened'
+      - 'edited'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  update-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update PR labels
+        id: update-pr-labels
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const description = context.payload.pull_request.body;
+            const mapping = [
+              ['* New feature', 'new-feature'],
+              ['* Experimental feature', 'experimental-feature'],
+              ['* Improvement', 'improvement'],
+              ['* Performance improvement', 'performance'],
+              ['* Bugfix', 'bugfix'],
+              ['* Backward incompatible change', 'backward-incompatible'],
+              ['* Documentation', 'documentation'],
+              ['* Not for changelog', 'not-for-changelog']
+            ];
+            if (!description) return;
+            for (let pair of mapping) {
+              if (!description.includes(pair[0])) continue;
+              try {
+                 const result = await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  labels: [pair[1]]
+                });
+                console.log('Added label', pair[1]);
+              } catch(e) {
+                console.log(e);
+              }
+              return;
+            }

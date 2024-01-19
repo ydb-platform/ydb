@@ -7,6 +7,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
@@ -325,7 +327,7 @@ class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
     , public TBaseChangeSender
     , public IChangeSenderResolver
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -537,6 +539,14 @@ class TAsyncIndexChangeSenderMain
             return;
         }
 
+        if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
+            LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
+
+            RemoveRecords();
+            KillSenders();
+            return Become(&TThis::StatePendingRemove);
+        }
+
         Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
         const auto& indexTable = entry.ListNodeEntry->Children.at(0);
 
@@ -559,7 +569,7 @@ class TAsyncIndexChangeSenderMain
     STATEFN(StateResolveIndexTable) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexTable);
-            sFunc(TEvents::TEvWakeup, ResolveIndexTable);
+            sFunc(TEvents::TEvWakeup, ResolveIndex);
         default:
             return StateBase(ev);
         }
@@ -638,7 +648,7 @@ class TAsyncIndexChangeSenderMain
     STATEFN(StateResolveKeys) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleKeys);
-            sFunc(TEvents::TEvWakeup, ResolveIndexTable);
+            sFunc(TEvents::TEvWakeup, ResolveIndex);
         default:
             return StateBase(ev);
         }
@@ -690,7 +700,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Resolve() override {
-        ResolveIndexTable();
+        ResolveIndex();
     }
 
     bool IsResolved() const override {
@@ -758,6 +768,11 @@ class TAsyncIndexChangeSenderMain
         PassAway();
     }
 
+    void AutoRemove(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        RemoveRecords(std::move(ev->Get()->Records));
+    }
+
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
         RenderHtmlPage(ESenderType::AsyncIndex, ev, ctx);
     }
@@ -792,6 +807,15 @@ public:
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            HFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+    STFUNC(StatePendingRemove) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvChangeExchange::TEvEnqueueRecords, AutoRemove);
+            hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

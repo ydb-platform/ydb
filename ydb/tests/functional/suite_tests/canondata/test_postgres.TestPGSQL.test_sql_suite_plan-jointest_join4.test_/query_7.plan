@@ -51,12 +51,13 @@
                                                 "Predicate": "item.tt5.f1 == item.tt5.f2 - item.tt6.f2"
                                             },
                                             {
+                                                "Condition": "f1 = f1",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 4
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "InternalOperatorId": 3
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

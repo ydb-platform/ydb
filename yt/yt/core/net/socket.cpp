@@ -113,8 +113,8 @@ SOCKET CreateTcpServerSocket()
             auto lastError = LastSystemError();
             SafeClose(serverSocket, false);
             THROW_ERROR_EXCEPTION(
-               NRpc::EErrorCode::TransportError,
-               "Failed to configure IPv6 protocol")
+                NRpc::EErrorCode::TransportError,
+                "Failed to configure IPv6 protocol")
                 << TError::FromSystem(lastError);
         }
     }

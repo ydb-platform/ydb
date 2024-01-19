@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022-07-22)
+VERSION(2022-09-04)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/1d057a6d43060eaf6c679e0593a43f99ecd70987.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/28f4245b6779303896e15d52fe59592e824e840f.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -199,7 +199,6 @@ ENDIF()
 SRCS(
     src/algorithm.cpp
     src/any.cpp
-    src/assert.cpp
     src/atomic.cpp
     src/barrier.cpp
     src/bind.cpp
@@ -240,6 +239,7 @@ SRCS(
     src/valarray.cpp
     src/variant.cpp
     src/vector.cpp
+    src/verbose_abort.cpp
 )
 
 IF (NOT GCC)

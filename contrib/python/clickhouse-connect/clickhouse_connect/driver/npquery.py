@@ -94,6 +94,7 @@ class NumpyResult(Closable):
 
     def close_df(self):
         pieces = list(self._df_stream())
+        pieces = [piece for piece in pieces if not piece.empty]
         if len(pieces) > 1:
             self._df_result = pd.concat(pieces, ignore_index=True)
         elif len(pieces) == 1:

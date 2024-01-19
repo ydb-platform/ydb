@@ -192,6 +192,8 @@ struct TRequestRestartResult
 
 struct IAdminClient
 {
+    virtual ~IAdminClient() = default;
+
     virtual TFuture<int> BuildSnapshot(
         const TBuildSnapshotOptions& options = {}) = 0;
 

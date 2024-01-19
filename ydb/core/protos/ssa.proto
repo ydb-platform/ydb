@@ -33,6 +33,10 @@ message TProgram {
             double Double = 7;
             bytes Bytes = 8;
             string Text = 9;
+            int32 Int8 = 10;
+            uint32 Uint8 = 11;
+            int32 Int16 = 12;
+            uint32 Uint16 = 13;
         }
     }
 

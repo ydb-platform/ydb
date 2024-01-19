@@ -369,7 +369,7 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " is DEAD");
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
-
+    TRlHelpers::PassAway(TActorBootstrapped<TReadSessionActor>::SelfId());
     TActorBootstrapped<TReadSessionActor>::Die(ctx);
 }
 
@@ -1627,7 +1627,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
         }
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }

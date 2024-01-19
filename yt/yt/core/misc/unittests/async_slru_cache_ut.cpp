@@ -695,7 +695,7 @@ TEST(TAsyncSlruGhostCacheTest, Lookups)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 6; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -736,7 +736,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveConstructCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
@@ -760,22 +760,22 @@ TEST(TAsyncSlruGhostCacheTest, MoveAssignCookie)
 
     // Ensure that all the necessary items are present in large ghost, but absent in main
     // cache and small ghost.
-     for (int index = 0; index < 5; ++index) {
+    for (int index = 0; index < 5; ++index) {
         auto cookie = cache->BeginInsert(index);
         ASSERT_TRUE(cookie.IsActive());
         cookie.EndInsert(New<TSimpleCachedValue>(
             /*key*/ index,
             /*value*/ 42,
             /*weight*/ 1));
-     }
-     {
+    }
+    {
         auto cookie = cache->BeginInsert(43);
         ASSERT_TRUE(cookie.IsActive());
         cookie.EndInsert(New<TSimpleCachedValue>(
             /*key*/ 43,
             /*value*/ 100500,
             /*weight*/ 101));
-     }
+    }
 
     for (int index = 0; index < 5; ++index) {
         auto otherCookie = cache->BeginInsert(index);
@@ -799,7 +799,7 @@ TEST(TAsyncSlruGhostCacheTest, MoveAssignCookie)
         auto oldLargeCounters = cache->ReadLargeGhostCounters();
 
         for (int index = 0; index < 5; ++index) {
-            cache->Lookup(index);
+            YT_UNUSED_FUTURE(cache->Lookup(index));
         }
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;

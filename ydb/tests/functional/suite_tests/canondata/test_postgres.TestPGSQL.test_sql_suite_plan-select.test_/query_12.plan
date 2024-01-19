@@ -41,6 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "unique1,stringu1 = i,j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2

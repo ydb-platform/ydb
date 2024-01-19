@@ -74,6 +74,8 @@ DEFINE_ENUM(ESchemaInferenceMode,
     (FromOutput)
 );
 
+// NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
+// If you change it, you must bump the controller agent tracker service protocol version!
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))

@@ -34,7 +34,17 @@ public:
         if (postData) {
             TCgiParameters params(postData);
             if (params.Has("target")) {
-                StringSplitter(params.Get("target")).Split(',').SkipEmpty().Collect(&Metrics);
+                TString metric;
+                size_t num = 0;
+                for (;;) {
+                    metric = params.Get("target", num);
+                    if (metric.empty()) {
+                        break;
+                    }
+                    Metrics.push_back(metric);
+                    ++num;
+                }
+                //StringSplitter(params.Get("target")).Split(',').SkipEmpty().Collect(&Metrics);
                 for (const auto& metric : Metrics) {
                     getRequest.AddMetrics(metric);
                 }

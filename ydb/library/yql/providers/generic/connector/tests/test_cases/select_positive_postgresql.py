@@ -248,7 +248,7 @@ class Factory:
             ],
             data_out_=None,
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            database=Database('primitive_types', EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -271,8 +271,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'upper_case_column'
+
         tc = TestCase(
-            name='upper_case_column_postgresql',
+            name=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COL1')),
             select_where=None,
@@ -287,7 +289,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -308,8 +310,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'constant'
+
         tc = TestCase(
-            name='constant_postgresql',
+            name=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
@@ -336,7 +340,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -357,8 +361,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'count'
+
         tc = TestCase(
-            name='count_postgresql',
+            name=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
             select_where=None,
@@ -379,7 +385,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            database=Database(test_case_name, EDataSourceKind.POSTGRESQL),
             pragmas=dict(),
         )
 
@@ -427,9 +433,11 @@ class Factory:
 
         data_source_kind = EDataSourceKind.POSTGRESQL
 
+        test_case_name = 'pushdown'
+
         return [
             TestCase(
-                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
+                name=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_1,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
@@ -437,10 +445,10 @@ class Factory:
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
+                database=Database(test_case_name, data_source_kind),
             ),
             TestCase(
-                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
+                name=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_2,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
@@ -448,7 +456,7 @@ class Factory:
                 select_where=SelectWhere('col_int32 = col_int64'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
+                database=Database(test_case_name, data_source_kind),
             ),
         ]
 

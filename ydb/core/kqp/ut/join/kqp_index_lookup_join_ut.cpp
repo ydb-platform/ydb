@@ -61,7 +61,8 @@ void PrepareTables(TSession session) {
             (101, "Value21"),
             (102, "Value22"),
             (103, "Value23"),
-            (NULL, "Value24");
+            (NULL, "Value24"),
+            (104, NULL);
 
         REPLACE INTO `/Root/LaunchByProcessIdAndPinned` (idx_processId, idx_pinned, idx_launchNumber) VALUES
             ("eProcess", false, 4),
@@ -90,6 +91,7 @@ Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -173,7 +175,7 @@ Y_UNIT_TEST(MultiJoins) {
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 }
 
-Y_UNIT_TEST(Inner) {
+Y_UNIT_TEST_TWIN(Inner, StreamLookup) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -185,10 +187,10 @@ Y_UNIT_TEST(Inner) {
         )",
         R"([
             [[1];[101];["Value1"];[101];["Value21"]]
-        ])", 2);
+        ])", 2, StreamLookup);
 }
 
-Y_UNIT_TEST(Left) {
+Y_UNIT_TEST_TWIN(Left, StreamLookup) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
@@ -200,14 +202,14 @@ Y_UNIT_TEST(Left) {
         )",
         R"([
             [[3];[103];["Value2"];[103];["Value23"]];
-            [[4];[104];["Value2"];#;#];
+            [[4];[104];["Value2"];[104];#];
             [[5];[105];["Value3"];#;#];
             [[6];#;["Value6"];#;#];
             [[7];#;["Value7"];#;#]
-        ])", 1);
+        ])", 2, StreamLookup);
 }
 
-Y_UNIT_TEST(LeftOnly) {
+Y_UNIT_TEST_TWIN(LeftOnly, StreamLookup) {
     Test(
         R"(
             SELECT l.Key, l.Fk, l.Value
@@ -218,11 +220,10 @@ Y_UNIT_TEST(LeftOnly) {
             ORDER BY l.Key
         )",
         R"([
-            [[4];[104];["Value2"]];
             [[5];[105];["Value3"]];
             [[6];#;["Value6"]];
             [[7];#;["Value7"]]
-        ])", 1);
+        ])", 2, StreamLookup);
 }
 
 Y_UNIT_TEST(LeftSemi) {
@@ -235,8 +236,9 @@ Y_UNIT_TEST(LeftSemi) {
             WHERE l.Value != 'Value1'   -- left table payload filter
         )",
         R"([
-            [[3];[103];["Value2"]]
-        ])", 1);
+            [[3];[103];["Value2"]];
+            [[4];[104];["Value2"]]
+        ])", 2);
 }
 
 Y_UNIT_TEST(RightSemi) {
@@ -252,7 +254,7 @@ Y_UNIT_TEST(RightSemi) {
         R"([
             [[101];["Value21"]];
             [[103];["Value23"]]
-        ])", 3);
+        ])", 4);
 }
 
 Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
@@ -267,8 +269,9 @@ Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
         R"([
             [[1];[101];["Value1"];[101];["Value21"]];
             [[2];[102];["Value1"];[102];["Value22"]];
-            [[3];[103];["Value2"];[103];["Value23"]]
-        ])", 3, StreamLookup);
+            [[3];[103];["Value2"];[103];["Value23"]];
+            [[4];[104];["Value2"];[104];#]
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(InnerJoinCustomColumnOrder, StreamLookup) {
@@ -283,8 +286,9 @@ Y_UNIT_TEST_TWIN(InnerJoinCustomColumnOrder, StreamLookup) {
         R"([
             [["Value21"];[1];[101];["Value1"];[101]];
             [["Value22"];[2];[102];["Value1"];[102]];
-            [["Value23"];[3];[103];["Value2"];[103]]
-        ])", 3, StreamLookup);
+            [["Value23"];[3];[103];["Value2"];[103]];
+            [#;[4];[104];["Value2"];[104]]
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(InnerJoinOnlyRightColumn, StreamLookup) {
@@ -297,10 +301,11 @@ Y_UNIT_TEST_TWIN(InnerJoinOnlyRightColumn, StreamLookup) {
             ORDER BY r.Value;
         )",
         R"([
+            [#];
             [["Value21"]];
             [["Value22"]];
             [["Value23"]]
-        ])", 3, StreamLookup);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(InnerJoinOnlyLeftColumn, StreamLookup) {
@@ -315,8 +320,9 @@ Y_UNIT_TEST_TWIN(InnerJoinOnlyLeftColumn, StreamLookup) {
         R"([
             [[101]];
             [[102]];
-            [[103]]
-        ])", 3, StreamLookup);
+            [[103]];
+            [[104]]
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(InnerJoinLeftFilter, StreamLookup) {
@@ -330,8 +336,9 @@ Y_UNIT_TEST_TWIN(InnerJoinLeftFilter, StreamLookup) {
             ORDER BY l.Key;
         )",
         R"([
-            [[3];[103];["Value2"];[103];["Value23"]]
-        ])", 1, StreamLookup);
+            [[3];[103];["Value2"];[103];["Value23"]];
+            [[4];[104];["Value2"];[104];#]
+        ])", 2, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
@@ -347,11 +354,11 @@ Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
             [[1];[101];["Value1"];[101];["Value21"]];
             [[2];[102];["Value1"];[102];["Value22"]];
             [[3];[103];["Value2"];[103];["Value23"]];
-            [[4];[104];["Value2"];#;#];
+            [[4];[104];["Value2"];[104];#];
             [[5];[105];["Value3"];#;#];
             [[6];#;["Value6"];#;#];
             [[7];#;["Value7"];#;#]
-        ])", 3, StreamLookup);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
@@ -367,11 +374,11 @@ Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
             [["Value21"];[1];[101];["Value1"];[101]];
             [["Value22"];[2];[102];["Value1"];[102]];
             [["Value23"];[3];[103];["Value2"];[103]];
-            [#;[4];#;["Value2"];[104]];
+            [#;[4];[104];["Value2"];[104]];
             [#;[5];#;["Value3"];[105]];
             [#;[6];#;["Value6"];#];
             [#;[7];#;["Value7"];#]
-        ])", 3, StreamLookup);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
@@ -391,7 +398,7 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
             [["Value21"]];
             [["Value22"]];
             [["Value23"]]
-        ])", 3, StreamLookup);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
@@ -411,41 +418,74 @@ Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
             [[103]];
             [[104]];
             [[105]]
-        ])", 3, StreamLookup);
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(SimpleLeftOnlyJoin, StreamLookup) {
     Test(
         R"(
-        SELECT l.Key, l.Fk, l.Value
-        FROM `/Root/Left` AS l
-        LEFT ONLY JOIN `/Root/Right` AS r
-            ON l.Fk = r.Key
-        ORDER BY l.Key
-    )",
-    R"([
-        [[4];[104];["Value2"]];
-        [[5];[105];["Value3"]];
-        [[6];#;["Value6"]];
-        [[7];#;["Value7"]]
-    ])", 3, StreamLookup);
+            SELECT l.Key, l.Fk, l.Value
+            FROM `/Root/Left` AS l
+            LEFT ONLY JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            ORDER BY l.Key
+        )",
+        R"([
+            [[5];[105];["Value3"]];
+            [[6];#;["Value6"]];
+            [[7];#;["Value7"]]
+        ])", 4, StreamLookup);
 }
 
 Y_UNIT_TEST_TWIN(LeftOnlyJoinValueColumn, StreamLookup) {
     Test(
         R"(
-        SELECT l.Value
-        FROM `/Root/Left` AS l
-        LEFT ONLY JOIN `/Root/Right` AS r
-            ON l.Fk = r.Key
-        ORDER BY l.Value
-    )",
-    R"([
-        [["Value2"]];
-        [["Value3"]];
-        [["Value6"]];
-        [["Value7"]]
-    ])", 3, StreamLookup);
+            SELECT l.Value
+            FROM `/Root/Left` AS l
+            LEFT ONLY JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value3"]];
+            [["Value6"]];
+            [["Value7"]]
+        ])", 4, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinRightNullFilter, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value, r.Value
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            WHERE r.Value IS NULL
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value2"];#];
+            [["Value3"];#];
+            [["Value6"];#];
+            [["Value7"];#]
+        ])", 4, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinSkipNullFilter, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Value, r.Value
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+                ON l.Fk = r.Key
+            WHERE r.Value IS NOT NULL
+            ORDER BY l.Value
+        )",
+        R"([
+            [["Value1"];["Value21"]];
+            [["Value1"];["Value22"]];
+            [["Value2"];["Value23"]]
+        ])", 4, StreamLookup);
 }
 
 void CreateSimpleTableWithKeyType(TSession session, const TString& columnType) {

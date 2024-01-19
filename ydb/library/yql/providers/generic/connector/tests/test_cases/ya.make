@@ -9,10 +9,10 @@ PY_SRCS(
     select_datetime.py
     select_missing_database.py
     select_missing_table.py
-    select_pg_schema.py
     select_positive_clickhouse.py
     select_positive_common.py
     select_positive_postgresql.py
+    select_positive_postgresql_schema.py
 )
 
 PEERDIR(

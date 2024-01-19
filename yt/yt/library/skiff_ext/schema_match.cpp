@@ -70,16 +70,16 @@ static bool IsSkiffSpecialColumn(
 static std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
 {
     if (skiffSchema->GetWireType() != EWireType::Variant8) {
-        return std::make_pair(skiffSchema, true);
+        return std::pair(skiffSchema, true);
     }
     auto children = skiffSchema->GetChildren();
     if (children.size() != 2) {
-        return std::make_pair(skiffSchema, true);
+        return std::pair(skiffSchema, true);
     }
     if (children[0]->GetWireType() == EWireType::Nothing) {
-        return std::make_pair(children[1], false);
+        return std::pair(children[1], false);
     } else {
-        return std::make_pair(skiffSchema, true);
+        return std::pair(skiffSchema, true);
     }
 }
 

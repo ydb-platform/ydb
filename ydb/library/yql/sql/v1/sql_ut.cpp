@@ -2359,6 +2359,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
     }
 
+    Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
+            "<main>:1:40: Error: local: alternative is not implemented yet: 692:7: local_index\n");
+    }
+
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());
@@ -6138,7 +6143,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
-    
+
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6182,7 +6187,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
             )
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
-        
+
         TString reconstructedQuery = ToString(Tokenize(query));
         TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
             if (word == "query_text") {

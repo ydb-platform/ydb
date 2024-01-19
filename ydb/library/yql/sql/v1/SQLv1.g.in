@@ -683,7 +683,7 @@ table_constraint:
 ;
 
 table_index: INDEX an_id table_index_type
-    (WITH LPAREN an_id EQUALS an_id COMMA (an_id EQUALS an_id)* RPAREN)?
+    (WITH LPAREN an_id EQUALS an_id (COMMA an_id EQUALS an_id)* COMMA? RPAREN)?
     ON LPAREN an_id_schema (COMMA an_id_schema)* RPAREN
     (COVER LPAREN an_id_schema (COMMA an_id_schema)* RPAREN)?;
 

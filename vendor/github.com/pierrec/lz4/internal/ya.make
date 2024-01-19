@@ -1,1 +1,0 @@
-RECURSE(xxh32)

@@ -23,7 +23,7 @@ RUN_ANTLR(
 IF (USE_VANILLA_PROTOC)
     SET(PROTOC_PATH contrib/tools/protoc_std)
 ELSE()
-    SET(PROTOC_PATH contrib/tools/protoc)
+    SET(PROTOC_PATH contrib/tools/protoc/bin)
 ENDIF()
 
 

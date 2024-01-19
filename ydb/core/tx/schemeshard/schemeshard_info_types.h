@@ -302,9 +302,11 @@ private:
 struct TAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
+    THashMap<TPathId, TPartitionStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;
@@ -1001,10 +1003,14 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         return Stats;
     }
 
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
         Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
+    }
+
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.UpdateTableStats(pathId, newStats);
     }
 };
 

@@ -91,7 +91,7 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
         MetricsData.Timestamp = now;
         MetricsData.Values.clear();
     }
-    if ((now - StartTimestamp) > DURATION_CLEAR_TRIGGER && (now - ClearTimestamp) < DURATION_CLEAR_PERIOD) {
+    if ((now - StartTimestamp) > DURATION_CLEAR_TRIGGER && (now - ClearTimestamp) > DURATION_CLEAR_PERIOD) {
         ClearTimestamp = now;
         BLOG_TRACE("Executing TxClearData");
         ExecuteTxClearData();

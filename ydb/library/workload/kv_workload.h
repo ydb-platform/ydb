@@ -26,7 +26,11 @@ enum KvWorkloadConstants : ui64 {
     MIXED_DO_SELECT = true,
 };
 
-struct TKvWorkloadParams : public TWorkloadParams {
+class TKvWorkloadParams : public TWorkloadParams {
+public:
+    void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
+    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TString GetWorkloadName() const override;
     ui64 MinPartitions = KvWorkloadConstants::MIN_PARTITIONS;
     const ui64 MaxPartitions = KvWorkloadConstants::MAX_PARTITIONS;
     ui64 PartitionSizeMb = KvWorkloadConstants::PARTITION_SIZE_MB;
@@ -46,8 +50,9 @@ struct TKvWorkloadParams : public TWorkloadParams {
     const std::string TableName = "kv_test";
 };
 
-class TKvWorkloadGenerator : public IWorkloadQueryGenerator {
+class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkloadParams> {
 public:
+    using TBase = TWorkloadQueryGeneratorBase<TKvWorkloadParams>;
     struct TRow {
         TVector<ui64> Ints;
         TVector<TString> Strings;
@@ -69,30 +74,23 @@ public:
             return Ints == other.Ints && Strings == other.Strings;
         }
     };
-
-    static TKvWorkloadGenerator* New(const TKvWorkloadParams* params) {
-        return new TKvWorkloadGenerator(params);
-    }
-
-    virtual ~TKvWorkloadGenerator() {}
+    TKvWorkloadGenerator(const TKvWorkloadParams* params);
 
     std::string GetDDLQueries() const override;
 
     TQueryInfoList GetInitialData() override;
 
-    std::string GetCleanDDLQueries() const override;
+    TVector<std::string> GetCleanPaths() const override;
 
     TQueryInfoList GetWorkload(int type) override;
-
-    TKvWorkloadParams* GetParams() override;
+    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
     enum class EType {
         UpsertRandom,
         InsertRandom,
         SelectRandom,
         ReadRowsRandom,
-        Mixed,
-        MaxType
+        Mixed
     };
 
 private:
@@ -103,12 +101,9 @@ private:
     TQueryInfoList ReadRows(TVector<TRow>&& rows);
     TQueryInfoList Mixed();
 
-    TKvWorkloadGenerator(const TKvWorkloadParams* params);
-
     TQueryInfo FillKvData() const;
     TVector<TRow> GenerateRandomRows(bool randomValues = false);
 
-    TKvWorkloadParams Params;
     TString BigString;
 
     std::atomic<TInstant> MixedNextChangePartitionsSize;

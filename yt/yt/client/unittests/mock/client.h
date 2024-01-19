@@ -47,7 +47,7 @@ public:
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (
+    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options), (override));
 
@@ -621,9 +621,14 @@ public:
     MOCK_METHOD(TFuture<void>, AlterQuery, (
         NQueryTrackerClient::TQueryId queryId, const TAlterQueryOptions& options), (override));
 
-    MOCK_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (
+    MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const TString& bundleName,
-        const TGetBundleConfigOptions& options), (override));
+        const NBundleControllerClient::TGetBundleConfigOptions& options), (override));
+
+    MOCK_METHOD(TFuture<void>, SetBundleConfig, (
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const NBundleControllerClient::TSetBundleConfigOptions& options), (override));
 };
 
 DEFINE_REFCOUNTED_TYPE(TMockClient)

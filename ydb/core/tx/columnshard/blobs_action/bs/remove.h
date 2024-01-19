@@ -15,15 +15,19 @@ protected:
 
     }
 
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
-        if (success) {
+    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        if (blobsWroteSuccessfully) {
             for (auto&& i : GetDeclaredBlobs()) {
-                Manager->DeleteBlob(i, dbBlobs);
+                Manager->DeleteBlobOnExecute(i, dbBlobs);
             }
         }
     }
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/) {
-
+    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {
+        if (blobsWroteSuccessfully) {
+            for (auto&& i : GetDeclaredBlobs()) {
+                Manager->DeleteBlobOnComplete(i);
+            }
+        }
     }
 public:
     TDeclareRemovingAction(const TString& storageId, NColumnShard::TBlobManager& manager)

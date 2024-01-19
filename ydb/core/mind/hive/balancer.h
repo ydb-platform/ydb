@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hive_impl.h"
+#include "leader_tablet_info.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -10,6 +11,9 @@ void BalanceNodes(std::vector<TNodeInfo*>& nodes, EResourceToBalance resourceTob
 
 template<NKikimrConfig::THiveConfig::EHiveTabletBalanceStrategy EHiveTabletBalanceStrategy>
 void BalanceTablets(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance);
+
+template <NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy>
+void BalanceChannels(std::vector<TLeaderTabletInfo::TChannel>& channels, NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy metricToBalance);
 
 }
 }

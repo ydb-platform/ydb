@@ -35,16 +35,10 @@ For HTTP/1.1 only support, install with:
 $ pip install httpcore
 ```
 
-For HTTP/1.1 and HTTP/2 support, install with:
+There are also a number of optional extras available...
 
 ```shell
-$ pip install httpcore[http2]
-```
-
-For SOCKS proxy support, install with:
-
-```shell
-$ pip install httpcore[socks]
+$ pip install httpcore['asyncio,trio,http2,socks']
 ```
 
 # Sending requests
@@ -89,3 +83,29 @@ The motivation for `httpcore` is:
 * To provide a reusable low-level client library, that other packages can then build on top of.
 * To provide a *really clear interface split* between the networking code and client logic,
   so that each is easier to understand and reason about in isolation.
+
+## Dependencies
+
+The `httpcore` package has the following dependencies...
+
+* `h11`
+* `certifi`
+
+And the following optional extras...
+
+* `anyio` - Required by `pip install httpcore['asyncio']`.
+* `trio` - Required by `pip install httpcore['trio']`.
+* `h2` - Required by `pip install httpcore['http2']`.
+* `socksio` - Required by `pip install httpcore['socks']`.
+
+## Versioning
+
+We use [SEMVER for our versioning policy](https://semver.org/).
+
+For changes between package versions please see our [project changelog](CHANGELOG.md).
+
+We recommend pinning your requirements either the most current major version, or a more specific version range:
+
+```python
+pip install 'httpcore==1.*'
+```

@@ -2,6 +2,7 @@
 
 #include "harmonizer.h"
 #include "executor_pool.h"
+#include "executor_pool_shared.h"
 
 namespace NActors {
     struct TActorSystemSetup;
@@ -9,7 +10,8 @@ namespace NActors {
     class TCpuManager : public TNonCopyable {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
-        THolder<IHarmonizer> Harmonizer;
+        std::unique_ptr<IHarmonizer> Harmonizer;
+        std::unique_ptr<TSharedExecutorPool> Shared;
         TCpuManagerConfig Config;
 
     public:

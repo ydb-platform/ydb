@@ -161,6 +161,13 @@ public:
         return Record.GetTraceId();
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const {
+        if (RequestCtx) {
+            return RequestCtx->GetWilsonTraceId();
+        }
+        return {};
+    }
+
     const TString& GetRequestType() const {
         if (RequestCtx) {
             if (!RequestType) {

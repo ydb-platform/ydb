@@ -50,12 +50,13 @@
                                                 "Predicate": "item.J2_TBL.k == 1"
                                             },
                                             {
+                                                "Condition": "i = i",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 14
                                                     },
                                                     {
-                                                        "Other": "ConstantExpression"
+                                                        "ExternalPlanNodeId": 12
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"

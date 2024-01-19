@@ -63,7 +63,7 @@ public:
         AFL_VERIFY(Stats);
     }
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-        return Schema->GetFieldByColumnId(columnId);
+        return Schema->GetFieldByColumnIdOptional(columnId);
     }
     virtual bool NeedMinMaxForColumn(const ui32 columnId) const override {
         return Schema->GetIndexInfo().GetMinMaxIdxColumns().contains(columnId);

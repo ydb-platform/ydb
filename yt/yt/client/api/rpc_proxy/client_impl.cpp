@@ -17,6 +17,7 @@
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
+#include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/row_buffer.h>
@@ -339,6 +340,7 @@ TFuture<void> TClient::ReshardTable(
     auto writer = CreateWireProtocolWriter();
     // XXX(sandello): This is ugly and inefficient.
     std::vector<TUnversionedRow> keys;
+    keys.reserve(pivotKeys.size());
     for (const auto& pivotKey : pivotKeys) {
         keys.push_back(pivotKey);
     }
@@ -659,6 +661,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->tablet_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->tablet_errors(index).errors().size());
             for (const auto& protoError : rsp->tablet_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -667,6 +670,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 
         for (i64 index = 0; index != rsp->replica_ids_size(); ++index) {
             std::vector<TError> errors;
+            errors.reserve(rsp->replication_errors(index).errors().size());
             for (const auto& protoError : rsp->replication_errors(index).errors()) {
                 errors.push_back(FromProto<TError>(protoError));
             }
@@ -851,6 +855,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueueConsumerRegistrationsPtr& rsp) {
         std::vector<TListQueueConsumerRegistrationsResult> result;
+        result.reserve(rsp->registrations().size());
         for (const auto& registration : rsp->registrations()) {
             std::optional<std::vector<int>> partitions;
             if (registration.has_partitions()) {
@@ -2056,11 +2061,19 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
-TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
+TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
-    const TGetBundleConfigOptions& /*options*/)
+    const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
+}
+
+TFuture<void> TClient::SetBundleConfig(
+    const TString& /*bundleName*/,
+    const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
+    const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("SetBundleConfig");
 }
 
 TFuture<void> TClient::SetUserPassword(

@@ -1716,7 +1716,7 @@ void TServiceBase::ReplyError(
     YT_LOG_EVENT(Logger, logLevel, richError);
 
     auto errorMessage = CreateErrorResponseMessage(requestId, richError);
-    YT_UNUSED_FUTURE(replyBus->Send(errorMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+    YT_UNUSED_FUTURE(replyBus->Send(errorMessage));
 }
 
 void TServiceBase::OnRequestAuthenticated(
@@ -2305,11 +2305,11 @@ void TServiceBase::OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context)
     auto payload = GetDiscoverRequestPayload(context);
     auto it = DiscoverRequestsByPayload_.find(payload);
     if (it != DiscoverRequestsByPayload_.end()) {
-         auto& requestSet = it->second;
-         if (requestSet.Has(context)) {
-             requestSet.Remove(context);
-             ReplyDiscoverRequest(context, IsUp(context));
-         }
+        auto& requestSet = it->second;
+        if (requestSet.Has(context)) {
+            requestSet.Remove(context);
+            ReplyDiscoverRequest(context, IsUp(context));
+        }
     }
 }
 

@@ -138,12 +138,7 @@ XFA50	X05AF
 X1234	XFFF5
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "X0F"
-
-    	X0F	X10
-	^
+Metacommand \. is not supported
 <sql-statement>
 SELECT a, b, ~a AS "~ a", a & b AS "a & b",
        a | b AS "a | b", a # b AS "a # b" FROM varbit_table;
@@ -179,12 +174,7 @@ XFA50	X05AF
 X1234	XFFF5
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "X0F00"
-
-    	X0F00	X1000
-	^
+Metacommand \. is not supported
 <sql-statement>
 SELECT a,b,~a AS "~ a",a & b AS "a & b",
 	a|b AS "a | b", a # b AS "a # b" FROM bit_table;

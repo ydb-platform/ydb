@@ -36,9 +36,7 @@ private:
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
     std::unordered_map<TString, TopicEntities> TopicToEntities;
-    std::unordered_map<TString, std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>> TopicToOffsets;
-    std::set<TString> UnknownTopics;
-    std::set<TString> ErroredTopics;
+    std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     ui32 InflyTopics = 0;
 
 };

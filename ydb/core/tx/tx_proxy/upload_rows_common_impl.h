@@ -23,7 +23,6 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -169,7 +168,6 @@ private:
     TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
-    NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
     TUploadCounters UploadCounters;
 
 protected:

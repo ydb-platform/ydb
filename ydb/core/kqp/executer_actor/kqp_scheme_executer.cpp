@@ -259,7 +259,7 @@ public:
             context.SetUserToken(*UserToken);
         }
 
-        auto resultFuture = cBehaviour->GetOperationsManager()->ExecutePrepared(schemeOp, cBehaviour, context);
+        auto resultFuture = cBehaviour->GetOperationsManager()->ExecutePrepared(schemeOp, SelfId().NodeId(), cBehaviour, context);
 
         using TResultFuture = NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus>;
         resultFuture.Subscribe([actorSystem, selfId](const TResultFuture& f) {

@@ -37,11 +37,11 @@ public:
         IAsyncOutputStreamPtr output,
         TDsvFormatConfigPtr config = New<TDsvFormatConfig>())
         : TSchemalessFormatWriterBase(
-             nameTable,
-             std::move(output),
-             enableContextSaving,
-             controlAttributesConfig,
-             0 /* keyColumnCount */)
+            nameTable,
+            std::move(output),
+            enableContextSaving,
+            controlAttributesConfig,
+            0 /* keyColumnCount */)
         , TDsvWriterBase(config)
     { }
 

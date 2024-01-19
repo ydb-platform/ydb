@@ -154,7 +154,7 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " proxy is DEAD");
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     ctx.Send(NPQ::MakePQDReadCacheServiceActorId(), new TEvPQProxy::TEvDirectReadDataSessionDead(Session));
-
+    TRlHelpers::PassAway(SelfId());
     TActorBootstrapped<TDirectReadSessionActor>::Die(ctx);
 }
 
@@ -364,7 +364,9 @@ void TDirectReadSessionActor::Handle(NGRpcService::TGRpcRequestProxy::TEvRefresh
         WriteToStreamOrDie(ctx, std::move(result));
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }

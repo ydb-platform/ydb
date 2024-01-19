@@ -1056,7 +1056,7 @@ private:
 
     const TCounter& GetWrittenEventsCounter(const TLogEvent& event)
     {
-        auto key = std::make_pair(event.Category->Name, event.Level);
+        auto key = std::pair(event.Category->Name, event.Level);
         auto it = WrittenEventsCounters_.find(key);
 
         if (it == WrittenEventsCounters_.end()) {

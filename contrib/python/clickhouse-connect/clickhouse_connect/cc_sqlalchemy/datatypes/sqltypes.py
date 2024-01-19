@@ -198,6 +198,10 @@ class UUID(ChSqlaType, UserDefinedType):
     python_type = None
 
 
+class Nothing(ChSqlaType, UserDefinedType):
+    python_type = None
+
+
 class Point(ChSqlaType, UserDefinedType):
     python_type = None
 

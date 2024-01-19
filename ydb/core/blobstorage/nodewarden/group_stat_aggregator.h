@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/stream/format.h>
+
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -50,7 +52,14 @@ namespace NKikimr {
         Y_ABORT_UNLESS(vdiskServiceId.IsService());
         char x[12];
         TStringBuf serviceId = vdiskServiceId.ServiceId();
-        Y_ABORT_UNLESS(serviceId[0] == 'b' && serviceId[1] == 's' && serviceId[2] == 'v' && serviceId[3] == 'd');
+        if (serviceId[0] != 'b' || serviceId[1] != 's' || serviceId[2] != 'v' || serviceId[3] != 'd') {
+            TStringStream str;
+            str << "Invalid VDisk's ServiceId# ";
+            for (ui32 i = 0; i < serviceId.size(); ++i) {
+                str << Hex(serviceId[i]) << ' ';
+            }
+            Y_FAIL_S(str.Str());
+        }
         memcpy(x, serviceId.data(), serviceId.size());
         x[0] = 'b';
         x[1] = 's';

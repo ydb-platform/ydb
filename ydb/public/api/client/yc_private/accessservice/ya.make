@@ -6,6 +6,7 @@ GRPC()
 SRCS(
     access_service.proto
     resource.proto
+    sensitive.proto
 )
 
 USE_COMMON_GOOGLE_APIS(

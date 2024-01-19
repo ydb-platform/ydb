@@ -32,7 +32,7 @@ bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false);
 bool IsValidDecimal(NUdf::TStringRef buf);
 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value);
-bool MakeDate32(i32 year, ui32 month, ui32 day, ui32& value);
+bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value);
 bool MakeTime(ui32 hour, ui32 minute, ui32 second, ui32& value);
 bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day);
 bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day);

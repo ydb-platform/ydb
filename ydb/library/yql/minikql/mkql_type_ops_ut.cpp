@@ -5,6 +5,12 @@
 #include <util/stream/format.h>
 #include <util/stream/str.h>
 
+extern "C" {
+#include <postgres.h>
+#include <datatype/timestamp.h>
+#include <utils/datetime.h>
+}
+
 using namespace NYql;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -37,9 +43,40 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT_EQUAL(value16, value32.Get<i32>());
             const NUdf::TUnboxedValue& strDate32 = ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(value32.Get<i32>()));
             UNIT_ASSERT(strDate32.HasValue());
+            UNIT_ASSERT_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
             auto val32 = ValueFromString(NUdf::EDataSlot::Date32, strDate32.AsStringRef());
             UNIT_ASSERT(val32.HasValue());
             UNIT_ASSERT_EQUAL(value16, val32.Get<i32>());
+        }
+    }
+
+    Y_UNIT_TEST(Date32vsPostgres) {
+        int value;
+        UNIT_ASSERT(MakeDate32(JULIAN_MINYEAR, JULIAN_MINMONTH, JULIAN_MINDAY, value));
+        for (; value < NUdf::MAX_DATE32; ++value) {
+            i32 year;
+            ui32 month, day;
+            SplitDate32(value, year, month, day);
+            if (year < 0) {
+                year++;
+            }
+            UNIT_ASSERT_EQUAL(value, date2j(year, month, day) - UNIX_EPOCH_JDATE);
+        }
+    }
+
+    Y_UNIT_TEST(PostgresVsDate32) {
+        for (int value = DATETIME_MIN_JULIAN; value < DATE_END_JULIAN; ++value) {
+            int year, month, day;
+            j2date(value, &year, &month, &day);
+            i32 date32;
+            if (year <= 0) {
+                year--;
+            }
+            UNIT_ASSERT(MakeDate32(year, static_cast<ui32>(month), static_cast<ui32>(day), date32));
+            UNIT_ASSERT_EQUAL(date32, value - UNIX_EPOCH_JDATE);
+            if (date32 == NUdf::MAX_DATE32) {
+                break;
+            }
         }
     }
 

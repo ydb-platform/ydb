@@ -765,11 +765,14 @@ public:
             return false;
         }
 
-        i32 y = (year < 0) ? (year - NUdf::MIN_YEAR + 1) : (year - NUdf::MIN_YEAR);
-        if (Y_UNLIKELY(y < 0)) {
-            value = (y / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + y % SOLAR_CYCLE_YEARS];
+        if (Y_UNLIKELY(year < 0)) {
+            year += 1;
+        }
+        year -= NUdf::MIN_YEAR;
+        if (Y_LIKELY(year%SOLAR_CYCLE_YEARS >= 0)) {
+            value = (year / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[year % SOLAR_CYCLE_YEARS];
         } else {
-            value = (y / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[y % SOLAR_CYCLE_YEARS];
+            value = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS];
         }
         value += isLeap ? LeapMonths_[month] : Months_[month];
         value += day - 1;
@@ -830,6 +833,10 @@ bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day) {
 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) {
     return TDateTable::Instance().MakeDate(year, month, day, value);
+}
+
+bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) {
+    return TDateTable::Instance().MakeDate32(year, month, day, value);
 }
 
 bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec) {
@@ -1111,7 +1118,7 @@ NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
     }
 
     i32 value;
-    if (Y_LIKELY(TDateTable::Instance().MakeDate32(iyear, month, day, value))) {
+    if (Y_LIKELY(MakeDate32(iyear, month, day, value))) {
         return NUdf::TUnboxedValuePod(value);
     }
 

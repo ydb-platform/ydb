@@ -738,6 +738,26 @@ DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
     const NBundleControllerClient::TSetBundleConfigOptions& options),
     (bundleName, bundleConfig, options))
 
+DELEGATE_METHOD(TFuture<void>, StartPipeline, (
+    const NYPath::TYPath& pipelinePath,
+    const TStartPipelineOptions& options),
+    (pipelinePath, options))
+
+DELEGATE_METHOD(TFuture<void>, StopPipeline, (
+    const NYPath::TYPath& pipelinePath,
+    const TStopPipelineOptions& options),
+    (pipelinePath, options))
+
+DELEGATE_METHOD(TFuture<void>, PausePipeline, (
+    const NYPath::TYPath& pipelinePath,
+    const TPausePipelineOptions& options),
+    (pipelinePath, options))
+
+DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineStatusOptions& options),
+    (pipelinePath, options))
+
 #undef DELEGATE_METHOD
 
 ////////////////////////////////////////////////////////////////////////////////

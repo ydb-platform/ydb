@@ -267,7 +267,7 @@ void TGeneralCompactColumnEngineChanges::AddCheckPoint(const NIndexedReader::TSo
 }
 
 std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCompactColumnEngineChanges::BuildMemoryPredictor() {
-    if (AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
+    if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseChunkedMergeOnCompaction()) {
         return std::make_shared<TMemoryPredictorChunkedPolicy>();
     } else {
         return std::make_shared<TMemoryPredictorSimplePolicy>();

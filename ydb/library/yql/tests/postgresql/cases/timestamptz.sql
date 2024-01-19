@@ -99,3 +99,43 @@ INSERT INTO TIMESTAMPTZ_TBL VALUES ('Dec 31 17:32:01 1999');
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Jan 01 17:32:01 2000');
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Dec 31 17:32:01 2000');
 INSERT INTO TIMESTAMPTZ_TBL VALUES ('Jan 01 17:32:01 2001');
+SELECT '4714-11-23 23:59:59+00 BC'::timestamptz;  -- out of range
+SELECT '294277-01-01 00:00:00+00'::timestamptz;  -- out of range
+SELECT '294277-12-31 16:00:00-08'::timestamptz;  -- out of range
+-- disallow intervals with months or years
+SELECT date_bin('5 months'::interval, timestamp with time zone '2020-02-01 01:01:01+00', timestamp with time zone '2001-01-01+00');
+SELECT date_bin('5 years'::interval,  timestamp with time zone '2020-02-01 01:01:01+00', timestamp with time zone '2001-01-01+00');
+-- disallow zero intervals
+SELECT date_bin('0 days'::interval, timestamp with time zone '1970-01-01 01:00:00+00' , timestamp with time zone '1970-01-01 00:00:00+00');
+-- disallow negative intervals
+SELECT date_bin('-2 days'::interval, timestamp with time zone '1970-01-01 01:00:00+00' , timestamp with time zone '1970-01-01 00:00:00+00');
+-- value near upper bound uses special case in code
+SELECT date_part('epoch', '294270-01-01 00:00:00+00'::timestamptz);
+SELECT extract(epoch from '294270-01-01 00:00:00+00'::timestamptz);
+-- another internal overflow test case
+SELECT extract(epoch from '5000-01-01 00:00:00+00'::timestamptz);
+SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
+   FROM (VALUES
+       ('2018-11-02 12:34:56'::timestamptz),
+       ('2018-11-02 12:34:56.78'),
+       ('2018-11-02 12:34:56.78901'),
+       ('2018-11-02 12:34:56.78901234')
+   ) d(d);
+SELECT to_char(now(), 'OF') as "OF", to_char(now(), 'TZH:TZM') as "TZH:TZM";
+CREATE TABLE TIMESTAMPTZ_TST (a int , b timestamptz);
+-- Test year field value with len > 4
+INSERT INTO TIMESTAMPTZ_TST VALUES(1, 'Sat Mar 12 23:58:48 1000 IST');
+INSERT INTO TIMESTAMPTZ_TST VALUES(2, 'Sat Mar 12 23:58:48 10000 IST');
+INSERT INTO TIMESTAMPTZ_TST VALUES(3, 'Sat Mar 12 23:58:48 100000 IST');
+INSERT INTO TIMESTAMPTZ_TST VALUES(3, '10000 Mar 12 23:58:48 IST');
+INSERT INTO TIMESTAMPTZ_TST VALUES(4, '100000312 23:58:48 IST');
+INSERT INTO TIMESTAMPTZ_TST VALUES(4, '1000000312 23:58:48 IST');
+--Cleanup
+DROP TABLE TIMESTAMPTZ_TST;
+-- these should fail
+SELECT make_timestamptz(1973, 07, 15, 08, 15, 55.33, '2');
+SELECT make_timestamptz(2014, 12, 10, 10, 10, 10, '+16');
+SELECT make_timestamptz(2014, 12, 10, 10, 10, 10, '-16');
+-- should be true
+SELECT make_timestamptz(1973, 07, 15, 08, 15, 55.33, '+2') = '1973-07-15 08:15:55.33+02'::timestamptz;
+SELECT make_timestamptz(1910, 12, 24, 0, 0, 0, 'Nehwon/Lankhmar');

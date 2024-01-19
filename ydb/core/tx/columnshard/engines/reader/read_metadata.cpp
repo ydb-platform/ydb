@@ -42,6 +42,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
     SelectInfo = dataAccessor.Select(readDescription);
+    StatsMode = readDescription.StatsMode;
     return true;
 }
 
@@ -55,20 +56,13 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
         }
     }
-    if (Snapshot.GetPlanStep()) {
-        auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
-        for (auto&& i : snapSchema->fields()) {
-            result.emplace(indexInfo.GetColumnId(i->name()));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i->name());
-        }
-    }
     return result;
 }
 
 std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     std::set<ui32> result;
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    for (auto&& i : indexInfo.GetPrimaryKey()) {
+    for (auto&& i : indexInfo.GetPrimaryKeyColumns()) {
         Y_ABORT_UNLESS(result.emplace(indexInfo.GetColumnId(i.first)).second);
     }
     return result;
@@ -86,7 +80,6 @@ void TReadStats::PrintToLog() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
         ("event", "statistic")
         ("begin", BeginTimestamp)
-        ("selected", SelectedIndex)
         ("index_granules", IndexGranules)
         ("index_portions", IndexPortions)
         ("index_batches", IndexBatches)

@@ -19,6 +19,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/testlib/actors
     ydb/core/testlib/basics/default
+    ydb/library/yql/minikql/comp_nodes/llvm
 )
 
 SRCS(

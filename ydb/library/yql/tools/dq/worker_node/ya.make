@@ -30,6 +30,8 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/utils/backtrace
         ydb/library/yql/providers/yt/comp_nodes/dq
+        ydb/library/yql/providers/yt/comp_nodes/llvm
+        ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/dq/actors/yt
         ydb/library/yql/providers/dq/global_worker_manager

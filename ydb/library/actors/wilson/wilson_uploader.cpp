@@ -6,7 +6,6 @@
 #include <opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
-#include <grpc++/grpc++.h>
 #include <chrono>
 
 namespace NWilson {
@@ -21,6 +20,8 @@ namespace NWilson {
         class TWilsonUploader
             : public TActorBootstrapped<TWilsonUploader>
         {
+            static constexpr size_t WILSON_SERVICE_ID = 430;
+
             TString Host;
             ui16 Port;
             TString RootCA;
@@ -30,6 +31,7 @@ namespace NWilson {
             std::unique_ptr<NServiceProto::TraceService::Stub> Stub;
             grpc::CompletionQueue CQ;
 
+            std::unique_ptr<IGrpcSigner> GrpcSigner;
             std::unique_ptr<grpc::ClientContext> Context;
             std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
             NServiceProto::ExportTraceServiceResponse Response;
@@ -51,11 +53,12 @@ namespace NWilson {
             bool WakeupScheduled = false;
 
         public:
-            TWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName)
-                : Host(std::move(host))
-                , Port(std::move(port))
-                , RootCA(std::move(rootCA))
-                , ServiceName(std::move(serviceName))
+            TWilsonUploader(WilsonUploaderParams params)
+                : Host(std::move(params.Host))
+                , Port(std::move(params.Port))
+                , RootCA(std::move(params.RootCA))
+                , ServiceName(std::move(params.ServiceName))
+                , GrpcSigner(std::move(params.GrpcSigner))
             {}
 
             ~TWilsonUploader() {
@@ -72,20 +75,19 @@ namespace NWilson {
                 }) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
-                LOG_INFO_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "TWilsonUploader::Bootstrap");
+                LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");
             }
 
             void Handle(TEvWilson::TPtr ev) {
                 if (SpansSize >= 100'000'000) {
-                    LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "dropped span due to overflow");
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID, "dropped span due to overflow");
                 } else {
                     const TMonotonic expirationTimestamp = TActivationContext::Monotonic() + MaxSpanTimeInQueue;
                     auto& span = ev->Get()->Span;
                     const ui32 size = span.ByteSizeLong();
                     Spans.push_back(TSpanQueueItem{expirationTimestamp, std::move(span), size});
                     SpansSize += size;
-                    CheckIfDone();
-                    TryToSend();
+                    TryMakeProgress();
                 }
             }
 
@@ -105,7 +107,7 @@ namespace NWilson {
                 }
 
                 if (numSpansDropped) {
-                    LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */,
+                    LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
                         "dropped " << numSpansDropped << " span(s) due to expiration");
                 }
 
@@ -128,7 +130,7 @@ namespace NWilson {
                     auto& item = Spans.front();
                     auto& s = item.Span;
 
-                    LOG_DEBUG_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "exporting span"
+                    LOG_DEBUG_S(*TlsActivationContext, WILSON_SERVICE_ID, "exporting span"
                         << " TraceId# " << HexEncode(s.trace_id())
                         << " SpanId# " << HexEncode(s.span_id())
                         << " ParentSpanId# " << HexEncode(s.parent_span_id())
@@ -139,7 +141,11 @@ namespace NWilson {
                     NextSendTimestamp += TDuration::MicroSeconds(1'000'000 / MaxSpansPerSecond);
                 }
 
+                ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
+                if (GrpcSigner) {
+                    GrpcSigner->SignClientContext(*Context);
+                }
                 Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
             }
@@ -150,7 +156,7 @@ namespace NWilson {
                     bool ok;
                     if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
                         if (!Status.ok()) {
-                            LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */,
+                            LOG_ERROR_S(*TlsActivationContext, WILSON_SERVICE_ID,
                                 "failed to commit traces: " << Status.error_message());
                         }
 
@@ -174,6 +180,10 @@ namespace NWilson {
             void HandleWakeup() {
                 Y_ABORT_UNLESS(WakeupScheduled);
                 WakeupScheduled = false;
+                TryMakeProgress();
+            }
+
+            void TryMakeProgress() {
                 CheckIfDone();
                 TryToSend();
             }
@@ -186,8 +196,12 @@ namespace NWilson {
 
     } // anonymous
 
-    IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName) {
-        return new TWilsonUploader(std::move(host), port, std::move(rootCA), std::move(serviceName));
+    IActor* CreateWilsonUploader(WilsonUploaderParams params) {
+        return new TWilsonUploader(std::move(params));
+    }
+
+    IActor* WilsonUploaderParams::CreateUploader() && {
+        return CreateWilsonUploader(std::move(*this));
     }
 
 } // NWilson

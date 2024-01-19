@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_record.h"
 #include "change_record_cdc_serializer.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
@@ -8,6 +9,8 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -39,8 +42,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Init() {
         auto opts = TPartitionWriterOpts()
             .WithCheckState(true)
-            .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), {}, ShardId, PartitionId, {}, SourceId, opts));
+            .WithAutoRegister(true)
+            .WithSourceId(SourceId);
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
     }
 
@@ -90,7 +94,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
-        for (const auto& record : ev->Get()->Records) {
+        for (auto recordPtr : ev->Get()->Records) {
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+
             if (record.GetSeqNo() <= MaxSeqNo) {
                 continue;
             }
@@ -287,7 +293,7 @@ class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
     , public TBaseChangeSender
     , public IChangeSenderResolver
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     struct TPQPartitionInfo {
         ui32 PartitionId;
@@ -650,13 +656,13 @@ class TCdcChangeSenderMain
         return KeyDesc && KeyDesc->Partitions;
     }
 
-    ui64 GetPartitionId(const TChangeRecord& record) const override {
+    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
         Y_ABORT_UNLESS(KeyDesc);
         Y_ABORT_UNLESS(KeyDesc->Partitions);
 
         switch (Stream.Format) {
             case NKikimrSchemeOp::ECdcStreamFormatProto: {
-                const auto range = TTableRange(record.GetKey());
+                const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
                 Y_ABORT_UNLESS(range.Point);
 
                 TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
@@ -680,7 +686,7 @@ class TCdcChangeSenderMain
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
                 using namespace NKikimr::NDataStreams::V1;
-                const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
+                const auto hashKey = HexBytesToDecimal(record->Get<TChangeRecord>()->GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());
             }
 

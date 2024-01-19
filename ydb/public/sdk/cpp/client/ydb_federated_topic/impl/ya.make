@@ -4,6 +4,8 @@ SRCS(
     federated_read_session.h
     federated_read_session.cpp
     federated_read_session_event.cpp
+    federated_write_session.h
+    federated_write_session.cpp
     federated_topic_impl.h
     federated_topic_impl.cpp
     federated_topic.cpp

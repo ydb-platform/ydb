@@ -15,7 +15,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 
-static const bool ENABLE_SCHEMESHARD_LOG = true;
+bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
@@ -535,6 +535,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
+    app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -821,6 +822,22 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
     default:
         return nullptr;
     }
+}
+
+void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
+{   
+    auto record = DescribePath(runtime, path);
+    const auto& pathDescr = record.GetPathDescription();
+    const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());
+
+    const TActorId sender = runtime.AllocateEdgeActor();
+    auto ev = MakeHolder<TEvFakeHive::TEvRequestDomainInfo>(subdomainKey);
+    ForwardToTablet(runtime, hive, sender, ev.Release());
+
+    const auto event = runtime.GrabEdgeEvent<TEvFakeHive::TEvRequestDomainInfoReply>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL(event->Get()->DomainInfo.ServerlessComputeResourcesMode, serverlessComputeResourcesMode);
 }
 
 TEvSchemeShard::TEvInitRootShardResult::EStatus NSchemeShardUT_Private::TTestEnv::InitRoot(NActors::TTestActorRuntime &runtime, ui64 schemeRoot, const NActors::TActorId &sender, const TString& domainName, const TDomainsInfo::TDomain::TStoragePoolKinds& StoragePoolTypes, const TString& owner) {

@@ -26,6 +26,7 @@ TString CreateQuerySession(const TGRpcClientConfig& clientConfig) {
             UNIT_ASSERT_C(grpcStatus.GRpcStatusCode == 0, grpcStatus.Msg + " " + grpcStatus.Details);
             UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT(response.session_id() != "");
+            UNIT_ASSERT(response.node_id() != 0);
             sessionId = response.session_id();
     };
 

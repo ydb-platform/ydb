@@ -5,6 +5,7 @@ SRCS(
     balancer.h
     boot_queue.cpp
     boot_queue.h
+    domain_info.cpp
     domain_info.h
     drain.cpp
     fill.cpp
@@ -32,6 +33,7 @@ SRCS(
     follower_group.h
     follower_tablet_info.cpp
     follower_tablet_info.h
+    storage_balancer.cpp
     storage_group_info.cpp
     storage_group_info.h
     storage_pool_info.cpp

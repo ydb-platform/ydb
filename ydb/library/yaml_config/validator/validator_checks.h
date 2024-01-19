@@ -27,7 +27,7 @@
 //     }
 // }
 
-namespace NYamlConfig::NValidator {
+namespace NKikimr::NYamlConfig::NValidator {
 namespace NDetail {
 
 template <typename TThis>
@@ -428,4 +428,4 @@ private:
     TEnumValidator* Validator_;
 };
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator

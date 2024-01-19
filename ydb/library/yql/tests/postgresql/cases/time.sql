@@ -13,3 +13,31 @@ INSERT INTO TIME_TBL VALUES ('23:59');
 INSERT INTO TIME_TBL VALUES ('11:59:59.99 PM');
 INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
 INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+SELECT f1 AS "None" FROM TIME_TBL WHERE f1 < '00:00';
+-- Check edge cases
+SELECT '23:59:59.999999'::time;
+SELECT '23:59:59.9999999'::time;  -- rounds up
+SELECT '23:59:60'::time;  -- rounds up
+SELECT '24:00:00'::time;  -- allowed
+SELECT '24:00:00.01'::time;  -- not allowed
+SELECT '23:59:60.01'::time;  -- not allowed
+SELECT '24:01:00'::time;  -- not allowed
+SELECT '25:00:00'::time;  -- not allowed
+--
+-- test EXTRACT
+--
+SELECT EXTRACT(MICROSECOND FROM TIME '2020-05-26 13:30:25.575401');
+SELECT EXTRACT(MILLISECOND FROM TIME '2020-05-26 13:30:25.575401');
+SELECT EXTRACT(SECOND      FROM TIME '2020-05-26 13:30:25.575401');
+SELECT EXTRACT(MINUTE      FROM TIME '2020-05-26 13:30:25.575401');
+SELECT EXTRACT(HOUR        FROM TIME '2020-05-26 13:30:25.575401');
+SELECT EXTRACT(DAY         FROM TIME '2020-05-26 13:30:25.575401');  -- error
+SELECT EXTRACT(FORTNIGHT   FROM TIME '2020-05-26 13:30:25.575401');  -- error
+SELECT EXTRACT(TIMEZONE    FROM TIME '2020-05-26 13:30:25.575401');  -- error
+SELECT EXTRACT(EPOCH       FROM TIME '2020-05-26 13:30:25.575401');
+-- date_part implementation is mostly the same as extract, so only
+-- test a few cases for additional coverage.
+SELECT date_part('microsecond', TIME '2020-05-26 13:30:25.575401');
+SELECT date_part('millisecond', TIME '2020-05-26 13:30:25.575401');
+SELECT date_part('second',      TIME '2020-05-26 13:30:25.575401');
+SELECT date_part('epoch',       TIME '2020-05-26 13:30:25.575401');

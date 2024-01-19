@@ -1716,7 +1716,7 @@ void TServiceBase::ReplyError(
     YT_LOG_EVENT(Logger, logLevel, richError);
 
     auto errorMessage = CreateErrorResponseMessage(requestId, richError);
-    YT_UNUSED_FUTURE(replyBus->Send(errorMessage, NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+    YT_UNUSED_FUTURE(replyBus->Send(errorMessage));
 }
 
 void TServiceBase::OnRequestAuthenticated(
@@ -2305,11 +2305,11 @@ void TServiceBase::OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context)
     auto payload = GetDiscoverRequestPayload(context);
     auto it = DiscoverRequestsByPayload_.find(payload);
     if (it != DiscoverRequestsByPayload_.end()) {
-         auto& requestSet = it->second;
-         if (requestSet.Has(context)) {
-             requestSet.Remove(context);
-             ReplyDiscoverRequest(context, IsUp(context));
-         }
+        auto& requestSet = it->second;
+        if (requestSet.Has(context)) {
+            requestSet.Remove(context);
+            ReplyDiscoverRequest(context, IsUp(context));
+        }
     }
 }
 
@@ -2451,6 +2451,7 @@ void TServiceBase::DoConfigure(
             auto methodConfig = methodIt ? methodIt->second : New<TMethodConfig>();
 
             const auto& descriptor = runtimeInfo->Descriptor;
+
             runtimeInfo->Heavy.store(methodConfig->Heavy.value_or(descriptor.Options.Heavy));
             runtimeInfo->QueueSizeLimit.store(methodConfig->QueueSizeLimit.value_or(descriptor.QueueSizeLimit));
             runtimeInfo->ConcurrencyLimit.Reconfigure(methodConfig->ConcurrencyLimit.value_or(descriptor.ConcurrencyLimit));

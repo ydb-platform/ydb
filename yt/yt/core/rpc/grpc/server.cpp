@@ -174,7 +174,8 @@ private:
             DoStop(graceful).Get().ThrowOnError();
         } catch (...) {
             if (auto* logFile = TryGetShutdownLogFile()) {
-                ::fprintf(logFile, "GRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",
+                ::fprintf(logFile, "%s\tGRPC server shutdown failed: %s (ThreadId: %" PRISZT ")\n",
+                    GetInstant().ToString().c_str(),
                     CurrentExceptionMessage().c_str(),
                     GetCurrentThreadId());
             }
@@ -967,7 +968,7 @@ private:
                 YT_LOG_WARNING(error);
 
                 auto responseMessage = CreateErrorResponseMessage(RequestId_, error);
-                YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage), NBus::TSendOptions(EDeliveryTrackingLevel::None)));
+                YT_UNUSED_FUTURE(ReplyBus_->Send(std::move(responseMessage)));
             }
         }
 

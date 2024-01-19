@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     cache.cpp
     cache_base.cpp
-    options.cpp
     rpc.cpp
 )
 

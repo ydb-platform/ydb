@@ -26,6 +26,7 @@
 #include "tool_setup.h"
 #include "tool_sdecls.h"
 #include "tool_urlglob.h"
+#include "var.h"
 
 struct GlobalConfig;
 
@@ -127,6 +128,7 @@ struct OperationConfig {
   struct getout *url_get;   /* point to the node to fill in URL */
   struct getout *url_out;   /* point to the node to fill in outfile */
   struct getout *url_ul;    /* point to the node to fill in upload */
+  char *ipfs_gateway;
   char *doh_url;
   char *cipher_list;
   char *proxy_cipher_list;
@@ -322,6 +324,7 @@ struct GlobalConfig {
   unsigned short parallel_max; /* MAX_PARALLEL is the maximum */
   bool parallel_connect;
   char *help_category;            /* The help category, if set */
+  struct var *variables;
   struct OperationConfig *first;
   struct OperationConfig *current;
   struct OperationConfig *last;   /* Always last in the struct */

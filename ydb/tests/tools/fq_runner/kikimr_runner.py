@@ -74,6 +74,12 @@ class BaseTenant(abc.ABC):
         if 'query_service_config' not in self.config_generator.yaml_config:
             self.config_generator.yaml_config['query_service_config'] = {}
         return self.config_generator.yaml_config['query_service_config']
+    
+    @property
+    def auth_config(self):
+        if 'auth_config' not in self.config_generator.yaml_config:
+            self.config_generator.yaml_config['auth_config'] = {}
+        return self.config_generator.yaml_config['auth_config']
 
     def enable_logging(self, component, level=LogLevels.TRACE):
         log_config = self.config_generator.yaml_config['log_config']
@@ -175,7 +181,7 @@ class BaseTenant(abc.ABC):
         if node_index is None:
             return sum(self.get_task_count(n, query_id) for n in self.kikimr_cluster.nodes)
         else:
-            result = self.get_sensors(node_index, "yq").find_sensor({"query_id": query_id, "Stage": "Total", "sensor": "TaskCount"})
+            result = self.get_sensors(node_index, "yq").find_sensor({"query_id": query_id, "Stage": "Total", "sensor": "Tasks"})
             return result if result is not None else 0
 
     def get_actor_count(self, node_index, activity):

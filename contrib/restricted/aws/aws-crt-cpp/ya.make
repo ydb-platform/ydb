@@ -63,6 +63,12 @@ CFLAGS(
     -DS2N___RESTRICT__SUPPORTED
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_CRT_CPP_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/Allocator.cpp
     source/Api.cpp

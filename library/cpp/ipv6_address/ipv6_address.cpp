@@ -310,7 +310,7 @@ NAddr::IRemoteAddr* ToIRemoteAddr(const TIpv6Address& Address, TIpPort Port) {
     return new TRemoteAddr(Address, Port);
 }
 
-std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromString(const TString& RawStr,
+std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromString(const TStringBuf RawStr,
                                                                                   TIpPort DefaultPort,
                                                                                   bool& Ok) noexcept {
     // Cout << "ParseHostAndMayBePortFromString: " << RawStr << ", Port: " << DefaultPort << Endl;
@@ -320,7 +320,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
     // ---------------------------------------------------------------------
 
     const size_t BracketColPos = RawStr.find("]:");
-    if (BracketColPos != TString::npos) {
+    if (BracketColPos != TStringBuf::npos) {
         // [ipv6]:port
         if (!RawStr.StartsWith('[')) {
             Ok = false;
@@ -375,7 +375,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
     // ---------------------------------------------------------------------
 
     const size_t ColPos = RawStr.find(':');
-    if (ColPos != TString::npos) {
+    if (ColPos != TStringBuf::npos) {
         // host:port
         // ipv4:port
         // ipv6

@@ -47,6 +47,17 @@ CFLAGS(
     -DS2N___RESTRICT__SUPPORTED
 )
 
+IF (CLANG_CL)
+    CFLAGS(
+        -DAWS_HTTP_EXPORTS
+        -std=c99
+    )
+ELSEIF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_HTTP_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/connection.c
     source/connection_manager.c

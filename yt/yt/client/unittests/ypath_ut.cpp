@@ -287,9 +287,9 @@ TEST_F(TYPathTest, InvalidCases)
 
     // get non-existent attribute from existent node
     EXPECT_ANY_THROW({
-       Set("/c", "{}");
-       Get("/c/@some");
-   });
+        Set("/c", "{}");
+        Get("/c/@some");
+    });
 
     // remove non-existing child
     EXPECT_ANY_THROW(Remove("/a"));

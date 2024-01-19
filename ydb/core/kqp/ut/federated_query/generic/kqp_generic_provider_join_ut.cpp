@@ -63,15 +63,13 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
         }
 
         std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr = MakeKikimrRunnerWithConnector();
-
-        auto tableCLient = kikimr->GetTableClient();
-        auto session = tableCLient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr->GetQueryClient();
 
         // external tables to pg/ch
         {
             const TString sql = fmt::format(
                 R"sql(
-                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="");
+                CREATE OBJECT pg_password_obj (TYPE SECRET) WITH (value="{pg_password}");
                 CREATE EXTERNAL DATA SOURCE pg_data_source WITH (
                     SOURCE_TYPE="PostgreSQL",
                     LOCATION="{pg_host}:{pg_port}",
@@ -97,13 +95,14 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
                 "pg_host"_a = GetPgHost(),
                 "pg_port"_a = GetPgPort(),
                 "pg_user"_a = GetPgUser(),
+                "pg_password"_a = GetPgPassword(),
                 "pg_database"_a = GetPgDatabase(),
                 "ch_host"_a = GetChHost(),
                 "ch_port"_a = GetChPort(),
                 "ch_database"_a = GetChDatabase(),
                 "ch_user"_a = GetChUser(),
                 "ch_password"_a = GetChPassword());
-            auto result = session.ExecuteSchemeQuery(sql).GetValueSync();
+            auto result = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -115,7 +114,6 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
             WHERE ch.key > 998
         )sql";
 
-        auto queryClient = kikimr->GetQueryClient();
         auto result = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

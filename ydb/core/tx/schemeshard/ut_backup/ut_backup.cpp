@@ -73,11 +73,11 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
 
         Backup(runtime, ToString(Codec), R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )", [](TTestBasicRuntime& runtime) {
-            WriteRow(runtime, "a", "valueA");
+            UpdateRow(runtime, "Table", 1, "valueA");
         });
     }
 
@@ -86,17 +86,17 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
 
         Backup(runtime, ToString(Codec), R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
             SplitBoundary {
               KeyPrefix {
-                Tuple { Optional { Text: "b" } }
+                Tuple { Optional { Uint32: 2 } }
               }
             }
         )", [](TTestBasicRuntime& runtime) {
-            WriteRow(runtime, "a", "valueA", TTestTxConfig::FakeHiveTablets + 0);
-            WriteRow(runtime, "b", "valueb", TTestTxConfig::FakeHiveTablets + 1);
+            UpdateRow(runtime, "Table", 1, "valueA", TTestTxConfig::FakeHiveTablets + 0);
+            UpdateRow(runtime, "Table", 2, "valueb", TTestTxConfig::FakeHiveTablets + 1);
         });
     }
 
@@ -107,12 +107,12 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
 
         const auto actualResult = Backup(runtime, ToString(Codec), R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )", [](TTestBasicRuntime& runtime) {
             for (ui32 i = 0; i < 100 * batchSize; ++i) {
-                WriteRow(runtime, Sprintf("a%d", i), "valueA");
+                UpdateRow(runtime, "Table", i, "valueA");
             }
         }, batchSize, minWriteBatchSize);
 

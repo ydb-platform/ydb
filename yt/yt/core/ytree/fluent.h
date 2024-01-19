@@ -4,6 +4,7 @@
 #include "tree_visitor.h"
 #include "tree_builder.h"
 #include "convert.h"
+#include "attributes.h"
 #include "attribute_consumer.h"
 #include "helpers.h"
 

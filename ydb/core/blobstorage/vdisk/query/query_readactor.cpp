@@ -60,6 +60,7 @@ namespace NKikimr {
                     " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()),
                     ui32(Result->DiskDataItemPtrs.size())));
             ctx.Send(NotifyID, new TEvents::TEvCompleted);
+            Span.EndOk();
             Die(ctx);
         }
 
@@ -96,6 +97,7 @@ namespace NKikimr {
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            Span.EndError("EvPoisonPill");
             TThis::Die(ctx);
         }
 

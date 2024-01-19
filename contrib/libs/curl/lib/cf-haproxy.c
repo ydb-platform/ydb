@@ -30,7 +30,7 @@
 #include "urldata.h"
 #include "cfilters.h"
 #include "cf-haproxy.h"
-#include "curl_log.h"
+#include "curl_trc.h"
 #include "multiif.h"
 
 /* The last 3 #include files should be in this order */
@@ -86,12 +86,12 @@ static CURLcode cf_haproxy_date_out_set(struct Curl_cfilter*cf,
   if(data->set.str[STRING_HAPROXY_CLIENT_IP])
     client_ip = data->set.str[STRING_HAPROXY_CLIENT_IP];
   else
-    client_ip = data->info.conn_primary_ip;
+    client_ip = data->info.conn_local_ip;
 
   result = Curl_dyn_addf(&ctx->data_out, "PROXY %s %s %s %i %i\r\n",
                          tcp_version,
-                         data->info.conn_local_ip,
                          client_ip,
+                         data->info.conn_primary_ip,
                          data->info.conn_local_port,
                          data->info.conn_primary_port);
 
@@ -157,36 +157,30 @@ static void cf_haproxy_destroy(struct Curl_cfilter *cf,
                                struct Curl_easy *data)
 {
   (void)data;
-  DEBUGF(LOG_CF(data, cf, "destroy"));
+  CURL_TRC_CF(data, cf, "destroy");
   cf_haproxy_ctx_free(cf->ctx);
 }
 
 static void cf_haproxy_close(struct Curl_cfilter *cf,
                              struct Curl_easy *data)
 {
-  DEBUGF(LOG_CF(data, cf, "close"));
+  CURL_TRC_CF(data, cf, "close");
   cf->connected = FALSE;
   cf_haproxy_ctx_reset(cf->ctx);
   if(cf->next)
     cf->next->cft->do_close(cf->next, data);
 }
 
-static int cf_haproxy_get_select_socks(struct Curl_cfilter *cf,
-                                       struct Curl_easy *data,
-                                       curl_socket_t *socks)
+static void cf_haproxy_adjust_pollset(struct Curl_cfilter *cf,
+                                      struct Curl_easy *data,
+                                      struct easy_pollset *ps)
 {
-  int fds;
-
-  fds = cf->next->cft->get_select_socks(cf->next, data, socks);
-  if(!fds && cf->next->connected && !cf->connected) {
+  if(cf->next->connected && !cf->connected) {
     /* If we are not connected, but the filter "below" is
      * and not waiting on something, we are sending. */
-    socks[0] = Curl_conn_cf_get_socket(cf, data);
-    return GETSOCK_WRITESOCK(0);
+    Curl_pollset_set_out_only(data, ps, Curl_conn_cf_get_socket(cf, data));
   }
-  return fds;
 }
-
 
 struct Curl_cftype Curl_cft_haproxy = {
   "HAPROXY",
@@ -196,7 +190,7 @@ struct Curl_cftype Curl_cft_haproxy = {
   cf_haproxy_connect,
   cf_haproxy_close,
   Curl_cf_def_get_host,
-  cf_haproxy_get_select_socks,
+  cf_haproxy_adjust_pollset,
   Curl_cf_def_data_pending,
   Curl_cf_def_send,
   Curl_cf_def_recv,
@@ -214,7 +208,7 @@ static CURLcode cf_haproxy_create(struct Curl_cfilter **pcf,
   CURLcode result;
 
   (void)data;
-  ctx = calloc(sizeof(*ctx), 1);
+  ctx = calloc(1, sizeof(*ctx));
   if(!ctx) {
     result = CURLE_OUT_OF_MEMORY;
     goto out;

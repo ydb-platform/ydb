@@ -38,6 +38,8 @@
 #include "warnless.h"
 #include "fopen.h"
 #include "rename.h"
+#include "strdup.h"
+#include "inet_pton.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -95,19 +97,37 @@ static struct altsvc *altsvc_createid(const char *srchost,
                                       unsigned int srcport,
                                       unsigned int dstport)
 {
-  struct altsvc *as = calloc(sizeof(struct altsvc), 1);
+  struct altsvc *as = calloc(1, sizeof(struct altsvc));
   size_t hlen;
+  size_t dlen;
   if(!as)
     return NULL;
   hlen = strlen(srchost);
+  dlen = strlen(dsthost);
   DEBUGASSERT(hlen);
-  as->src.host = strdup(srchost);
+  DEBUGASSERT(dlen);
+  if(!hlen || !dlen)
+    /* bad input */
+    return NULL;
+  if((hlen > 2) && srchost[0] == '[') {
+    /* IPv6 address, strip off brackets */
+    srchost++;
+    hlen -= 2;
+  }
+  else if(srchost[hlen - 1] == '.')
+    /* strip off trailing dot */
+    hlen--;
+  if((dlen > 2) && dsthost[0] == '[') {
+    /* IPv6 address, strip off brackets */
+    dsthost++;
+    dlen -= 2;
+  }
+
+  as->src.host = Curl_strndup(srchost, hlen);
   if(!as->src.host)
     goto error;
-  if(hlen && (srchost[hlen - 1] == '.'))
-    /* strip off trailing any dot */
-    as->src.host[--hlen] = 0;
-  as->dst.host = strdup(dsthost);
+
+  as->dst.host = Curl_strndup(dsthost, dlen);
   if(!as->dst.host)
     goto error;
 
@@ -231,18 +251,40 @@ fail:
 static CURLcode altsvc_out(struct altsvc *as, FILE *fp)
 {
   struct tm stamp;
+  const char *dst6_pre = "";
+  const char *dst6_post = "";
+  const char *src6_pre = "";
+  const char *src6_post = "";
   CURLcode result = Curl_gmtime(as->expires, &stamp);
   if(result)
     return result;
-
+#ifdef ENABLE_IPV6
+  else {
+    char ipv6_unused[16];
+    if(1 == Curl_inet_pton(AF_INET6, as->dst.host, ipv6_unused)) {
+      dst6_pre = "[";
+      dst6_post = "]";
+    }
+    if(1 == Curl_inet_pton(AF_INET6, as->src.host, ipv6_unused)) {
+      src6_pre = "[";
+      src6_post = "]";
+    }
+  }
+#endif
   fprintf(fp,
-          "%s %s %u "
-          "%s %s %u "
+          "%s %s%s%s %u "
+          "%s %s%s%s %u "
           "\"%d%02d%02d "
           "%02d:%02d:%02d\" "
           "%u %d\n",
-          Curl_alpnid2str(as->src.alpnid), as->src.host, as->src.port,
-          Curl_alpnid2str(as->dst.alpnid), as->dst.host, as->dst.port,
+          Curl_alpnid2str(as->src.alpnid),
+          src6_pre, as->src.host, src6_post,
+          as->src.port,
+
+          Curl_alpnid2str(as->dst.alpnid),
+          dst6_pre, as->dst.host, dst6_post,
+          as->dst.port,
+
           stamp.tm_year + 1900, stamp.tm_mon + 1, stamp.tm_mday,
           stamp.tm_hour, stamp.tm_min, stamp.tm_sec,
           as->persist, as->prio);
@@ -257,7 +299,7 @@ static CURLcode altsvc_out(struct altsvc *as, FILE *fp)
  */
 struct altsvcinfo *Curl_altsvc_init(void)
 {
-  struct altsvcinfo *asi = calloc(sizeof(struct altsvcinfo), 1);
+  struct altsvcinfo *asi = calloc(1, sizeof(struct altsvcinfo));
   if(!asi)
     return NULL;
   Curl_llist_init(&asi->list, NULL);
@@ -500,9 +542,21 @@ CURLcode Curl_altsvc_parse(struct Curl_easy *data,
         if(*p != ':') {
           /* host name starts here */
           const char *hostp = p;
-          while(*p && (ISALNUM(*p) || (*p == '.') || (*p == '-')))
-            p++;
-          len = p - hostp;
+          if(*p == '[') {
+            /* pass all valid IPv6 letters - does not handle zone id */
+            len = strspn(++p, "0123456789abcdefABCDEF:.");
+            if(p[len] != ']')
+              /* invalid host syntax, bail out */
+              break;
+            /* we store the IPv6 numerical address *with* brackets */
+            len += 2;
+            p = &p[len-1];
+          }
+          else {
+            while(*p && (ISALNUM(*p) || (*p == '.') || (*p == '-')))
+              p++;
+            len = p - hostp;
+          }
           if(!len || (len >= MAX_ALTSVC_HOSTLEN)) {
             infof(data, "Excessive alt-svc host name, ignoring.");
             valid = FALSE;

@@ -831,7 +831,7 @@ TEST(TLogicalTypeTest, TestAllTypesInCombineFunctions)
 }
 
 class TCombineLogicalMetatypeTests
-    : public ::testing::TestWithParam<std::pair<TString,TCombineTypeFunc>>
+    : public ::testing::TestWithParam<std::pair<TString, TCombineTypeFunc>>
 { };
 
 INSTANTIATE_TEST_SUITE_P(

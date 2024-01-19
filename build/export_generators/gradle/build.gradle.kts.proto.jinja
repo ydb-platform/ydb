@@ -26,9 +26,11 @@ java {
 }
 
 dependencies {
-{% for library in targets[0].consumer_classpath -%}
-    api({{ library }})
-{% endfor -%}
+{%  if targets[0].consumer is defined -%}
+{%-    for library in targets[0].consumer -%}
+    api({{ library.classpath }})
+{%     endfor -%}
+{%- endif -%}
 
 {% if targets[0].proto_namespace is defined -%}
     protobuf(files(File(buildProtoDir, "{{ targets[0].proto_namespace }}")))

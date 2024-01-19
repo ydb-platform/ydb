@@ -24,11 +24,10 @@
 
 #include "timeval.h"
 
-#if defined(WIN32) && !defined(MSDOS)
+#if defined(_WIN32)
 
-/* set in win32_init() */
-extern LARGE_INTEGER Curl_freq;
-extern bool Curl_isVistaOrGreater;
+#include <curl/curl.h>
+#include "system_win32.h"
 
 /* In case of bug fix this function has a counterpart in tool_util.c */
 struct curltime Curl_now(void)
@@ -207,6 +206,20 @@ timediff_t Curl_timediff(struct curltime newer, struct curltime older)
   else if(diff <= (TIMEDIFF_T_MIN/1000))
     return TIMEDIFF_T_MIN;
   return diff * 1000 + (newer.tv_usec-older.tv_usec)/1000;
+}
+
+/*
+ * Returns: time difference in number of milliseconds, rounded up.
+ * For too large diffs it returns max value.
+ */
+timediff_t Curl_timediff_ceil(struct curltime newer, struct curltime older)
+{
+  timediff_t diff = (timediff_t)newer.tv_sec-older.tv_sec;
+  if(diff >= (TIMEDIFF_T_MAX/1000))
+    return TIMEDIFF_T_MAX;
+  else if(diff <= (TIMEDIFF_T_MIN/1000))
+    return TIMEDIFF_T_MIN;
+  return diff * 1000 + (newer.tv_usec - older.tv_usec + 999)/1000;
 }
 
 /*

@@ -46,6 +46,12 @@ CFLAGS(
     -DS2N___RESTRICT__SUPPORTED
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DAWS_EVENT_STREAM_EXPORTS
+    )
+ENDIF()
+
 SRCS(
     source/event_stream.c
     source/event_stream_channel_handler.c

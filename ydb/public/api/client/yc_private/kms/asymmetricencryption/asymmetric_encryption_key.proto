@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.kms.v1.asymmetricencryption;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/kms/asymmetricencryption;kms";
+option java_outer_classname = "PAEK";
+
+enum AsymmetricEncryptionAlgorithm {
+  ASYMMETRIC_ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
+  RSA_2048_ENC_OAEP_SHA_256 = 1;
+  RSA_3072_ENC_OAEP_SHA_256 = 2;
+  RSA_4096_ENC_OAEP_SHA_256 = 3;
+
+  // Leaving space for new algorithms
+  RSA_2048_ENC_OAEP_SHA_256_HSM = 65;
+  RSA_3072_ENC_OAEP_SHA_256_HSM = 66;
+  RSA_4096_ENC_OAEP_SHA_256_HSM = 67;
+}
+
+message AsymmetricEncryptionKey {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    INACTIVE = 3;
+    DELETED = 4;
+  }
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+  Status status = 7;
+  AsymmetricEncryptionAlgorithm encryption_algorithm = 8;
+  bool deletion_protection = 9;
+}

@@ -260,7 +260,12 @@ namespace NActors {
             }
         }
 
-        SetEnoughCpu(enoughCpu);
+        if (enoughCpu) {
+            SetEnoughCpu(true);
+            StarvingInRow = 0;
+        } else {
+            SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
+        }
 
         // calculate ping time
         auto it = std::min_element(PingQ.begin(), PingQ.end());

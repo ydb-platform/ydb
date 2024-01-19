@@ -15,13 +15,11 @@ target_link_libraries(restricted-boost-variant INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   restricted-boost-assert
-  restricted-boost-bind
   restricted-boost-config
   restricted-boost-container_hash
   restricted-boost-core
   restricted-boost-detail
   restricted-boost-integer
-  restricted-boost-move
   restricted-boost-mpl
   restricted-boost-preprocessor
   restricted-boost-static_assert

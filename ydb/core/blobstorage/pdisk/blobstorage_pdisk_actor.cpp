@@ -648,7 +648,7 @@ public:
         }
         str << " StateErrorReason# " << StateErrorReason;
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, str.Str()));
-        for (auto &log : evMultiLog.Logs) {
+        for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
         PDisk->Mon.WriteLog.CountRequest(0);
@@ -783,9 +783,9 @@ public:
     }
 
     void Handle(NPDisk::TEvMultiLog::TPtr &ev) {
-        for (auto &log : ev->Get()->Logs) {
+        for (auto &[log, traceId] : ev->Get()->Logs) {
             double burstMs;
-            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(ev->TraceId));
+            TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*log, ev->Sender, burstMs, std::move(traceId));
             CheckBurst(request->IsSensitive, burstMs);
             request->Orbit = std::move(log->Orbit);
             PDisk->InputRequest(request);
@@ -796,7 +796,7 @@ public:
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s Marker# BSY01",
             (ui32)PDisk->PDiskId, ev->Get()->ToString().c_str());
         double burstMs;
-        auto* request = PDisk->ReqCreator.CreateFromEv<TLogRead>(*ev->Get(), ev->Sender, &burstMs);
+        auto* request = PDisk->ReqCreator.CreateFromEvPtr<TLogRead>(ev, &burstMs);
         CheckBurst(request->IsSensitive, burstMs);
         PDisk->InputRequest(request);
     }
@@ -874,7 +874,7 @@ public:
     }
 
     void Handle(NPDisk::TEvAskForCutLog::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TAskForCutLog>(*ev->Get(), ev->Sender);
+        auto* request = PDisk->ReqCreator.CreateFromEvPtr<TAskForCutLog>(ev);
         PDisk->InputRequest(request);
     }
 
@@ -1135,7 +1135,7 @@ public:
     }
 
     void Handle(NPDisk::TEvReadLogContinue::TPtr &ev) {
-        auto *request = PDisk->ReqCreator.CreateFromEv<TLogReadContinue>(*ev->Get(), SelfId());
+        auto *request = PDisk->ReqCreator.CreateFromEvPtr<TLogReadContinue>(ev);
         PDisk->InputRequest(request);
     }
 

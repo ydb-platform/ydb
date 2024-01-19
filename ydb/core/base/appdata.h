@@ -11,6 +11,7 @@
 #include "event_filter.h"
 
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/cms.pb.h>

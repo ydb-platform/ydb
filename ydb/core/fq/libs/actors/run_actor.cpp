@@ -183,64 +183,68 @@ public:
     }
 
     void Bootstrap() {
-        TProgramFactory progFactory(false, FunctionRegistry, NextUniqueId, DataProvidersInit, "yq");
-        progFactory.SetModules(ModuleResolver);
-        progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry, nullptr));
-        progFactory.SetGatewaysConfig(&GatewaysConfig);
+        try {
+            TProgramFactory progFactory(false, FunctionRegistry, NextUniqueId, DataProvidersInit, "yq");
+            progFactory.SetModules(ModuleResolver);
+            progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry, nullptr));
+            progFactory.SetGatewaysConfig(&GatewaysConfig);
 
-        Program = progFactory.Create("-stdin-", Sql, SessionId);
-        Program->EnableResultPosition();
+            Program = progFactory.Create("-stdin-", Sql, SessionId);
+            Program->EnableResultPosition();
 
-        // parse phase
-        {
-            if (!Program->ParseSql(SqlSettings)) {
-                SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
+            // parse phase
+            {
+                if (!Program->ParseSql(SqlSettings)) {
+                    SendStatusAndDie(TProgram::TStatus::Error, "Failed to parse query");
+                    return;
+                }
+
+                if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
+                    SendStatusAndDie(TProgram::TStatus::Ok);
+                    return;
+                }
+            }
+
+            // compile phase
+            {
+                if (!Program->Compile("")) {
+                    SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
+                    return;
+                }
+
+                if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
+                    SendStatusAndDie(TProgram::TStatus::Ok);
+                    return;
+                }
+            }
+
+            Compiled = true;
+
+            // next phases can be async: optimize, validate, run
+            TProgram::TFutureStatus futureStatus;
+            switch (ExecuteMode) {
+            case FederatedQuery::ExecuteMode::EXPLAIN:
+                futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
+                break;
+            case FederatedQuery::ExecuteMode::VALIDATE:
+                futureStatus = Program->ValidateAsync("");
+                break;
+            case FederatedQuery::ExecuteMode::RUN:
+                futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
+                break;
+            default:
+                SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
                 return;
             }
 
-            if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
-                SendStatusAndDie(TProgram::TStatus::Ok);
-                return;
-            }
+            futureStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
+                actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
+            });
+
+            Become(&TProgramRunnerActor::StateFunc);
+        } catch (...) {
+            SendStatusAndDie(TProgram::TStatus::Error, CurrentExceptionMessage());
         }
-
-        // compile phase
-        {
-            if (!Program->Compile("")) {
-                SendStatusAndDie(TProgram::TStatus::Error, "Failed to compile query");
-                return;
-            }
-
-            if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
-                SendStatusAndDie(TProgram::TStatus::Ok);
-                return;
-            }
-        }
-
-        Compiled = true;
-
-        // next phases can be async: optimize, validate, run
-        TProgram::TFutureStatus futureStatus;
-        switch (ExecuteMode) {
-        case FederatedQuery::ExecuteMode::EXPLAIN:
-            futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
-            break;
-        case FederatedQuery::ExecuteMode::VALIDATE:
-            futureStatus = Program->ValidateAsync("");
-            break;
-        case FederatedQuery::ExecuteMode::RUN:
-            futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
-            break;
-        default:
-            SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
-            return;
-        }
-
-        futureStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
-            actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
-        });
-
-        Become(&TProgramRunnerActor::StateFunc);
     }
 
     void SendStatusAndDie(NYql::TProgram::TStatus status, const TString& message = "") {

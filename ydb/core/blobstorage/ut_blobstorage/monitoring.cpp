@@ -119,7 +119,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
 
     updateCounters();
     UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
-    
+
     actor->SetGroupId(groupId);
     env.Runtime->Register(actor, 1);
     env.Sim(TDuration::Minutes(15));
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(CostMetricsGetMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 100, 10, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10000, 1000, 1000);
 }
-    
+
 Y_UNIT_TEST_SUITE(CostMetricsGetBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Get, 1, 1, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Get, 10, 1, 1000);

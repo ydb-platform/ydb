@@ -62,7 +62,7 @@ from __future__ import absolute_import, division, print_function
 
 import sys
 import logging
-import imp
+import importlib
 import contextlib
 import types
 import copy
@@ -297,8 +297,7 @@ class RenameImport(object):
                 flog.debug('What to do here?')
 
         name = bits[0]
-        module_info = imp.find_module(name, path)
-        return imp.load_module(name, *module_info)
+        return importlib.import_module(name, path)
 
 
 class hooks(object):

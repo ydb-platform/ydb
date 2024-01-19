@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
@@ -73,6 +74,17 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
     FillClusterAuth(clusterConfig, s3.auth(), authToken, accountIdSignatures);
 }
 
+std::pair<TString, bool> ParseHttpEndpoint(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf host;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, host, uri);
+
+    // by default useSsl is true
+    // explicit "http://" scheme should disable ssl usage
+    return std::make_pair(ToString(host), scheme != "http");
+}
+
 void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
@@ -81,11 +93,13 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const FederatedQuery::Monitoring& monitoring) {
     clusterConfig.SetName(name);
 
-    clusterConfig.SetCluster(endpoint);
+    auto [address, useSsl] = ParseHttpEndpoint(endpoint);
+
+    clusterConfig.SetCluster(address);
     clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
-    clusterConfig.SetUseSsl(true);
+    clusterConfig.SetUseSsl(useSsl);
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
@@ -106,11 +120,7 @@ void FillGenericClusterConfigBase(
     clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
     clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
     FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
-
-    // Since resolver always returns secure ports, we'll always ask for secure connections
-    // between remote Connector and the data source:
-    // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.cpp#L24
-    clusterCfg.SetUseSsl(true);
+    clusterCfg.SetUseSsl(!common.GetDisableSslForGenericDataSources());
 
     // In YQv1 we just hardcode desired protocols here.
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.

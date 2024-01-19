@@ -14,7 +14,7 @@ target_compile_options(restricted-aws-aws-c-common PRIVATE
   -DAWS_PTHREAD_SETNAME_TAKES_2ARGS
   -DCJSON_HIDE_SYMBOLS
   -DHAVE_SYSCONF
-  -DAWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR
+  -DAWS_COMMON_EXPORTS
   -DHAVE_MM256_EXTRACT_EPI64
   -DHAVE_AVX2_INTRINSICS
   -DUSE_SIMD_ENCODING
@@ -53,17 +53,6 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lru_cache.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/math.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/memtrace.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c

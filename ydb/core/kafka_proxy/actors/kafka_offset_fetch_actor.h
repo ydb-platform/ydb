@@ -19,18 +19,25 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void StateWork(TAutoPtr<IEventHandle>& ev);
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);
+        }
+    }
+
     void Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx);
     void ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic);
     TOffsetFetchResponseData::TPtr GetOffsetFetchResponse();
+    void ReplyError(const TActorContext& ctx);
 
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
-    std::unordered_map<TString, TopicEntities> TopicToEntities_;
-    std::unordered_map<TString, std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>> TopicToOffsets_;
-    ui32 InflyTopics_ = 0;
+    std::unordered_map<TString, TopicEntities> TopicToEntities;
+    std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
+    ui32 InflyTopics = 0;
 
 };
 

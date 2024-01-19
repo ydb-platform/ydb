@@ -48,7 +48,7 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 # ifndef R_OK
 #  define R_OK 4
 # endif
@@ -311,8 +311,7 @@ static char *escape_string(struct Curl_easy *data,
   table = formtable;
   /* data can be NULL when this function is called indirectly from
      curl_formget(). */
-  if(strategy == MIMESTRATEGY_MAIL ||
-     (data && (data->set.mime_options & CURLMIMEOPT_FORMESCAPE)))
+  if(strategy == MIMESTRATEGY_MAIL || (data && (data->set.mime_formescape)))
     table = mimetable;
 
   Curl_dyn_init(&db, CURL_MAX_INPUT_LENGTH);
@@ -1167,14 +1166,16 @@ static void mime_subparts_unbind(void *ptr)
 
 void Curl_mime_cleanpart(curl_mimepart *part)
 {
-  cleanup_part_content(part);
-  curl_slist_free_all(part->curlheaders);
-  if(part->flags & MIME_USERHEADERS_OWNER)
-    curl_slist_free_all(part->userheaders);
-  Curl_safefree(part->mimetype);
-  Curl_safefree(part->name);
-  Curl_safefree(part->filename);
-  Curl_mime_initpart(part);
+  if(part) {
+    cleanup_part_content(part);
+    curl_slist_free_all(part->curlheaders);
+    if(part->flags & MIME_USERHEADERS_OWNER)
+      curl_slist_free_all(part->userheaders);
+    Curl_safefree(part->mimetype);
+    Curl_safefree(part->name);
+    Curl_safefree(part->filename);
+    Curl_mime_initpart(part);
+  }
 }
 
 /* Recursively delete a mime handle and its parts. */
@@ -1287,9 +1288,9 @@ curl_mime *curl_mime_init(struct Curl_easy *easy)
     mime->lastpart = NULL;
 
     memset(mime->boundary, '-', MIME_BOUNDARY_DASHES);
-    if(Curl_rand_hex(easy,
-                     (unsigned char *) &mime->boundary[MIME_BOUNDARY_DASHES],
-                     MIME_RAND_BOUNDARY_CHARS + 1)) {
+    if(Curl_rand_alnum(easy,
+                       (unsigned char *) &mime->boundary[MIME_BOUNDARY_DASHES],
+                       MIME_RAND_BOUNDARY_CHARS + 1)) {
       /* failed to get random separator, bail out */
       free(mime);
       return NULL;

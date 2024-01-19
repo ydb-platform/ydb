@@ -48,6 +48,11 @@ public:
         All
     };
 
+    struct TLocalFileInfo {
+        TString Hash;
+        bool BypassArtifactCache;
+    };
+
     NKikimr::NMiniKQL::TCallableVisitFunc operator()(NKikimr::NMiniKQL::TInternName name);
 
     void SetTwoPhaseTransform() {
@@ -100,8 +105,8 @@ private:
     std::shared_ptr<THashMap<TString, TString>> JobUdfs_;
     std::shared_ptr<THashMap<TString, TString>> UniqFiles_;
     std::shared_ptr<TVector<NYT::TRichYPath>> RemoteFiles_;
-    std::shared_ptr<TVector<std::pair<TString, TString>>> LocalFiles_;
-    std::shared_ptr<TVector<std::pair<TString, TString>>> DeferredUdfFiles_;
+    std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> LocalFiles_;
+    std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> DeferredUdfFiles_;
 };
 
 } // NNative

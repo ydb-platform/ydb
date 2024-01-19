@@ -27,6 +27,8 @@ UN = UInt(N)
 def test_uint64_initialization():
     assert UInt(2**63 - 1) == 2**63 - 1
     assert UInt() == UInt(0) == 0
+    assert UInt(1) == 1
+    assert UInt(2) == 2
     assert UInt(long(78)) == 78
     assert UInt(23.57) == 23
     assert UInt('111') == 111

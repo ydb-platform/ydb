@@ -13,17 +13,6 @@ public:
     using TBase::TBase;
     using TBase::operator=;
 
-    inline std::optional<bool> GetEnableMvcc() const {
-        switch (TBase::GetEnableMvcc()) {
-        case NKikimrConfig::TFeatureFlags::UNSET:
-            return std::nullopt;
-        case NKikimrConfig::TFeatureFlags::VALUE_TRUE:
-            return true;
-        case NKikimrConfig::TFeatureFlags::VALUE_FALSE:
-            return false;
-        }
-    }
-
     inline void SetEnableBackgroundCompactionForTest(bool value) {
         SetEnableBackgroundCompaction(value);
     }

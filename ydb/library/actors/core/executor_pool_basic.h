@@ -173,7 +173,7 @@ namespace NActors {
             // Sign bit
             i16 CurrentThreadCount = 0; // 14 bits
 
-            inline i64 ConverToI64() {
+            inline i64 ConvertToI64() {
                 i64 value = (1ll << 34) + OldSemaphore;
                 return value
                     | (((i64)CurrentSleepThreadCount + (1 << 14)) << 35)
@@ -208,8 +208,6 @@ namespace NActors {
                            i16 priority = 0);
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
-
-        void SetSharedExecutorsCount(i16 count);
 
         void Initialize(TWorkerContext& wctx) override;
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;

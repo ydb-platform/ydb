@@ -124,7 +124,7 @@ private:
                 // We already lost the client, so the client should not see this status
                 Reply(Ydb::StatusIds::INTERNAL_ERROR);
             } else {
-                SendSessionResult(kqpResponse.GetSessionId());
+                SendSessionResult(kqpResponse);
                 PassAway();
                 return;
             }
@@ -134,7 +134,7 @@ private:
     }
 
 private:
-    virtual void SendSessionResult(const TString& id) = 0;
+    virtual void SendSessionResult(const NKikimrKqp::TCreateSessionResponse& kqpResponse) = 0;
 
     template<typename TResp>
     void ReplyResponseError(const TResp& kqpResponse) {
@@ -171,9 +171,9 @@ public:
     }
 
 private:
-    void SendSessionResult(const TString& id) override {
+    void SendSessionResult(const NKikimrKqp::TCreateSessionResponse& kqpResponse) override {
         Ydb::Table::CreateSessionResult result;
-        result.set_session_id(id);
+        result.set_session_id(kqpResponse.GetSessionId());
         static_cast<TCtx*>(Request.get())->SendResult(result, Ydb::StatusIds::SUCCESS);
     };
 };
@@ -186,11 +186,15 @@ public:
     }
 
 private:
-    void SendSessionResult(const TString& id) override {
+    void SendSessionResult(const NKikimrKqp::TCreateSessionResponse& kqpResponse) override {
         using TRes = Ydb::Query::CreateSessionResponse;
         auto res = google::protobuf::Arena::CreateMessage<TRes>(Request->GetArena());;
         res->set_status(Ydb::StatusIds::SUCCESS);
-        res->set_session_id(id);
+        res->set_session_id(kqpResponse.GetSessionId());
+
+        if (kqpResponse.HasNodeId())
+            res->set_node_id(kqpResponse.GetNodeId());
+
         Request->Reply(res, Ydb::StatusIds::SUCCESS);
     };
 };

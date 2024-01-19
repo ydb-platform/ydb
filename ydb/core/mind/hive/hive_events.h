@@ -27,6 +27,10 @@ struct TEvPrivate {
         EvProcessIncomingEvent,
         EvRefreshStorageInfo,
         EvLogTabletMoves,
+        EvStartStorageBalancer,
+        EvRestartCancelled,
+        EvProcessStorageBalancer,
+        EvStorageBalancerOut,
         EvEnd
     };
 
@@ -90,6 +94,22 @@ struct TEvPrivate {
     struct TEvRefreshStorageInfo : TEventLocal<TEvRefreshStorageInfo, EvRefreshStorageInfo> {};
 
     struct TEvLogTabletMoves : TEventLocal<TEvLogTabletMoves, EvLogTabletMoves> {};
+
+    struct TEvStartStorageBalancer : TEventLocal<TEvStartStorageBalancer, EvStartStorageBalancer> {
+        TStorageBalancerSettings Settings;
+
+        TEvStartStorageBalancer(TStorageBalancerSettings settings) : Settings(settings) {}
+    };
+
+    struct TEvRestartCancelled : TEventLocal<TEvRestartCancelled, EvRestartCancelled> {
+        TFullTabletId TabletId;
+
+        TEvRestartCancelled(TFullTabletId tabletId) : TabletId(tabletId) {}
+    };
+
+    struct TEvProcessStorageBalancer : TEventLocal<TEvProcessStorageBalancer, EvProcessStorageBalancer> {};
+
+    struct TEvStorageBalancerOut : TEventLocal<TEvStorageBalancerOut, EvStorageBalancerOut> {};
 };
 
 } // NHive

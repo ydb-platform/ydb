@@ -16,13 +16,11 @@ SRCS(
     protobuf_writer.cpp
     schemaful_dsv_parser.cpp
     schemaful_dsv_writer.cpp
-    schemaful_writer.cpp
     schemaless_writer_adapter.cpp
     skiff_parser.cpp
     skiff_writer.cpp
     skiff_yson_converter.cpp
     unversioned_value_yson_writer.cpp
-    versioned_writer.cpp
     web_json_writer.cpp
     yamred_dsv_parser.cpp
     yamred_dsv_writer.cpp

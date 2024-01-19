@@ -4,8 +4,8 @@
 #include "flat_bloom_hash.h"
 #include "flat_part_iter_multi.h"
 #include "flat_part_laid.h"
-#include "flat_part_shrink.h"
-#include "flat_part_charge.h"
+#include "flat_part_charge_range.h"
+#include "flat_part_charge_create.h"
 #include "flat_part_dump.h"
 #include "flat_range_cache.h"
 #include "flat_util_misc.h"
@@ -789,8 +789,8 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
                 {
                     TRowId row1 = pos->Slice.BeginRowId();
                     TRowId row2 = pos->Slice.EndRowId() - 1;
-                    ready &= TCharge(env, *pos->Part, tags, includeHistory)
-                        .Do(key, key, row1, row2, *Scheme->Keys, items, bytes)
+                    ready &= CreateCharge(env, *pos->Part, tags, includeHistory)
+                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes)
                         .Ready;
                     ++stats.Sieved;
                 } else {
@@ -805,10 +805,10 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
         for (const auto& run : GetLevels()) {
             switch (direction) {
                 case EDirection::Forward:
-                    ready &= TCharge::Range(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    ready &= ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
                 case EDirection::Reverse:
-                    ready &= TCharge::RangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    ready &= ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
             }
         }

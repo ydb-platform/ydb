@@ -134,7 +134,6 @@ public:
 
     TStepOrder StepTxId() const { return StepTxId_; }
     ui64 TxId() const { return StepTxId_.TxId; }
-    ui64 TabletId() const { return TabletId_; }
     const TString& Body() const { return TxBody; }
 
     ui64 LockTxId() const { return Tx.GetLockTxId(); }
@@ -175,7 +174,7 @@ public:
     void ResetCounters() { EngineBay.ResetCounters(); }
 
     bool CanCancel();
-    bool CheckCancelled();
+    bool CheckCancelled(ui64 tabletId);
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
@@ -291,7 +290,6 @@ public:
 
 private:
     TStepOrder StepTxId_;
-    ui64 TabletId_;
     TString TxBody;
     TActorId Source_;
     TEngineBay EngineBay;
@@ -388,17 +386,6 @@ public:
     {
         TrackMemory();
     }
-
-    TActiveTransaction(const TBasicOpInfo &op,
-                       TValidatedDataTx::TPtr savedTx);
-    TActiveTransaction(TDataShard *self,
-                       TTransactionContext &txc,
-                       const TActorContext &ctx,
-                       const TBasicOpInfo &op,
-                       const TActorId &target,
-                       const TString &txBody,
-                       const TVector<TSysTables::TLocksTable::TLock> &locks,
-                       ui64 artifactFlags);
 
     ~TActiveTransaction();
 
@@ -527,10 +514,10 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(TDataShard * self,
+    void DbStoreLocksAccessLog(ui64 tabletId,
                                TTransactionContext &txc,
                                const TActorContext &ctx);
-    void DbStoreArtifactFlags(TDataShard * self,
+    void DbStoreArtifactFlags(ui64 tabletId,
                               TTransactionContext &txc,
                               const TActorContext &ctx);
 

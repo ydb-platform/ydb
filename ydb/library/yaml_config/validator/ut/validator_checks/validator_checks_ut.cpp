@@ -7,6 +7,8 @@
 #include <ydb/library/yaml_config/validator/validator.h>
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 
+namespace NKikimr {
+
 using namespace NYamlConfig::NValidator;
 using TIssue = TValidationResult::TIssue;
 
@@ -384,3 +386,5 @@ Y_UNIT_TEST_SUITE(Checks) {
         }}));
     }
 }
+
+} // namespace NKikimr

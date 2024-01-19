@@ -42,11 +42,8 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - start";
-
         output = input;
         if (ctx.Step.IsDone(TExprStep::DiscoveryIO)) {
-            YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, is done";
             return TStatus::Ok;
         }
 
@@ -318,7 +315,6 @@ public:
         }
 
         CanonizationRangesFoldersFuture_ = NThreading::WaitExceptionOrAll(allFutures);
-        YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
         return TStatus::Async;
     }
 

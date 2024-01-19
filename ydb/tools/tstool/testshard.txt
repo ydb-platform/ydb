@@ -1,0 +1,7 @@
+StorageServerPort: 35000
+MaxDataBytes: 1500000000
+MinDataBytes: 1000000000
+MaxInFlight: 5
+Sizes { Weight: 1 Min: 1 Max: 1024 Inline: true }
+Sizes { Weight: 3 Min: 10000 Max: 1000000 }
+Sizes { Weight: 7 Min: 2357120 Max: 8388608 }

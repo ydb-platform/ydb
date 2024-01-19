@@ -11,7 +11,7 @@ public:
     using TPtr = std::shared_ptr<IModifierExternalController>;
     virtual ~IModifierExternalController() = default;
     virtual void OnModificationFinished(const TString& modificationId) = 0;
-    virtual void OnModificationFailed(const TString& errorMessage, const TString& modificationId) = 0;
+    virtual void OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& modificationId) = 0;
 };
 
 class ITableModifier {
@@ -55,8 +55,8 @@ protected:
         virtual void OnRequestResult(typename TDialogPolicy::TResponse&& /*result*/) override {
             ExternalController->OnModificationFinished(ModificationId);
         }
-        virtual void OnRequestFailed(const TString& errorMessage) override {
-            ExternalController->OnModificationFailed(errorMessage, ModificationId);
+        virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
+            ExternalController->OnModificationFailed(status, errorMessage, ModificationId);
         }
     };
 

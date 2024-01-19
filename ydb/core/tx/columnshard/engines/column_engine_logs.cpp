@@ -129,13 +129,12 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
 }
 
-void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
-    if (!ColumnsTable) {
-        ui32 indexId = info.GetId();
-        ColumnsTable = std::make_shared<TColumnsTable>(indexId);
-        CountersTable = std::make_shared<TCountersTable>(indexId);
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+    if (!VersionedIndex.IsEmpty()) {
+        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
+        Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
     }
-    VersionedIndex.AddIndex(snapshot, std::move(info));
+    VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -143,6 +142,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Loaded = true;
     THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
+        TMemoryProfileGuard g("TTxInit/LoadColumns");
         auto guard = GranulesStorage->StartPackModification();
         if (!LoadColumns(db)) {
             return false;
@@ -169,7 +169,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TSnapshot lastSnapshot(0, 0);
     const TIndexInfo* currentIndexInfo = nullptr;
-    auto result = ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+    if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
@@ -178,11 +178,14 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         // Locate granule and append the record.
         TColumnRecord rec(loadContext, *currentIndexInfo);
         GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
-    });
+    })) {
+        return false;
+    }
+
     for (auto&& i : Tables) {
         i.second->OnAfterPortionsLoad();
     }
-    return result;
+    return true;
 }
 
 bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
@@ -203,7 +206,7 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
         }
     };
 
-    return CountersTable->Load(db, callback);
+    return db.LoadCounters(callback);
 }
 
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
@@ -472,13 +475,13 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         TApplyChangesContext context(db, snapshot);
         Y_ABORT_UNLESS(indexChanges->ApplyChanges(*this, context));
     }
-    CountersTable->Write(db, LAST_PORTION, LastPortion);
-    CountersTable->Write(db, LAST_GRANULE, LastGranule);
+    db.WriteCounter(LAST_PORTION, LastPortion);
+    db.WriteCounter(LAST_GRANULE, LastGranule);
 
     if (LastSnapshot < snapshot) {
         LastSnapshot = snapshot;
-        CountersTable->Write(db, LAST_PLAN_STEP, LastSnapshot.GetPlanStep());
-        CountersTable->Write(db, LAST_TX_ID, LastSnapshot.GetTxId());
+        db.WriteCounter(LAST_PLAN_STEP, LastSnapshot.GetPlanStep());
+        db.WriteCounter(LAST_TX_ID, LastSnapshot.GetTxId());
     }
     return true;
 }

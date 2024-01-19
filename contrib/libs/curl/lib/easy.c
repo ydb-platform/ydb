@@ -112,7 +112,7 @@ static curl_simple_lock s_lock = CURL_SIMPLE_LOCK_INIT;
 #define system_strdup strdup
 #endif
 
-#if defined(_MSC_VER) && defined(_DLL) && !defined(__POCC__)
+#if defined(_MSC_VER) && defined(_DLL)
 #  pragma warning(disable:4232) /* MSVC extension, dllimport identity */
 #endif
 
@@ -125,11 +125,11 @@ curl_free_callback Curl_cfree = (curl_free_callback)free;
 curl_realloc_callback Curl_crealloc = (curl_realloc_callback)realloc;
 curl_strdup_callback Curl_cstrdup = (curl_strdup_callback)system_strdup;
 curl_calloc_callback Curl_ccalloc = (curl_calloc_callback)calloc;
-#if defined(WIN32) && defined(UNICODE)
+#if defined(_WIN32) && defined(UNICODE)
 curl_wcsdup_callback Curl_cwcsdup = Curl_wcsdup;
 #endif
 
-#if defined(_MSC_VER) && defined(_DLL) && !defined(__POCC__)
+#if defined(_MSC_VER) && defined(_DLL)
 #  pragma warning(default:4232) /* MSVC extension, dllimport identity */
 #endif
 
@@ -153,13 +153,13 @@ static CURLcode global_init(long flags, bool memoryfuncs)
     Curl_crealloc = (curl_realloc_callback)realloc;
     Curl_cstrdup = (curl_strdup_callback)system_strdup;
     Curl_ccalloc = (curl_calloc_callback)calloc;
-#if defined(WIN32) && defined(UNICODE)
+#if defined(_WIN32) && defined(UNICODE)
     Curl_cwcsdup = (curl_wcsdup_callback)_wcsdup;
 #endif
   }
 
-  if(Curl_log_init()) {
-    DEBUGF(fprintf(stderr, "Error: Curl_log_init failed\n"));
+  if(Curl_trc_init()) {
+    DEBUGF(fprintf(stderr, "Error: Curl_trc_init failed\n"));
     goto fail;
   }
 
@@ -168,19 +168,15 @@ static CURLcode global_init(long flags, bool memoryfuncs)
     goto fail;
   }
 
-#ifdef WIN32
   if(Curl_win32_init(flags)) {
     DEBUGF(fprintf(stderr, "Error: win32_init failed\n"));
     goto fail;
   }
-#endif
 
-#ifdef __AMIGA__
   if(Curl_amiga_init()) {
     DEBUGF(fprintf(stderr, "Error: Curl_amiga_init failed\n"));
     goto fail;
   }
-#endif
 
   if(Curl_macos_init()) {
     DEBUGF(fprintf(stderr, "Error: Curl_macos_init failed\n"));
@@ -192,18 +188,10 @@ static CURLcode global_init(long flags, bool memoryfuncs)
     goto fail;
   }
 
-#if defined(USE_SSH)
   if(Curl_ssh_init()) {
+    DEBUGF(fprintf(stderr, "Error: Curl_ssh_init failed\n"));
     goto fail;
   }
-#endif
-
-#ifdef USE_WOLFSSH
-  if(WS_SUCCESS != wolfSSH_Init()) {
-    DEBUGF(fprintf(stderr, "Error: wolfSSH_Init failed\n"));
-    return CURLE_FAILED_INIT;
-  }
-#endif
 
   easy_init_flags = flags;
 
@@ -299,7 +287,7 @@ void curl_global_cleanup(void)
   Curl_ssl_cleanup();
   Curl_resolver_global_cleanup();
 
-#ifdef WIN32
+#ifdef _WIN32
   Curl_win32_cleanup(easy_init_flags);
 #endif
 
@@ -307,9 +295,6 @@ void curl_global_cleanup(void)
 
   Curl_ssh_cleanup();
 
-#ifdef USE_WOLFSSH
-  (void)wolfSSH_Cleanup();
-#endif
 #ifdef DEBUGBUILD
   free(leakpointer);
 #endif
@@ -317,6 +302,26 @@ void curl_global_cleanup(void)
   easy_init_flags = 0;
 
   global_init_unlock();
+}
+
+/**
+ * curl_global_trace() globally initializes curl logging.
+ */
+CURLcode curl_global_trace(const char *config)
+{
+#ifndef CURL_DISABLE_VERBOSE_STRINGS
+  CURLcode result;
+  global_init_lock();
+
+  result = Curl_trc_opt(config);
+
+  global_init_unlock();
+
+  return result;
+#else
+  (void)config;
+  return CURLE_OK;
+#endif
 }
 
 /*
@@ -699,7 +704,7 @@ static CURLcode easy_transfer(struct Curl_multi *multi)
  *
  * REALITY: it can't just create and destroy the multi handle that easily. It
  * needs to keep it around since if this easy handle is used again by this
- * function, the same multi handle must be re-used so that the same pools and
+ * function, the same multi handle must be reused so that the same pools and
  * caches can be used.
  *
  * DEBUG: if 'events' is set TRUE, this function will use a replacement engine
@@ -739,7 +744,7 @@ static CURLcode easy_perform(struct Curl_easy *data, bool events)
     return CURLE_RECURSIVE_API_CALL;
 
   /* Copy the MAXCONNECTS option to the multi handle */
-  curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, data->set.maxconnects);
+  curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, (long)data->set.maxconnects);
 
   mcode = curl_multi_add_handle(multi, data);
   if(mcode) {
@@ -832,8 +837,10 @@ static CURLcode dupset(struct Curl_easy *dst, struct Curl_easy *src)
   dst->set = src->set;
   Curl_mime_initpart(&dst->set.mimepost);
 
-  /* clear all string pointers first */
+  /* clear all dest string and blob pointers first, in case we error out
+     mid-function */
   memset(dst->set.str, 0, STRING_LAST * sizeof(char *));
+  memset(dst->set.blobs, 0, BLOB_LAST * sizeof(struct curl_blob *));
 
   /* duplicate all strings */
   for(i = (enum dupstring)0; i< STRING_LASTZEROTERMINATED; i++) {
@@ -842,8 +849,6 @@ static CURLcode dupset(struct Curl_easy *dst, struct Curl_easy *src)
       return result;
   }
 
-  /* clear all blob pointers first */
-  memset(dst->set.blobs, 0, BLOB_LAST * sizeof(struct curl_blob *));
   /* duplicate all blobs */
   for(j = (enum dupblob)0; j < BLOB_LAST; j++) {
     result = Curl_setblobopt(&dst->set.blobs[j], src->set.blobs[j]);
@@ -853,10 +858,13 @@ static CURLcode dupset(struct Curl_easy *dst, struct Curl_easy *src)
 
   /* duplicate memory areas pointed to */
   i = STRING_COPYPOSTFIELDS;
-  if(src->set.postfieldsize && src->set.str[i]) {
-    /* postfieldsize is curl_off_t, Curl_memdup() takes a size_t ... */
-    dst->set.str[i] = Curl_memdup(src->set.str[i],
-                                  curlx_sotouz(src->set.postfieldsize));
+  if(src->set.str[i]) {
+    if(src->set.postfieldsize == -1)
+      dst->set.str[i] = strdup(src->set.str[i]);
+    else
+      /* postfieldsize is curl_off_t, Curl_memdup() takes a size_t ... */
+      dst->set.str[i] = Curl_memdup(src->set.str[i],
+                                    curlx_sotouz(src->set.postfieldsize));
     if(!dst->set.str[i])
       return CURLE_OUT_OF_MEMORY;
     /* point to the new copy */
@@ -906,20 +914,19 @@ struct Curl_easy *curl_easy_duphandle(struct Curl_easy *data)
   outcurl->progress.callback = data->progress.callback;
 
 #ifndef CURL_DISABLE_COOKIES
-  if(data->cookies) {
+  outcurl->state.cookielist = NULL;
+  if(data->cookies && data->state.cookie_engine) {
     /* If cookies are enabled in the parent handle, we enable them
        in the clone as well! */
-    outcurl->cookies = Curl_cookie_init(data,
-                                        data->cookies->filename,
-                                        outcurl->cookies,
+    outcurl->cookies = Curl_cookie_init(outcurl, NULL, outcurl->cookies,
                                         data->set.cookiesession);
     if(!outcurl->cookies)
       goto fail;
   }
 
-  if(data->set.cookielist) {
-    outcurl->set.cookielist = Curl_slist_duplicate(data->set.cookielist);
-    if(!outcurl->set.cookielist)
+  if(data->state.cookielist) {
+    outcurl->state.cookielist = Curl_slist_duplicate(data->state.cookielist);
+    if(!outcurl->state.cookielist)
       goto fail;
   }
 #endif
@@ -965,33 +972,6 @@ struct Curl_easy *curl_easy_duphandle(struct Curl_easy *data)
     (void)Curl_hsts_loadcb(outcurl, outcurl->hsts);
   }
 #endif
-  /* Clone the resolver handle, if present, for the new handle */
-  if(Curl_resolver_duphandle(outcurl,
-                             &outcurl->state.async.resolver,
-                             data->state.async.resolver))
-    goto fail;
-
-#ifdef USE_ARES
-  {
-    CURLcode rc;
-
-    rc = Curl_set_dns_servers(outcurl, data->set.str[STRING_DNS_SERVERS]);
-    if(rc && rc != CURLE_NOT_BUILT_IN)
-      goto fail;
-
-    rc = Curl_set_dns_interface(outcurl, data->set.str[STRING_DNS_INTERFACE]);
-    if(rc && rc != CURLE_NOT_BUILT_IN)
-      goto fail;
-
-    rc = Curl_set_dns_local_ip4(outcurl, data->set.str[STRING_DNS_LOCAL_IP4]);
-    if(rc && rc != CURLE_NOT_BUILT_IN)
-      goto fail;
-
-    rc = Curl_set_dns_local_ip6(outcurl, data->set.str[STRING_DNS_LOCAL_IP6]);
-    if(rc && rc != CURLE_NOT_BUILT_IN)
-      goto fail;
-  }
-#endif /* USE_ARES */
 
   Curl_initinfo(outcurl);
 
@@ -1005,13 +985,10 @@ fail:
 
   if(outcurl) {
 #ifndef CURL_DISABLE_COOKIES
-    curl_slist_free_all(outcurl->set.cookielist);
-    outcurl->set.cookielist = NULL;
+    free(outcurl->cookies);
 #endif
-    Curl_safefree(outcurl->state.buffer);
+    free(outcurl->state.buffer);
     Curl_dyn_free(&outcurl->state.headerb);
-    Curl_safefree(outcurl->state.url);
-    Curl_safefree(outcurl->state.referer);
     Curl_altsvc_cleanup(&outcurl->asi);
     Curl_hsts_cleanup(&outcurl->hsts);
     Curl_freeset(outcurl);
@@ -1048,7 +1025,7 @@ void curl_easy_reset(struct Curl_easy *data)
   memset(&data->state.authhost, 0, sizeof(struct auth));
   memset(&data->state.authproxy, 0, sizeof(struct auth));
 
-#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_CRYPTO_AUTH)
+#if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_DIGEST_AUTH)
   Curl_http_auth_cleanup_digest(data);
 #endif
 }
@@ -1072,11 +1049,14 @@ CURLcode curl_easy_pause(struct Curl_easy *data, int action)
   CURLcode result = CURLE_OK;
   int oldstate;
   int newstate;
+  bool recursive = FALSE;
 
   if(!GOOD_EASY_HANDLE(data) || !data->conn)
     /* crazy input, don't continue */
     return CURLE_BAD_FUNCTION_ARGUMENT;
 
+  if(Curl_is_in_callback(data))
+    recursive = TRUE;
   k = &data->req;
   oldstate = k->keepon & (KEEP_RECV_PAUSE| KEEP_SEND_PAUSE);
 
@@ -1104,34 +1084,9 @@ CURLcode curl_easy_pause(struct Curl_easy *data, int action)
 
   if(!(newstate & KEEP_RECV_PAUSE)) {
     Curl_conn_ev_data_pause(data, FALSE);
-
-    if(data->state.tempcount) {
-      /* there are buffers for sending that can be delivered as the receive
-         pausing is lifted! */
-      unsigned int i;
-      unsigned int count = data->state.tempcount;
-      struct tempbuf writebuf[3]; /* there can only be three */
-
-      /* copy the structs to allow for immediate re-pausing */
-      for(i = 0; i < data->state.tempcount; i++) {
-        writebuf[i] = data->state.tempwrite[i];
-        Curl_dyn_init(&data->state.tempwrite[i].b, DYN_PAUSE_BUFFER);
-      }
-      data->state.tempcount = 0;
-
-      for(i = 0; i < count; i++) {
-        /* even if one function returns error, this loops through and frees
-           all buffers */
-        if(!result)
-          result = Curl_client_write(data, writebuf[i].type,
-                                     Curl_dyn_ptr(&writebuf[i].b),
-                                     Curl_dyn_len(&writebuf[i].b));
-        Curl_dyn_free(&writebuf[i].b);
-      }
-
-      if(result)
-        return result;
-    }
+    result = Curl_client_unpause(data);
+    if(result)
+      return result;
   }
 
 #ifdef USE_HYPER
@@ -1167,6 +1122,11 @@ CURLcode curl_easy_pause(struct Curl_easy *data, int action)
     /* This transfer may have been moved in or out of the bundle, update the
        corresponding socket callback, if used */
     result = Curl_updatesocket(data);
+
+  if(recursive)
+    /* this might have called a callback recursively which might have set this
+       to false again on exit */
+    Curl_set_in_callback(data, TRUE);
 
   return result;
 }

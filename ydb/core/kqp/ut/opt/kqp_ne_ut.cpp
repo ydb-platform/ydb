@@ -205,7 +205,12 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpCnStreamLookup"), explainResult.GetAst());
+        } else {
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        }
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$group").OptionalUint32(1).Build()
@@ -851,14 +856,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM `/Root/TwoShard` WHERE Key = 2;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT(!result.IsSuccess());
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(LocksMultiShard) {
@@ -883,14 +881,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM `/Root/EightShard`;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            UNIT_ASSERT(!result.IsSuccess());
-            result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(LocksMultiShardOk) {
@@ -1011,13 +1002,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            Cerr << result.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(BrokenLocksAtROTxSharded) {
@@ -1045,13 +1030,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT 42;
         )", TTxControl::Tx(*tx).CommitTx()).GetValueSync();
 
-        if (kikimr.IsUsingSnapshotReads()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        } else {
-            Cerr << result.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(BrokenLocksOnUpdate) {
@@ -1224,7 +1203,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         size_t phase = 0;
         if (stats.query_phases().size() == 2) {
             phase = 1;
-        } else if (stats.query_phases().size() == 0) {
+        } else if (stats.query_phases().size() == 1) {
             phase = 0;
         } else {
             UNIT_ASSERT(false);
@@ -2073,7 +2052,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                     NJson::TJsonValue plan;
                     NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                    auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+                    auto node = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
                     UNIT_ASSERT(node.IsDefined());
 
                     TStringBuilder readLimitValue;
@@ -3905,7 +3884,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(AutoChooseIndex) {
         TKikimrSettings settings;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_MAX_USED_PREFIX);
+        appConfig.MutableTableServiceConfig()->SetIndexAutoChooseMode(NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS);
         settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
@@ -3919,7 +3898,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/SecondaryKeys` WHERE Fk <= 1;
+            SELECT Fk, Key FROM `/Root/SecondaryKeys` WHERE Fk <= 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);

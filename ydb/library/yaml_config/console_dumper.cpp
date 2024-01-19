@@ -8,9 +8,7 @@
 
 #include <regex>
 
-namespace NYamlConfig {
-
-using namespace NKikimr;
+namespace NKikimr::NYamlConfig {
 
 using TUsageScope = NConsole::TUsageScope;
 
@@ -632,4 +630,4 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
     return result;
 }
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

@@ -9,6 +9,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/util/fragmented_buffer.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -163,8 +164,10 @@ struct TIntermediate {
 
     ui32 EvType = 0;
 
+    NWilson::TSpan Span;
+
     TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
-            TRequestType::EType requestType);
+            TRequestType::EType requestType, NWilson::TTraceId traceId);
 
     void UpdateStat();
 };

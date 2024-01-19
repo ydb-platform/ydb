@@ -5,10 +5,56 @@
 #include "sql_values.h"
 #include "sql_select.h"
 #include "source.h"
+
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
+
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+
+#include <library/cpp/protobuf/util/simple_reflection.h>
+
+namespace {
+
+using namespace NSQLTranslationV1;
+
+template <typename Callback>
+void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
+    const auto* descr = msg.GetDescriptor();
+    for (int i = 0; i < descr->field_count(); ++i) {
+        const auto* fd = descr->field(i);
+        NProtoBuf::TConstField field(msg, fd);
+        if (field.IsMessage()) {
+            for (size_t j = 0; j < field.Size(); ++j) {
+                const auto& message = *field.Get<NProtoBuf::Message>(j);
+                callback(message);
+                VisitAllFields(message, callback);
+            }
+        }
+    }
+}
+
+struct TTokenCollector {
+    void operator()(const NProtoBuf::Message& message) {
+        if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
+            if (!Tokens.Empty()) {
+                Tokens << ' ';
+            }
+            Tokens << token->GetValue();
+        }
+    }
+
+    TStringBuilder Tokens;
+};
+
+TString CollectTokens(const TRule_select_stmt& selectStatement) {
+    TTokenCollector tokenCollector;
+    VisitAllFields(selectStatement, tokenCollector);
+    return tokenCollector.Tokens;
+}
+
+}
+
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
@@ -1523,6 +1569,16 @@ namespace {
         return true;
     }
 
+    bool StoreBool(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx) {
+        if (!from.HasAlt_table_setting_value6()) {
+            return false;
+        }
+        // bool_value
+        const TString value = to_lower(ctx.Token(from.GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1()));
+        to = TDeferredAtom(BuildLiteralBool(ctx.Pos(), FromString<bool>(value)), ctx);
+        return true;
+    }
+
     bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
             TSqlExpression& expr, TContext& ctx) {
         TVector<TNodePtr> boundaryKeys;
@@ -1646,6 +1702,26 @@ namespace {
         default:
             return false;
         }
+        return true;
+    }
+
+    bool StoreViewOptionsEntry(const TIdentifier& id,
+                               const TRule_table_setting_value& value,
+                               std::map<TString, TDeferredAtom>& features,
+                               TContext& ctx) {
+        const auto name = to_lower(id.Name);
+        const auto publicName = to_upper(name);
+
+        if (features.find(name) != features.end()) {
+            ctx.Error(ctx.Pos()) << publicName << " is a duplicate";
+            return false;
+        }
+
+        if (!StoreBool(value, features[name], ctx)) {
+            ctx.Error(ctx.Pos()) << "Value of " << publicName << " must be a bool";
+            return false;
+        }
+
         return true;
     }
 
@@ -4313,6 +4389,54 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     if (params.PkColumns) {
         Ctx.Error() << "PRIMARY KEY is not supported for external table";
         return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& features,
+                                       const TRule_with_table_settings& options) {
+    const auto& firstEntry = options.GetRule_table_settings_entry3();
+    if (!StoreViewOptionsEntry(IdEx(firstEntry.GetRule_an_id1(), *this),
+                               firstEntry.GetRule_table_setting_value3(),
+                               features,
+                               Ctx)) {
+        return false;
+    }
+    for (const auto& block : options.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreViewOptionsEntry(IdEx(entry.GetRule_an_id1(), *this),
+                                   entry.GetRule_table_setting_value3(),
+                                   features,
+                                   Ctx)) {
+            return false;
+        }
+    }
+    if (const auto securityInvoker = features.find("security_invoker");
+        securityInvoker == features.end() || securityInvoker->second.Build()->GetLiteralValue() != "true") {
+        Ctx.Error(Ctx.Pos()) << "SECURITY_INVOKER option must be explicitly enabled";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
+                                     const TRule_select_stmt& query) {
+    const TString queryText = CollectTokens(query);
+    features["query_text"] = {Ctx.Pos(), queryText};
+
+    {
+        TSqlSelect select(Ctx, Mode);
+        TPosition pos;
+        auto source = select.Build(query, pos);
+        if (!source) {
+            return false;
+        }
+        features["query_ast"] = {BuildSelectResult(pos,
+                                                   std::move(source),
+                                                   false,
+                                                   false,
+                                                   Ctx.Scoped), Ctx};
     }
 
     return true;

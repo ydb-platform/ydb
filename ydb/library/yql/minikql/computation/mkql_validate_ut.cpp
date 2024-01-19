@@ -707,7 +707,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         bool wrapped = false;
-        UNIT_ASSERT_EXCEPTION(TValidate<TValidateErrorPolicyThrow>::Value(nullptr, env.GetTypeOfType(),
+        UNIT_ASSERT_EXCEPTION(TValidate<TValidateErrorPolicyThrow>::Value(nullptr, env.GetTypeOfTypeLazy(),
             NUdf::TUnboxedValuePod(), "ut for verify empty value exception", &wrapped), TUdfValidateException);
         UNIT_ASSERT(!wrapped);
     }

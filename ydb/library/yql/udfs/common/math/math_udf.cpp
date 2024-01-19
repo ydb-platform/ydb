@@ -3,10 +3,17 @@
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 
+extern const char TagRoundingMode[] = "MathRoundingMode";
+using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
+
 #define MATH_UDF_MAP(XX, XXL)                                                                       \
     XX(Pi, double(), 0)                                                                             \
     XX(E, double(), 0)                                                                              \
     XX(Eps, double(), 0)                                                                            \
+    XX(RoundDownward, TTaggedRoundingMode(), 0)                                                     \
+    XX(RoundToNearest, TTaggedRoundingMode(), 0)                                                    \
+    XX(RoundTowardZero, TTaggedRoundingMode(), 0)                                                   \
+    XX(RoundUpward, TTaggedRoundingMode(), 0)                                                       \
     XX(Abs, double(TAutoMap<double>), 0)                                                            \
     XX(Acos, double(TAutoMap<double>), 0)                                                           \
     XX(Asin, double(TAutoMap<double>), 0)                                                           \
@@ -50,8 +57,18 @@
     XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), 0)                                                  \
     XXL(Round, double(TAutoMap<double>, TPrecision), 1)
 
+#define MATH_UDF_MAP_WITHOUT_IR(XX)                                                                 \
+    XX(NearbyInt, TOptional<i64>(TAutoMap<double>, TTaggedRoundingMode), 0)
+
 #define MATH_STRICT_UDF(name, signature, optionalArgsCount)                                                       \
     SIMPLE_STRICT_UDF_WITH_IR(T##name, signature, optionalArgsCount, "/llvm_bc/Math", #name "IR") {               \
+        TUnboxedValuePod res;                                                                                     \
+        name##IR(this, &res, valueBuilder, args);                                                                 \
+        return res;                                                                                               \
+    }
+
+#define MATH_STRICT_UDF_WITHOUT_IR(name, signature, optionalArgsCount)                                            \
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(T##name, signature, optionalArgsCount) {                                                    \
         TUnboxedValuePod res;                                                                                     \
         name##IR(this, &res, valueBuilder, args);                                                                 \
         return res;                                                                                               \
@@ -72,7 +89,10 @@ namespace {
 
     MATH_UDF_MAP(MATH_STRICT_UDF, MATH_STRICT_UDF)
 
+    MATH_UDF_MAP_WITHOUT_IR(MATH_STRICT_UDF_WITHOUT_IR)
+
     SIMPLE_MODULE(TMathModule,
+        MATH_UDF_MAP_WITHOUT_IR(REGISTER_MATH_UDF)
         MATH_UDF_MAP(REGISTER_MATH_UDF, REGISTER_MATH_UDF_LAST))
 }
 

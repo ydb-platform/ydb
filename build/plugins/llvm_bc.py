@@ -2,10 +2,12 @@ from _common import rootrel_arc_src, sort_by_keywords, skip_build_root
 
 
 def onllvm_bc(unit, *args):
-    free_args, kwds = sort_by_keywords({'SYMBOLS': -1, 'NAME': 1, 'GENERATE_MACHINE_CODE': 0, 'NO_COMPILE': 0}, args)
+    free_args, kwds = sort_by_keywords(
+        {'SYMBOLS': -1, 'NAME': 1, 'GENERATE_MACHINE_CODE': 0, 'NO_COMPILE': 0, 'SUFFIX': 1}, args
+    )
     name = kwds['NAME'][0]
     symbols = kwds.get('SYMBOLS')
-    obj_suf = unit.get('OBJ_SUF')
+    obj_suf = kwds['SUFFIX'][0] if 'SUFFIX' in kwds else '' + unit.get('OBJ_SUF')
     skip_compile_step = 'NO_COMPILE' in kwds
     merged_bc = name + '_merged' + obj_suf + '.bc'
     out_bc = name + '_optimized' + obj_suf + '.bc'

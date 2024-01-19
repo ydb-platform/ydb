@@ -1266,10 +1266,10 @@ static CURLcode send_telnet_data(struct Curl_easy *data,
         break;
       default:                    /* write! */
         bytes_written = 0;
-        result = Curl_write(data, conn->sock[FIRSTSOCKET],
-                            outbuf + total_written,
-                            outlen - total_written,
-                            &bytes_written);
+        result = Curl_nwrite(data, FIRSTSOCKET,
+                             outbuf + total_written,
+                             outlen - total_written,
+                             &bytes_written);
         total_written += bytes_written;
         break;
     }
@@ -1570,8 +1570,9 @@ static CURLcode telnet_do(struct Curl_easy *data, bool *done)
         }
 
         total_dl += nread;
-        Curl_pgrsSetDownloadCounter(data, total_dl);
-        result = telrcv(data, (unsigned char *)buf, nread);
+        result = Curl_pgrsSetDownloadCounter(data, total_dl);
+        if(!result)
+          result = telrcv(data, (unsigned char *)buf, nread);
         if(result) {
           keepon = FALSE;
           break;

@@ -181,7 +181,11 @@ public:
         }
 
         Self->BuildCurrentConfig();
-        Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        if (Self->CurrentConfig.HasWarmUpEnabled()) {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        } else {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+        }
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
@@ -270,6 +274,10 @@ public:
                 if (domainRowset.GetValueOrDefault<Schema::SubDomain::Primary>()) {
                     Self->PrimaryDomainKey = key;
                 }
+                if (domainRowset.HaveValue<Schema::SubDomain::ServerlessComputeResourcesMode>()) {
+                    domain.ServerlessComputeResourcesMode = domainRowset.GetValue<Schema::SubDomain::ServerlessComputeResourcesMode>();
+                }
+                
                 if (!domainRowset.Next())
                     return false;
             }
@@ -706,7 +714,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
-        i64 tabletsTotal = 0;
+        ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
             for (const TTabletInfo& follower : it->second.Followers) {
@@ -723,7 +731,8 @@ public:
         Self->SetCounterTabletsTotal(tabletsTotal);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
-        Self->TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Set(Self->Nodes.size());
+        Self->ExpectedNodes = Self->Nodes.size();
+        Self->TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Set(Self->ExpectedNodes);
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
 

@@ -14,17 +14,17 @@ TFederatedTopicClient::TFederatedTopicClient(const TDriver& driver, const TFeder
 {
 }
 
-std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateFederatedReadSession(const TFederatedReadSessionSettings& settings) {
-    return Impl_->CreateFederatedReadSession(settings);
+std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(const TFederatedReadSessionSettings& settings) {
+    return Impl_->CreateReadSession(settings);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingFederatedWriteSession(
+// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
 //     const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateSimpleFederatedWriteSession(settings);
+//     return Impl_->CreateSimpleBlockingWriteSession(settings);
 // }
 
-// std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateFederatedWriteSession(const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateFederatedWriteSession(settings);
-// }
+std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
+    return Impl_->CreateWriteSession(settings);
+}
 
 } // namespace NYdb::NFederatedTopic

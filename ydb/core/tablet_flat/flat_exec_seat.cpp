@@ -9,14 +9,14 @@ namespace NTabletFlatExecutor {
         }
         Self->Complete(ctx);
 
-        TxSpan.Attribute("rw", isRW);
-        TxSpan.EndOk();
+        Self->TxSpan.Attribute("rw", isRW);
+        Self->TxSpan.EndOk();
     }
 
     void TSeat::Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept {
         Self->Terminate(reason, ctx);
 
-        TxSpan.EndError("Terminated");
+        Self->TxSpan.EndError("Terminated");
     }
 
 } // namespace NTabletFlatExecutor

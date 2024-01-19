@@ -31,13 +31,6 @@
 #if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x600
 
 #ifdef __MINGW32__
-#ifndef __MINGW64_VERSION_MAJOR
-#if (__MINGW32_MAJOR_VERSION < 5) || \
-    (__MINGW32_MAJOR_VERSION == 5 && __MINGW32_MINOR_VERSION == 0)
-/* mingw >= 5.0.1 defines SRWLOCK, and slightly different from MS define */
-typedef PVOID SRWLOCK, *PSRWLOCK;
-#endif
-#endif
 #ifndef SRWLOCK_INIT
 #define SRWLOCK_INIT NULL
 #endif
@@ -99,6 +92,15 @@ static inline void curl_simple_lock_unlock(curl_simple_lock *lock)
 {
   atomic_store_explicit(lock, false, memory_order_release);
 }
+
+#elif defined(USE_THREADS_POSIX) && defined(HAVE_PTHREAD_H)
+
+#include <pthread.h>
+
+#define curl_simple_lock pthread_mutex_t
+#define CURL_SIMPLE_LOCK_INIT PTHREAD_MUTEX_INITIALIZER
+#define curl_simple_lock_lock(m) pthread_mutex_lock(m)
+#define curl_simple_lock_unlock(m) pthread_mutex_unlock(m)
 
 #else
 

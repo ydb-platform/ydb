@@ -367,6 +367,7 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
     auto mutationId = Options.GetOrGenerateMutationId();
 
     std::vector<TCallback<TFuture<TYsonString>()>> callbacks;
+    callbacks.reserve(Requests.size());
     for (int requestIndex = 0; requestIndex < std::ssize(Requests); ++requestIndex) {
         auto executor = New<TRequestExecutor>(
             context,
@@ -378,7 +379,7 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
         callbacks.push_back(BIND(&TRequestExecutor::Run, executor));
     }
 
-    auto results = WaitFor(RunWithBoundedConcurrency(callbacks, Options.Concurrency))
+    auto results = WaitFor(RunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
         .ValueOrThrow();
 
     ProduceSingleOutput(context, "results", [&] (NYson::IYsonConsumer* consumer) {

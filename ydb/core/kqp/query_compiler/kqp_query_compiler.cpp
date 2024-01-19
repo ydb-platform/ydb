@@ -366,7 +366,7 @@ void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool i
     }
 }
 
-void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto) {
+void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto, TExprContext& ctx) {
     auto maybeList = lookup.LookupKeys().Maybe<TCoIterator>().List();
     YQL_ENSURE(maybeList, "Expected iterator as lookup input, got: " << lookup.LookupKeys().Ref().Content());
 
@@ -398,7 +398,9 @@ void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& looku
             }
         }
     } else {
-        YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content());
+        auto brokenLookup =  KqpExprToPrettyString(lookup, ctx);
+        YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content()
+            << "lookup: " << brokenLookup);
     }
 }
 
@@ -621,7 +623,7 @@ private:
                 FillTablesMap(lookupTable.Table(), lookupTable.Columns(), tablesMap);
                 FillTableId(lookupTable.Table(), *tableOp.MutableTable());
                 FillColumns(lookupTable.Columns(), *tableMeta, tableOp, true);
-                FillLookup(lookupTable, *tableOp.MutableLookup());
+                FillLookup(lookupTable, *tableOp.MutableLookup(), ctx);
             } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
                 auto upsertRows = maybeUpsertRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
@@ -1092,7 +1094,7 @@ private:
             const auto inputItemType = inputNodeType->Cast<TListExprType>()->GetItemType();
             sequencerProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
-            auto autoIncrementColumns = sequencer.AutoIncrementColumns();
+            auto autoIncrementColumns = sequencer.DefaultConstraintColumns();
             for(const auto& column : autoIncrementColumns) {
                 sequencerProto.AddAutoIncrementColumns(column.StringValue());
             }

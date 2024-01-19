@@ -22,7 +22,7 @@ namespace detail {
 class BOOST_SYMBOL_VISIBLE placeholder {
 public:
     virtual ~placeholder() {}
-    virtual const boost::typeindex::type_info& type() const BOOST_NOEXCEPT = 0;
+    virtual const boost::typeindex::type_info& type() const noexcept = 0;
 };
 
 } // namespace detail

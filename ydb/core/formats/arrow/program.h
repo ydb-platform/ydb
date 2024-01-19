@@ -128,6 +128,34 @@ public:
         , FuncOpts(nullptr)
     {}
 
+    explicit TAssign(const TColumnInfo& column, i8 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::Int8Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, ui8 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::UInt8Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, i16 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::Int16Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, ui16 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::UInt16Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
     explicit TAssign(const TColumnInfo& column, i32 value)
         : Column(column)
         , Operation(EOperation::Constant)

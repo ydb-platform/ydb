@@ -15,6 +15,10 @@ public:
         : IndexInfo(indexInfo)
     {}
 
+    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
+        return IndexInfo.GetColumnIdOptional(name);
+    }
+
     TString GetColumnName(ui32 id, bool required) const override {
         return IndexInfo.GetColumnName(id, required);
     }
@@ -89,6 +93,10 @@ public:
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {
         return ReadyResults.size();
+    }
+
+    virtual const NOlap::TReadStats& GetStats() const override {
+        return *ReadMetadata->ReadStats;
     }
 
     virtual TString DebugString(const bool verbose) const override {

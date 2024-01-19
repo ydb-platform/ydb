@@ -20,7 +20,7 @@
 #include <map>
 #include <string>
 
-namespace NYamlConfig {
+namespace NKikimr::NYamlConfig {
 
 struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollector {
     void OnEnterMapItem(const TString& key) override {
@@ -86,4 +86,4 @@ void ResolveAndParseYamlConfig(
  */
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
 
-} // namespace NYamlConfig
+} // namespace NKikimr::NYamlConfig

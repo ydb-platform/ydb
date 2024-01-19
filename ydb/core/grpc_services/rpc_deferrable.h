@@ -6,11 +6,12 @@
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -150,6 +151,8 @@ public:
 
     TRpcOperationRequestActor(IRequestOpCtx* request)
         : TBase(request)
+        , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
+                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -280,6 +283,9 @@ private:
         auto as = TActivationContext::ActorSystem();
         PassSubscription(ev->Get(), Request_.get(), as);
     }
+
+protected:
+    NWilson::TSpan Span_;
 };
 
 } // namespace NGRpcService

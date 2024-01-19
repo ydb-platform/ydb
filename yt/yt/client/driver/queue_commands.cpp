@@ -98,7 +98,8 @@ void TListQueueConsumerRegistrationsCommand::DoExecute(ICommandContextPtr contex
 void TPullQueueCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("queue_path", &TThis::QueuePath);
-    registrar.Parameter("offset", &TThis::Offset);
+    registrar.Parameter("offset", &TThis::Offset)
+        .Optional();
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
 
     registrar.ParameterWithUniversalAccessor<i64>(
@@ -226,13 +227,20 @@ void TAdvanceConsumerCommand::Register(TRegistrar registrar)
     registrar.Parameter("old_offset", &TThis::OldOffset)
         .Optional();
     registrar.Parameter("new_offset", &TThis::NewOffset);
+    registrar.Parameter("client_side", &TThis::ClientSide)
+        .Optional();
 }
 
 void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = GetTransaction(context);
 
-    transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
+    if (ClientSide.value_or(false)) {
+        transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
+    } else {
+        WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))
+            .ThrowOnError();
+    }
 
     if (ShouldCommitTransaction()) {
         WaitFor(transaction->Commit())

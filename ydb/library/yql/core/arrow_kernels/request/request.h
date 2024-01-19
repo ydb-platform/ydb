@@ -11,6 +11,8 @@ public:
     enum class EUnaryOp {
         Not,
         Size,
+        Minus,
+        Abs
     };
 
     enum class EBinaryOp {
@@ -34,6 +36,8 @@ public:
         LessOrEqual,
         Greater,
         GreaterOrEqual,
+
+        Coalesce
     };
 
     TKernelRequestBuilder(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);

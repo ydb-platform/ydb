@@ -687,14 +687,14 @@ partitioning_settings {
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, "a", "valueA");
-        WriteRow(runtime, "b", "valueB");
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
 
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -827,14 +827,14 @@ partitioning_settings {
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 1; i < 500; ++i) {
-            WriteRow(runtime, Sprintf("a%i", i), "value");
+            UpdateRow(runtime, "Table", i, "value");
         }
 
         // trigger memtable's compaction
@@ -925,13 +925,13 @@ partitioning_settings {
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, "a", "valueA");
+        UpdateRow(runtime, "Table", 1, "valueA");
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1277,14 +1277,14 @@ partitioning_settings {
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
 
-        WriteRow(runtime, "a", "valueA");
-        WriteRow(runtime, "b", "valueB");
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         TPortManager portManager;

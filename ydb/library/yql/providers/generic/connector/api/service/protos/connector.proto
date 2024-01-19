@@ -144,8 +144,10 @@ message TSelect {
     TWhat what = 2;
 
     message TFrom {
-        // TODO: for some of RDBMS the table name may be not enough
+        // Table name for RDBMs
         string table = 1;
+        // Unique identifier of an object stored within S3
+        string object_key = 2;
     }
 
     // Transforms into FROM $from
@@ -172,6 +174,11 @@ message TSelect {
     // Transforms into LIMIT $limit [OFFSET $offset].
     // Optional field.
     TLimit limit = 5;
+
+    // For schemaless data sources, when it's hard for us to infer schema for the query result,
+    // user can supply the schema himself.
+    // Optional field that must be empty for schematized data sources.
+    TSchema predefined_schema = 6;
 }
 
 // Split is a certain part of a table. In general, it should be much smaller than a partition.

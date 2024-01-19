@@ -42,6 +42,8 @@ try:
 except ModuleNotFoundError:
 
     class PickleShareDB:  # type: ignore [no-redef]
+        _mock = True
+
         def __init__(self, path):
             pass
 
@@ -2637,7 +2639,10 @@ class InteractiveShell(SingletonConfigurable):
         """
         cmd = self.var_expand(cmd, depth=1)
         # warn if there is an IPython magic alternative.
-        main_cmd = cmd.split()[0]
+        if cmd == "":
+            main_cmd = ""
+        else:
+            main_cmd = cmd.split()[0]
         has_magic_alternatives = ("pip", "conda", "cd")
 
         if main_cmd in has_magic_alternatives:

@@ -6,7 +6,6 @@ on:
       - 'stable-*'
     paths-ignore:
       - 'ydb/docs/**'
-      - '.github/**'
       - '*'
     types:
       - 'opened'
@@ -18,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check-running-allowed:
+    if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
     runs-on: ubuntu-latest
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result }}
@@ -121,5 +121,5 @@ jobs:
       test_type: "unittest,py3test,py2test,pytest"
       test_threads: 52
       runner_label: auto-provisioned
-      put_build_results_to_cache: false
+      put_build_results_to_cache: true
     secrets: inherit

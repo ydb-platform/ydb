@@ -1,5 +1,6 @@
 #include "rt_insertion.h"
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/remove.h>
 
 namespace NKikimr::NOlap {
 

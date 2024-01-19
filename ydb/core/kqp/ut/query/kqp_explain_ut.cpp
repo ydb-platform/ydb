@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(aggregate.IsDefined());
         UNIT_ASSERT(aggregate.GetMapSafe().at("GroupBy").GetStringSafe() == "item.App");
         UNIT_ASSERT(aggregate.GetMapSafe().at("Aggregation").GetStringSafe() ==
-            "{_yql_agg_0: MAX(item.Message),_yql_agg_1: MIN(item.Message)}");
+            "{_yql_agg_0: MAX(item.Message,state._yql_agg_0),_yql_agg_1: MIN(item.Message,state._yql_agg_1)}");
     }
 
     Y_UNIT_TEST(ComplexJoin) {
@@ -497,7 +497,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
         node = FindPlanNodeByKv(plan, "Name", "TableFullScan");
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
-        node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
+
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
+        } else {
+            node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
+        }
+
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
     }
 
@@ -526,17 +532,19 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto deletesCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
 
-        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan") +
-            CountPlanNodesByKv(plan, "Node Type", "Stage-TableFullScan");
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
 
-        auto rangeScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan") +
-            CountPlanNodesByKv(plan, "Name", "TableRangeScan");
+        auto rangeScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
         UNIT_ASSERT_VALUES_EQUAL(rangeScansCount, 1);
 
         ui32 lookupsCount = 0;
-        lookupsCount = CountPlanNodesByKv(plan, "Node Type", "Stage-TablePointLookup");
-        lookupsCount += CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
+        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        } else {
+            lookupsCount = CountPlanNodesByKv(plan, "Node Type", "TablePointLookup-ConstantExpr");
+        }
+
         UNIT_ASSERT_VALUES_EQUAL(lookupsCount, 1);
 
         /* check tables section */
@@ -902,7 +910,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(MultiJoinCteLinks) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

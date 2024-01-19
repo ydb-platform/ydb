@@ -39,13 +39,13 @@ TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters
     Y_ABORT_UNLESS(recordsCountCheck == batch->num_rows());
 }
 
-bool TRBSplitLimiter::Next(std::vector<std::vector<IPortionColumnChunk::TPtr>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch) {
+bool TRBSplitLimiter::Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!Slices.size()) {
         return false;
     }
     std::vector<TSplittedBlob> blobs;
     Slices.front().GroupBlobs(blobs);
-    std::vector<std::vector<IPortionColumnChunk::TPtr>> result;
+    std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> result;
     std::map<ui32, ui32> columnChunks;
     for (auto&& i : blobs) {
         if (blobs.size() == 1) {
@@ -60,5 +60,4 @@ bool TRBSplitLimiter::Next(std::vector<std::vector<IPortionColumnChunk::TPtr>>& 
     Slices.pop_front();
     return true;
 }
-
 }

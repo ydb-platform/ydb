@@ -48,7 +48,7 @@ void TestShutdown(const IChannelPtr& channel)
 
     while (shutdownLogInput.ReadLine(buffer)) {
         Cerr << buffer << Endl;
-        if (exitCode && buffer == "*** Shutdown completed") {
+        if (exitCode && buffer.Contains("*** Shutdown completed")) {
             exitCode = 0;
         }
     }

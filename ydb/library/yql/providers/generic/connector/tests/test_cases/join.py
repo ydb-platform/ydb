@@ -1,6 +1,6 @@
 import itertools
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Sequence
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
@@ -10,6 +10,7 @@ from utils.settings import Settings
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
 from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
+from ydb.library.yql.providers.generic.connector.tests.utils.data_source_kind import data_source_kind_alias
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -39,16 +40,7 @@ class DataSource:
 
     @property
     def alias(self) -> str:
-        prefix = None
-        match (self.kind):
-            case EDataSourceKind.CLICKHOUSE:
-                prefix = "ch"
-            case EDataSourceKind.POSTGRESQL:
-                prefix = "pg"
-            case _:
-                raise Exception(f'invalid data source: {self.kind}')
-
-        return prefix + "_" + self.table.name
+        return data_source_kind_alias(self.kind) + "_" + self.table.name
 
     @property
     def yql_qualified_name(self) -> str:
@@ -178,18 +170,14 @@ class Factory:
 
         data_out = list(map(lambda x: list(itertools.chain(*x)), zip(*(t.data_in for t in tables))))
 
-        # data_sources: Sequence[DataSource] = [
-        #     DataSource(kind=EDataSourceKind.CLICKHOUSE, database=Database(name='dqrun', use_as_default=False)),
-        #     DataSource(kind=EDataSourceKind.POSTGRESQL, database=Database(name='dqrun', use_as_default=True)),
-        # ]
-        data_sources: Sequence[Tuple[EDataSourceKind, Database]] = (
-            (EDataSourceKind.CLICKHOUSE, Database()),
-            (EDataSourceKind.POSTGRESQL, Database()),
+        data_sources: Sequence[EDataSourceKind] = (
+            EDataSourceKind.CLICKHOUSE,
+            EDataSourceKind.POSTGRESQL,
         )
 
         # For each test case we create a unique set of datasources;
         # tables described above will be mapped to every particular set of data sources
-        # in order to model federative requests:
+        # in order to model federative requests, for example:
         #
         # TestCase(table_1 -> CH, table_2 -> PG)
         # TestCase(table_1 -> PG, table_2 -> CH)
@@ -204,15 +192,18 @@ class Factory:
         for dsc in data_source_combinations:
             assert len(dsc) == len(tables)
 
+            # generate test case name
+            test_case_name = 'join_' + "_".join(data_source_kind_alias(data_source_kind) for data_source_kind in dsc)
+
             # inject tables into data sources
             test_case_data_sources = []
-            for i, _combo in enumerate(dsc):
-                (kind, database) = _combo
-                ds = DataSource(kind=kind, database=database, table=tables[i])
+            for i, data_source_kind in enumerate(dsc):
+                ds = DataSource(
+                    kind=data_source_kind,
+                    database=Database(name=test_case_name, kind=data_source_kind),
+                    table=tables[i],
+                )
                 test_case_data_sources.append(ds)
-
-            # generate test case name
-            test_case_name = 'join_' + "_".join(ds.alias for ds in test_case_data_sources)
 
             test_case = TestCase(
                 name=test_case_name,
@@ -251,16 +242,27 @@ class Factory:
                 [9, 'test_1_e', 90],
             ],
         )
+
+        test_case_name = 'inner_join'
+
         test_case_data_sources = [
-            DataSource(kind=EDataSourceKind.CLICKHOUSE, database=Database(), table=ch_table),
-            DataSource(kind=EDataSourceKind.POSTGRESQL, database=Database(), table=pg_table),
+            DataSource(
+                kind=EDataSourceKind.CLICKHOUSE,
+                database=Database(kind=EDataSourceKind.CLICKHOUSE, name=test_case_name),
+                table=ch_table,
+            ),
+            DataSource(
+                kind=EDataSourceKind.POSTGRESQL,
+                database=Database(kind=EDataSourceKind.POSTGRESQL, name=test_case_name),
+                table=pg_table,
+            ),
         ]
         data_out = [
             ['test_1_a', 10, 1],
         ]
         return [
             InnerJoinTestCase(
-                name='inner_join',
+                name=test_case_name,
                 data_sources=test_case_data_sources,
                 data_out=data_out,
             )

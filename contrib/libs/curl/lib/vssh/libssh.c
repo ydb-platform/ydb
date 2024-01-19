@@ -40,9 +40,6 @@
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
-#ifdef HAVE_UTSNAME_H
-#include <sys/utsname.h>
-#endif
 #ifdef HAVE_NETDB_H
 #include <netdb.h>
 #endif
@@ -96,6 +93,7 @@
 #if defined(__GNUC__) &&                        \
   (LIBSSH_VERSION_MINOR >= 10) ||               \
   (LIBSSH_VERSION_MAJOR > 0)
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
@@ -1162,13 +1160,23 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
         break;
       }
       else if(statvfs) {
+        #ifdef _MSC_VER
+        #define LIBSSH_VFS_SIZE_MASK "I64u"
+        #else
+        #define LIBSSH_VFS_SIZE_MASK PRIu64
+        #endif
         char *tmp = aprintf("statvfs:\n"
-                            "f_bsize: %llu\n" "f_frsize: %llu\n"
-                            "f_blocks: %llu\n" "f_bfree: %llu\n"
-                            "f_bavail: %llu\n" "f_files: %llu\n"
-                            "f_ffree: %llu\n" "f_favail: %llu\n"
-                            "f_fsid: %llu\n" "f_flag: %llu\n"
-                            "f_namemax: %llu\n",
+                            "f_bsize: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_frsize: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_blocks: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_bfree: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_bavail: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_files: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_ffree: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_favail: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_fsid: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_flag: %" LIBSSH_VFS_SIZE_MASK "\n"
+                            "f_namemax: %" LIBSSH_VFS_SIZE_MASK "\n",
                             statvfs->f_bsize, statvfs->f_frsize,
                             statvfs->f_blocks, statvfs->f_bfree,
                             statvfs->f_bavail, statvfs->f_files,
@@ -1469,13 +1477,7 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
             state(data, SSH_STOP);
             break;
           }
-          /* since this counts what we send to the client, we include the
-             newline in this counter */
-          data->req.bytecount += sshc->readdir_len + 1;
 
-          /* output debug output if that is requested */
-          Curl_debug(data, CURLINFO_DATA_OUT, (char *)sshc->readdir_filename,
-                     sshc->readdir_len);
         }
         else {
           if(Curl_dyn_add(&sshc->readdir_buf, sshc->readdir_longentry)) {
@@ -1567,12 +1569,6 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
                                    Curl_dyn_ptr(&sshc->readdir_buf),
                                    Curl_dyn_len(&sshc->readdir_buf));
 
-      if(!result) {
-        /* output debug output if that is requested */
-        Curl_debug(data, CURLINFO_DATA_OUT, Curl_dyn_ptr(&sshc->readdir_buf),
-                   Curl_dyn_len(&sshc->readdir_buf));
-        data->req.bytecount += Curl_dyn_len(&sshc->readdir_buf);
-      }
       ssh_string_free_char(sshc->readdir_tmp);
       sshc->readdir_tmp = NULL;
 
@@ -1966,10 +1962,9 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
       ssh_disconnect(sshc->ssh_session);
       if(!ssh_version(SSH_VERSION_INT(0, 10, 0))) {
         /* conn->sock[FIRSTSOCKET] is closed by ssh_disconnect behind our back,
-           explicitly mark it as closed with the memdebug macro. This libssh
+           tell the connection to forget about it. This libssh
            bug is fixed in 0.10.0. */
-        fake_sclose(conn->sock[FIRSTSOCKET]);
-        conn->sock[FIRSTSOCKET] = CURL_SOCKET_BAD;
+        Curl_conn_forget_socket(data, FIRSTSOCKET);
       }
 
       SSH_STRING_FREE_CHAR(sshc->homedir);
@@ -2186,7 +2181,7 @@ static CURLcode myssh_connect(struct Curl_easy *data, bool *done)
     myssh_setup_connection(data, conn);
 
   /* We default to persistent connections. We set this already in this connect
-     function to make the re-use checks properly be able to check this bit. */
+     function to make the reuse checks properly be able to check this bit. */
   connkeep(conn, "SSH default");
 
   if(conn->handler->protocol & CURLPROTO_SCP) {
@@ -2570,6 +2565,12 @@ static ssize_t sftp_send(struct Curl_easy *data, int sockindex,
   struct connectdata *conn = data->conn;
   (void)sockindex;
 
+  /* limit the writes to the maximum specified in Section 3 of
+   * https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02
+   */
+  if(len > 32768)
+    len = 32768;
+
   nwrite = sftp_write(conn->proto.sshc.sftp_file, mem, len);
 
   myssh_block2waitfor(conn, FALSE);
@@ -2657,7 +2658,7 @@ static void sftp_quote(struct Curl_easy *data)
   /* if a command starts with an asterisk, which a legal SFTP command never
      can, the command will be allowed to fail without it causing any
      aborts or cancels etc. It will cause libcurl to act as if the command
-     is successful, whatever the server reponds. */
+     is successful, whatever the server responds. */
 
   if(cmd[0] == '*') {
     cmd++;
@@ -2831,7 +2832,7 @@ static void sftp_quote_stat(struct Curl_easy *data)
   /* if a command starts with an asterisk, which a legal SFTP command never
      can, the command will be allowed to fail without it causing any
      aborts or cancels etc. It will cause libcurl to act as if the command
-     is successful, whatever the server reponds. */
+     is successful, whatever the server responds. */
 
   if(cmd[0] == '*') {
     cmd++;
@@ -2955,5 +2956,11 @@ void Curl_ssh_version(char *buffer, size_t buflen)
 {
   (void)msnprintf(buffer, buflen, "libssh/%s", ssh_version(0));
 }
+
+#if defined(__GNUC__) &&                        \
+  (LIBSSH_VERSION_MINOR >= 10) ||               \
+  (LIBSSH_VERSION_MAJOR > 0)
+#pragma GCC diagnostic pop
+#endif
 
 #endif                          /* USE_LIBSSH */

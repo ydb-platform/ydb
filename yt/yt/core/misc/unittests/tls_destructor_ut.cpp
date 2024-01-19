@@ -9,13 +9,13 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::atomic<bool> TlsDestructorOfWasCalled = false;
+std::atomic<bool> TlsDestructorWasCalled = false;
 
 struct TTlsGuard
 {
     ~TTlsGuard()
     {
-        TlsDestructorOfWasCalled = true;
+        TlsDestructorWasCalled = true;
     }
 };
 
@@ -26,11 +26,12 @@ TEST(TTlsDestructorTest, DestructorIsCalled)
     // This is the test of compiler in fact. Check expected behaviour.
 
     std::thread thread{[] {
-        Y_UNUSED(TlsGuard); // Important moment. Tls must be touched to be initialized and destructed later.
+        // Important moment. TLS must be touched to be initialized and destructed later.
+        Y_UNUSED(TlsGuard);
     }};
     thread.join();
 
-    EXPECT_TRUE(TlsDestructorOfWasCalled);
+    EXPECT_TRUE(TlsDestructorWasCalled);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

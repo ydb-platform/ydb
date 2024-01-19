@@ -1,9 +1,7 @@
-#include "mkql_builtins_codegen.h"
+#include "mkql_builtins_codegen.h" // Y_IGNORE
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Instructions.h>
+#include "mkql_builtins_codegen_llvm.h"  // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {

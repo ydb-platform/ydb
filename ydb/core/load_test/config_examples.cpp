@@ -16,6 +16,7 @@ TVector<TConfigTemplate> BuildExamples() {
     UniformPartitionsCount: 1000
     DeleteTableOnFinish: 1
     WorkloadType: 0
+    QueryType: "data"
     Kv: {
         InitRowCount: 1000
         PartitionsByLoad: true
@@ -23,6 +24,20 @@ TVector<TConfigTemplate> BuildExamples() {
         StringLen: 8
         ColumnsCnt: 2
         RowsCnt: 1
+    }
+})_"
+        },
+        TConfigTemplate{
+            .LoadName = "KeyValueLoad",
+            .Template = R"_(KeyValueLoad: {
+    TargetTabletId: xxx
+    DurationSeconds: 120
+    Workers {
+        KeyPrefix: "LoadTest_"
+        MaxInFlight: 128
+        Size: 1024
+        IsInline: false
+        LoopAtKeyCount: 0
     }
 })_"
         },

@@ -187,6 +187,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui
     , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
+    , LastEmittedHeartbeat(TRowVersion::Min())
 {
     TabletCounters.Populate(Counters);
 
@@ -643,7 +644,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 auto* clientInfo = result.AddConsumerResult();
                 clientInfo->SetConsumer(userInfo.User);
                 clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
-                clientInfo->SetCommitedOffset(userInfo.GetReadOffset());
+                clientInfo->SetCommitedOffset(userInfo.Offset);
                 requiredConsumers.extract(userInfo.User);
             }
             continue;

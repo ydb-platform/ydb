@@ -14,3 +14,23 @@ CREATE TEMP TABLE nocols();
 --
 CREATE TEMP TABLE foo (f1 int);
 INSERT INTO foo VALUES (42),(3),(10),(7),(null),(null),(1);
+-- check if indexscans do the right things
+CREATE INDEX fooi ON foo (f1);
+CREATE INDEX fooi ON foo (f1 DESC);
+CREATE INDEX fooi ON foo (f1 DESC NULLS LAST);
+-- X = X isn't a no-op, it's effectively X IS NOT NULL assuming = is strict
+-- (see bug #5084)
+select * from (values (2),(null),(1)) v(k) where k = k order by k;
+ k 
+---
+ 1
+ 2
+(2 rows)
+
+select * from (values (2),(null),(1)) v(k) where k = k;
+ k 
+---
+ 2
+ 1
+(2 rows)
+

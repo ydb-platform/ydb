@@ -504,7 +504,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     TBytesStatistics stats;
     TUnboxedValueVector cells;
     if (TotalColumnsCount == 0u) {
-        cells.resize(batch.size(), holderFactory.GetEmptyContainer());
+        cells.resize(batch.size(), holderFactory.GetEmptyContainerLazy());
         stats.AddStatistics({ sizeof(ui64) * batch.size(), sizeof(ui64) * batch.size() });
     } else {
         cells.resize(batch.size() * TotalColumnsCount);
@@ -557,7 +557,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     TUnboxedValueVector cells;
 
     if (TotalColumnsCount == 0u) {
-        cells.resize(batch.GetRecordsCount(), holderFactory.GetEmptyContainer());
+        cells.resize(batch.GetRecordsCount(), holderFactory.GetEmptyContainerLazy());
         stats.AddStatistics({ sizeof(ui64) * batch.GetRecordsCount(), sizeof(ui64) * batch.GetRecordsCount() });
     } else {
         cells.resize(batch.GetRecordsCount() * TotalColumnsCount);

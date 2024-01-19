@@ -451,6 +451,7 @@ public:
         subdomain.SetName(Subdomain.second);
         if (Tenant->IsExternalSubdomain) {
             subdomain.SetExternalSchemeShard(true);
+            subdomain.SetGraphShard(true);
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }

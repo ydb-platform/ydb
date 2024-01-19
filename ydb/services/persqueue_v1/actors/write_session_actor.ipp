@@ -299,7 +299,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     }
 
     State = ES_DYING;
-
+    TRlHelpers::PassAway(TActorBootstrapped<TWriteSessionActor>::SelfId());
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
 }
 
@@ -679,7 +679,12 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     NPQ::TPartitionWriterOpts opts;
 
     opts.WithDeduplication(UseDeduplication);
-    if constexpr (!UseMigrationProtocol) {
+    opts.WithSourceId(SourceId);
+    opts.WithExpectedGeneration(ExpectedGeneration);
+
+    if constexpr (UseMigrationProtocol) {
+        opts.WithTopicPath(InitRequest.topic());
+    } else {
         if (Request->GetDatabaseName()) {
             opts.WithDatabase(*Request->GetDatabaseName());
         }
@@ -699,8 +704,6 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
         std::make_unique<TPartitionWriterCacheActor>(ctx.SelfID,
                                                      Partition,
                                                      PartitionTabletId,
-                                                     ExpectedGeneration,
-                                                     SourceId,
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
@@ -1275,7 +1278,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
         }
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }

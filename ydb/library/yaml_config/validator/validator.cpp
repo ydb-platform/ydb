@@ -6,9 +6,9 @@
 
 #include <utility>
 
-using namespace NFyaml;
+namespace NKikimr::NYamlConfig::NValidator {
 
-namespace NYamlConfig::NValidator {
+using namespace NFyaml;
 
 TValidationResult::TIssue::TIssue() {}
 
@@ -424,13 +424,13 @@ TValidationResult TEnumValidator::Validate(const TNodeRef& node) {
     return validationResult;
 }
 
-} // namespace NYamlConfig::NValidator
+} // namespace NKikimr::NYamlConfig::NValidator
 
-IOutputStream& operator<<(IOutputStream& out, const NYamlConfig::NValidator::TValidationResult::TIssue& issue) {
+IOutputStream& operator<<(IOutputStream& out, const NKikimr::NYamlConfig::NValidator::TValidationResult::TIssue& issue) {
     return out << issue.NodePath << ": " << issue.Problem;
 }
 
-Y_DECLARE_OUT_SPEC(, NYamlConfig::NValidator::TValidationResult, out, result) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NYamlConfig::NValidator::TValidationResult, out, result) {
 for (const auto& issue : result.Issues) {
         out << issue << ";" << Endl;
     }

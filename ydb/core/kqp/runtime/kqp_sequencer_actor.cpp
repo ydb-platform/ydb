@@ -183,7 +183,7 @@ private:
         finished = (status == NUdf::EFetchStatus::Finish)
             && (UnprocessedRows == 0);
 
-        if (WaitingReplies == 0) {
+        if (PendingRows.size() > 0 && WaitingReplies == 0) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         } 
 

@@ -32,6 +32,7 @@ SRCS(
     compression/brotli.cpp
     compression/bzip2.cpp
     compression/codec.cpp
+    compression/dictionary_codec.cpp
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
@@ -81,7 +82,7 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
-    concurrency/recurring_executor_base.cpp
+    concurrency/retrying_periodic_executor.cpp
     concurrency/scheduled_executor.cpp
 
     crypto/config.cpp
@@ -93,7 +94,7 @@ SRCS(
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
-    logging/log_manager.cpp
+    GLOBAL logging/log_manager.cpp
     logging/logger_owner.cpp
     logging/serializable_logger.cpp
     logging/stream_output.cpp
@@ -252,6 +253,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/depth_limiting_yson_consumer.cpp
+    yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp

@@ -32,9 +32,6 @@
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
-#ifdef HAVE_UTSNAME_H
-#include <sys/utsname.h>
-#endif
 #ifdef HAVE_NETDB_H
 #include <netdb.h>
 #endif
@@ -822,7 +819,7 @@ static int ftp_domore_getsock(struct Curl_easy *data,
   DEBUGF(infof(data, "ftp_domore_getsock()"));
   if(conn->cfilter[SECONDARYSOCKET]
      && !Curl_conn_is_connected(conn, SECONDARYSOCKET))
-    return Curl_conn_get_select_socks(data, SECONDARYSOCKET, socks);
+    return 0;
 
   if(FTP_STOP == ftpc->state) {
     int bits = GETSOCK_READSOCK(0);
@@ -865,7 +862,7 @@ static CURLcode ftp_state_cwd(struct Curl_easy *data,
     if(conn->bits.reuse && ftpc->entrypath &&
        /* no need to go to entrypath when we have an absolute path */
        !(ftpc->dirdepth && ftpc->dirs[0][0] == '/')) {
-      /* This is a re-used connection. Since we change directory to where the
+      /* This is a reused connection. Since we change directory to where the
          transfer is taking place, we must first get back to the original dir
          where we ended up after login: */
       ftpc->cwdcount = 0; /* we count this as the first path, then we add one
@@ -950,7 +947,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
     char *port_start = NULL;
     char *port_sep = NULL;
 
-    addr = calloc(addrlen + 1, 1);
+    addr = calloc(1, addrlen + 1);
     if(!addr) {
       result = CURLE_OUT_OF_MEMORY;
       goto out;
@@ -975,7 +972,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
         if(ip_end) {
           /* either ipv6 or (ipv4|domain|interface):port(-range) */
 #ifdef ENABLE_IPV6
-          if(Curl_inet_pton(AF_INET6, string_ftpport, sa6) == 1) {
+          if(Curl_inet_pton(AF_INET6, string_ftpport, &sa6->sin6_addr) == 1) {
             /* ipv6 */
             port_min = port_max = 0;
             strcpy(addr, string_ftpport);
@@ -1900,7 +1897,7 @@ static CURLcode ftp_state_pasv_resp(struct Curl_easy *data,
     if(data->set.ftp_skip_ip) {
       /* told to ignore the remotely given IP but instead use the host we used
          for the control connection */
-      infof(data, "Skip %u.%u.%u.%u for data connection, re-use %s instead",
+      infof(data, "Skip %u.%u.%u.%u for data connection, reuse %s instead",
             ip[0], ip[1], ip[2], ip[3],
             conn->host.name);
       ftpc->newhost = strdup(control_address(conn));
@@ -2070,6 +2067,31 @@ static bool ftp_213_date(const char *p, int *year, int *month, int *day,
   return TRUE;
 }
 
+static CURLcode client_write_header(struct Curl_easy *data,
+                                    char *buf, size_t blen)
+{
+  /* Some replies from an FTP server are written to the client
+   * as CLIENTWRITE_HEADER, formatted as if they came from a
+   * HTTP conversation.
+   * In all protocols, CLIENTWRITE_HEADER data is only passed to
+   * the body write callback when data->set.include_header is set
+   * via CURLOPT_HEADER.
+   * For historic reasons, FTP never played this game and expects
+   * all its HEADERs to do that always. Set that flag during the
+   * call to Curl_client_write() so it does the right thing.
+   *
+   * Notice that we cannot enable this flag for FTP in general,
+   * as an FTP transfer might involve a HTTP proxy connection and
+   * headers from CONNECT should not automatically be part of the
+   * output. */
+  CURLcode result;
+  int save = data->set.include_header;
+  data->set.include_header = TRUE;
+  result = Curl_client_write(data, CLIENTWRITE_HEADER, buf, blen);
+  data->set.include_header = save? TRUE:FALSE;
+  return result;
+}
+
 static CURLcode ftp_state_mdtm_resp(struct Curl_easy *data,
                                     int ftpcode)
 {
@@ -2123,8 +2145,7 @@ static CURLcode ftp_state_mdtm_resp(struct Curl_easy *data,
                   tm->tm_hour,
                   tm->tm_min,
                   tm->tm_sec);
-        result = Curl_client_write(data, CLIENTWRITE_BOTH, headerbuf,
-                                   headerbuflen);
+        result = client_write_header(data, headerbuf, headerbuflen);
         if(result)
           return result;
       } /* end of a ridiculous amount of conditionals */
@@ -2334,7 +2355,7 @@ static CURLcode ftp_state_size_resp(struct Curl_easy *data,
       char clbuf[128];
       int clbuflen = msnprintf(clbuf, sizeof(clbuf),
                 "Content-Length: %" CURL_FORMAT_CURL_OFF_T "\r\n", filesize);
-      result = Curl_client_write(data, CLIENTWRITE_BOTH, clbuf, clbuflen);
+      result = client_write_header(data, clbuf, clbuflen);
       if(result)
         return result;
     }
@@ -2368,8 +2389,7 @@ static CURLcode ftp_state_rest_resp(struct Curl_easy *data,
 #ifdef CURL_FTP_HTTPSTYLE_HEAD
     if(ftpcode == 350) {
       char buffer[24]= { "Accept-ranges: bytes\r\n" };
-      result = Curl_client_write(data, CLIENTWRITE_BOTH, buffer,
-                                 strlen(buffer));
+      result = client_write_header(data, buffer, strlen(buffer));
       if(result)
         return result;
     }
@@ -3460,7 +3480,7 @@ CURLcode ftp_sendquote(struct Curl_easy *data,
       /* if a command starts with an asterisk, which a legal FTP command never
          can, the command will be allowed to fail without it causing any
          aborts or cancels etc. It will cause libcurl to act as if the command
-         is successful, whatever the server reponds. */
+         is successful, whatever the server responds. */
 
       if(cmd[0] == '*') {
         cmd++;
@@ -4359,7 +4379,7 @@ static CURLcode ftp_setup_connection(struct Curl_easy *data,
   CURLcode result = CURLE_OK;
   struct ftp_conn *ftpc = &conn->proto.ftpc;
 
-  ftp = calloc(sizeof(struct FTP), 1);
+  ftp = calloc(1, sizeof(struct FTP));
   if(!ftp)
     return CURLE_OUT_OF_MEMORY;
 

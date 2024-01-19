@@ -237,7 +237,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                             TABLED() {
                                 ui32 logSize = OwnerData[owner].OperationLog.Size();
                                 str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
-                                    data-target='#operationLogCollapse" << owner << 
+                                    data-target='#operationLogCollapse" << owner <<
                                     "'>Show last " << logSize << " operations</button>";
 
                                 str << "<div id='operationLogCollapse" << owner << "' class='collapse'>";
@@ -335,7 +335,7 @@ void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
 
     auto commonParams = [&] (TStringStream &str, TString requestName) {
         for (TEvChunkLock::ELockFrom from : { TEvChunkLock::ELockFrom::LOG, TEvChunkLock::ELockFrom::PERSONAL_QUOTA } ) {
-            str << "<input id='" << requestName << "LockFrom_" << TEvChunkLock::ELockFrom_Name(from) << 
+            str << "<input id='" << requestName << "LockFrom_" << TEvChunkLock::ELockFrom_Name(from) <<
                 "' name='lockFrom' type='radio' value='" << TEvChunkLock::ELockFrom_Name(from) << "'";
             if (from == TEvChunkLock::ELockFrom::PERSONAL_QUOTA) {
                 str << " checked";
@@ -370,7 +370,7 @@ void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
             LABEL_CLASS_FOR("control-label", "color") { str << "Color"; }
             for (TColor::E color : { TColor::CYAN, TColor::LIGHT_YELLOW, TColor::YELLOW, TColor::LIGHT_ORANGE,
                     TColor::ORANGE, TColor::RED, TColor::BLACK} ) {
-                str << "<input id='inputColor_" << TPDiskSpaceColor_Name(color) << "' name='spaceColor' type='radio' value='" 
+                str << "<input id='inputColor_" << TPDiskSpaceColor_Name(color) << "' name='spaceColor' type='radio' value='"
                     << TPDiskSpaceColor_Name(color) << "'";
                 if (color == TColor::CYAN) {
                     str << " checked";

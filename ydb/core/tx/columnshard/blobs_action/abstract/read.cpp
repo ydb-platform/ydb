@@ -73,9 +73,9 @@ void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatu
 void IBlobsReadingAction::AddRange(const TBlobRange& range, const TString& result /*= Default<TString>()*/) {
     Y_ABORT_UNLESS(!Started);
     if (!result) {
-        Y_ABORT_UNLESS(RangesForRead[range.BlobId].emplace(range).second);
+        AFL_VERIFY(RangesForRead[range.BlobId].emplace(range).second)("range", range.ToString());
     } else {
-        Y_ABORT_UNLESS(RangesForResult.emplace(range, result).second);
+        AFL_VERIFY(RangesForResult.emplace(range, result).second)("range", range.ToString());
     }
 }
 

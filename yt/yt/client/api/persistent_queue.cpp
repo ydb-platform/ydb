@@ -95,6 +95,7 @@ public:
             StateTablePath_,
             TabletIndexes_);
 
+        PollExecutors_.reserve(TabletIndexes_.size());
         for (int tabletIndex : TabletIndexes_) {
             auto executor = New<TPeriodicExecutor>(
                 Invoker_,
@@ -262,8 +263,10 @@ private:
         auto stateColumnId = schema->GetColumnIndexOrThrow(TStateTable::StateColumnName);
 
         std::vector<TStateTableRow> rows;
+        auto rowsRange = rowset->GetRows();
+        rows.reserve(rowsRange.Size());
 
-        for (auto row : rowset->GetRows()) {
+        for (auto row : rowsRange) {
             TStateTableRow stateRow;
 
             YT_ASSERT(row[tabletIndexColumnId].Type == EValueType::Int64);
@@ -522,7 +525,7 @@ private:
         while (!state->Batches.empty() && !state->Promises.empty()) {
             const auto& batch = state->Batches.front();
             const auto& promise = state->Promises.front();
-            toFulfill.push_back(std::make_tuple(batch, promise));
+            toFulfill.push_back(std::tuple(batch, promise));
             state->Batches.pop_front();
             state->Promises.pop_front();
             state->BatchesRowCount -= batch.RowCount;
@@ -598,6 +601,7 @@ private:
                 auto rows = rowset->GetRows();
                 if (!rows.Empty()) {
                     std::vector<i64> rowIndexes;
+                    rowIndexes.reserve(rows.Size());
                     for (auto row : rows) {
                         i64 rowIndex;
                         FromUnversionedRow(
@@ -653,6 +657,9 @@ private:
 
                 auto rowBuffer = New<TRowBuffer>(TPersistentQueuePollerBufferTag());
                 std::vector<TUnversionedRow> rows;
+                if (auto rowCount = batch.EndRowIndex - batch.BeginRowIndex; rowCount > 0) {
+                    rows.reserve(rowCount);
+                }
                 for (i64 rowIndex = batch.BeginRowIndex; rowIndex < batch.EndRowIndex; ++rowIndex) {
                     auto row = rowBuffer->AllocateUnversioned(3);
                     row[0] = MakeUnversionedInt64Value(batch.TabletIndex, tabletIndexColumnId);
@@ -776,6 +783,9 @@ private:
                     auto rowBuffer = New<TRowBuffer>(TPersistentQueuePollerBufferTag());
 
                     std::vector<TUnversionedRow> deleteKeys;
+                    if (auto rowCount = stateTrimRowIndex - statistics.LastTrimmedRowIndex; rowCount > 0) {
+                        deleteKeys.reserve(rowCount);
+                    }
                     for (i64 rowIndex = statistics.LastTrimmedRowIndex; rowIndex < stateTrimRowIndex; ++rowIndex) {
                         auto key = rowBuffer->AllocateUnversioned(2);
                         key[0] = MakeUnversionedInt64Value(tabletIndex, tabletIndexColumnId);

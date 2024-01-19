@@ -77,10 +77,18 @@ struct TStageExecutionStats {
     std::vector<ui64> InputBytes;
     std::vector<ui64> OutputRows;
     std::vector<ui64> OutputBytes;
+    std::vector<ui64> ResultRows;
+    std::vector<ui64> ResultBytes;
+    std::vector<ui64> IngressRows;
+    std::vector<ui64> IngressBytes;
+    std::vector<ui64> EgressRows;
+    std::vector<ui64> EgressBytes;
 
-    std::vector<ui64> FirstRowTimeMs;
     std::vector<ui64> FinishTimeMs;
     std::vector<ui64> StartTimeMs;
+    std::vector<ui64> DurationUs;
+    std::vector<ui64> WaitInputTimeUs;
+    std::vector<ui64> WaitOutputTimeUs;
 
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;
@@ -92,7 +100,7 @@ struct TStageExecutionStats {
 
     void Resize(ui32 taskCount);
     void UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage);
+    void UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 
 struct TQueryExecutionStats {
@@ -108,8 +116,8 @@ public:
     // basic stats
     std::unordered_set<ui64> AffectedShards;
     ui32 TotalTasks = 0;
-    std::atomic<ui64> ResultBytes = 0;
-    std::atomic<ui64> ResultRows = 0;
+    ui64 ResultBytes = 0;
+    ui64 ResultRows = 0;
     TDuration ExecuterCpuTime;
 
     TInstant StartTs;
@@ -156,6 +164,7 @@ public:
 
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
+    void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
 
     void Finish();
 

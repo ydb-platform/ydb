@@ -19,7 +19,7 @@
 #include <boost/static_assert.hpp>
 #include <boost/assert.hpp>
 #include <boost/type_traits/is_same.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional.hpp>
 #include <boost/throw_exception.hpp>
 #include <algorithm>
 #include <string>

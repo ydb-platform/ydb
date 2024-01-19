@@ -87,6 +87,7 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_table
     ydb/services/auth
     ydb/services/cms

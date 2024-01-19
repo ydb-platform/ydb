@@ -75,7 +75,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
         }
     }
-    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize && 
+    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize &&
         userAccessibleChunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
         throw NPDisk::TPDiskFormatBigChunkException() << "diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
@@ -154,7 +154,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
     blockDevice->PreadSync(formatRaw->Data(), formatSectorsSize, 0,
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
-    for (auto& key : mainKey.Keys) { 
+    for (auto& key : mainKey.Keys) {
         NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
         cypher.SetKey(key);
         bool isOk = false;

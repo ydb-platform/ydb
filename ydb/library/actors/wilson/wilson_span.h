@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/hash.h>
+#include <util/generic/overloaded.h>
 #include <util/datetime/cputimer.h>
 
 #include "wilson_trace.h"
@@ -56,13 +57,17 @@ namespace NWilson {
             int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
             bool Ignored = false;
+            NActors::TActorSystem* ActorSystem;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags)
+            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem)
                 : StartTime(startTime)
                 , StartCycles(startCycles)
                 , TraceId(std::move(traceId))
                 , Flags(flags)
-            {}
+                , ActorSystem(actorSystem ? actorSystem : (NActors::TlsActivationContext ? NActors::TActivationContext::ActorSystem() : nullptr))
+            {
+                Y_DEBUG_ABORT_UNLESS(ActorSystem, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
+            }
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -76,9 +81,10 @@ namespace NWilson {
         TSpan(const TSpan&) = delete;
         TSpan(TSpan&&) = default;
 
-        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name, TFlags flags = EFlags::NONE)
+        TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
+                TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr)
             : Data(parentId
-                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags)
+                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
                     : nullptr)
         {
             if (Y_UNLIKELY(*this)) {
@@ -89,11 +95,18 @@ namespace NWilson {
                     Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
                     Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
 
-                    if (name) {
-                        Name(std::move(*name));
-                    }
+                    std::visit(TOverloaded{
+                        [&](const char *name) {
+                            Name(TString(name));
+                        },
+                        [&](std::optional<TString>& name) {
+                            if (name) {
+                                Name(std::move(*name));
+                            }
+                        }
+                    }, name);
 
-                    Attribute("node_id", NActors::TActivationContext::ActorSystem()->NodeId);
+                    Attribute("node_id", Data->ActorSystem->NodeId);
                 } else {
                     Data->Ignored = true; // ignore this span due to verbosity mismatch, still allowing child spans to be created
                 }
@@ -146,29 +159,32 @@ namespace NWilson {
             return *this;
         }
 
-        TSpan& Name(TString name) {
+        template<typename T>
+        TSpan& Name(T&& name) {
             if (Y_UNLIKELY(*this)) {
-                Data->Span.set_name(std::move(name));
+                Data->Span.set_name(std::forward<T>(name));
             } else {
                 VerifyNotSent();
             }
             return *this;
         }
 
-        TSpan& Attribute(TString name, TAttributeValue value) {
+        template<typename T, typename T1>
+        TSpan& Attribute(T&& name, T1&& value) {
             if (Y_UNLIKELY(*this)) {
-                SerializeKeyValue(std::move(name), std::move(value), Data->Span.add_attributes());
+                SerializeKeyValue(std::forward<T>(name), std::forward<T1>(value), Data->Span.add_attributes());
             } else {
                 VerifyNotSent();
             }
             return *this;
         }
 
-        TSpan& Event(TString name, TKeyValueList attributes) {
+        template<typename T, typename T1 = std::initializer_list<std::pair<const char*, TAttributeValue>>>
+        TSpan& Event(T&& name, T1&& attributes) {
             if (Y_UNLIKELY(*this)) {
                 auto *event = Data->Span.add_events();
                 event->set_time_unix_nano(TimeUnixNano());
-                event->set_name(std::move(name));
+                event->set_name(std::forward<T>(name));
                 for (auto&& [key, value] : attributes) {
                     SerializeKeyValue(std::move(key), std::move(value), event->add_attributes());
                 }
@@ -178,7 +194,13 @@ namespace NWilson {
             return *this;
         }
 
-        TSpan& Link(const TTraceId& traceId, TKeyValueList attributes) {
+        template<typename T>
+        TSpan& Event(T&& name) {
+            return Event(std::forward<T>(name), {});
+        }
+
+        template<typename T = std::initializer_list<std::pair<TString, TAttributeValue>>>
+        TSpan& Link(const TTraceId& traceId, T&& attributes) {
             if (Y_UNLIKELY(*this)) {
                 auto *link = Data->Span.add_links();
                 link->set_trace_id(traceId.GetTraceIdPtr(), traceId.GetTraceIdSize());
@@ -192,6 +214,8 @@ namespace NWilson {
             return *this;
         }
 
+        TSpan& Link(const TTraceId& traceId);
+
         void EndOk() {
             if (Y_UNLIKELY(*this)) {
                 auto *status = Data->Span.mutable_status();
@@ -202,11 +226,12 @@ namespace NWilson {
             }
         }
 
-        void EndError(TString error) {
+        template<typename T>
+        void EndError(T&& error) {
             if (Y_UNLIKELY(*this)) {
                 auto *status = Data->Span.mutable_status();
                 status->set_code(NTraceProto::Status::STATUS_CODE_ERROR);
-                status->set_message(std::move(error));
+                status->set_message(std::forward<T>(error));
                 End();
             } else {
                 VerifyNotSent();
@@ -227,6 +252,16 @@ namespace NWilson {
         TTraceId GetTraceId() const {
             return Data ? TTraceId(Data->TraceId) : TTraceId();
         }
+
+        NActors::TActorSystem* GetActorSystem() const {
+            return Data ? Data->ActorSystem : nullptr;
+        }
+
+        TSpan CreateChild(ui8 verbosity, std::variant<std::optional<TString>, const char*> name, TFlags flags = EFlags::NONE) const {
+            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
+        }
+
+        static const TSpan Empty;
 
     private:
         void Send();

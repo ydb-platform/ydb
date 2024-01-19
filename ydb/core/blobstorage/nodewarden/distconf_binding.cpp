@@ -58,7 +58,7 @@ namespace NKikimr::NStorage {
         // issue updates
         NodeIds = std::move(nodeIds);
         BindQueue.Update(NodeIds);
-        if (StorageConfig) {
+        if (NodeListObtained && StorageConfigLoaded) {
             IssueNextBindRequest();
         }
     }

@@ -570,6 +570,7 @@ public:
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
+            response.SetNodeId(SelfId().NodeId());
             dbCounters = result.Value->DbCounters;
         } else {
             dbCounters = Counters->GetDbCounters(request.GetDatabase());
@@ -661,7 +662,7 @@ public:
             << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {

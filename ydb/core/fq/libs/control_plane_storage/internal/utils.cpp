@@ -1,5 +1,6 @@
 #include "utils.h"
 
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
 #include <ydb/core/metering/bill_record.h>
@@ -263,18 +264,18 @@ TString GetPrettyStatistics(const TString& statistics) {
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    RemapNode(writer, p.second, "StagesCount", "StagesCount");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.TasksCount", "TasksCount");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.BuildCpuTimeUs", "BuildCpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ComputeCpuTimeUs", "ComputeCpuTimeUs");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.Tasks", "Tasks");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.CpuTimeUs", "CpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.SourceCpuTimeUs", "SourceCpuTimeUs");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressS3SourceBytes", "IngressObjectStorageBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressS3SinkBytes", "EgressObjectStorageBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressPqSourceBytes", "IngressStreamBytes");
-                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressPqSinkBytes", "EgressStreamBytes");
-                    RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
-                    RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.InputRows", "InputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.ResultRows", "ResultRows");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressRows", "EgressRows");
                 writer.OnEndMap();
             }
             // YQv2
@@ -282,18 +283,127 @@ TString GetPrettyStatistics(const TString& statistics) {
             else {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    AggregateNode(writer, p.second, "TotalTasks", "TasksCount");
-                    AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
-                    AggregateNode(writer, p.second, "Ingress=S3Source.Ingress.Bytes", "IngressObjectStorageBytes");
-                    AggregateNode(writer, p.second, "Egress=S3Sink.Egress.Bytes", "EgressObjectStorageBytes");
+                    RemapNode(writer, p.second, "Tasks", "Tasks");
+                    RemapNode(writer, p.second, "CpuTimeUs", "CpuTimeUs");
                     RemapNode(writer, p.second, "IngressBytes", "IngressBytes");
+                    RemapNode(writer, p.second, "IngressRows", "IngressRows");
+                    RemapNode(writer, p.second, "InputBytes", "InputBytes");
+                    RemapNode(writer, p.second, "InputRows", "InputRows");
+                    RemapNode(writer, p.second, "OutputBytes", "OutputBytes");
+                    RemapNode(writer, p.second, "OutputRows", "OutputRows");
+                    RemapNode(writer, p.second, "ResultBytes", "ResultBytes");
+                    RemapNode(writer, p.second, "ResultRows", "ResultRows");
                     RemapNode(writer, p.second, "EgressBytes", "EgressBytes");
+                    RemapNode(writer, p.second, "EgressRows", "EgressRows");
                 writer.OnEndMap();
             }
         }
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
+}
+
+namespace {
+
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
+    for (const auto& [stageName, stageStats] : root.GetMap()) {
+        if (!stageStats.IsMap()) {
+            continue;
+        }
+
+        for (const auto& [partKey, partStats] : stageStats.GetMap()) {
+            if (!partStats.IsMap()) {
+                continue;
+            }
+
+            constexpr std::string_view v1Prefix = "Source=";
+            constexpr std::string_view v2Prefix = "Ingress=";
+            std::string_view matchedPrefix;
+            std::string_view ingressPath;
+            if (partKey.StartsWith(v1Prefix)) {
+                matchedPrefix = v1Prefix;
+                ingressPath = "Stage=Total.IngressBytes.sum";
+            } else if (partKey.StartsWith(v2Prefix)) {
+                matchedPrefix = v2Prefix;
+                ingressPath = "Ingress.Bytes.sum";
+            } else {
+                continue;
+            }
+            if (auto valuePtr = partStats.GetValueByPath(ingressPath)) {
+                TString valueKey{partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size()};
+                i64 value = valuePtr->GetIntegerSafe();
+                aggregatedStats[valueKey] += value;
+                break;
+            }
+        }
+    }
+}
+
+void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+    using namespace std::string_view_literals;
+    auto fieldToPath = {
+        std::make_pair(TString{"IngressBytes"}, "IngressBytes.sum"sv),
+        {"EgressBytes", "EgressBytes.sum"},
+        {"InputBytes", "InputBytes.sum"},
+        {"OutputBytes", "OutputBytes.sum"}};
+
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        bool isV1 = rootKey.find('=') != TString::npos;
+        for (auto [field, path] : fieldToPath) {
+            if (auto jsonField = graph.GetValueByPath(fmt::format("{}{}", (isV1 ? "TaskRunner.Stage=Total." : ""), path))) {
+                aggregatedStatistics[field] += jsonField->GetIntegerSafe();
+            }
+        }
+    }
+}
+
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        AggregateStatisticsBySources(graph, aggregatedStatistics);
+    }
+}
+}
+
+void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& dest, std::string_view statsStr) {
+    NJson::TJsonValue statsJson;
+    if (!NJson::ReadJsonFastTree(statsStr, &statsJson)) {
+        return;
+    }
+
+    if (!statsJson.IsMap()) {
+        return;
+    }
+
+    std::unordered_map<TString, i64> aggregatedStatistics;
+    CollectTotalStatistics(statsJson, aggregatedStatistics);
+    CollectDetalizationStatistics(statsJson, aggregatedStatistics);
+
+    for (auto [field, stat] : aggregatedStatistics) {
+        auto newStat = dest.Add();
+        newStat->set_name(TString{field});
+        newStat->set_value(stat);
+    }
+}
+
+StatsValuesList ExtractStatisticsFromProtobuf(const google::protobuf::RepeatedPtrField<FederatedQuery::Internal::StatisticsNamedValue>& statsProto) {
+    StatsValuesList statPairs;
+    statPairs.reserve(statsProto.size());
+    for (const auto& stat : statsProto) {
+        statPairs.emplace_back(stat.name(), stat.value());
+    }
+    return statPairs;
+}
+
+TStringBuilder& operator<<(TStringBuilder& builder, const Statistics& statistics) {
+    bool first = true;
+    for (const auto& [field, value] : statistics.Stats) {
+        if (!first) {
+            builder << ", ";
+        }
+        builder << field << ": [" << value << "]";
+        first = false;
+    }
+    return builder;
 }
 
 };

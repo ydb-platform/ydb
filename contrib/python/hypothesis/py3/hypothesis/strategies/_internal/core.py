@@ -74,13 +74,10 @@ from hypothesis.internal.compat import (
     get_type_hints,
     is_typed_named_tuple,
 )
-from hypothesis.internal.conjecture.utils import (
-    calc_label_from_cls,
-    check_sample,
-    integer_range,
-)
+from hypothesis.internal.conjecture.utils import calc_label_from_cls, check_sample
 from hypothesis.internal.entropy import get_seeder_and_restorer
 from hypothesis.internal.floats import float_of
+from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
     define_function_signature,
     get_pretty_function_description,
@@ -133,7 +130,11 @@ from hypothesis.strategies._internal.strings import (
     OneCharStringStrategy,
     TextStrategy,
 )
-from hypothesis.strategies._internal.utils import cacheable, defines_strategy
+from hypothesis.strategies._internal.utils import (
+    cacheable,
+    defines_strategy,
+    to_jsonable,
+)
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import RepresentationPrinter
 
@@ -1269,12 +1270,18 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
 
     # Let registered extra modules handle their own recognized types first, before
     # e.g. Unions are resolved
-    if thing not in types._global_type_lookup:
-        for module, resolver in types._global_extra_lookup.items():
-            if module in sys.modules:
-                strat = resolver(thing)
-                if strat is not None:
-                    return strat
+    try:
+        known = thing in types._global_type_lookup
+    except TypeError:
+        # thing is not always hashable!
+        pass
+    else:
+        if not known:
+            for module, resolver in types._global_extra_lookup.items():
+                if module in sys.modules:
+                    strat = resolver(thing)
+                    if strat is not None:
+                        return strat
     if not isinstance(thing, type):
         if types.is_a_new_type(thing):
             # Check if we have an explicitly registered strategy for this thing,
@@ -1701,7 +1708,7 @@ class PermutationStrategy(SearchStrategy):
         # change.  We don't consider the last element as it's always a no-op.
         result = list(self.values)
         for i in range(len(result) - 1):
-            j = integer_range(data, i, len(result) - 1)
+            j = data.draw_integer(i, len(result) - 1)
             result[i], result[j] = result[j], result[i]
         return result
 
@@ -2005,7 +2012,7 @@ def shared(
 @composite
 def _maybe_nil_uuids(draw, uuid):
     # Equivalent to `random_uuids | just(...)`, with a stronger bias to the former.
-    if draw(data()).conjecture_data.draw_bits(6) == 63:
+    if draw(data()).conjecture_data.draw_boolean(1 / 64):
         return UUID("00000000-0000-0000-0000-000000000000")
     return uuid
 
@@ -2096,8 +2103,11 @@ class DataObject:
         result = self.conjecture_data.draw(strategy)
         self.count += 1
         printer = RepresentationPrinter(context=current_build_context())
-        printer.text(f"Draw {self.count}")
-        printer.text(": " if label is None else f" ({label}): ")
+        desc = f"Draw {self.count}{'' if label is None else f' ({label})'}: "
+        if TESTCASE_CALLBACKS:
+            self.conjecture_data._observability_args[desc] = to_jsonable(result)
+
+        printer.text(desc)
         printer.pretty(result)
         note(printer.getvalue())
         return result

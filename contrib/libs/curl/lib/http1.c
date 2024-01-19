@@ -163,7 +163,7 @@ static CURLcode start_req(struct h1_req_parser *parser,
       break;
     }
   }
-  /* no SPACE found or empty TARGET or empy HTTP_VERSION */
+  /* no SPACE found or empty TARGET or empty HTTP_VERSION */
   if(!target_len || !hv_len)
     goto out;
 
@@ -318,5 +318,29 @@ out:
   return nread;
 }
 
+CURLcode Curl_h1_req_write_head(struct httpreq *req, int http_minor,
+                                struct dynbuf *dbuf)
+{
+  CURLcode result;
+
+  result = Curl_dyn_addf(dbuf, "%s %s%s%s%s HTTP/1.%d\r\n",
+                         req->method,
+                         req->scheme? req->scheme : "",
+                         req->scheme? "://" : "",
+                         req->authority? req->authority : "",
+                         req->path? req->path : "",
+                         http_minor);
+  if(result)
+    goto out;
+
+  result = Curl_dynhds_h1_dprint(&req->headers, dbuf);
+  if(result)
+    goto out;
+
+  result = Curl_dyn_addn(dbuf, STRCONST("\r\n"));
+
+out:
+  return result;
+}
 
 #endif /* !CURL_DISABLE_HTTP */

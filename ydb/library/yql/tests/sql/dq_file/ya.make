@@ -9,4 +9,14 @@ RECURSE(
     part7
     part8
     part9
+    part10
+    part11
+    part12
+    part13
+    part14
+    part15
+    part16
+    part17
+    part18
+    part19
 )

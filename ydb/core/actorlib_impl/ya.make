@@ -18,8 +18,6 @@ SRCS(
     melancholic_gopher.cpp
     name_service_client_protocol.cpp
     name_service_client_protocol.h
-    node_identifier.cpp
-    node_identifier.h
     proto_ready_actor.h
     read_data_protocol.cpp
     read_data_protocol.h

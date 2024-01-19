@@ -83,10 +83,10 @@ void TLoader::StageParseMeta() noexcept
                 for (const auto &meta : history ? layout.GetBTreeHistoricIndexes() : layout.GetBTreeGroupIndexes()) {
                     NPage::TBtreeIndexMeta converted{{
                         meta.GetRootPageId(), 
-                        meta.GetCount(), 
+                        meta.GetRowCount(), 
                         meta.GetDataSize(), 
-                        meta.GetErasedCount()}, 
-                        meta.GetLevelsCount(), 
+                        meta.GetErasedRowCount()}, 
+                        meta.GetLevelCount(), 
                         meta.GetIndexSize()};
                     (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
                 }
@@ -184,8 +184,15 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // TODO: put index size to stat?
     // TODO: include history indexes bytes
     size_t indexesRawSize = 0;
-    for (auto indexPage : groupIndexesIds) {
-        indexesRawSize += GetPageSize(indexPage);
+    if (BTreeGroupIndexes) {
+        for (const auto &meta : BTreeGroupIndexes) {
+            indexesRawSize += meta.IndexSize;
+        }
+        // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
+    } else {
+        for (auto indexPage : groupIndexesIds) {
+            indexesRawSize += GetPageSize(indexPage);
+        }
     }
 
     auto *partStore = new TPartStore(

@@ -92,9 +92,9 @@
 #endif
 
 struct wolfssl_ssl_backend_data {
-  SSL_CTX* ctx;
-  SSL*     handle;
-  CURLcode io_result;       /* result of last BIO cfilter operation */
+  WOLFSSL_CTX *ctx;
+  WOLFSSL     *handle;
+  CURLcode    io_result;   /* result of last BIO cfilter operation */
 };
 
 #ifdef OPENSSL_EXTRA
@@ -180,7 +180,8 @@ wolfssl_log_tls12_secret(SSL *ssl)
   }
 #endif
 
-  if(SSL_get_keys(ssl, &ms, &msLen, &sr, &srLen, &cr, &crLen) != SSL_SUCCESS) {
+  if(wolfSSL_get_keys(ssl, &ms, &msLen, &sr, &srLen, &cr, &crLen) !=
+     SSL_SUCCESS) {
     return;
   }
 
@@ -228,7 +229,7 @@ static const struct group_name_map gnm[] = {
 
 #ifdef USE_BIO_CHAIN
 
-static int bio_cf_create(WOLFSSL_BIO *bio)
+static int wolfssl_bio_cf_create(WOLFSSL_BIO *bio)
 {
   wolfSSL_BIO_set_shutdown(bio, 1);
   wolfSSL_BIO_set_init(bio, 1);
@@ -236,14 +237,14 @@ static int bio_cf_create(WOLFSSL_BIO *bio)
   return 1;
 }
 
-static int bio_cf_destroy(WOLFSSL_BIO *bio)
+static int wolfssl_bio_cf_destroy(WOLFSSL_BIO *bio)
 {
   if(!bio)
     return 0;
   return 1;
 }
 
-static long bio_cf_ctrl(WOLFSSL_BIO *bio, int cmd, long num, void *ptr)
+static long wolfssl_bio_cf_ctrl(WOLFSSL_BIO *bio, int cmd, long num, void *ptr)
 {
   struct Curl_cfilter *cf = BIO_get_data(bio);
   long ret = 1;
@@ -277,7 +278,8 @@ static long bio_cf_ctrl(WOLFSSL_BIO *bio, int cmd, long num, void *ptr)
   return ret;
 }
 
-static int bio_cf_out_write(WOLFSSL_BIO *bio, const char *buf, int blen)
+static int wolfssl_bio_cf_out_write(WOLFSSL_BIO *bio,
+                                    const char *buf, int blen)
 {
   struct Curl_cfilter *cf = wolfSSL_BIO_get_data(bio);
   struct ssl_connect_data *connssl = cf->ctx;
@@ -290,15 +292,15 @@ static int bio_cf_out_write(WOLFSSL_BIO *bio, const char *buf, int blen)
   DEBUGASSERT(data);
   nwritten = Curl_conn_cf_send(cf->next, data, buf, blen, &result);
   backend->io_result = result;
-  DEBUGF(LOG_CF(data, cf, "bio_write(len=%d) -> %zd, %d",
-                blen, nwritten, result));
+  CURL_TRC_CF(data, cf, "bio_write(len=%d) -> %zd, %d",
+              blen, nwritten, result);
   wolfSSL_BIO_clear_retry_flags(bio);
   if(nwritten < 0 && CURLE_AGAIN == result)
-    BIO_set_retry_read(bio);
+    BIO_set_retry_write(bio);
   return (int)nwritten;
 }
 
-static int bio_cf_in_read(WOLFSSL_BIO *bio, char *buf, int blen)
+static int wolfssl_bio_cf_in_read(WOLFSSL_BIO *bio, char *buf, int blen)
 {
   struct Curl_cfilter *cf = wolfSSL_BIO_get_data(bio);
   struct ssl_connect_data *connssl = cf->ctx;
@@ -315,35 +317,34 @@ static int bio_cf_in_read(WOLFSSL_BIO *bio, char *buf, int blen)
 
   nread = Curl_conn_cf_recv(cf->next, data, buf, blen, &result);
   backend->io_result = result;
-  DEBUGF(LOG_CF(data, cf, "bio_read(len=%d) -> %zd, %d",
-                blen, nread, result));
+  CURL_TRC_CF(data, cf, "bio_read(len=%d) -> %zd, %d", blen, nread, result);
   wolfSSL_BIO_clear_retry_flags(bio);
   if(nread < 0 && CURLE_AGAIN == result)
     BIO_set_retry_read(bio);
   return (int)nread;
 }
 
-static WOLFSSL_BIO_METHOD *bio_cf_method = NULL;
+static WOLFSSL_BIO_METHOD *wolfssl_bio_cf_method = NULL;
 
-static void bio_cf_init_methods(void)
+static void wolfssl_bio_cf_init_methods(void)
 {
-    bio_cf_method = wolfSSL_BIO_meth_new(BIO_TYPE_MEM, "wolfSSL CF BIO");
-    wolfSSL_BIO_meth_set_write(bio_cf_method, &bio_cf_out_write);
-    wolfSSL_BIO_meth_set_read(bio_cf_method, &bio_cf_in_read);
-    wolfSSL_BIO_meth_set_ctrl(bio_cf_method, &bio_cf_ctrl);
-    wolfSSL_BIO_meth_set_create(bio_cf_method, &bio_cf_create);
-    wolfSSL_BIO_meth_set_destroy(bio_cf_method, &bio_cf_destroy);
+  wolfssl_bio_cf_method = wolfSSL_BIO_meth_new(BIO_TYPE_MEM, "wolfSSL CF BIO");
+  wolfSSL_BIO_meth_set_write(wolfssl_bio_cf_method, &wolfssl_bio_cf_out_write);
+  wolfSSL_BIO_meth_set_read(wolfssl_bio_cf_method, &wolfssl_bio_cf_in_read);
+  wolfSSL_BIO_meth_set_ctrl(wolfssl_bio_cf_method, &wolfssl_bio_cf_ctrl);
+  wolfSSL_BIO_meth_set_create(wolfssl_bio_cf_method, &wolfssl_bio_cf_create);
+  wolfSSL_BIO_meth_set_destroy(wolfssl_bio_cf_method, &wolfssl_bio_cf_destroy);
 }
 
-static void bio_cf_free_methods(void)
+static void wolfssl_bio_cf_free_methods(void)
 {
-    wolfSSL_BIO_meth_free(bio_cf_method);
+  wolfSSL_BIO_meth_free(wolfssl_bio_cf_method);
 }
 
 #else /* USE_BIO_CHAIN */
 
-#define bio_cf_init_methods() Curl_nop_stmt
-#define bio_cf_free_methods() Curl_nop_stmt
+#define wolfssl_bio_cf_init_methods() Curl_nop_stmt
+#define wolfssl_bio_cf_free_methods() Curl_nop_stmt
 
 #endif /* !USE_BIO_CHAIN */
 
@@ -361,7 +362,11 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
   struct ssl_primary_config *conn_config = Curl_ssl_cf_get_primary_config(cf);
   const struct curl_blob *ca_info_blob = conn_config->ca_info_blob;
   const struct ssl_config_data *ssl_config = Curl_ssl_cf_get_config(cf, data);
-  SSL_METHOD* req_method = NULL;
+  const char * const ssl_cafile =
+    /* CURLOPT_CAINFO_BLOB overrides CURLOPT_CAINFO */
+    (ca_info_blob ? NULL : conn_config->CAfile);
+  const char * const ssl_capath = conn_config->CApath;
+  WOLFSSL_METHOD* req_method = NULL;
 #ifdef HAVE_LIBOQS
   word16 oqsAlg = 0;
   size_t idx = 0;
@@ -372,6 +377,7 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
 #else
 #define use_sni(x)  Curl_nop_stmt
 #endif
+  bool imported_native_ca = false;
   bool imported_ca_info_blob = false;
 
   DEBUGASSERT(backend);
@@ -445,8 +451,8 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
   }
 
   if(backend->ctx)
-    SSL_CTX_free(backend->ctx);
-  backend->ctx = SSL_CTX_new(req_method);
+    wolfSSL_CTX_free(backend->ctx);
+  backend->ctx = wolfSSL_CTX_new(req_method);
 
   if(!backend->ctx) {
     failf(data, "SSL: couldn't create a context");
@@ -474,6 +480,7 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
       return CURLE_SSL_CONNECT_ERROR;
     }
 #endif
+  default:
     break;
   }
 
@@ -507,13 +514,31 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
     }
   }
 
+#if !defined(NO_FILESYSTEM) && defined(WOLFSSL_SYS_CA_CERTS)
+  /* load native CA certificates */
+  if(ssl_config->native_ca_store) {
+    if(wolfSSL_CTX_load_system_CA_certs(backend->ctx) != WOLFSSL_SUCCESS) {
+      infof(data, "error importing native CA store, continuing anyway");
+    }
+    else {
+      imported_native_ca = true;
+      infof(data, "successfully imported native CA store");
+    }
+  }
+#endif /* !NO_FILESYSTEM */
+
+  /* load certificate blob */
   if(ca_info_blob) {
-    if(wolfSSL_CTX_load_verify_buffer(
-      backend->ctx, ca_info_blob->data, ca_info_blob->len,
-      SSL_FILETYPE_PEM
-    ) != SSL_SUCCESS) {
-      failf(data, "error importing CA certificate blob");
-      return CURLE_SSL_CACERT_BADFILE;
+    if(wolfSSL_CTX_load_verify_buffer(backend->ctx, ca_info_blob->data,
+                                      ca_info_blob->len,
+                                      SSL_FILETYPE_PEM) != SSL_SUCCESS) {
+      if(imported_native_ca) {
+        infof(data, "error importing CA certificate blob, continuing anyway");
+      }
+      else {
+        failf(data, "error importing CA certificate blob");
+        return CURLE_SSL_CACERT_BADFILE;
+      }
     }
     else {
       imported_ca_info_blob = true;
@@ -522,19 +547,21 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
   }
 
 #ifndef NO_FILESYSTEM
-  /* load trusted cacert */
-  if(conn_config->CAfile) {
-    if(1 != SSL_CTX_load_verify_locations(backend->ctx,
-                                      conn_config->CAfile,
-                                      conn_config->CApath)) {
-      if(conn_config->verifypeer && !imported_ca_info_blob) {
+  /* load trusted cacert from file if not blob */
+  if(ssl_cafile || ssl_capath) {
+    int rc =
+      wolfSSL_CTX_load_verify_locations_ex(backend->ctx,
+                                           ssl_cafile,
+                                           ssl_capath,
+                                           WOLFSSL_LOAD_FLAG_IGNORE_ERR);
+    if(SSL_SUCCESS != rc) {
+      if(conn_config->verifypeer && !imported_ca_info_blob &&
+         !imported_native_ca) {
         /* Fail if we insist on successfully verifying the server. */
         failf(data, "error setting certificate verify locations:"
               " CAfile: %s CApath: %s",
-              conn_config->CAfile?
-              conn_config->CAfile: "none",
-              conn_config->CApath?
-              conn_config->CApath : "none");
+              ssl_cafile ? ssl_cafile : "none",
+              ssl_capath ? ssl_capath : "none");
         return CURLE_SSL_CACERT_BADFILE;
       }
       else {
@@ -548,27 +575,25 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
       /* Everything is fine. */
       infof(data, "successfully set certificate verify locations:");
     }
-    infof(data, " CAfile: %s",
-          conn_config->CAfile ? conn_config->CAfile : "none");
-    infof(data, " CApath: %s",
-          conn_config->CApath ? conn_config->CApath : "none");
+    infof(data, " CAfile: %s", ssl_cafile ? ssl_cafile : "none");
+    infof(data, " CApath: %s", ssl_capath ? ssl_capath : "none");
   }
 
   /* Load the client certificate, and private key */
   if(ssl_config->primary.clientcert && ssl_config->key) {
     int file_type = do_file_type(ssl_config->cert_type);
 
-    if(SSL_CTX_use_certificate_file(backend->ctx,
-                                    ssl_config->primary.clientcert,
-                                    file_type) != 1) {
+    if(wolfSSL_CTX_use_certificate_file(backend->ctx,
+                                        ssl_config->primary.clientcert,
+                                        file_type) != 1) {
       failf(data, "unable to use client certificate (no key or wrong pass"
             " phrase?)");
       return CURLE_SSL_CONNECT_ERROR;
     }
 
     file_type = do_file_type(ssl_config->key_type);
-    if(SSL_CTX_use_PrivateKey_file(backend->ctx, ssl_config->key,
-                                    file_type) != 1) {
+    if(wolfSSL_CTX_use_PrivateKey_file(backend->ctx, ssl_config->key,
+                                       file_type) != 1) {
       failf(data, "unable to set private key");
       return CURLE_SSL_CONNECT_ERROR;
     }
@@ -579,30 +604,17 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
    * fail to connect if the verification fails, or if it should continue
    * anyway. In the latter case the result of the verification is checked with
    * SSL_get_verify_result() below. */
-  SSL_CTX_set_verify(backend->ctx,
-                     conn_config->verifypeer?SSL_VERIFY_PEER:
-                                             SSL_VERIFY_NONE,
-                     NULL);
+  wolfSSL_CTX_set_verify(backend->ctx,
+                         conn_config->verifypeer?SSL_VERIFY_PEER:
+                         SSL_VERIFY_NONE, NULL);
 
 #ifdef HAVE_SNI
-  if(sni) {
-    struct in_addr addr4;
-#ifdef ENABLE_IPV6
-    struct in6_addr addr6;
-#endif
-    size_t hostname_len = strlen(connssl->hostname);
-
-    if((hostname_len < USHRT_MAX) &&
-       !Curl_inet_pton(AF_INET, connssl->hostname, &addr4)
-#ifdef ENABLE_IPV6
-       && !Curl_inet_pton(AF_INET6, connssl->hostname, &addr6)
-#endif
-      ) {
-      size_t snilen;
-      char *snihost = Curl_ssl_snihost(data, connssl->hostname, &snilen);
-      if(!snihost ||
-         wolfSSL_CTX_UseSNI(backend->ctx, WOLFSSL_SNI_HOST_NAME, snihost,
-                            (unsigned short)snilen) != 1) {
+  if(sni && connssl->peer.sni) {
+    size_t sni_len = strlen(connssl->peer.sni);
+    if((sni_len < USHRT_MAX)) {
+      if(wolfSSL_CTX_UseSNI(backend->ctx, WOLFSSL_SNI_HOST_NAME,
+                            connssl->peer.sni,
+                            (unsigned short)sni_len) != 1) {
         failf(data, "Failed to set SNI");
         return CURLE_SSL_CONNECT_ERROR;
       }
@@ -631,8 +643,8 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
 
   /* Let's make an SSL structure */
   if(backend->handle)
-    SSL_free(backend->handle);
-  backend->handle = SSL_new(backend->ctx);
+    wolfSSL_free(backend->handle);
+  backend->handle = wolfSSL_new(backend->ctx);
   if(!backend->handle) {
     failf(data, "SSL: couldn't create a handle");
     return CURLE_OUT_OF_MEMORY;
@@ -692,7 +704,7 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
         infof(data, "Can't use session ID, going on without");
       }
       else
-        infof(data, "SSL re-using session ID");
+        infof(data, "SSL reusing session ID");
     }
     Curl_ssl_sessionid_unlock(data);
   }
@@ -701,7 +713,7 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
   {
     WOLFSSL_BIO *bio;
 
-    bio = BIO_new(bio_cf_method);
+    bio = BIO_new(wolfssl_bio_cf_method);
     if(!bio)
       return CURLE_OUT_OF_MEMORY;
 
@@ -710,7 +722,8 @@ wolfssl_connect_step1(struct Curl_cfilter *cf, struct Curl_easy *data)
   }
 #else /* USE_BIO_CHAIN */
   /* pass the raw socket into the SSL layer */
-  if(!SSL_set_fd(backend->handle, (int)Curl_conn_cf_get_socket(cf, data))) {
+  if(!wolfSSL_set_fd(backend->handle,
+                     (int)Curl_conn_cf_get_socket(cf, data))) {
     failf(data, "SSL: SSL_set_fd failed");
     return CURLE_SSL_CONNECT_ERROR;
   }
@@ -735,17 +748,17 @@ wolfssl_connect_step2(struct Curl_cfilter *cf, struct Curl_easy *data)
 
   DEBUGASSERT(backend);
 
-  ERR_clear_error();
+  wolfSSL_ERR_clear_error();
 
   /* Enable RFC2818 checks */
   if(conn_config->verifyhost) {
-    char *snihost = Curl_ssl_snihost(data, connssl->hostname, NULL);
-    if(!snihost ||
-       (wolfSSL_check_domain_name(backend->handle, snihost) == SSL_FAILURE))
+    char *snihost = connssl->peer.sni?
+                    connssl->peer.sni : connssl->peer.hostname;
+    if(wolfSSL_check_domain_name(backend->handle, snihost) == SSL_FAILURE)
       return CURLE_SSL_CONNECT_ERROR;
   }
 
-  ret = SSL_connect(backend->handle);
+  ret = wolfSSL_connect(backend->handle);
 
 #ifdef OPENSSL_EXTRA
   if(Curl_tls_keylog_enabled()) {
@@ -773,7 +786,7 @@ wolfssl_connect_step2(struct Curl_cfilter *cf, struct Curl_easy *data)
 
   if(ret != 1) {
     char error_buffer[WOLFSSL_MAX_ERROR_SZ];
-    int  detail = SSL_get_error(backend->handle, ret);
+    int  detail = wolfSSL_get_error(backend->handle, ret);
 
     if(SSL_ERROR_WANT_READ == detail) {
       connssl->connecting_state = ssl_connect_2_reading;
@@ -789,7 +802,7 @@ wolfssl_connect_step2(struct Curl_cfilter *cf, struct Curl_easy *data)
     else if(DOMAIN_NAME_MISMATCH == detail) {
 #if 1
       failf(data, " subject alt name(s) or common name do not match \"%s\"",
-            connssl->dispname);
+            connssl->peer.dispname);
       return CURLE_PEER_FAILED_VERIFICATION;
 #else
       /* When the wolfssl_check_domain_name() is used and you desire to
@@ -831,7 +844,7 @@ wolfssl_connect_step2(struct Curl_cfilter *cf, struct Curl_easy *data)
     }
     else {
       failf(data, "SSL_connect failed with error %d: %s", detail,
-          ERR_error_string(detail, error_buffer));
+            wolfSSL_ERR_error_string(detail, error_buffer));
       return CURLE_SSL_CONNECT_ERROR;
     }
   }
@@ -845,7 +858,7 @@ wolfssl_connect_step2(struct Curl_cfilter *cf, struct Curl_easy *data)
     struct Curl_asn1Element *pubkey;
     CURLcode result;
 
-    x509 = SSL_get_peer_certificate(backend->handle);
+    x509 = wolfSSL_get_peer_certificate(backend->handle);
     if(!x509) {
       failf(data, "SSL: failed retrieving server certificate");
       return CURLE_SSL_PINNEDPUBKEYNOTMATCH;
@@ -931,8 +944,8 @@ wolfssl_connect_step3(struct Curl_cfilter *cf, struct Curl_easy *data)
     bool incache;
     bool added = FALSE;
     void *old_ssl_sessionid = NULL;
-    /* SSL_get1_session allocates memory that has to be freed. */
-    SSL_SESSION *our_ssl_sessionid = SSL_get1_session(backend->handle);
+    /* wolfSSL_get1_session allocates memory that has to be freed. */
+    WOLFSSL_SESSION *our_ssl_sessionid = wolfSSL_get1_session(backend->handle);
 
     if(our_ssl_sessionid) {
       Curl_ssl_sessionid_lock(data);
@@ -949,7 +962,7 @@ wolfssl_connect_step3(struct Curl_cfilter *cf, struct Curl_easy *data)
         result = Curl_ssl_addsessionid(cf, data, our_ssl_sessionid, 0, NULL);
         if(result) {
           Curl_ssl_sessionid_unlock(data);
-          SSL_SESSION_free(our_ssl_sessionid);
+          wolfSSL_SESSION_free(our_ssl_sessionid);
           failf(data, "failed to store ssl session");
           return result;
         }
@@ -961,7 +974,7 @@ wolfssl_connect_step3(struct Curl_cfilter *cf, struct Curl_easy *data)
 
       if(!added) {
         /* If the session info wasn't added to the cache, free our copy. */
-        SSL_SESSION_free(our_ssl_sessionid);
+        wolfSSL_SESSION_free(our_ssl_sessionid);
       }
     }
   }
@@ -987,35 +1000,34 @@ static ssize_t wolfssl_send(struct Curl_cfilter *cf,
 
   DEBUGASSERT(backend);
 
-  ERR_clear_error();
+  wolfSSL_ERR_clear_error();
 
-  rc = SSL_write(backend->handle, mem, memlen);
+  rc = wolfSSL_write(backend->handle, mem, memlen);
   if(rc <= 0) {
-    int err = SSL_get_error(backend->handle, rc);
+    int err = wolfSSL_get_error(backend->handle, rc);
 
     switch(err) {
     case SSL_ERROR_WANT_READ:
     case SSL_ERROR_WANT_WRITE:
       /* there's data pending, re-invoke SSL_write() */
-      DEBUGF(LOG_CF(data, cf, "wolfssl_send(len=%zu) -> AGAIN", len));
+      CURL_TRC_CF(data, cf, "wolfssl_send(len=%zu) -> AGAIN", len);
       *curlcode = CURLE_AGAIN;
       return -1;
     default:
       if(backend->io_result == CURLE_AGAIN) {
-        DEBUGF(LOG_CF(data, cf, "wolfssl_send(len=%zu) -> AGAIN", len));
+        CURL_TRC_CF(data, cf, "wolfssl_send(len=%zu) -> AGAIN", len);
         *curlcode = CURLE_AGAIN;
         return -1;
       }
-      DEBUGF(LOG_CF(data, cf, "wolfssl_send(len=%zu) -> %d, %d",
-                    len, rc, err));
+      CURL_TRC_CF(data, cf, "wolfssl_send(len=%zu) -> %d, %d", len, rc, err);
       failf(data, "SSL write: %s, errno %d",
-            ERR_error_string(err, error_buffer),
+            wolfSSL_ERR_error_string(err, error_buffer),
             SOCKERRNO);
       *curlcode = CURLE_SEND_ERROR;
       return -1;
     }
   }
-  DEBUGF(LOG_CF(data, cf, "wolfssl_send(len=%zu) -> %d", len, rc));
+  CURL_TRC_CF(data, cf, "wolfssl_send(len=%zu) -> %d", len, rc);
   return rc;
 }
 
@@ -1033,13 +1045,13 @@ static void wolfssl_close(struct Curl_cfilter *cf, struct Curl_easy *data)
     char buf[32];
     /* Maybe the server has already sent a close notify alert.
        Read it to avoid an RST on the TCP connection. */
-    (void)SSL_read(backend->handle, buf, (int)sizeof(buf));
-    (void)SSL_shutdown(backend->handle);
-    SSL_free(backend->handle);
+    (void)wolfSSL_read(backend->handle, buf, (int)sizeof(buf));
+    (void)wolfSSL_shutdown(backend->handle);
+    wolfSSL_free(backend->handle);
     backend->handle = NULL;
   }
   if(backend->ctx) {
-    SSL_CTX_free(backend->ctx);
+    wolfSSL_CTX_free(backend->ctx);
     backend->ctx = NULL;
   }
 }
@@ -1058,17 +1070,17 @@ static ssize_t wolfssl_recv(struct Curl_cfilter *cf,
 
   DEBUGASSERT(backend);
 
-  ERR_clear_error();
+  wolfSSL_ERR_clear_error();
   *curlcode = CURLE_OK;
 
-  nread = SSL_read(backend->handle, buf, buffsize);
+  nread = wolfSSL_read(backend->handle, buf, buffsize);
 
   if(nread <= 0) {
-    int err = SSL_get_error(backend->handle, nread);
+    int err = wolfSSL_get_error(backend->handle, nread);
 
     switch(err) {
     case SSL_ERROR_ZERO_RETURN: /* no more data */
-      DEBUGF(LOG_CF(data, cf, "wolfssl_recv(len=%zu) -> CLOSED", blen));
+      CURL_TRC_CF(data, cf, "wolfssl_recv(len=%zu) -> CLOSED", blen);
       *curlcode = CURLE_OK;
       return 0;
     case SSL_ERROR_NONE:
@@ -1076,30 +1088,30 @@ static ssize_t wolfssl_recv(struct Curl_cfilter *cf,
     case SSL_ERROR_WANT_READ:
       /* FALLTHROUGH */
     case SSL_ERROR_WANT_WRITE:
-      /* there's data pending, re-invoke SSL_read() */
-      DEBUGF(LOG_CF(data, cf, "wolfssl_recv(len=%zu) -> AGAIN", blen));
+      /* there's data pending, re-invoke wolfSSL_read() */
+      CURL_TRC_CF(data, cf, "wolfssl_recv(len=%zu) -> AGAIN", blen);
       *curlcode = CURLE_AGAIN;
       return -1;
     default:
       if(backend->io_result == CURLE_AGAIN) {
-        DEBUGF(LOG_CF(data, cf, "wolfssl_recv(len=%zu) -> AGAIN", blen));
+        CURL_TRC_CF(data, cf, "wolfssl_recv(len=%zu) -> AGAIN", blen);
         *curlcode = CURLE_AGAIN;
         return -1;
       }
       failf(data, "SSL read: %s, errno %d",
-            ERR_error_string(err, error_buffer), SOCKERRNO);
+            wolfSSL_ERR_error_string(err, error_buffer), SOCKERRNO);
       *curlcode = CURLE_RECV_ERROR;
       return -1;
     }
   }
-  DEBUGF(LOG_CF(data, cf, "wolfssl_recv(len=%zu) -> %d", blen, nread));
+  CURL_TRC_CF(data, cf, "wolfssl_recv(len=%zu) -> %d", blen, nread);
   return nread;
 }
 
 
 static void wolfssl_session_free(void *ptr)
 {
-  SSL_SESSION_free(ptr);
+  wolfSSL_SESSION_free(ptr);
 }
 
 
@@ -1121,14 +1133,14 @@ static int wolfssl_init(void)
   Curl_tls_keylog_open();
 #endif
   ret = (wolfSSL_Init() == SSL_SUCCESS);
-  bio_cf_init_methods();
+  wolfssl_bio_cf_init_methods();
   return ret;
 }
 
 
 static void wolfssl_cleanup(void)
 {
-  bio_cf_free_methods();
+  wolfssl_bio_cf_free_methods();
   wolfSSL_Cleanup();
 #ifdef OPENSSL_EXTRA
   Curl_tls_keylog_close();
@@ -1147,7 +1159,7 @@ static bool wolfssl_data_pending(struct Curl_cfilter *cf,
 
   backend = (struct wolfssl_ssl_backend_data *)ctx->backend;
   if(backend->handle)   /* SSL is in use */
-    return (0 != SSL_pending(backend->handle)) ? TRUE : FALSE;
+    return (0 != wolfSSL_pending(backend->handle)) ? TRUE : FALSE;
   else
     return FALSE;
 }
@@ -1169,8 +1181,8 @@ static int wolfssl_shutdown(struct Curl_cfilter *cf,
 
   backend = (struct wolfssl_ssl_backend_data *)ctx->backend;
   if(backend->handle) {
-    ERR_clear_error();
-    SSL_free(backend->handle);
+    wolfSSL_ERR_clear_error();
+    wolfSSL_free(backend->handle);
     backend->handle = NULL;
   }
   return retval;
@@ -1333,7 +1345,8 @@ static CURLcode wolfssl_sha256sum(const unsigned char *tmp, /* input */
 {
   wc_Sha256 SHA256pw;
   (void)unused;
-  wc_InitSha256(&SHA256pw);
+  if(wc_InitSha256(&SHA256pw))
+    return CURLE_FAILED_INIT;
   wc_Sha256Update(&SHA256pw, tmp, (word32)tmplen);
   wc_Sha256Final(&SHA256pw, sha256sum);
   return CURLE_OK;
@@ -1358,6 +1371,7 @@ const struct Curl_ssl Curl_ssl_wolfssl = {
 #ifdef USE_BIO_CHAIN
   SSLSUPP_HTTPS_PROXY |
 #endif
+  SSLSUPP_CA_PATH |
   SSLSUPP_CAINFO_BLOB |
   SSLSUPP_SSL_CTX,
 
@@ -1373,7 +1387,7 @@ const struct Curl_ssl Curl_ssl_wolfssl = {
   Curl_none_cert_status_request,   /* cert_status_request */
   wolfssl_connect,                 /* connect */
   wolfssl_connect_nonblocking,     /* connect_nonblocking */
-  Curl_ssl_get_select_socks,                /* getsock */
+  Curl_ssl_adjust_pollset,         /* adjust_pollset */
   wolfssl_get_internals,           /* get_internals */
   wolfssl_close,                   /* close_one */
   Curl_none_close_all,             /* close_all */

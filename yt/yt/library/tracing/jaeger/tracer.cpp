@@ -11,10 +11,12 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/serialize.h>
+
 #include <yt/yt/core/utilex/random.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 #include <util/string/cast.h>
 #include <util/string/reverse.h>
@@ -287,7 +289,7 @@ std::tuple<std::vector<TSharedRef>, int, int> TBatchInfo::PeekQueue(const TJaege
         batches.push_back(BatchQueue_[batchCount].second);
     }
 
-    return std::make_tuple(batches, batchCount, spanCount);
+    return std::tuple(batches, batchCount, spanCount);
 }
 
 TJaegerChannelManager::TJaegerChannelManager()
@@ -550,6 +552,7 @@ void TJaegerTracer::Flush()
     DequeueAll(config);
 
     if (TInstant::Now() - LastSuccessfulFlushTime_ > config->QueueStallTimeout) {
+        YT_LOG_DEBUG("Queue stall timeout expired (QueueStallTimeout: %v)", config->QueueStallTimeout);
         DropFullQueue();
     }
 
@@ -571,6 +574,14 @@ void TJaegerTracer::Flush()
 
     std::stack<TString> toRemove;
     auto keys = ExtractKeys(BatchInfo_);
+
+    if (keys.empty()) {
+        YT_LOG_DEBUG("Span batch info is empty");
+        LastSuccessfulFlushTime_ = flushStartTime;
+        NotifyEmptyQueue();
+        return;
+    }
+
     for (const auto& endpoint : keys) {
         auto [batches, batchCount, spanCount] = PeekQueue(config, endpoint);
         if (batchCount <= 0) {
@@ -578,6 +589,7 @@ void TJaegerTracer::Flush()
                 toRemove.push(endpoint);
             }
             YT_LOG_DEBUG("Span queue is empty (Endpoint: %v)", endpoint);
+            LastSuccessfulFlushTime_ = flushStartTime;
             continue;
         }
 

@@ -351,6 +351,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(QueryTimeoutImmediate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
         TKikimrRunner kikimr{settings};
@@ -490,6 +491,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
     Y_UNIT_TEST(QueryCancelImmediate) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
@@ -1464,6 +1466,98 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             SELECT {};
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(QueryFromSqs) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString user = "uuuuuuuuuuuuuuuuuuuuuuuu";
+        TString queue = "qqqqqqqqqqqqqqqqqqqqqqqq";
+
+        {
+            const auto status = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/SQS/Test` (
+                    Account String,
+                    QueueName String,
+                    Version Uint64,
+                    PRIMARY KEY(Account, QueueName)
+                )
+            )").GetValueSync();
+            UNIT_ASSERT(status.IsSuccess());
+
+            auto replaceQuery = Q1_(R"(
+                DECLARE $rows AS
+                    List<Struct<
+                        Account: String,
+                        QueueName: String,
+                        Version: Uint64
+                    >>;
+
+                REPLACE INTO `/Root/SQS/Test`
+                SELECT * FROM AS_TABLE($rows);
+            )");
+
+
+            auto paramsBuilder = session.GetParamsBuilder();
+            paramsBuilder
+                .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                .BeginStruct()
+                    .AddMember("Version")
+                        .Uint64(0)
+                    .AddMember("Account")
+                        .String(user)
+                    .AddMember("QueueName")
+                        .String(queue)
+                .EndStruct()
+                .EndList()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(replaceQuery, TTxControl::BeginTx().CommitTx(),
+                paramsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Q_(R"(
+                SELECT * FROM `/Root/SQS/Test`;
+            )");
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            auto query = "SELECT * FROM `/Root/SQS/Test` WHERE Account='" + user + "'";;
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            auto query = "SELECT * FROM `/Root/SQS/Test` WHERE QueueName='" + queue + "'";;
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+
+        {
+            auto query = "SELECT * FROM `/Root/SQS/Test` WHERE Account='" + user + "' AND QueueName='" + queue + "'";;
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSet(0).Truncated());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
     }
 }
 

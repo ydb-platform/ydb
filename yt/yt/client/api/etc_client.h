@@ -38,7 +38,7 @@ struct TClusterMeta
 struct TCheckClusterLivenessOptions
     : public TTimeoutOptions
 {
-    //! Checks cypress root availability.
+    //! Checks Cypress root availability.
     bool CheckCypressRoot = false;
     //! Checks secondary master cells generic availability.
     bool CheckSecondaryMasterCells = false;
@@ -55,6 +55,8 @@ struct TCheckClusterLivenessOptions
 
 struct IEtcClientBase
 {
+    virtual ~IEtcClientBase() = default;
+
     virtual TFuture<NObjectClient::TObjectId> CreateObject(
         NObjectClient::EObjectType type,
         const TCreateObjectOptions& options = {}) = 0;
@@ -64,6 +66,8 @@ struct IEtcClientBase
 
 struct IEtcClient
 {
+    virtual ~IEtcClient() = default;
+
     virtual TFuture<TClusterMeta> GetClusterMeta(
         const TGetClusterMetaOptions& options = {}) = 0;
 

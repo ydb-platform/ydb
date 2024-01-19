@@ -1,23 +1,23 @@
 #include "should_continue.h"
 
 void TProgramShouldContinue::ShouldRestart() {
-    AtomicSet(State, Restart);
+    State.store(Restart, std::memory_order_release);
 }
 
 void TProgramShouldContinue::ShouldStop(int returnCode) {
-    AtomicSet(ReturnCode, returnCode);
-    AtomicSet(State, Stop);
+    ReturnCode.store(returnCode, std::memory_order_release);
+    State.store(Stop, std::memory_order_release);
 }
 
 TProgramShouldContinue::EState TProgramShouldContinue::PollState() {
-    return static_cast<EState>(AtomicGet(State));
+    return State.load(std::memory_order_acquire);
 }
 
 int TProgramShouldContinue::GetReturnCode() {
-    return static_cast<int>(AtomicGet(ReturnCode));
+    return ReturnCode.load(std::memory_order_acquire);
 }
 
 void TProgramShouldContinue::Reset() {
-    AtomicSet(ReturnCode, 0);
-    AtomicSet(State, Continue);
+    ReturnCode.store(0, std::memory_order_release);
+    State.store(Continue, std::memory_order_release);
 }

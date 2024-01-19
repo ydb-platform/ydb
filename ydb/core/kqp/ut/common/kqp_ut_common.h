@@ -178,10 +178,6 @@ public:
         return GetTestServer().GetRuntime()->WaitFuture(future);
     }
 
-    bool IsUsingSnapshotReads() const {
-        return Server->GetRuntime()->GetAppData().FeatureFlags.GetEnableMvccSnapshotReads();
-    }
-
 private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
@@ -267,6 +263,12 @@ struct TExpectedTableStats {
     TMaybe<ui64> ExpectedUpdates;
     TMaybe<ui64> ExpectedDeletes;
 };
+
+void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
+
+void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+    const TExpectedTableStats& expectedStats);
 
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);

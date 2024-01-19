@@ -18,7 +18,7 @@
 #include <boost/variant/detail/backup_holder.hpp>
 #include <boost/variant/detail/cast_storage.hpp>
 #include <boost/variant/detail/forced_return.hpp>
-#include <boost/variant/variant_fwd.hpp> // for BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES
+#include <boost/variant/variant_fwd.hpp>
 
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/bool.hpp>
@@ -47,14 +47,9 @@
 //
 #if !defined(BOOST_VARIANT_VISITATION_UNROLLING_LIMIT)
 
-#ifndef BOOST_VARIANT_DO_NOT_USE_VARIADIC_TEMPLATES
 #   include <boost/mpl/limits/list.hpp>
 #   define BOOST_VARIANT_VISITATION_UNROLLING_LIMIT   \
         BOOST_MPL_LIMIT_LIST_SIZE
-#else
-#   define BOOST_VARIANT_VISITATION_UNROLLING_LIMIT   \
-        BOOST_VARIANT_LIMIT_TYPES
-#endif
 
 #endif
 

@@ -1,0 +1,16 @@
+# YT <-> YQL bridge.
+BridgeCreateYqlPlugin
+BridgeFreeYqlPlugin
+BridgeFreeQueryResult
+BridgeRun
+BridgeGetProgress
+BridgeGetAbiVersion
+BridgeAbort
+BridgeFreeAbortResult
+
+# YQL <-> YQL UDFs interface.
+UdfAllocateWithSize
+UdfFreeWithSize
+UdfRegisterObject
+UdfTerminate
+UdfUnregisterObject

@@ -191,6 +191,10 @@ public:
         return Nothing();
     }
 
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return {};
+    }
+
     TInstant GetDeadline() const override {
         return TInstant::Max();
     }

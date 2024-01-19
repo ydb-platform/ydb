@@ -1,0 +1,5 @@
+MountPoints {
+    MountPoint: "../../mount/lib"
+    RootAlias: "/lib"
+    Library: true
+}

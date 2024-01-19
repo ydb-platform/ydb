@@ -38,6 +38,9 @@ struct TJoinColumn {
         }
     };
 };
+
+bool operator < (const TJoinColumn& c1, const TJoinColumn& c2);
+
 }
 
 enum EJoinImplType {

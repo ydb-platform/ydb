@@ -1,5 +1,6 @@
 #include "sequenceproxy_impl.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
@@ -15,7 +16,21 @@
 namespace NKikimr {
 namespace NSequenceProxy {
 
+    TSequenceProxyCounters::TSequenceProxyCounters() {
+        auto group = GetServiceCounters(AppData()->Counters, "proxy");
+        SequenceShardAllocateCount = group->GetHistogram(
+            "SequenceProxy/SequenceShard/AllocateCountPerRequest",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+
+        ErrorsCount = group->GetCounter("SequenceProxy/Errors", true);
+        RequestCount = group->GetCounter("SequenceProxy/Requests", true);
+        ResponseCount = group->GetCounter("SequenceProxy/Responses", true);
+        NextValLatency = group->GetHistogram("SequenceProxy/Latency",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+    };
+
     void TSequenceProxy::Bootstrap() {
+        Counters.Reset(new TSequenceProxyCounters());
         LogPrefix = TStringBuilder() << "TSequenceProxy [Node " << SelfId().NodeId() << "] ";
         Become(&TThis::StateWork);
     }
@@ -30,11 +45,27 @@ namespace NSequenceProxy {
         request.Sender = ev->Sender;
         request.Cookie = ev->Cookie;
         request.UserToken = std::move(msg->UserToken);
+        request.StartAt = AppData()->MonotonicTimeProvider->Now();
         std::visit(
             [&](const auto& path) {
                 DoNextVal(std::move(request), msg->Database, path);
             },
             msg->Path);
+    }
+
+    void TSequenceProxy::Reply(const TNextValRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        Counters->ResponseCount->Inc();
+        auto milliseconds = (AppData()->MonotonicTimeProvider->Now() - request.StartAt).MilliSeconds();
+        Counters->NextValLatency->Collect(milliseconds);
+        Counters->ErrorsCount->Inc();
+        Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(status, issues), 0, request.Cookie);
+    }
+
+    void TSequenceProxy::Reply(const TNextValRequestInfo& request, const TPathId& pathId, i64 value) {
+        Counters->ResponseCount->Inc();
+        auto milliseconds = (AppData()->MonotonicTimeProvider->Now() - request.StartAt).MilliSeconds();
+        Counters->NextValLatency->Collect(milliseconds);
+        Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(pathId, value), 0, request.Cookie);
     }
 
     void TSequenceProxy::MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info) {
@@ -46,12 +77,15 @@ namespace NSequenceProxy {
     }
 
     void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path) {
+        Counters->RequestCount->Inc();
         auto& info = Databases[database].SequenceByName[path];
         info.NewNextValResolve.emplace_back(std::move(request));
         MaybeStartResolve(database, path, info);
     }
 
     void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh) {
+        Counters->RequestCount->Inc();
+
         auto& info = Databases[database].SequenceByPathId[pathId];
         if (!info.ResolveInProgress && (needRefresh || !info.SequenceInfo)) {
             StartResolve(database, pathId, !info.SequenceInfo);
@@ -77,14 +111,13 @@ namespace NSequenceProxy {
         OnChanged(database, pathId, info);
     }
 
-    void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+    void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         auto& info = Databases[database].SequenceByName[path];
         Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
         while (!info.PendingNextValResolve.empty()) {
-            const auto& request = info.PendingNextValResolve.front();
-            Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(status, issues), 0, request.Cookie);
+            Reply(info.PendingNextValResolve.front(), status, issues);
             info.PendingNextValResolve.pop_front();
         }
 
@@ -111,14 +144,13 @@ namespace NSequenceProxy {
         MaybeStartResolve(database, path, info);
     }
 
-    void TSequenceProxy::OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+    void TSequenceProxy::OnResolveError(const TString& database, const TPathId& pathId, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         auto& info = Databases[database].SequenceByPathId[pathId];
         Y_ABORT_UNLESS(info.ResolveInProgress);
         info.ResolveInProgress = false;
 
         while (!info.PendingNextValResolve.empty()) {
-            const auto& request = info.PendingNextValResolve.front();
-            Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(status, issues), 0, request.Cookie);
+            Reply(info.PendingNextValResolve.front(), status, issues);
             info.PendingNextValResolve.pop_front();
         }
     }
@@ -144,7 +176,7 @@ namespace NSequenceProxy {
                 info.PendingNextVal.emplace_back(std::move(request));
                 ++info.TotalRequested;
             }
-            resolved.pop_back();
+            resolved.pop_front();
         }
 
         OnChanged(database, pathId, info);
@@ -173,8 +205,7 @@ namespace NSequenceProxy {
         } else {
             // We will answer up to cache requests with this error
             while (cache > 0 && !info.PendingNextVal.empty()) {
-                const auto& request = info.PendingNextVal.front();
-                Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(msg->Status, msg->Issues), 0, request.Cookie);
+                Reply(info.PendingNextVal.front(), msg->Status, msg->Issues);
                 info.PendingNextVal.pop_front();
                 --info.TotalRequested;
                 --cache;
@@ -209,7 +240,7 @@ namespace NSequenceProxy {
                     << "Access denied for " << request.UserToken->GetUserSID() << " to sequence " << pathId;
                 NYql::TIssueManager issueManager;
                 issueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error));
-                Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(Ydb::StatusIds::UNAUTHORIZED, issueManager.GetIssues()));
+                Reply(request, Ydb::StatusIds::UNAUTHORIZED, issueManager.GetIssues());
                 return true;
             }
         }
@@ -226,7 +257,7 @@ namespace NSequenceProxy {
         Y_ABORT_UNLESS(!info.CachedAllocations.empty());
         auto& front = info.CachedAllocations.front();
         Y_ABORT_UNLESS(front.Count > 0);
-        Send(request.Sender, new TEvSequenceProxy::TEvNextValResult(pathId, front.Start), 0, request.Cookie);
+        Reply(request, pathId, front.Start);
         --info.TotalCached;
         if (--front.Count > 0) {
             front.Start += front.Increment;

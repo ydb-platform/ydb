@@ -4,7 +4,7 @@ option java_package = "tech.ytsaurus.rpcproxy";
 option java_outer_classname = "ApiProtos";
 option java_multiple_files = true;
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/api/rpc_proxy";
+option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
@@ -600,6 +600,20 @@ message TRspSelectRows
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+message TReqAdvanceConsumer
+{
+    optional NYT.NProto.TGuid transaction_id = 1;
+    optional string consumer_path = 2;
+    optional string queue_path = 3;
+    optional int32 partition_index = 4;
+    optional int64 old_offset = 5;
+    optional int64 new_offset = 6;
+}
+
+message TRspAdvanceConsumer
+{
+}
 
 message TRowBatchReadOptions
 {
@@ -1313,6 +1327,55 @@ message TRspGetTablePivotKeys
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TTableBackupManifest
+{
+    required string source_path = 1; // YPath
+    required string destination_path = 2; // YPath
+    required int32 ordered_mode = 3;
+}
+
+message TBackupManifest
+{
+    message TClusterManifest
+    {
+        required string cluster = 1;
+        repeated TTableBackupManifest table_manifests = 2;
+    }
+
+    repeated TClusterManifest clusters = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqCreateTableBackup
+{
+    required TBackupManifest manifest = 1;
+    required uint64 checkpoint_timestamp_delay = 2;
+    required uint64 checkpoint_check_period = 3;
+    required uint64 checkpoint_check_timeout = 4;
+    required bool force = 5;
+}
+
+message TRspCreateTableBackup
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRestoreTableBackup
+{
+    required TBackupManifest manifest = 1;
+    required bool force = 2;
+    required bool mount = 3;
+    required bool enable_replicas = 4;
+}
+
+message TRspRestoreTableBackup
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqCreateNode
 {
     required string path = 1; // YPath
@@ -1867,6 +1930,7 @@ message TReqDestroyChunkLocations
 {
     required string node_address = 1;
     repeated NYT.NProto.TGuid location_uuids = 2;
+    optional bool recover_unlinked_disks = 3 [default = false];
 }
 
 message TRspDestroyChunkLocations

@@ -41,6 +41,8 @@ SRCS(
     flat_sausagecache.cpp
     flat_sausagecache.h
     flat_sausage_meta.cpp
+    flat_part_charge_create.cpp
+    flat_part_charge_range.cpp
     flat_page_label.cpp
     flat_part_dump.cpp
     flat_part_iter_multi.cpp

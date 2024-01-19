@@ -73,6 +73,9 @@ void TFederatedReadSessionImpl::Start() {
         Y_UNUSED(f);
         if (auto self = selfCtx->LockShared()) {
             with_lock(self->Lock) {
+                if (self->Closing) {
+                    return;
+                }
                 self->FederationState = self->Observer->GetState();
                 self->OnFederatedStateUpdateImpl();
             }
@@ -110,11 +113,11 @@ NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
     // TODO override with read session settings timeout
     return AsyncInit.Apply([selfCtx = SelfContext](const NThreading::TFuture<void>) {
         if (auto self = selfCtx->LockShared()) {
-            if (self->Closing) {
-                return NThreading::MakeFuture();
-            }
             std::vector<NThreading::TFuture<void>> waiters;
             with_lock(self->Lock) {
+                if (self->Closing) {
+                    return NThreading::MakeFuture();
+                }
                 Y_ABORT_UNLESS(!self->SubSessions.empty(), "SubSessions empty in discovered state");
                 for (const auto& sub : self->SubSessions) {
                     waiters.emplace_back(sub.Session->WaitEvent());
@@ -162,12 +165,16 @@ void TFederatedReadSessionImpl::CloseImpl() {
 }
 
 bool TFederatedReadSessionImpl::Close(TDuration timeout) {
-    bool result = true;
-    for (const auto& sub : SubSessions) {
-        // TODO substract from user timeout
-        result = sub.Session->Close(timeout);
+    with_lock(Lock) {
+        Closing = true;
+
+        bool result = true;
+        for (const auto& sub : SubSessions) {
+            // TODO substract from user timeout
+            result = sub.Session->Close(timeout);
+        }
+        return result;
     }
-    return result;
 }
 
 }  // namespace NYdb::NFederatedTopic

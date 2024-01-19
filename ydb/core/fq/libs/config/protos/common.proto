@@ -27,5 +27,5 @@ message TCommonConfig {
     uint64 MaxTasksPerStage = 12;
     bool KeepInternalErrors = 13;
     bool UseNativeProtocolForClickHouse = 14;
-    uint64 MaxDPccpDPTableSize = 15;
+    bool DisableSslForGenericDataSources = 15;
 }

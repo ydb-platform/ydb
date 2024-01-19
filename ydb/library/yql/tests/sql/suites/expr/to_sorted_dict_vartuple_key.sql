@@ -10,11 +10,11 @@ $l = AsList(
 );
 
 $d = ToSortedDict($l);
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),ListSort(DictKeys($d)),ListSort(DictPayloads($d));
 select DictLookup($d,$v1), DictLookup($d,$v3);
 select DictContains($d,$v1), DictContains($d,$v3);
 
 $d = ToSortedMultiDict($l);
-select $d,DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(DictItems($d)),ListSort(DictKeys($d)),ListSort(DictPayloads($d));
 select DictLookup($d,$v1), DictLookup($d,$v3);
 select DictContains($d,$v1), DictContains($d,$v3);

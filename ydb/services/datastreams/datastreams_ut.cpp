@@ -133,7 +133,6 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> labels_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> usage_check) {
-    Sleep(TDuration::Seconds(1));
     if (meteringFile->IsOpen()) {
         meteringFile->Flush();
         meteringFile->Close();

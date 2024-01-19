@@ -745,7 +745,9 @@ private:
         YQL_CLOG(TRACE, ProviderKqp) << "[BuildTx] " << KqpExprToPrettyString(*result, ctx)
             << ", isPrecompute: " << isPrecompute;
 
-        auto& transformer = KqpCtx->IsDataQuery() ? *DataTxTransformer : *ScanTxTransformer;
+        auto& transformer = KqpCtx->IsScanQuery() ? *ScanTxTransformer : *DataTxTransformer;
+
+
         transformer.Rewind();
         BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);
         auto expr = result;

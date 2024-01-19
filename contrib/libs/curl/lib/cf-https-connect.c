@@ -28,7 +28,7 @@
 
 #include "urldata.h"
 #include <curl/curl.h>
-#include "curl_log.h"
+#include "curl_trc.h"
 #include "cfilters.h"
 #include "connect.h"
 #include "multiif.h"
@@ -165,9 +165,9 @@ static CURLcode baller_connected(struct Curl_cfilter *cf,
   if(winner != &ctx->h21_baller)
     cf_hc_baller_reset(&ctx->h21_baller, data);
 
-  DEBUGF(LOG_CF(data, cf, "connect+handshake %s: %dms, 1st data: %dms",
-                winner->name, (int)Curl_timediff(Curl_now(), winner->started),
-                cf_hc_baller_reply_ms(winner, data)));
+  CURL_TRC_CF(data, cf, "connect+handshake %s: %dms, 1st data: %dms",
+              winner->name, (int)Curl_timediff(Curl_now(), winner->started),
+              cf_hc_baller_reply_ms(winner, data));
   cf->next = winner->cf;
   winner->cf = NULL;
 
@@ -187,9 +187,6 @@ static CURLcode baller_connected(struct Curl_cfilter *cf,
     }
 #endif
     infof(data, "using HTTP/2");
-    break;
-  case CURL_HTTP_VERSION_1_1:
-    infof(data, "using HTTP/1.1");
     break;
   default:
     infof(data, "using HTTP/1.x");
@@ -218,16 +215,16 @@ static bool time_to_start_h21(struct Curl_cfilter *cf,
 
   elapsed_ms = Curl_timediff(now, ctx->started);
   if(elapsed_ms >= ctx->hard_eyeballs_timeout_ms) {
-    DEBUGF(LOG_CF(data, cf, "hard timeout of %dms reached, starting h21",
-                  ctx->hard_eyeballs_timeout_ms));
+    CURL_TRC_CF(data, cf, "hard timeout of %dms reached, starting h21",
+                ctx->hard_eyeballs_timeout_ms);
     return TRUE;
   }
 
   if(elapsed_ms >= ctx->soft_eyeballs_timeout_ms) {
     if(cf_hc_baller_reply_ms(&ctx->h3_baller, data) < 0) {
-      DEBUGF(LOG_CF(data, cf, "soft timeout of %dms reached, h3 has not "
-                    "seen any data, starting h21",
-                    ctx->soft_eyeballs_timeout_ms));
+      CURL_TRC_CF(data, cf, "soft timeout of %dms reached, h3 has not "
+                  "seen any data, starting h21",
+                  ctx->soft_eyeballs_timeout_ms);
       return TRUE;
     }
     /* set the effective hard timeout again */
@@ -258,7 +255,7 @@ static CURLcode cf_hc_connect(struct Curl_cfilter *cf,
     DEBUGASSERT(!ctx->h3_baller.cf);
     DEBUGASSERT(!ctx->h21_baller.cf);
     DEBUGASSERT(!cf->next);
-    DEBUGF(LOG_CF(data, cf, "connect, init"));
+    CURL_TRC_CF(data, cf, "connect, init");
     ctx->started = now;
     if(ctx->h3_baller.enabled) {
       cf_hc_baller_init(&ctx->h3_baller, cf, data, "h3", TRNSPRT_QUIC);
@@ -286,7 +283,7 @@ static CURLcode cf_hc_connect(struct Curl_cfilter *cf,
     }
 
     if(cf_hc_baller_is_active(&ctx->h21_baller)) {
-      DEBUGF(LOG_CF(data, cf, "connect, check h21"));
+      CURL_TRC_CF(data, cf, "connect, check h21");
       result = cf_hc_baller_connect(&ctx->h21_baller, cf, data, done);
       if(!result && *done) {
         result = baller_connected(cf, data, &ctx->h21_baller);
@@ -297,7 +294,7 @@ static CURLcode cf_hc_connect(struct Curl_cfilter *cf,
     if((!ctx->h3_baller.enabled || ctx->h3_baller.result) &&
        (!ctx->h21_baller.enabled || ctx->h21_baller.result)) {
       /* both failed or disabled. we give up */
-      DEBUGF(LOG_CF(data, cf, "connect, all failed"));
+      CURL_TRC_CF(data, cf, "connect, all failed");
       result = ctx->result = ctx->h3_baller.enabled?
                               ctx->h3_baller.result : ctx->h21_baller.result;
       ctx->state = CF_HC_FAILURE;
@@ -321,46 +318,29 @@ static CURLcode cf_hc_connect(struct Curl_cfilter *cf,
   }
 
 out:
-  DEBUGF(LOG_CF(data, cf, "connect -> %d, done=%d", result, *done));
+  CURL_TRC_CF(data, cf, "connect -> %d, done=%d", result, *done);
   return result;
 }
 
-static int cf_hc_get_select_socks(struct Curl_cfilter *cf,
+static void cf_hc_adjust_pollset(struct Curl_cfilter *cf,
                                   struct Curl_easy *data,
-                                  curl_socket_t *socks)
+                                  struct easy_pollset *ps)
 {
-  struct cf_hc_ctx *ctx = cf->ctx;
-  size_t i, j, s;
-  int brc, rc = GETSOCK_BLANK;
-  curl_socket_t bsocks[MAX_SOCKSPEREASYHANDLE];
-  struct cf_hc_baller *ballers[2];
+  if(!cf->connected) {
+    struct cf_hc_ctx *ctx = cf->ctx;
+    struct cf_hc_baller *ballers[2];
+    size_t i;
 
-  if(cf->connected)
-    return cf->next->cft->get_select_socks(cf->next, data, socks);
-
-  ballers[0] = &ctx->h3_baller;
-  ballers[1] = &ctx->h21_baller;
-  for(i = s = 0; i < sizeof(ballers)/sizeof(ballers[0]); i++) {
-    struct cf_hc_baller *b = ballers[i];
-    if(!cf_hc_baller_is_active(b))
-      continue;
-    brc = Curl_conn_cf_get_select_socks(b->cf, data, bsocks);
-    DEBUGF(LOG_CF(data, cf, "get_selected_socks(%s) -> %x", b->name, brc));
-    if(!brc)
-      continue;
-    for(j = 0; j < MAX_SOCKSPEREASYHANDLE && s < MAX_SOCKSPEREASYHANDLE; ++j) {
-      if((brc & GETSOCK_WRITESOCK(j)) || (brc & GETSOCK_READSOCK(j))) {
-        socks[s] = bsocks[j];
-        if(brc & GETSOCK_WRITESOCK(j))
-          rc |= GETSOCK_WRITESOCK(s);
-        if(brc & GETSOCK_READSOCK(j))
-          rc |= GETSOCK_READSOCK(s);
-        s++;
-      }
+    ballers[0] = &ctx->h3_baller;
+    ballers[1] = &ctx->h21_baller;
+    for(i = 0; i < sizeof(ballers)/sizeof(ballers[0]); i++) {
+      struct cf_hc_baller *b = ballers[i];
+      if(!cf_hc_baller_is_active(b))
+        continue;
+      Curl_conn_cf_adjust_pollset(b->cf, data, ps);
     }
+    CURL_TRC_CF(data, cf, "adjust_pollset -> %d socks", ps->num);
   }
-  DEBUGF(LOG_CF(data, cf, "get_selected_socks -> %x", rc));
-  return rc;
 }
 
 static bool cf_hc_data_pending(struct Curl_cfilter *cf,
@@ -371,7 +351,7 @@ static bool cf_hc_data_pending(struct Curl_cfilter *cf,
   if(cf->connected)
     return cf->next->cft->has_data_pending(cf->next, data);
 
-  DEBUGF(LOG_CF((struct Curl_easy *)data, cf, "data_pending"));
+  CURL_TRC_CF((struct Curl_easy *)data, cf, "data_pending");
   return cf_hc_baller_data_pending(&ctx->h3_baller, data)
          || cf_hc_baller_data_pending(&ctx->h21_baller, data);
 }
@@ -427,7 +407,7 @@ static CURLcode cf_hc_query(struct Curl_cfilter *cf,
 
 static void cf_hc_close(struct Curl_cfilter *cf, struct Curl_easy *data)
 {
-  DEBUGF(LOG_CF(data, cf, "close"));
+  CURL_TRC_CF(data, cf, "close");
   cf_hc_reset(cf, data);
   cf->connected = FALSE;
 
@@ -442,7 +422,7 @@ static void cf_hc_destroy(struct Curl_cfilter *cf, struct Curl_easy *data)
   struct cf_hc_ctx *ctx = cf->ctx;
 
   (void)data;
-  DEBUGF(LOG_CF(data, cf, "destroy"));
+  CURL_TRC_CF(data, cf, "destroy");
   cf_hc_reset(cf, data);
   Curl_safefree(ctx);
 }
@@ -450,12 +430,12 @@ static void cf_hc_destroy(struct Curl_cfilter *cf, struct Curl_easy *data)
 struct Curl_cftype Curl_cft_http_connect = {
   "HTTPS-CONNECT",
   0,
-  CURL_LOG_DEFAULT,
+  CURL_LOG_LVL_NONE,
   cf_hc_destroy,
   cf_hc_connect,
   cf_hc_close,
   Curl_cf_def_get_host,
-  cf_hc_get_select_socks,
+  cf_hc_adjust_pollset,
   cf_hc_data_pending,
   Curl_cf_def_send,
   Curl_cf_def_recv,
@@ -475,7 +455,7 @@ static CURLcode cf_hc_create(struct Curl_cfilter **pcf,
   CURLcode result = CURLE_OK;
 
   (void)data;
-  ctx = calloc(sizeof(*ctx), 1);
+  ctx = calloc(1, sizeof(*ctx));
   if(!ctx) {
     result = CURLE_OUT_OF_MEMORY;
     goto out;

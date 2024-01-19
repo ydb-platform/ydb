@@ -5,6 +5,7 @@
 
 #include <yt/yt/core/yson/string.h>
 
+#include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
 
 #include <util/stream/str.h>
@@ -35,7 +36,7 @@ public:
 
     // Simulate overload from TAdlException::operator <<
     template <class TLikeThis, class TArg>
-        requires std::is_base_of_v<TAdlException, std::decay_t<TLikeThis>>
+        requires std::derived_from<std::decay_t<TLikeThis>, TAdlException>
     friend TLikeThis&& operator << (TLikeThis&& ex, const TArg& /*other*/)
     {
         ++OverloadCallCount;
@@ -682,6 +683,11 @@ TEST(TErrorTest, CompositeYTExceptionToError)
     }
 }
 
+TString HostSanitizer(TStringBuf)
+{
+    return "";
+}
+
 TEST(TErrorTest, ErrorSanitizer)
 {
     auto checkSantizied = [&] (const TError& error) {
@@ -711,7 +717,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
     {
         auto instant1 = TInstant::Days(123);
-        TErrorSanitizerGuard guard1(instant1);
+        TErrorSanitizerGuard guard1(instant1, BIND(&HostSanitizer));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -719,7 +725,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
         {
             auto instant2 = TInstant::Days(234);
-            TErrorSanitizerGuard guard2(instant2);
+            TErrorSanitizerGuard guard2(instant2, BIND(&HostSanitizer));
 
             auto error3 = TError("error3");
             checkSantizied(error3);

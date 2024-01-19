@@ -54,13 +54,13 @@ class TJsonStorage : public TJsonStorageBase {
         uint64 Read;
         uint64 Write;
 
-        TGroupRow() 
+        TGroupRow()
             : Degraded(0)
             , Usage(0)
             , Used(0)
             , Limit(0)
             , Read(0)
-            , Write(0) 
+            , Write(0)
         {}
     };
     THashMap<TString, TGroupRow> GroupRowsByGroupId;
@@ -245,6 +245,36 @@ public:
         }
     }
 
+    bool CheckGroupFilters(const TString& groupId, const TString& poolName, const TGroupRow& groupRow) {
+        if (!EffectiveFilterGroupIds.empty() && !EffectiveFilterGroupIds.contains(groupId)) {
+            return false;
+        }
+        switch (With) {
+            case EWith::MissingDisks:
+                if (BSGroupWithMissingDisks.count(groupId) == 0) {
+                    return false;
+                }
+                break;
+            case EWith::SpaceProblems:
+                if (BSGroupWithSpaceProblems.count(groupId) == 0 && groupRow.Usage < 0.8) {
+                    return false;
+                }
+                break;
+            case EWith::Everything:
+                break;
+        }
+        if (Filter) {
+            if (poolName.Contains(Filter)) {
+                return true;
+            }
+            if (groupId.Contains(Filter)) {
+                return true;
+            }
+            return false;
+        }
+        return true;
+    }
+
     void ReplyAndPassAway() override {
         if (CheckAdditionalNodesInfoNeeded()) {
             return;
@@ -270,19 +300,62 @@ public:
         }
         ui64 foundGroups = 0;
         ui64 totalGroups = 0;
+        TVector<TGroupRow> GroupRows;
         for (const auto& [poolName, poolInfo] : StoragePoolInfo) {
             if ((!FilterTenant.empty() || !FilterStoragePools.empty()) && FilterStoragePools.count(poolName) == 0) {
                 continue;
             }
             NKikimrViewer::TStoragePoolInfo* pool = StorageInfo.AddStoragePools();
             for (TString groupId : poolInfo.Groups) {
+                TGroupRow row;
+                row.PoolName = poolName;
+                row.GroupId = groupId;
+                row.Kind = poolInfo.Kind;
+                auto ib = BSGroupIndex.find(groupId);
+                if (ib != BSGroupIndex.end()) {
+                    row.Erasure = ib->second.GetErasureSpecies();
+                    const auto& vDiskIds = ib->second.GetVDiskIds();
+                    for (auto iv = vDiskIds.begin(); iv != vDiskIds.end(); ++iv) {
+                        const NKikimrBlobStorage::TVDiskID& vDiskId = *iv;
+                        auto ie = VDisksIndex.find(vDiskId);
+                        bool degraded = false;
+                        if (ie != VDisksIndex.end()) {
+                            ui32 nodeId = ie->second.GetNodeId();
+                            ui32 pDiskId = ie->second.GetPDiskId();
+                            degraded |= !ie->second.GetReplicated() || ie->second.GetVDiskState() != NKikimrWhiteboard::EVDiskState::OK;
+                            row.Used += ie->second.GetAllocatedSize();
+                            row.Limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
+                            row.Read += ie->second.GetReadThroughput();
+                            row.Write += ie->second.GetWriteThroughput();
+
+                            auto ip = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
+                            if (ip != PDisksIndex.end()) {
+                                degraded |= ip->second.GetState() != NKikimrBlobStorage::TPDiskState::Normal;
+                                if (!ie->second.HasAvailableSize()) {
+                                    row.Limit += ip->second.GetAvailableSize();
+                                }
+                            }
+                        }
+                        if (degraded) {
+                            row.Degraded++;
+                        }
+                    }
+                }
+                row.Usage = row.Limit == 0 ? 100 : (float)row.Used / row.Limit;
+
                 ++totalGroups;
-                if (!CheckGroupFilters(groupId, poolName)) {
+                if (!CheckGroupFilters(groupId, poolName, row)) {
                     continue;
                 }
                 ++foundGroups;
                 if (Version == EVersion::v1) {
                     pool->AddGroups()->SetGroupId(groupId);
+                } else if (Version == EVersion::v2) {
+                    if (!UsageBuckets.empty() && !BinarySearch(UsageBuckets.begin(), UsageBuckets.end(), (ui32)(row.Usage * 100) / UsagePace)) {
+                        continue;
+                    }
+                    GroupRows.emplace_back(row);
+                    GroupRowsByGroupId[groupId] = row;
                 }
                 auto itHiveGroup = BSGroupHiveIndex.find(groupId);
                 if (itHiveGroup != BSGroupHiveIndex.end()) {
@@ -309,61 +382,6 @@ public:
         }
 
         if (Version == EVersion::v2) {
-            TVector<TGroupRow> GroupRows;
-            for (const auto& [poolName, poolInfo] : StoragePoolInfo) {
-                if ((!FilterTenant.empty() || !FilterStoragePools.empty()) && FilterStoragePools.count(poolName) == 0) {
-                    continue;
-                }
-                for (TString groupId : poolInfo.Groups) {
-                    if (!CheckGroupFilters(groupId, poolName)) {
-                        continue;
-                    }
-
-                    TGroupRow row;
-                    row.PoolName = poolName;
-                    row.GroupId = groupId;
-                    row.Kind = poolInfo.Kind;
-
-                    auto ib = BSGroupIndex.find(groupId);
-                    if (ib != BSGroupIndex.end()) {
-                        row.Erasure = ib->second.GetErasureSpecies();
-                        const auto& vDiskIds = ib->second.GetVDiskIds();
-                        for (auto iv = vDiskIds.begin(); iv != vDiskIds.end(); ++iv) {
-                            const NKikimrBlobStorage::TVDiskID& vDiskId = *iv;
-                            auto ie = VDisksIndex.find(vDiskId);
-                            bool degraded = false;
-                            if (ie != VDisksIndex.end()) {
-                                ui32 nodeId = ie->second.GetNodeId();
-                                ui32 pDiskId = ie->second.GetPDiskId();
-                                degraded |= !ie->second.GetReplicated() || ie->second.GetVDiskState() != NKikimrWhiteboard::EVDiskState::OK;
-                                row.Used += ie->second.GetAllocatedSize();
-                                row.Limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
-                                row.Read += ie->second.GetReadThroughput();
-                                row.Write += ie->second.GetWriteThroughput();
-
-                                auto ip = PDisksIndex.find(std::make_pair(nodeId, pDiskId));
-                                if (ip != PDisksIndex.end()) {
-                                    degraded |= ip->second.GetState() != NKikimrBlobStorage::TPDiskState::Normal;
-                                    if (!ie->second.HasAvailableSize()) {
-                                        row.Limit += ip->second.GetAvailableSize();
-                                    }
-                                }
-                            }
-                            if (degraded) {
-                                row.Degraded++;
-                            }
-                        }
-                    }
-
-                    row.Usage = row.Limit == 0 ? 100 : (float)row.Used / row.Limit;
-                    if (!UsageBuckets.empty() && !BinarySearch(UsageBuckets.begin(), UsageBuckets.end(), (ui32)(row.Usage * 100) / UsagePace)) {
-                        continue;
-                    }
-                    GroupRows.emplace_back(row);
-                    GroupRowsByGroupId[groupId] = row;
-                }
-            }
-
             switch (GroupSort) {
                 case EGroupSort::PoolName:
                     SortCollection(GroupRows, [](const TGroupRow& node) { return node.PoolName;}, ReverseSort);

@@ -238,7 +238,7 @@ void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActo
     Y_ABORT_UNLESS(response.GetStatusResultSize());
 
     Partition()->DiskIsFull = DiskIsFull(ev);
-    if (!Partition()->DiskIsFull) {
+    if (Partition()->DiskIsFull) {
         Partition()->LogAndCollectError(NKikimrServices::PERSQUEUE, "disk is full", ctx);
     }
 

@@ -8,6 +8,7 @@ LICENSE(MIT)
 
 PEERDIR(
     contrib/python/pycparser
+    contrib/python/setuptools
     contrib/restricted/libffi
 )
 

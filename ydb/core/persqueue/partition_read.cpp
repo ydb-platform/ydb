@@ -709,7 +709,8 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
     const TString& user = read->ClientId;
     auto userInfo = UsersInfoStorage->GetIfExists(user);
     if(!userInfo) {
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
@@ -757,7 +758,11 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
         return;
     }
 
-    Y_ABORT_UNLESS(offset < EndOffset);
+    if (offset > EndOffset) {
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << EndOffset);
+        return;
+    }
 
     ProcessRead(ctx, std::move(info), cookie, false);
 }

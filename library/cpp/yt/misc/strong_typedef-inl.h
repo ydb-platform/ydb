@@ -62,33 +62,27 @@ constexpr T&& TStrongTypedef<T, TTag>::Underlying() &&
     return std::move(Underlying_);
 }
 
-template <class T, class TTag>
-constexpr bool TStrongTypedef<T, TTag>::operator==(const TStrongTypedef& rhs) const
-    noexcept(noexcept(Underlying_ == rhs.Underlying_))
-        requires std::equality_comparable<T>
-{
-    //! NB: We add a constexpr branch to keep constexprness of the function
-    //! without making extra specializations explicitly.
-    if constexpr (std::same_as<T, void>) {
-        return true;
+#define XX(op, defaultValue) \
+    template <class T, class TTag> \
+    constexpr auto TStrongTypedef<T, TTag>::operator op(const TStrongTypedef& rhs) const \
+        noexcept(noexcept(Underlying_ op rhs.Underlying_)) \
+            requires requires (T lhs, T rhs) {lhs op rhs; } \
+    { \
+        if constexpr (std::same_as<T, void>) { \
+            return defaultValue; \
+        } \
+        return Underlying_ op rhs.Underlying_; \
     }
 
-    return Underlying_ == rhs.Underlying_;
-}
+XX(<, false)
+XX(>, false)
+XX(<=, true)
+XX(>=, true)
+XX(==, true)
+XX(!=, false)
+XX(<=>, std::strong_ordering::equal)
 
-template <class T, class TTag>
-constexpr auto TStrongTypedef<T, TTag>::operator<=>(const TStrongTypedef& rhs) const
-    noexcept(noexcept(Underlying_ <=> rhs.Underlying_))
-        requires std::three_way_comparable<T>
-{
-    //! NB: We add a constexpr branch to keep constexprness of the function
-    //! without making extra specializations explicitly.
-    if constexpr (std::same_as<T, void>) {
-        return std::strong_ordering::equal;
-    }
-
-    return Underlying_ <=> rhs.Underlying_;
-}
+#undef XX
 
 template <class T, class TTag>
 TStrongTypedef<T, TTag>::operator bool() const
@@ -169,6 +163,61 @@ struct hash<NYT::TStrongTypedef<T, TTag>>
     {
         return std::hash<T>()(value.Underlying());
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class TTag>
+    requires std::numeric_limits<T>::is_specialized
+class numeric_limits<NYT::TStrongTypedef<T, TTag>>
+{
+public:
+    #define XX(name) \
+        static constexpr decltype(numeric_limits<T>::name) name = numeric_limits<T>::name;
+
+    XX(is_specialized)
+    XX(is_signed)
+    XX(digits)
+    XX(digits10)
+    XX(max_digits10)
+    XX(is_integer)
+    XX(is_exact)
+    XX(radix)
+    XX(min_exponent)
+    XX(min_exponent10)
+    XX(max_exponent)
+    XX(max_exponent10)
+    XX(has_infinity)
+    XX(has_quiet_NaN)
+    XX(has_signaling_NaN)
+    XX(has_denorm)
+    XX(has_denorm_loss)
+    XX(is_iec559)
+    XX(is_bounded)
+    XX(is_modulo)
+    XX(traps)
+    XX(tinyness_before)
+    XX(round_style)
+
+    #undef XX
+
+    #define XX(name) \
+        static constexpr NYT::TStrongTypedef<T, TTag> name() noexcept \
+        { \
+            return NYT::TStrongTypedef<T, TTag>(numeric_limits<T>::name()); \
+        }
+
+    XX(min)
+    XX(max)
+    XX(lowest)
+    XX(epsilon)
+    XX(round_error)
+    XX(infinity)
+    XX(quiet_NaN)
+    XX(signaling_NaN)
+    XX(denorm_min)
+
+    #undef XX
 };
 
 ////////////////////////////////////////////////////////////////////////////////

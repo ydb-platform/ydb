@@ -269,13 +269,15 @@ private:
             }
 
             auto inner = ScanExprLineage(node.Head(), arg, src, visited);
-            if (!inner || !inner->StructItems) {
+            if (!inner) {
                 return Nothing();
             }
 
-            TFieldsLineage result; 
-            result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
-            return it->second = result;
+            if (inner->StructItems) {
+                TFieldsLineage result; 
+                result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+                return it->second = result;
+            }
         }
 
         if (node.IsCallable("SqlIn")) {

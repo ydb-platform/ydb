@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/transaction_client/public.h>
 
+#include <yt/yt/client/bundle_controller_client/public.h>
+
 #include <yt/yt/library/auth/authentication_options.h>
 
 #include <yt/yt/core/misc/public.h>
@@ -107,6 +109,8 @@ DECLARE_REFCOUNTED_TYPE(IVersionedRowset)
 DECLARE_REFCOUNTED_TYPE(ITypeErasedRowset)
 DECLARE_REFCOUNTED_STRUCT(IPersistentQueueRowset)
 DECLARE_REFCOUNTED_STRUCT(TSkynetSharePartsLocations)
+
+DECLARE_REFCOUNTED_STRUCT(IJournalWritesObserver)
 
 struct TConnectionOptions;
 

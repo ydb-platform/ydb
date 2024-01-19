@@ -11,6 +11,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/escape.h>
@@ -2653,7 +2654,7 @@ bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::T
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-            StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), TRequestType::ReadOnly));
+            StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), TRequestType::ReadOnly, std::move(ev->TraceId)));
 
     intermediate->HasCookie = true;
     intermediate->Cookie = request.cookie();
@@ -2707,7 +2708,7 @@ bool TKeyValueState::PrepareReadRangeRequest(const TActorContext &ctx, TEvKeyVal
 
     TRequestType::EType requestType = TRequestType::ReadOnly;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
     intermediate->HasCookie = true;
     intermediate->Cookie = request.cookie();
@@ -2774,7 +2775,7 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
 
     TRequestType::EType requestType = TRequestType::WriteOnly;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
     intermediate->HasCookie = true;
     intermediate->Cookie = request.cookie();
@@ -2834,7 +2835,7 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
 
     TRequestType::EType requestType = TRequestType::ReadOnly;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
@@ -2869,7 +2870,7 @@ bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyV
 
     TRequestType::EType requestType = TRequestType::ReadOnlyInline;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
@@ -3160,7 +3161,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
-        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), inOutRequestType));
+        StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), inOutRequestType, std::move(ev->TraceId)));
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();

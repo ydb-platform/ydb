@@ -1160,7 +1160,7 @@ namespace NKikimr {
                     cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender
                 );
             } else {
-                return new TMonErrorActor(notifyId, ev, 
+                return new TMonErrorActor(notifyId, ev,
                     "VDisk restart in the normal state is not allowed <br>\n"
                     "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
                 );

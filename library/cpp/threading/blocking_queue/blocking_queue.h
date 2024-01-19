@@ -73,6 +73,30 @@ namespace NThreading {
         }
 
         ///
+        /// Blocks until queue has some elements or queue is stopped or deadline is reached.
+        /// Returns empty internal deque if queue is stopped or deadline is reached.
+        /// Returns iternal deque element otherwise.
+        TDeque<TElement> Drain(TInstant deadline = TInstant::Max()) {
+            TGuard<TMutex> g(Lock);
+
+            const auto canPop = [this]() { return CanPop(); };
+            if (!CanPopCV.WaitD(Lock, deadline, canPop)) {
+                return {};
+            }
+
+            TDeque<TElement> result;
+            std::swap(result, Queue);
+
+            CanPushCV.BroadCast();
+
+            return result;
+        }
+
+        TDeque<TElement> Drain(TDuration duration) {
+            return Drain(TInstant::Now() + duration);
+        }
+
+        ///
         /// Blocks until queue has space for new elements or queue is stopped or deadline is reached.
         /// Returns false exception if queue is stopped and push failed or deadline is reached.
         /// Pushes element to queue and returns true otherwise.

@@ -131,10 +131,6 @@ bool TScanHead::IsReverse() const {
     return GetContext().GetReadMetadata()->IsDescSorted();
 }
 
-NKikimr::NOlap::NPlainReader::TFetchingPlan TScanHead::GetColumnsFetchingPlan(const bool exclusiveSource) const {
-    return Context->GetColumnsFetchingPlan(exclusiveSource);
-}
-
 void TScanHead::Abort() {
     for (auto&& i : FetchingIntervals) {
         i.second->Abort();

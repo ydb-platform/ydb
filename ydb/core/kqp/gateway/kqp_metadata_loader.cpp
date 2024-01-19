@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/stat_service.h>
 
@@ -277,6 +278,29 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     return result;
 }
 
+TTableMetadataResult GetViewMetadataResult(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const TString& cluster,
+    const TString& viewName
+) {
+  const auto& description = schemeEntry.ViewInfo->Description;
+
+  TTableMetadataResult builtResult;
+  builtResult.SetSuccess();
+
+  builtResult.Metadata = new NYql::TKikimrTableMetadata(cluster, viewName);
+  auto metadata = builtResult.Metadata;
+  metadata->DoesExist = true;
+  metadata->PathId = NYql::TKikimrPathId(description.GetPathId().GetOwnerId(),
+                                         description.GetPathId().GetLocalId());
+  metadata->SchemaVersion = description.GetVersion();
+  metadata->Kind = NYql::EKikimrTableKind::View;
+  metadata->Attributes = schemeEntry.Attributes;
+  metadata->ViewPersistedData = {description.GetQueryText()};
+
+  return builtResult;
+}
+
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
         const TString& cluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
@@ -305,7 +329,11 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             return ResultFromError<TResult>(ToString(entry.Status));
     }
 
-    YQL_ENSURE(entry.Kind == EKind::KindTable || entry.Kind == EKind::KindColumnTable || entry.Kind == EKind::KindExternalTable || entry.Kind == EKind::KindExternalDataSource);
+    YQL_ENSURE(IsIn({EKind::KindTable,
+                     EKind::KindColumnTable,
+                     EKind::KindExternalTable,
+                     EKind::KindExternalDataSource,
+                     EKind::KindView}, entry.Kind));
 
     TTableMetadataResult result;
     switch (entry.Kind) {
@@ -314,6 +342,9 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             break;
         case EKind::KindExternalDataSource:
             result = GetExternalDataSourceMetadataResult(entry, cluster, tableName);
+            break;
+        case EKind::KindView:
+            result = GetViewMetadataResult(entry, cluster, tableName);
             break;
         default:
             result = GetTableMetadataResult(entry, cluster, tableName, queryName);
@@ -545,7 +576,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
 
     for (size_t i = 0; i < indexesCount; i++) {
         const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = NYql::IKikimrGateway::CreateIndexTablePath(tableName, index.Name);
+        auto indexTablePath = NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
 
         if (!index.SchemaVersion) {
             LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
@@ -714,7 +745,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     return;
                 }
 
-                if (!IsIn({EKind::KindExternalDataSource, EKind::KindExternalTable}, entry.Kind) && expectedSchemaVersion && entry.TableId.SchemaVersion) {
+                if (!IsIn({EKind::KindExternalDataSource,
+                           EKind::KindExternalTable,
+                           EKind::KindView}, entry.Kind) && expectedSchemaVersion && entry.TableId.SchemaVersion) {
                     if (entry.TableId.SchemaVersion != expectedSchemaVersion) {
                         const auto message = TStringBuilder()
                             << "schema version mismatch during metadata loading for: "

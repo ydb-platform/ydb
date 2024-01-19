@@ -13,6 +13,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/size_literals.h>
+
 using namespace NYql::NDqs;
 using namespace NActors;
 
@@ -32,6 +34,154 @@ TTaskRunnerActorSensors GetSensors(const T& t) {
     }
     return result;
 }
+
+class TSpillingStorageInfo : public TSimpleRefCount<TSpillingStorageInfo> {
+public:
+    using TPtr = std::shared_ptr<TSpillingStorageInfo>;
+
+    TSpillingStorageInfo(const IDqChannelStorage::TPtr spillingStorage, ui64 channelId)
+        : SpillingStorage(spillingStorage)
+        , ChannelId(channelId)
+        , FirstStoredId(0)
+        , NextStoredId(0)
+    {}
+
+    const IDqChannelStorage::TPtr SpillingStorage = nullptr;
+    ui64 ChannelId = 0;
+    ui64 FirstStoredId = 0;
+    ui64 NextStoredId = 0;
+};
+
+struct TOutputChannelReadResult {
+    bool IsChanged = false;
+    bool IsFinished = false;
+    bool HasData = false;
+    std::list<::NYql::NDqProto::TMetric> Metrics;
+    TVector<TDqSerializedBatch> DataChunks;
+};
+
+class TOutputChannelReader {
+public:
+    TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize,
+        bool wasFinished, TSpillingStorageInfo::TPtr spillingStorageInfo, ui64 cookie
+    )
+        : Channel(channel)
+        , SpillingStorageInfo(spillingStorageInfo)
+        , ToPopSize(toPopSize)
+        , WasFinished(wasFinished)
+        , Cookie(cookie)
+    {}
+
+    TOutputChannelReadResult Read() {
+        if (SpillingStorageInfo) {
+            return ReadWithSpilling();
+        }
+        return ReadDirectly();
+    }
+
+private:
+
+    TOutputChannelReadResult ReadDirectly() {
+        int maxChunks = std::numeric_limits<int>::max();
+        bool changed = false;
+        bool isFinished = false;
+        i64 remain = ToPopSize;
+        ui32 dataSize = 0;
+        bool hasData = true;
+        TOutputChannelReadResult result;
+
+        if (remain == 0) {
+            // special case to WorkerActor
+            remain = 5_MB;
+            maxChunks = 1;
+        }
+
+        TVector<TDqSerializedBatch> chunks;
+        for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
+            TDqSerializedBatch data;
+            const auto lastPop = std::move(Channel->Pop(data));
+
+            for (auto& metric : lastPop.GetMetric()) {
+                result.Metrics.push_back(metric);
+            }
+
+            hasData = lastPop.GetResult();
+            result.HasData = result.HasData || hasData;
+            dataSize = data.Size();
+            isFinished = !hasData && Channel->IsFinished();
+            changed = changed || hasData || (isFinished != WasFinished);
+
+            if (hasData) {
+                result.DataChunks.emplace_back(std::move(data));
+            }
+        }
+        result.IsFinished = isFinished;
+        result.IsChanged = changed;
+        return result;
+    }
+
+    TOutputChannelReadResult ReadWithSpilling() {
+        int maxChunks = std::numeric_limits<int>::max();
+        bool changed = false;
+        bool isChanFinished = false;
+        i64 remain = ToPopSize;
+        bool hasData = true;
+        TOutputChannelReadResult result;
+
+        if (remain == 0) {
+            // special case to WorkerActor
+            remain = 5_MB;
+            maxChunks = 1;
+        }
+
+        auto spillingStorage = SpillingStorageInfo->SpillingStorage;
+        // Read all available data from the pipe and spill it
+        while (spillingStorage && !isChanFinished && hasData) {
+            TDqSerializedBatch data;
+            const auto lastPop = std::move(Channel->Pop(data));
+
+            for (auto& metric : lastPop.GetMetric()) {
+                result.Metrics.push_back(metric);
+            }
+
+            hasData = lastPop.GetResult();
+            isChanFinished = !hasData && Channel->IsFinished();
+            changed = changed || hasData || (isChanFinished != WasFinished);
+            if (hasData) {
+                spillingStorage->Put(SpillingStorageInfo->NextStoredId++, SaveForSpilling(std::move(data)), Cookie);
+            }
+        }
+
+        changed = false;
+        result.DataChunks.reserve(SpillingStorageInfo->NextStoredId - SpillingStorageInfo->FirstStoredId);
+        while (SpillingStorageInfo->FirstStoredId < SpillingStorageInfo->NextStoredId && remain > 0) {
+            TDqSerializedBatch data;
+            YQL_ENSURE(spillingStorage);
+            TBuffer blob;
+            if (!spillingStorage->Get(SpillingStorageInfo->FirstStoredId, blob, Cookie)) {
+                break;
+            }
+            ++SpillingStorageInfo->FirstStoredId;
+            data = LoadSpilled(std::move(blob));
+            remain -= data.Size();
+            result.DataChunks.emplace_back(std::move(data));
+            --maxChunks;
+            changed = true;
+            hasData = true;
+        }
+
+        result.IsFinished = isChanFinished && SpillingStorageInfo->FirstStoredId == SpillingStorageInfo->NextStoredId;
+        result.IsChanged = changed;
+        result.HasData = hasData;
+        return result;
+    }
+
+    NTaskRunnerProxy::IOutputChannel::TPtr Channel;
+    TSpillingStorageInfo::TPtr SpillingStorageInfo;
+    i64 ToPopSize;
+    bool WasFinished;
+    ui64 Cookie;
+};
 
 } // namespace
 
@@ -74,15 +224,24 @@ public:
         }
     }
 
-    STRICT_STFUNC(Handler, {
-        cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
-        hFunc(TEvTaskRunnerCreate, OnDqTask);
-        hFunc(TEvContinueRun, OnContinueRun);
-        hFunc(TEvPop, OnChannelPop);
-        hFunc(TEvPush, OnChannelPush);
-        hFunc(TEvSinkPop, OnSinkPop);
-        hFunc(TEvSinkPopFinished, OnSinkPopFinished);
-    })
+    STFUNC(Handler) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
+            hFunc(TEvTaskRunnerCreate, OnDqTask);
+            hFunc(TEvContinueRun, OnContinueRun);
+            hFunc(TEvPop, OnChannelPop);
+            hFunc(TEvPush, OnChannelPush);
+            hFunc(TEvSinkPop, OnSinkPop);
+            hFunc(TEvSinkPopFinished, OnSinkPopFinished);
+            IgnoreFunc(TEvStatistics);
+            default: {
+                auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
+                auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
+                auto reply = MakeHolder<NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
+                Send(ParentId, reply.Release());
+            }
+        }
+    }
 
 private:
     static std::pair<NYql::NDqProto::StatusIds::StatusCode, TString> ParseStderr(const TString& input, TIntrusivePtr<TDqConfiguration> settings) {
@@ -111,7 +270,7 @@ private:
                     } else if (line.Contains("No such transaction")) {
                         // YQL-15542
                         fallback = true;
-                    } else if (line.Contains("(NYT::TErrorException) Request timed out")) {
+                    } else if (line.Contains("YT RPC Reader exception:")) {
                         // RPC reader fallback to YT
                         fallback = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {
@@ -298,43 +457,22 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
+        ui64 channelId = ev->Get()->ChannelId;
+
+        TSpillingStorageInfo::TPtr spillingStorageInfo = GetSpillingStorage(channelId, actorSystem);
+
+        Invoker->Invoke([spillingStorageInfo, cookie, selfId, channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
-                int maxChunks = std::numeric_limits<int>::max();
-                bool changed = false;
-                bool isFinished = false;
-                i64 remain = toPop;
-                ui32 dataSize = 0;
-                bool hasData = true;
+                TOutputChannelReader reader(channel, toPop, wasFinished, spillingStorageInfo, cookie);
+                TOutputChannelReadResult result = reader.Read();
 
-                if (remain == 0) {
-                    // special case to WorkerActor
-                    remain = 5<<20;
-                    maxChunks = 1;
-                }
-
-                TVector<TDqSerializedBatch> chunks;
                 NDqProto::TPopResponse response;
-                for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
-                    TDqSerializedBatch data;
-                    const auto lastPop = std::move(channel->Pop(data));
-
-                    for (auto& metric : lastPop.GetMetric()) {
-                        *response.AddMetric() = metric;
-                    }
-
-                    hasData = lastPop.GetResult();
-                    dataSize = data.Size();
-                    isFinished = !hasData && channel->IsFinished();
-                    response.SetResult(response.GetResult() || hasData);
-                    changed = changed || hasData || (isFinished != wasFinished);
-
-                    if (hasData) {
-                        chunks.emplace_back(std::move(data));
-                    }
+                for (auto& metric : result.Metrics) {
+                    *response.AddMetric() = metric;
                 }
+                response.SetResult(response.GetResult() || result.HasData);
 
                 actorSystem->Send(
                     new IEventHandle(
@@ -342,11 +480,11 @@ private:
                         selfId,
                         new TEvChannelPopFinished(
                             channelId,
-                            std::move(chunks),
+                            std::move(result.DataChunks),
                             Nothing(),
                             Nothing(),
-                            isFinished,
-                            changed,
+                            result.IsFinished,
+                            result.IsChanged,
                             GetSensors(response)),
                         /*flags=*/0,
                         cookie));
@@ -438,6 +576,7 @@ private:
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
         auto startTime = TInstant::Now();
+        ExecCtx = ev->Get()->ExecCtx;
 
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
@@ -569,6 +708,22 @@ private:
         });
     }
 
+    TSpillingStorageInfo::TPtr GetSpillingStorage(ui64 channelId, TActorSystem* actorSystem) {
+        TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, actorSystem, true /*isConcurrent*/);
+
+        if (channelStorage) {
+            auto spillingIt = SpillingStoragesInfos.find(channelId);
+            if (spillingIt == SpillingStoragesInfos.end()) {
+                TSpillingStorageInfo* info = new TSpillingStorageInfo(channelStorage, channelId);
+                spillingIt = SpillingStoragesInfos.emplace(channelId, info).first;
+            }
+            spillingStorageInfo = spillingIt->second;
+        }
+
+        return spillingStorageInfo;
+    }
+
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
     const TString TraceId;
@@ -584,6 +739,9 @@ private:
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
+
+    std::shared_ptr<IDqTaskRunnerExecutionContext> ExecCtx;
+    std::unordered_map<ui64, TSpillingStorageInfo::TPtr> SpillingStoragesInfos;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

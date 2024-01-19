@@ -145,12 +145,6 @@ class SyncStream(NetworkStream):
         server_hostname: typing.Optional[str] = None,
         timeout: typing.Optional[float] = None,
     ) -> NetworkStream:
-        if isinstance(self._sock, ssl.SSLSocket):  # pragma: no cover
-            raise RuntimeError(
-                "Attempted to add a TLS layer on top of the existing "
-                "TLS stream, which is not supported by httpcore package"
-            )
-
         exc_map: ExceptionMapping = {
             socket.timeout: ConnectTimeout,
             OSError: ConnectError,

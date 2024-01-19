@@ -72,7 +72,7 @@ static inline size_t EscapeC(unsigned char c, char next, char r[ESCAPE_C_BUFFER_
         r[0] = '\\';
         r[1] = 't';
         return 2;
-   } else if (c < 8 && !IsOctDigit(next)) {
+    } else if (c < 8 && !IsOctDigit(next)) {
         r[0] = '\\';
         r[1] = OctDigit(c);
         return 2;

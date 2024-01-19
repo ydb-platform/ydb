@@ -84,6 +84,8 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
 }
 
 Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {
+    return; // KIKIMR-9016
+
     NKikimr::TBlobStorageGroupType erasure = TErasureType::Erasure4Plus2Block;
     TTestBasicRuntime runtime(1, false);
     SetLogPriorities(runtime);

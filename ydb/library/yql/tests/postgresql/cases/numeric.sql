@@ -580,3 +580,250 @@ SELECT power('-inf'::numeric, '3');
 SELECT power('-inf'::numeric, '4.5');
 SELECT power('-inf'::numeric, '0');
 SELECT power('-inf'::numeric, 'inf');
+-- Check for appropriate rounding and overflow
+CREATE TABLE fract_only (id int, val numeric(4,4));
+INSERT INTO fract_only VALUES (1, '0.0');
+INSERT INTO fract_only VALUES (2, '0.1');
+INSERT INTO fract_only VALUES (4, '-0.9999');
+INSERT INTO fract_only VALUES (5, '0.99994');
+INSERT INTO fract_only VALUES (7, '0.00001');
+INSERT INTO fract_only VALUES (8, '0.00017');
+INSERT INTO fract_only VALUES (9, 'NaN');
+DROP TABLE fract_only;
+-- Check conversion to integers
+SELECT (-9223372036854775808.5)::int8; -- should fail
+SELECT (-9223372036854775808.4)::int8; -- ok
+SELECT 9223372036854775807.4::int8; -- ok
+SELECT 9223372036854775807.5::int8; -- should fail
+SELECT (-2147483648.5)::int4; -- should fail
+SELECT (-2147483648.4)::int4; -- ok
+SELECT 2147483647.4::int4; -- ok
+SELECT 2147483647.5::int4; -- should fail
+SELECT (-32768.5)::int2; -- should fail
+SELECT (-32768.4)::int2; -- ok
+SELECT 32767.4::int2; -- ok
+SELECT 32767.5::int2; -- should fail
+-- Check inf/nan conversion behavior
+SELECT 'NaN'::float8::numeric;
+SELECT 'Infinity'::float8::numeric;
+SELECT '-Infinity'::float8::numeric;
+SELECT 'NaN'::float4::numeric;
+SELECT 'Infinity'::float4::numeric;
+SELECT '-Infinity'::float4::numeric;
+SELECT '42'::int2::numeric;
+SELECT 'NaN'::numeric::int2;
+SELECT 'Infinity'::numeric::int2;
+SELECT '-Infinity'::numeric::int2;
+SELECT 'NaN'::numeric::int4;
+SELECT 'Infinity'::numeric::int4;
+SELECT '-Infinity'::numeric::int4;
+SELECT 'NaN'::numeric::int8;
+SELECT 'Infinity'::numeric::int8;
+SELECT '-Infinity'::numeric::int8;
+-- Simple check that ceil(), floor(), and round() work correctly
+CREATE TABLE ceil_floor_round (a numeric);
+INSERT INTO ceil_floor_round VALUES ('-5.5');
+INSERT INTO ceil_floor_round VALUES ('-5.499999');
+INSERT INTO ceil_floor_round VALUES ('9.5');
+INSERT INTO ceil_floor_round VALUES ('9.4999999');
+INSERT INTO ceil_floor_round VALUES ('0.0');
+INSERT INTO ceil_floor_round VALUES ('0.0000001');
+INSERT INTO ceil_floor_round VALUES ('-0.000001');
+DROP TABLE ceil_floor_round;
+-- Check rounding, it should round ties away from zero.
+SELECT i as pow,
+	round((-2.5 * 10 ^ i)::numeric, -i),
+	round((-1.5 * 10 ^ i)::numeric, -i),
+	round((-0.5 * 10 ^ i)::numeric, -i),
+	round((0.5 * 10 ^ i)::numeric, -i),
+	round((1.5 * 10 ^ i)::numeric, -i),
+	round((2.5 * 10 ^ i)::numeric, -i)
+FROM generate_series(-5,5) AS t(i);
+-- Testing for width_bucket(). For convenience, we test both the
+-- numeric and float8 versions of the function in this file.
+-- errors
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+SELECT width_bucket(2.0, 3.0, '-inf', 888);
+SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+-- normal operation
+CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+-- Check positive and negative infinity: we require
+-- finite bucket bounds, but allow an infinite operand
+SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
+SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+       width_bucket('-Infinity'::numeric, 1, 10, 10);
+SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+       width_bucket('-Infinity'::float8, 1, 10, 10);
+DROP TABLE width_bucket_test;
+-- Simple test for roundoff error when results should be exact
+SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
+       width_bucket(x::numeric, 10, 100, 9) as num
+FROM generate_series(0, 110, 10) x;
+SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
+       width_bucket(x::numeric, 100, 10, 9) as num
+FROM generate_series(0, 110, 10) x;
+SELECT to_char('100'::numeric, 'FM999.9');
+SELECT to_char('100'::numeric, 'FM999.');
+SELECT to_char('100'::numeric, 'FM999');
+-- Check parsing of literal text in a format string
+SELECT to_char('100'::numeric, 'foo999');
+SELECT to_char('100'::numeric, 'f\oo999');
+SELECT to_char('100'::numeric, 'f\\oo999');
+SELECT to_char('100'::numeric, 'f\"oo999');
+SELECT to_char('100'::numeric, 'f\\"oo999');
+SELECT to_char('100'::numeric, 'f"ool"999');
+SELECT to_char('100'::numeric, 'f"\ool"999');
+SELECT to_char('100'::numeric, 'f"\\ool"999');
+SELECT to_char('100'::numeric, 'f"ool\"999');
+SELECT to_char('100'::numeric, 'f"ool\\"999');
+SELECT to_number('-34,338,492', '99G999G999');
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+SELECT to_number('<564646.654564>', '999999.999999PR');
+SELECT to_number('0.00001-', '9.999999S');
+SELECT to_number('5.01-', 'FM9.999999S');
+SELECT to_number('5.01-', 'FM9.999999MI');
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+SELECT to_number('.01', 'FM9.99');
+SELECT to_number('.0', '99999999.99999999');
+SELECT to_number('.-01', 'S99.99');
+SELECT to_number('.01-', '99.99S');
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+SELECT to_number('34,50','999,99');
+SELECT to_number('123,000','999G');
+SELECT to_number('123456','999G999');
+SELECT to_number('$1234.56','L9,999.99');
+SELECT to_number('$1234.56','L99,999.99');
+SELECT to_number('$1,234.56','L99,999.99');
+SELECT to_number('1234.56','L99,999.99');
+SELECT to_number('1,234.56','L99,999.99');
+SELECT to_number('42nd', '99th');
+--
+-- Input syntax
+--
+CREATE TABLE num_input_test (n1 numeric);
+-- good inputs
+INSERT INTO num_input_test(n1) VALUES (' 123');
+INSERT INTO num_input_test(n1) VALUES ('   3245874    ');
+INSERT INTO num_input_test(n1) VALUES ('  -93853');
+INSERT INTO num_input_test(n1) VALUES ('555.50');
+INSERT INTO num_input_test(n1) VALUES ('-555.50');
+INSERT INTO num_input_test(n1) VALUES ('NaN ');
+INSERT INTO num_input_test(n1) VALUES ('        nan');
+INSERT INTO num_input_test(n1) VALUES (' inf ');
+INSERT INTO num_input_test(n1) VALUES (' +inf ');
+INSERT INTO num_input_test(n1) VALUES (' -inf ');
+INSERT INTO num_input_test(n1) VALUES (' Infinity ');
+INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
+INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
+-- bad inputs
+INSERT INTO num_input_test(n1) VALUES ('     ');
+INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+INSERT INTO num_input_test(n1) VALUES ('xyz');
+INSERT INTO num_input_test(n1) VALUES ('- 1234');
+INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+INSERT INTO num_input_test(n1) VALUES ('');
+INSERT INTO num_input_test(n1) VALUES (' N aN ');
+INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+SELECT * FROM num_input_test;
+select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
+--
+-- Test some corner cases for division
+--
+select 999999999999999999999::numeric/1000000000000000000000;
+select mod(999999999999999999999::numeric,1000000000000000000000);
+select div(-9999999999999999999999::numeric,1000000000000000000000);
+select mod(-9999999999999999999999::numeric,1000000000000000000000);
+select div(-9999999999999999999999::numeric,1000000000000000000000)*1000000000000000000000 + mod(-9999999999999999999999::numeric,1000000000000000000000);
+select mod (70.0,70) ;
+select div (70.0,70) ;
+select 70.0 / 70 ;
+select 12345678901234567890 % 123;
+select 12345678901234567890 / 123;
+select div(12345678901234567890, 123);
+select div(12345678901234567890, 123) * 123 + 12345678901234567890 % 123;
+--
+-- Test some corner cases for square root
+--
+select sqrt(1.000000000000003::numeric);
+select sqrt(1.000000000000004::numeric);
+select sqrt(96627521408608.56340355805::numeric);
+select sqrt(96627521408608.56340355806::numeric);
+select sqrt(515549506212297735.073688290367::numeric);
+select sqrt(515549506212297735.073688290368::numeric);
+select sqrt(8015491789940783531003294973900306::numeric);
+select sqrt(8015491789940783531003294973900307::numeric);
+--
+-- Test code path for raising to integer powers
+--
+select 10.0 ^ -2147483648 as rounds_to_zero;
+select 10.0 ^ -2147483647 as rounds_to_zero;
+select 10.0 ^ 2147483647 as overflows;
+select 117743296169.0 ^ 1000000000 as overflows;
+-- cases that used to return inaccurate results
+select 3.789 ^ 21;
+select 3.789 ^ 35;
+select 1.2 ^ 345;
+select 0.12 ^ (-20);
+select 1.000000000123 ^ (-2147483648);
+-- cases that used to error out
+select 0.12 ^ (-25);
+select 0.5678 ^ (-85);
+-- negative base to integer powers
+select (-1.0) ^ 2147483646;
+select (-1.0) ^ 2147483647;
+select (-1.0) ^ 2147483648;
+select (-1.0) ^ 1000000000000000;
+select (-1.0) ^ 1000000000000001;
+--
+-- Tests for raising to non-integer powers
+--
+-- special cases
+select 0.0 ^ 0.0;
+select (-12.34) ^ 0.0;
+select 12.34 ^ 0.0;
+select 0.0 ^ 12.34;
+-- NaNs
+select 'NaN'::numeric ^ 'NaN'::numeric;
+select 'NaN'::numeric ^ 0;
+select 'NaN'::numeric ^ 1;
+select 0 ^ 'NaN'::numeric;
+select 1 ^ 'NaN'::numeric;
+-- invalid inputs
+select 0.0 ^ (-12.34);
+select (-12.34) ^ 1.2;
+-- cases that used to generate inaccurate results
+select 32.1 ^ 9.8;
+select 32.1 ^ (-9.8);
+select 12.3 ^ 45.6;
+select 12.3 ^ (-45.6);
+--
+-- Tests for EXP()
+--
+-- special cases
+select exp(0.0);
+select exp(1.0);
+select exp(1.0::numeric(71,70));
+select exp('nan'::numeric);
+select exp('inf'::numeric);
+-- cases that used to generate inaccurate results
+select exp(32.999);
+select exp(-32.999);
+select exp(123.456);
+select exp(-123.456);
+--
+-- Tests for generate_series
+--
+select * from generate_series(0.0::numeric, 4.0::numeric);
+select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);

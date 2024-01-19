@@ -6,6 +6,7 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 
 package NKikimrScheme;
 option java_package = "ru.yandex.kikimr.proto";
@@ -97,6 +98,7 @@ message TEvModifySchemeTransactionResult {
     optional uint64 PathId = 5;
     optional uint64 PathCreateTxId = 6;
     optional uint64 PathDropTxId = 7;
+    repeated Ydb.Issue.IssueMessage Issues = 8;
 }
 
 message TEvDescribeSchemeResult {
@@ -356,6 +358,7 @@ message TEvSyncTenantSchemeShard {
     optional uint64 TenantHive = 8;
     optional uint64 TenantSysViewProcessor = 9;
     optional uint64 TenantStatisticsAggregator = 11;
+    optional fixed64 TenantGraphShard = 12;
 
     optional string TenantRootACL = 10;
 }
@@ -377,6 +380,7 @@ message TEvUpdateTenantSchemeShard {
     optional uint64 TenantHive = 10;
     optional uint64 TenantSysViewProcessor = 11;
     optional uint64 TenantStatisticsAggregator = 16;
+    optional fixed64 TenantGraphShard = 18;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;

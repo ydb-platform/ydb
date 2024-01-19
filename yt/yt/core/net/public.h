@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/misc/public.h>
 
-#include <yt/yt/core/misc/intrusive_ptr.h>
+#include <library/cpp/yt/memory/intrusive_ptr.h>
 
 namespace NYT::NNet {
 

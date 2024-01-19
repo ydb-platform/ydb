@@ -100,3 +100,7 @@ DEFINE_REFCOUNTED_TYPE(IAttributeDictionary)
 
 } // namespace NYT::NYTree
 
+
+#define ATTRIBUTES_INL_H_
+#include "attributes-inl.h"
+#undef ATTRIBUTES_INL_H_

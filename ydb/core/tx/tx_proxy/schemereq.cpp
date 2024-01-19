@@ -431,6 +431,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             if (shardResult->HasPathDropTxId()) {
                 result->Record.SetPathDropTxId(shardResult->GetPathDropTxId());
             }
+
+            for (const auto& issue : shardResult->GetIssues()) {
+                auto newIssue = result->Record.AddIssues();
+                newIssue->CopyFrom(issue);
+            }
         } else {
             switch (status) {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:

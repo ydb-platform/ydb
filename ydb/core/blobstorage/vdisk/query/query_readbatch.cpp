@@ -219,9 +219,9 @@ namespace NKikimr {
 
     IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId,
             bool isRepl) {
-        if (Result->DiskDataItemPtrs.empty())
+        if (Result->DiskDataItemPtrs.empty()) {
             return nullptr;
-        else {
+        } else {
             // prepare read plan
             PrepareReadPlan();
             Y_DEBUG_ABORT_UNLESS(!Result->GlueReads.empty());

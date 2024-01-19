@@ -16,10 +16,16 @@ protected:
 
     }
 
-    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
-        if (success) {
+    virtual void DoOnExecuteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        if (blobsWroteSuccessfully) {
             for (auto&& i : GetDeclaredBlobs()) {
                 dbBlobs.AddTierBlobToDelete(GetStorageId(), i);
+            }
+        }
+    }
+    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {
+        if (blobsWroteSuccessfully) {
+            for (auto&& i : GetDeclaredBlobs()) {
                 if (GCInfo->IsBlobInUsage(i)) {
                     Y_ABORT_UNLESS(GCInfo->MutableBlobsToDeleteInFuture().emplace(i).second);
                 } else {
@@ -27,9 +33,6 @@ protected:
                 }
             }
         }
-    }
-    virtual void DoOnCompleteTxAfterRemoving(NColumnShard::TColumnShard& /*self*/) {
-
     }
 public:
     TDeclareRemovingAction(const TString& storageId, const std::shared_ptr<TGCInfo>& gcInfo)

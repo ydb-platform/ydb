@@ -25,7 +25,7 @@
 
 #include <sys/stat.h>
 
-#ifdef WIN32
+#ifdef _WIN32
 #  include <direct.h>
 #endif
 
@@ -38,7 +38,7 @@
 
 #include "memdebug.h" /* keep this as LAST include */
 
-#if defined(WIN32) || (defined(MSDOS) && !defined(__DJGPP__))
+#if defined(_WIN32) || (defined(MSDOS) && !defined(__DJGPP__))
 #  define mkdir(x,y) (mkdir)((x))
 #  ifndef F_OK
 #    define F_OK 0
@@ -84,11 +84,11 @@ static void show_dir_errno(struct GlobalConfig *global, const char *name)
 /*
  * Create the needed directory hierarchy recursively in order to save
  *  multi-GETs in file output, ie:
- *  curl "http://my.site/dir[1-5]/file[1-5].txt" -o "dir#1/file#2.txt"
+ *  curl "http://example.org/dir[1-5]/file[1-5].txt" -o "dir#1/file#2.txt"
  *  should create all the dir* automagically
  */
 
-#if defined(WIN32) || defined(__DJGPP__)
+#if defined(_WIN32) || defined(__DJGPP__)
 /* systems that may use either or when specifying a path */
 #define PATH_DELIMITERS "\\/"
 #else
@@ -132,7 +132,7 @@ CURLcode create_dir_hierarchy(const char *outfile, struct GlobalConfig *global)
         msnprintf(&dirbuildup[dlen], outlen - dlen, "%s%s", DIR_CHAR, tempdir);
       else {
         if(outdup == tempdir) {
-#if defined(MSDOS) || defined(WIN32)
+#if defined(_WIN32) || defined(MSDOS)
           /* Skip creating a drive's current directory.
              It may seem as though that would harmlessly fail but it could be
              a corner case if X: did not exist, since we would be creating it

@@ -18,6 +18,15 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
 }
 }
 
+bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
+    if (c1.RelName < c2.RelName){
+        return true;
+    } else if (c1.RelName == c2.RelName) {
+        return c1.AttributeName < c2.AttributeName;
+    }
+    return false;
+}
+
 /**
  * Compute the cost and output cardinality of a join
  * 
@@ -32,9 +41,11 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     double newCard;
     EStatisticsType outputType;
+    TVector<TString> joinedTableKeys;
 
     if (IsPKJoin(rightStats,rightJoinKeys)) {
-        newCard = std::max(leftStats.Nrows,rightStats.Nrows);
+        newCard = leftStats.Nrows;
+        joinedTableKeys = leftStats.KeyColumns;
         if (leftStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -42,7 +53,8 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         }
     }
     else if (IsPKJoin(leftStats,leftJoinKeys)) {
-        newCard = std::max(leftStats.Nrows,rightStats.Nrows);
+        newCard = rightStats.Nrows;
+        joinedTableKeys = rightStats.KeyColumns;
         if (rightStats.Type == EStatisticsType::BaseTable){
             outputType = EStatisticsType::FilteredFactTable;
         } else {
@@ -60,7 +72,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
-    return TOptimizerStatistics(outputType, newCard, newNCols, cost);
+    return TOptimizerStatistics(outputType, newCard, newNCols, cost, joinedTableKeys);
 }
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 

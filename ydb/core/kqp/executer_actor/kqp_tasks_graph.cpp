@@ -112,6 +112,8 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     meta.TableId = MakeTableId(input.GetStreamLookup().GetTable());
                     meta.TablePath = input.GetStreamLookup().GetTable().GetPath();
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+                    YQL_ENSURE(meta.TableConstInfo);
+                    meta.TableKind = meta.TableConstInfo->TableKind;
                 }
 
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
@@ -366,6 +368,12 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         keyColumnProto->SetName(keyColumn);
         keyColumnProto->SetId(columnIt->second.Id);
         keyColumnProto->SetTypeId(columnIt->second.Type.GetTypeId());
+
+        if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            auto& typeInfo = *keyColumnProto->MutableTypeInfo();
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
+        }
     }
 
     for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
@@ -382,6 +390,12 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         columnProto->SetName(column);
         columnProto->SetId(columnIt->second.Id);
         columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
+
+        if (columnIt->second.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            auto& typeInfo = *columnProto->MutableTypeInfo();
+            typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnIt->second.Type.GetTypeDesc()));
+            typeInfo.SetPgTypeMod(columnIt->second.TypeMod);
+        }
     }
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());

@@ -28,6 +28,8 @@ target_compile_options(restricted-aws-aws-c-http PRIVATE
   -DS2N_PLATFORM_SUPPORTS_KTLS
   -DS2N_STACKTRACE
   -DS2N___RESTRICT__SUPPORTED
+  -DAWS_HTTP_EXPORTS
+  -std=c99
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-aws-aws-c-http PUBLIC

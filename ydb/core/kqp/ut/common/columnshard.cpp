@@ -9,12 +9,15 @@ namespace NKqp {
     TTestHelper::TTestHelper(const TKikimrSettings& settings)
         : Kikimr(settings)
         , TableClient(Kikimr.GetTableClient())
-        , LongTxClient(Kikimr.GetDriver())
         , Session(TableClient.CreateSession().GetValueSync().GetSession())
     {}
 
     NKikimr::NKqp::TKikimrRunner& TTestHelper::GetKikimr() {
         return Kikimr;
+    }
+
+    TTestActorRuntime& TTestHelper::GetRuntime() {
+        return *Kikimr.GetTestServer().GetRuntime();
     }
 
     NYdb::NTable::TSession& TTestHelper::GetSession() {
@@ -25,26 +28,6 @@ namespace NKqp {
         std::cerr << (table.BuildQuery()) << std::endl;
         auto result = Session.ExecuteSchemeQuery(table.BuildQuery()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    void TTestHelper::InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit /*= {}*/, const EStatus opStatus /*= EStatus::SUCCESS*/) {
-        NLongTx::TLongTxBeginResult resBeginTx = LongTxClient.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
-        auto batch = updates.BuildArrow();
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-            LongTxClient.Write(txId, table.GetName(), txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), opStatus, resWrite.Status().GetIssues().ToString());
-
-        if (onBeforeCommit) {
-            onBeforeCommit();
-        }
-
-        NLongTx::TLongTxCommitResult resCommitTx = LongTxClient.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
     }
 
     void TTestHelper::BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
@@ -100,7 +83,12 @@ namespace NKqp {
         if (!Sharding.empty()) {
             str << " PARTITION BY HASH(" << JoinStrings(Sharding, ", ") << ")";
         }
-        str << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount << ");";
+        str << " WITH (STORE = COLUMN";
+        str << ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT =" << MinPartitionsCount;
+        if (TTLConf) {
+            str << ", TTL = " << TTLConf->second << " ON " << TTLConf->first;
+        }
+        str << ");";
         return str;
     }
 

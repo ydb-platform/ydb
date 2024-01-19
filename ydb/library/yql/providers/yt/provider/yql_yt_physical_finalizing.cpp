@@ -631,6 +631,12 @@ private:
 
             bool good = true;
             THashSet<TString> usedColumns;
+            if (NYql::HasSetting(*writer->Child(TYtTransientOpBase::idx_Settings), EYtSettingType::KeepSorted)) {
+                for (size_t i = 0; i < rowSpec.SortedBy.size(); ++i) {
+                    usedColumns.insert(rowSpec.SortedBy[i]);
+                }
+            }
+
             for (auto& item: x.second) {
                 if (auto rawSection = std::get<1>(item)) {
                     if (HasNonEmptyKeyFilter(TYtSection(rawSection))) {
@@ -2308,6 +2314,8 @@ private:
                         if ((outerMap.World().Ref().IsWorld() || outerMap.World().Raw() == op.World().Raw())
                             && outerMap.Input().Size() == 1 && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
+                            && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
+                            && !NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)
                             && !HasYtRowNumber(outerMap.Mapper().Body().Ref())
                             && IsYieldTransparent(outerMap.Mapper().Ptr(), *State_->Types)
                             && (!op.Maybe<TYtMapReduce>() || AllOf(outerMap.Output(), [](const auto& out) { return !TYtTableBaseInfo::GetRowSpec(out)->IsSorted(); }))) {

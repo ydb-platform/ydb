@@ -140,7 +140,7 @@ public:
     TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
-        i64 offset,
+        std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullConsumerOptions& options = {}) override;
@@ -414,6 +414,7 @@ public:
 
     TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
         const TString& nodeAddress,
+        bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options) override;
 
@@ -482,9 +483,14 @@ public:
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
-    TFuture<TBundleConfigDescriptor> GetBundleConfig(
+    TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
-        const TGetBundleConfigOptions& options = {}) override;
+        const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
+
+    TFuture<void> SetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
 private:
     const TConnectionPtr Connection_;

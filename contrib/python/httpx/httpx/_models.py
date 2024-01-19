@@ -318,7 +318,7 @@ class Request:
         json: typing.Optional[typing.Any] = None,
         stream: typing.Union[SyncByteStream, AsyncByteStream, None] = None,
         extensions: typing.Optional[RequestExtensions] = None,
-    ):
+    ) -> None:
         self.method = (
             method.decode("ascii").upper()
             if isinstance(method, bytes)
@@ -358,7 +358,8 @@ class Request:
             # Using `content=...` implies automatically populated `Host` and content
             # headers, of either `Content-Length: ...` or `Transfer-Encoding: chunked`.
             #
-            # Using `stream=...` will not automatically include *any* auto-populated headers.
+            # Using `stream=...` will not automatically include *any*
+            # auto-populated headers.
             #
             # As an end-user you don't really need `stream=...`. It's only
             # useful when:
@@ -456,7 +457,7 @@ class Response:
         extensions: typing.Optional[ResponseExtensions] = None,
         history: typing.Optional[typing.List["Response"]] = None,
         default_encoding: typing.Union[str, typing.Callable[[bytes], str]] = "utf-8",
-    ):
+    ) -> None:
         self.status_code = status_code
         self.headers = Headers(headers)
 
@@ -852,7 +853,7 @@ class Response:
                     yield chunk
             text_content = decoder.flush()
             for chunk in chunker.decode(text_content):
-                yield chunk
+                yield chunk  # pragma: no cover
             for chunk in chunker.flush():
                 yield chunk
 
@@ -956,7 +957,7 @@ class Response:
                     yield chunk
             text_content = decoder.flush()
             for chunk in chunker.decode(text_content):
-                yield chunk
+                yield chunk  # pragma: no cover
             for chunk in chunker.flush():
                 yield chunk
 
@@ -1201,7 +1202,7 @@ class Cookies(typing.MutableMapping[str, str]):
         for use with `CookieJar` operations.
         """
 
-        def __init__(self, response: Response):
+        def __init__(self, response: Response) -> None:
             self.response = response
 
         def info(self) -> email.message.Message:

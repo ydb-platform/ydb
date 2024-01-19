@@ -369,7 +369,7 @@ TRuntimeNode BuildDqYtInputCall(
             }
             tablesNode.Add(refName);
             // TODO() Enable range indexes
-            auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, true, !enableBlockReader, false);
+            auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, !enableBlockReader, !enableBlockReader, false);
             const auto tmpFolder = GetTablesTmpFolder(*state->Configuration);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {

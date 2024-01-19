@@ -4,7 +4,6 @@
 #include "change_exchange_helpers.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -63,7 +62,7 @@ public:
     virtual void RemoveRecords() = 0;
 
     virtual void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
-    virtual void ProcessRecords(TVector<TChangeRecord>&& records) = 0;
+    virtual void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) = 0;
     virtual void ForgetRecords(TVector<ui64>&& records) = 0;
     virtual void OnReady(ui64 partitionId) = 0;
     virtual void OnGone(ui64 partitionId) = 0;
@@ -76,7 +75,7 @@ public:
     virtual void Resolve() = 0;
     virtual bool IsResolving() const = 0;
     virtual bool IsResolved() const = 0;
-    virtual ui64 GetPartitionId(const TChangeRecord& record) const = 0;
+    virtual ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const = 0;
 };
 
 class TBaseChangeSender: public IChangeSender {
@@ -87,7 +86,7 @@ class TBaseChangeSender: public IChangeSender {
         TActorId ActorId;
         bool Ready = false;
         TVector<TEnqueuedRecord> Pending;
-        TVector<TChangeRecord> Prepared;
+        TVector<NChangeExchange::IChangeRecord::TPtr> Prepared;
         TVector<ui64> Broadcasting;
     };
 
@@ -109,7 +108,7 @@ class TBaseChangeSender: public IChangeSender {
     void SendPreparedRecords(ui64 partitionId);
     void ReEnqueueRecords(const TSender& sender);
 
-    TBroadcast& EnsureBroadcast(const TChangeRecord& record);
+    TBroadcast& EnsureBroadcast(NChangeExchange::IChangeRecord::TPtr record);
     bool AddBroadcastPartition(ui64 order, ui64 partitionId);
     bool RemoveBroadcastPartition(ui64 order, ui64 partitionId);
     bool CompleteBroadcastPartition(ui64 order, ui64 partitionId);
@@ -138,7 +137,7 @@ protected:
     void RemoveRecords() override;
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
-    void ProcessRecords(TVector<TChangeRecord>&& records) override;
+    void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) override;
     void ForgetRecords(TVector<ui64>&& records) override;
     void OnReady(ui64 partitionId) override;
     void OnGone(ui64 partitionId) override;
@@ -163,106 +162,12 @@ private:
     THashMap<ui64, TSender> Senders; // ui64 is partition id
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TRequestedRecord> PendingBody;
-    TMap<ui64, TChangeRecord> PendingSent; // ui64 is order
+    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingSent; // ui64 is order
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;
 
 }; // TBaseChangeSender
-
-struct TSchemeCacheHelpers {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-    using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySet;
-    using TResolve = NSchemeCache::TSchemeCacheRequest;
-    using TEvResolve = TEvTxProxySchemeCache::TEvResolveKeySet;
-    using TCheckFailFunc = std::function<void(const TString&)>;
-
-    inline static TNavigate::TEntry MakeNavigateEntry(const TTableId& tableId, TNavigate::EOp op) {
-        TNavigate::TEntry entry;
-        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-        entry.TableId = tableId;
-        entry.Operation = op;
-        entry.ShowPrivatePath = true;
-        return entry;
-    }
-
-    template <typename T>
-    static bool CheckNotEmpty(const TStringBuf marker, const TAutoPtr<T>& result, TCheckFailFunc onFailure) {
-        if (result) {
-            return true;
-        }
-
-        onFailure(TStringBuilder() << "Empty result at '" << marker << "'");
-        return false;
-    }
-
-    template <typename T>
-    static bool CheckEntriesCount(const TStringBuf marker, const TAutoPtr<T>& result, ui32 expected, TCheckFailFunc onFailure) {
-        if (result->ResultSet.size() == expected) {
-            return true;
-        }
-
-        onFailure(TStringBuilder() << "Unexpected entries count at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << result->ResultSet.size()
-            << ", result# " << result->ToString(*AppData()->TypeRegistry));
-        return false;
-    }
-
-    inline static const TTableId& GetTableId(const TNavigate::TEntry& entry) {
-        return entry.TableId;
-    }
-
-    inline static const TTableId& GetTableId(const TResolve::TEntry& entry) {
-        return entry.KeyDescription->TableId;
-    }
-
-    template <typename T>
-    static bool CheckTableId(const TStringBuf marker, const T& entry, const TTableId& expected, TCheckFailFunc onFailure) {
-        if (GetTableId(entry).HasSamePath(expected)) {
-            return true;
-        }
-
-        onFailure(TStringBuilder() << "Unexpected table id at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << GetTableId(entry)
-            << ", entry# " << entry.ToString());
-        return false;
-    }
-
-    inline static bool IsSucceeded(TNavigate::EStatus status) {
-        return status == TNavigate::EStatus::Ok;
-    }
-
-    inline static bool IsSucceeded(TResolve::EStatus status) {
-        return status == TResolve::EStatus::OkData;
-    }
-
-    template <typename T>
-    static bool CheckEntrySucceeded(const TStringBuf marker, const T& entry, TCheckFailFunc onFailure) {
-        if (IsSucceeded(entry.Status)) {
-            return true;
-        }
-
-        onFailure(TStringBuilder() << "Failed entry at '" << marker << "'"
-            << ": entry# " << entry.ToString());
-        return false;
-    }
-
-    template <typename T>
-    static bool CheckEntryKind(const TStringBuf marker, const T& entry, TNavigate::EKind expected, TCheckFailFunc onFailure) {
-        if (entry.Kind == expected) {
-            return true;
-        }
-
-        onFailure(TStringBuilder() << "Unexpected entry kind at '" << marker << "'"
-            << ", expected# " << static_cast<ui32>(expected)
-            << ", got# " << static_cast<ui32>(entry.Kind)
-            << ", entry# " << entry.ToString());
-        return false;
-    }
-
-}; // TSchemeCacheHelpers
 
 } // NDataShard
 } // NKikimr

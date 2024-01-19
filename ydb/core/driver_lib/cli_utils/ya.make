@@ -29,7 +29,6 @@ SRCS(
     cli_persqueue_stress.cpp
     cli_load.cpp
     cli_minikql_compile_and_exec.cpp
-    cli_mb_trace.cpp
     cli_scheme_cache_append.cpp
     cli_scheme_initroot.cpp
 )

@@ -59,7 +59,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
     } else {
         limitValue = take.Count();
         if (maybeSkip) {
-            limitValue = Build<TCoPlus>(ctx, node.Pos())
+            limitValue = Build<TCoAggrAdd>(ctx, node.Pos())
                 .Left(limitValue.Cast())
                 .Right(maybeSkip.Cast().Count())
                 .Done();
@@ -152,7 +152,7 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
     } else {
         limitValue = topSort.Count();
         if (maybeSkip) {
-            limitValue = Build<TCoPlus>(ctx, node.Pos())
+            limitValue = Build<TCoAggrAdd>(ctx, node.Pos())
                 .Left(limitValue.Cast())
                 .Right(maybeSkip.Cast().Count())
                 .Done();

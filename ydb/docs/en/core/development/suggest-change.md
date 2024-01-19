@@ -10,9 +10,32 @@ You need to have a GitHub account to suggest any changes to the YDB source code.
 
 ### SSH key pair {#ssh_key_pair}
 
-Create an SSH key pair and register the public key at your GitHub account settings to be authenticated at GitHub when running commands from a command line on your development machine.
+* In general to connect to github you can use: ssh/token/ssh from yubikey/password etc. Recommended method is ssh keys.
+* If you don't have already created keys (or yubikey), then just create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
+* If you have a yubikey, you can use the legacy key from the yubikey:
+  * Let's assume you have already configured yubikey (or configure yubikey locally)
+  * On your laptop: `skotty ssh keys`
+  * Upload `legacy@yubikey` ssh key to github (over ui: https://github.com/settings/keys) 
+  * test connection on laptop: `ssh -T git@github.com`
 
-Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
+#### Remote development 
+If you are developing on a remote dev host you can use the key from your laptop (generated keys or keys from yubikey). You need to configure key forwarding. (Full instructions are on  [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding) ).
+
+Suppose your remote machine is dev123456.search.yandex.net.
+
+* on your laptop add ssh forwarding (`~/.ssh/config`):
+```
+Host dev123456.search.yandex.net
+    ForwardAgent yes
+```
+* on remote dev host add to `~/.bashrc`:
+```
+if [[ -S "$SSH_AUTH_SOCK" && ! -h "$SSH_AUTH_SOCK" ]]; then
+    ln -sf "$SSH_AUTH_SOCK" ~/.ssh/ssh_auth_sock;
+fi
+export SSH_AUTH_SOCK=~/.ssh/ssh_auth_sock;
+```
+* test connection: `ssh -T git@github.com`
 
 ### Git CLI {#git_cli}
 
@@ -25,7 +48,18 @@ sudo apt-get update
 sudo apt-get install git
 ```
 
-### GitHub CLI {#gh_cli}
+### Build dependencies {#build_dependencies}
+
+You need to have some libraries installed on the development machine.
+
+To install it under Linux/Ubuntu run:
+
+```
+sudo apt-get update
+sudo apt-get install libidn11-dev libaio-dev libc6-dev
+```
+
+### GitHub CLI (optional) {#gh_cli}
 
 Using GitHub CLI enables you to create Pull Requests and manage repositories from a command line. You can also use GitHub UI for such actions.
 
@@ -64,17 +98,33 @@ And copy-paste the shown token to complete the GitHub CLI configuration.
 
 YDB official repository is [https://github.com/ydb-platform/ydb](https://github.com/ydb-platform/ydb), located under the YDB organization account `ydb-platform`.
 
-To work on the YDB code changes, you need to create a fork repository under your GitHub account, and clone it locally. There's a single GitHub CLI command which does all of that together:
-
+Create working dir:
 ```
 mkdir -p ~/ydbwork
 cd ~/ydbwork
 ```
+
+To work on the YDB code changes, you need to create a fork repository under your GitHub account, and clone it locally. 
+
+{% list tabs %}
+
+- GitHub CLI:
+
+There's a single GitHub CLI command which does all of that together:
+
 ```
 gh repo fork ydb-platform/ydb --default-branch-only --clone
 ```
 
 Once completed, you have a YDB Git repository fork cloned to `~/ydbwork/ydb`.
+
+- git
+
+On https://github.com/ydb-platform/ydb press Fork (Fork your own copy of ydb-platform/ydb).
+```
+git clone git@github.com:{your_name}/ydb.git
+```
+{% endlist %}
 
 Forking a repository is an instant action, however cloning to the local machine takes some time to transfer about 650 MB of repository data over the network.
 
@@ -112,7 +162,7 @@ git checkout main
 git pull
 ```
 
-### Create a development branch {#fork_sync}
+### Create a development branch {#create_devbranch}
 
 Create a development branch using Git (replace "feature42" with your branch name), and assign upstream for it:
 
@@ -187,6 +237,6 @@ If you have conflicts on the Pull Request, you may rebase your changes on top of
 ```
 # Assuming your active branch is your development branch
 gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git pull main
+git fetch origin main:main
 git rebase main
 ```

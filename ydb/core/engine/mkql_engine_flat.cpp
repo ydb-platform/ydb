@@ -156,7 +156,7 @@ private:
 
 TRuntimeNode ReplaceAsVoid(TCallable& callable, const TTypeEnvironment& env) {
     Y_UNUSED(callable);
-    return TRuntimeNode(env.GetVoid(), true);
+    return TRuntimeNode(env.GetVoidLazy(), true);
 };
 
 TRuntimeNode RenameCallable(TCallable& callable, const TStringBuf& newName, const TTypeEnvironment& env) {
@@ -257,7 +257,7 @@ public:
         , IsCancelled(false)
     {
         Ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, Env);
-        ResultType = Env.GetEmptyStruct()->GetType();
+        ResultType = Env.GetEmptyStructLazy()->GetType();
         Alloc.DisableStrictAllocationCheck();
         Alloc.Release();
     }
@@ -2064,7 +2064,7 @@ private:
                 }
             }
 
-            return TRuntimeNode(env.GetVoid(), true);
+            return TRuntimeNode(env.GetVoidLazy(), true);
         };
 
         auto lpoProvider = GetLiteralPropagationOptimizationFuncProvider();

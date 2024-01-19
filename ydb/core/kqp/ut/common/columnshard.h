@@ -3,7 +3,6 @@
 #include "kqp_ut_common.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -34,9 +33,16 @@ namespace NKqp {
             YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
             YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
             YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
+
+            std::optional<std::pair<TString, TString>> TTLConf;
         public:
             TString BuildQuery() const;
             std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns);
+
+            TColumnTableBase& SetTTL(const TString& columnName, const TString& ttlConf) {
+                TTLConf = std::make_pair(columnName, ttlConf);
+                return *this;
+            }
 
         private:
             virtual TString GetObjectType() const = 0;
@@ -57,15 +63,14 @@ namespace NKqp {
     private:
         TKikimrRunner Kikimr;
         NYdb::NTable::TTableClient TableClient;
-        NYdb::NLongTx::TClient LongTxClient;
         NYdb::NTable::TSession Session;
 
     public:
         TTestHelper(const TKikimrSettings& settings);
         TKikimrRunner& GetKikimr();
+        TTestActorRuntime& GetRuntime();
         NYdb::NTable::TSession& GetSession();
         void CreateTable(const TColumnTableBase& table);
-        void InsertData(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const std::function<void()> onBeforeCommit = {}, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);
         void BulkUpsert(const TColumnTable& table, TTestHelper::TUpdatesBuilder& updates, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus = Ydb::StatusIds::SUCCESS);
         void ReadData(const TString& query, const TString& expected, const NYdb::EStatus opStatus = NYdb::EStatus::SUCCESS);

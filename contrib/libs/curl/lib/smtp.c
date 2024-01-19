@@ -49,9 +49,6 @@
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
-#ifdef HAVE_UTSNAME_H
-#include <sys/utsname.h>
-#endif
 #ifdef HAVE_NETDB_H
 #include <netdb.h>
 #endif
@@ -1323,7 +1320,7 @@ static CURLcode smtp_init(struct Curl_easy *data)
   CURLcode result = CURLE_OK;
   struct SMTP *smtp;
 
-  smtp = data->req.p.smtp = calloc(sizeof(struct SMTP), 1);
+  smtp = data->req.p.smtp = calloc(1, sizeof(struct SMTP));
   if(!smtp)
     result = CURLE_OUT_OF_MEMORY;
 

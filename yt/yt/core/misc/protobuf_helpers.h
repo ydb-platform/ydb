@@ -62,56 +62,15 @@ template <class T>
 void FromProto(T* original, ui64 serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-template <class TSerialized, class TOriginal>
+template <class TSerialized, class TOriginalArray>
 void ToProto(
     ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const std::vector<TOriginal>& originalArray);
+    const TOriginalArray& originalArray);
 
-template <class TSerialized, class TOriginal>
+template <class TSerialized, class TOriginalArray>
 void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const std::vector<TOriginal>& originalArray);
-
-template <class TSerialized, class TOriginal, size_t N>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const std::array<TOriginal, N>& originalArray);
-
-template <class TSerialized, class TOriginal, size_t N>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const std::array<TOriginal, N>& originalArray);
-
-template <class TSerialized, class TOriginal, size_t Size>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TCompactVector<TOriginal, Size>& originalArray);
-
-template <class TSerialized, class TOriginal, size_t Size>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const TCompactVector<TOriginal, Size>& originalArray);
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const THashSet<TOriginal>& originalArray);
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const THashSet<TOriginal>& originalArray);
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    TRange<TOriginal> originalArray);
-
-template <class TSerialized, class TOriginal>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    TRange<TOriginal> originalArray);
+    const TOriginalArray& originalArray);
 
 template <class TOriginalArray, class TSerialized>
 void FromProto(
@@ -132,16 +91,6 @@ template <class TOriginal, class TSerialized>
 void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
-
-template <class TSerialized, class T, class E, E Min, E Max>
-void ToProto(
-    ::google::protobuf::RepeatedPtrField<TSerialized>* serializedArray,
-    const TEnumIndexedVector<E, T, Min, Max>& originalArray);
-
-template <class TSerialized, class T, class E, E Min, E Max>
-void ToProto(
-    ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
-    const TEnumIndexedVector<E, T, Min, Max>& originalArray);
 
 template <class TSerialized, class T, class TTag>
 void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);

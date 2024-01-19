@@ -50,7 +50,7 @@ public:
         std::optional<ui64> UpdatedSeqNo() const;
 
         void Update(ui64 seqNo, ui64 offset, TInstant timestamp);
-        void Update(ui64 seqNo, ui64 offset, TInstant timestamp, THeartbeat&& heartbeat);
+        void Update(THeartbeat&& heartbeat);
 
         operator bool() const;
 
@@ -77,7 +77,7 @@ public:
         TModificationBatch(TPartitionSourceManager& manager, ESourceIdFormat format);
         ~TModificationBatch();
 
-        TMaybe<THeartbeat> CanEmit() const;
+        TMaybe<THeartbeat> CanEmitHeartbeat() const;
         TSourceManager GetSource(const TString& id);
 
         void Cancel();

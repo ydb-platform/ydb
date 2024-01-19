@@ -18,5 +18,6 @@ namespace NYql {
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks = {},
         const TString& computeActorType = "old",
-        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_UNSPECIFIED);
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_UNSPECIFIED,
+        bool enableSpilling = false);
 } // namespace NYql

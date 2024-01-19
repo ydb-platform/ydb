@@ -232,6 +232,8 @@ Y_UNIT_TEST_SUITE(Scheme) {
     }
 
     void CompareTypedCellMatrix(const TSerializedCellMatrix& matrix, const TVector<TCell>& cells, const TVector<TTypeInfo>& types, ui64 hash) {
+        UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), matrix.GetRowCount() * matrix.GetColCount());
+
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), cells.size());
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetCells().size(), types.size());
 
@@ -279,6 +281,13 @@ Y_UNIT_TEST_SUITE(Scheme) {
         CompareTypedCellMatrix(matrix, cells, types, hash);
 
         UNIT_ASSERT_VALUES_EQUAL(matrix.GetBuffer().size(), 2146);
+
+        //test submatrix
+        {
+            TVector<TCell> submatrix;
+            matrix.GetSubmatrix(1, 2, 3, 5, submatrix);
+            UNIT_ASSERT_VALUES_EQUAL(submatrix.size(), 6);
+        }
 
         TSerializedCellMatrix matrix2(matrix.GetBuffer());
         CompareTypedCellMatrix(matrix2, cells, types, hash);

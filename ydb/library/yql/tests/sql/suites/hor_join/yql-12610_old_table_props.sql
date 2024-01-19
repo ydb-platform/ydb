@@ -1,7 +1,6 @@
 /* postgres can not */
 /* syntax version 1 */
 /* kikimr can not - yt pragma */
-/* dq can not */
 USE plato;
 pragma yt.UseSystemColumns="0";
 

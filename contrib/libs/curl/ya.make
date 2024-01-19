@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.2.1)
+VERSION(8.5.0)
 
-ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_2_1/curl-8.2.1.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_5_0/curl-8.5.0.tar.bz2)
 
 PEERDIR(
     contrib/libs/libc_compat
@@ -85,7 +85,6 @@ SRCS(
     lib/curl_get_line.c
     lib/curl_gethostname.c
     lib/curl_gssapi.c
-    lib/curl_log.c
     lib/curl_memrchr.c
     lib/curl_multibyte.c
     lib/curl_ntlm_core.c
@@ -96,6 +95,7 @@ SRCS(
     lib/curl_sasl.c
     lib/curl_sspi.c
     lib/curl_threads.c
+    lib/curl_trc.c
     lib/dict.c
     lib/doh.c
     lib/dynbuf.c

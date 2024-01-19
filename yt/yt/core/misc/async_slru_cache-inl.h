@@ -241,7 +241,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TAsyncSlruCacheBase(
     , LargeGhostCounters_(profiler.WithPrefix("/large_ghost_cache"))
 {
     static_assert(
-        std::is_base_of_v<TAsyncCacheValueBase<TKey, TValue, THash>, TValue>,
+        std::derived_from<TValue, TAsyncCacheValueBase<TKey, TValue, THash>>,
         "TValue must be derived from TAsyncCacheValueBase");
 
     auto youngerSegmentProfiler = profiler.WithTag("segment", "younger");

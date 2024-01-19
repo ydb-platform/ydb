@@ -1,4 +1,5 @@
 #include "source_id_encoding.h"
+#include "util/generic/fwd.h"
 #include "writer.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -451,20 +452,28 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         return WriteResult(ErrorCode, "Rejected by writer", MakeResponse(cookie));
     }
 
-    void HoldPending(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
+    bool HoldPending(TEvPartitionWriter::TEvWriteRequest::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const auto cookie = record.GetPartitionRequest().GetCookie();
 
-        Y_ABORT_UNLESS(Pending.empty() || Pending.rbegin()->first < cookie);
-        Y_ABORT_UNLESS(PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
-        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
+        auto pendingValid = (Pending.empty() || Pending.rbegin()->first < cookie);
+        auto reserveValid = (PendingReserve.empty() || PendingReserve.rbegin()->first < cookie);
+        auto writeValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
+
+        if (!(pendingValid && reserveValid && writeValid)) {
+            ERROR("The cookie of WriteRequest is invalid. Cookie=" << cookie);
+            Disconnected(EErrorCode::InternalError);
+            return false;
+        }
 
         Pending.emplace(cookie, std::move(ev->Get()->Record));
+        return true;
     }
 
     void Handle(TEvPartitionWriter::TEvWriteRequest::TPtr& ev, const TActorContext& ctx) {
-        HoldPending(ev);
-        ReserveBytes(ctx);
+        if (HoldPending(ev)) {
+            ReserveBytes(ctx);
+        }
     }
 
     void ReserveBytes(const TActorContext& ctx) {
@@ -514,10 +523,18 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void EnqueueReservedAndProcess(ui64 cookie) {
-        Y_ABORT_UNLESS(!PendingReserve.empty());
+        if(PendingReserve.empty()) {
+            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
         auto it = PendingReserve.begin();
 
-        Y_ABORT_UNLESS(it->first == cookie);
+        if(it->first != cookie) {
+            ERROR("The order of reservation is invalid. Cookie=" << cookie << ", ReserveCookie=" << it->first);
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
 
         ReceivedReserve.emplace(it->first, std::move(it->second));
 
@@ -582,11 +599,20 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void Write(ui64 cookie) {
-        Y_ABORT_UNLESS(!PendingReserve.empty());
+        if (PendingReserve.empty()) {
+            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #02");
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
         auto it = PendingReserve.begin();
 
-        Y_ABORT_UNLESS(it->first == cookie);
-        Y_ABORT_UNLESS(PendingWrite.empty() || PendingWrite.back() < cookie);
+        auto cookieReserveValid = (it->first == cookie);
+        auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back() < cookie);
+        if (!(cookieReserveValid && cookieWriteValid)) {
+            ERROR("The cookie of Write is invalid. Cookie=" << cookie);
+            Disconnected(EErrorCode::InternalError);
+            return;
+        }
 
         Write(cookie, std::move(it->second.Request));
 
@@ -634,7 +660,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             WriteAccepted(cookie);
 
-            Y_ABORT_UNLESS(!PendingReserve.empty());
+            if (PendingReserve.empty()) {
+                ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #03");
+                Disconnected(EErrorCode::InternalError);
+                return;
+            }
             auto it = PendingReserve.begin();
             auto& holder = it->second;
 
@@ -705,6 +735,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
         }
         SendError("Unexpected termination");
+        TRlHelpers::PassAway(SelfId());
         TActorBootstrapped::PassAway();
     }
 
@@ -738,18 +769,15 @@ public:
 
     explicit TPartitionWriter(
             const TActorId& client,
-            const std::optional<TString>& topicPath,
             ui64 tabletId,
             ui32 partitionId,
-            const std::optional<ui32> expectedGeneration,
-            const TString& sourceId,
             const TPartitionWriterOpts& opts)
-        : TRlHelpers(topicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
+        : TRlHelpers(opts.TopicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
         , Client(client)
         , TabletId(tabletId)
         , PartitionId(partitionId)
-        , ExpectedGeneration(expectedGeneration)
-        , SourceId(sourceId)
+        , ExpectedGeneration(opts.ExpectedGeneration)
+        , SourceId(opts.SourceId)
         , Opts(opts)
     {
         if (Opts.MeteringMode) {
@@ -831,10 +859,13 @@ private:
     ui64 WriteId = INVALID_WRITE_ID;
 }; // TPartitionWriter
 
-IActor* CreatePartitionWriter(const TActorId& client, const std::optional<TString>& topicPath, ui64 tabletId, ui32 partitionId, 
-                              const std::optional<ui32> expectedGeneration, const TString& sourceId,
+
+IActor* CreatePartitionWriter(const TActorId& client,
+                             // const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                              ui64 tabletId,
+                              ui32 partitionId, 
                               const TPartitionWriterOpts& opts) {
-    return new TPartitionWriter(client, topicPath, tabletId, partitionId, expectedGeneration, sourceId, opts);
+    return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
 
 #undef LOG_PREFIX

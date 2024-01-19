@@ -30,6 +30,8 @@ public:
 
     struct TBasicResponse {
         TString Error;
+        TString Warning;
+        TString Notice;
     };
 
     struct TLoginUserRequest : TBasicRequest {
@@ -99,8 +101,23 @@ public:
         TString Member;
     };
 
+    struct TRenameGroupRequest : TBasicRequest {
+        struct TOptions {
+            bool CheckName = true;
+        };
+
+        TString Group;
+        TString NewName;
+        TOptions Options;
+    };
+
+    struct TRenameGroupResponse : TBasicResponse {
+        std::vector<TString> TouchedGroups;
+    };
+
     struct TRemoveGroupRequest : TBasicRequest {
         TString Group;
+        bool MissingOk;
     };
 
     struct TRemoveGroupResponse : TBasicResponse {
@@ -152,6 +169,7 @@ public:
     TBasicResponse CreateGroup(const TCreateGroupRequest& request);
     TBasicResponse AddGroupMembership(const TAddGroupMembershipRequest& request);
     TBasicResponse RemoveGroupMembership(const TRemoveGroupMembershipRequest& request);
+    TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
     TLoginProvider();

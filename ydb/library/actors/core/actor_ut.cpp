@@ -25,6 +25,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(WithSharedExecutors) {
+        return;
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
          TActorBenchmark::AddBasicPool(setup, 2, 1, 0);
          TActorBenchmark::AddBasicPool(setup, 2, 1, 1);

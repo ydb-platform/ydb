@@ -169,6 +169,7 @@ protected:
     friend class TQueryMigrationWaitActor;
     friend class TReleaseTabletsWaitActor;
     friend class TDrainNodeWaitActor;
+    friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
 
     friend class TTxInitScheme;
@@ -204,6 +205,8 @@ protected:
     friend class TTxMonEvent_QueryMigration;
     friend class TTxMonEvent_RebalanceFromScratch;
     friend class TTxMonEvent_ObjectStats;
+    friend class TTxMonEvent_StorageRebalance;
+    friend class TTxMonEvent_Subactors;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -239,6 +242,7 @@ protected:
     void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
+    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -279,7 +283,6 @@ protected:
     ITransaction* CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event);
     ITransaction* CreateProcessPendingOperations();
     ITransaction* CreateProcessBootQueue();
-    ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey);
     ITransaction* CreateSeizeTablets(TEvHive::TEvSeizeTablets::TPtr event);
     ITransaction* CreateSeizeTabletsReply(TEvHive::TEvSeizeTabletsReply::TPtr event);
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
@@ -290,6 +293,7 @@ protected:
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
+    ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
 
 public:
     TDomainsView DomainsView;
@@ -362,7 +366,10 @@ protected:
     bool ProcessBootQueueScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
+    TInstant ProcessBootQueuePostponedUntil;
+    TDuration MaxTimeBetweenConnects;
     bool WarmUp;
+    ui64 ExpectedNodes;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
@@ -385,6 +392,7 @@ protected:
     bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
     bool LogTabletMovesScheduled = false;
+    bool ProcessStorageBalancerScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -548,7 +556,10 @@ protected:
     void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
+    void Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
+    void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -618,6 +629,7 @@ public:
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
+    const TDomainInfo* FindDomain(TSubDomainKey key) const;
     const TNodeLocation& GetNodeLocation(TNodeId nodeId) const;
     void DeleteTablet(TTabletId tabletId);
     void DeleteNode(TNodeId nodeId);
@@ -628,6 +640,8 @@ public:
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
     void KillNode(TNodeId nodeId, const TActorId& local);
     void AddToBootQueue(TTabletInfo* tablet);
+    void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
+    void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
     void SetCounterTabletsTotal(ui64 tabletsTotal);
     void UpdateCounterTabletsTotal(i64 tabletsTotalDiff);
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);
@@ -641,6 +655,7 @@ public:
     void PostponeProcessBootQueue(TDuration after);
     void ProcessPendingOperations();
     void ProcessTabletBalancer();
+    void ProcessStorageBalancer();
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
     static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
     static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
@@ -654,7 +669,7 @@ public:
             const NKikimrTabletBase::TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
-    static void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
+    void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
     ui32 GetRegisteredDataCenters();
@@ -669,7 +684,7 @@ public:
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
-    TDuration GetBalancerCooldown() const;
+    TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
 
@@ -894,13 +909,31 @@ public:
         return CurrentConfig.GetBootStrategy();
     }
 
+    NKikimrConfig::THiveConfig::EHiveChannelBalanceStrategy GetChannelBalanceStrategy() const {
+        return CurrentConfig.GetChannelBalanceStrategy();
+    }
+
+    ui64 GetMaxChannelHistorySize() const {
+        return CurrentConfig.GetMaxChannelHistorySize();
+    }
+
+    TDuration GetStorageInfoRefreshFrequency() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetStorageInfoRefreshFrequency());
+    }
+
+    double GetMinStorageScatterToBalance() const {
+        return CurrentConfig.GetMinStorageScatterToBalance();
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
+    static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
 
 protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
+    TInstant GetAllowedBootingTime();
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;
@@ -936,6 +969,7 @@ protected:
 
     THiveStats GetStats() const;
     void RemoveSubActor(ISubActor* subActor);
+    bool StopSubActor(TSubActorId subActorId);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
     NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);

@@ -20,6 +20,8 @@ struct TTransferPoolResourcesOptions
 
 struct IAccountingClient
 {
+    virtual ~IAccountingClient() = default;
+
     virtual TFuture<void> TransferAccountResources(
         const TString& srcAccount,
         const TString& dstAccount,

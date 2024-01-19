@@ -482,7 +482,7 @@ public:
         if (LogQ.empty()) {
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
-        for (auto& msg : ev->Get()->Logs) {
+        for (auto& [msg, _] : ev->Get()->Logs) {
             Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(msg.Get()));
             LogQ.emplace_back(ev->Sender, std::move(msg));
         }
@@ -853,7 +853,7 @@ public:
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
         const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
         THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
-        for (auto &log : evMultiLog.Logs) {
+        for (auto &[log, _] : evMultiLog.Logs) {
             result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
         }
         Send(ev->Sender, result.Release());

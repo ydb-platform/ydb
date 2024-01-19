@@ -17,3 +17,12 @@ INSERT INTO test_missing_target VALUES (6, 4, 'cccc', 'g');
 INSERT INTO test_missing_target VALUES (7, 4, 'cccc', 'h');
 INSERT INTO test_missing_target VALUES (8, 4, 'CCCC', 'I');
 INSERT INTO test_missing_target VALUES (9, 4, 'CCCC', 'j');
+--   group using reference number
+SELECT count(*) FROM test_missing_target ORDER BY 1 desc;
+ count 
+-------
+    10
+(1 row)
+
+--   Cleanup
+DROP TABLE test_missing_target;

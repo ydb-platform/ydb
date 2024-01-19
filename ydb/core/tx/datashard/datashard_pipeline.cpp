@@ -3,6 +3,7 @@
 #include "datashard_pipeline.h"
 #include "datashard_impl.h"
 #include "datashard_txs.h"
+#include "datashard_write_operation.h"
 
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/cputime.h>
@@ -1170,6 +1171,10 @@ bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui6
         return false;
     }
 
+    if (!op->IsExecutionPlanFinished()) {
+        GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+    }
+
     ForgetTx(txId);
     Self->CheckDelayedProposeQueue(ctx);
     MaybeActivateWaitingSchemeOps(ctx);
@@ -1195,6 +1200,11 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
     }
 
     for (ui64 txId : outdatedTxs) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+
         ForgetTx(txId);
         LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                 "Outdated Tx %" PRIu64 " is cleaned at tablet %" PRIu64 " and outdatedStep# %" PRIu64,
@@ -1210,6 +1220,11 @@ bool TPipeline::CleanupVolatile(ui64 txId, const TActorContext& ctx,
         std::vector<std::unique_ptr<IEventHandle>>& replies)
 {
     if (Self->TransQueue.CleanupVolatile(txId, replies)) {
+        auto op = Self->TransQueue.FindTxInFly(txId);
+        if (op && !op->IsExecutionPlanFinished()) {
+            GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
+        }
+        
         ForgetTx(txId);
 
         Self->CheckDelayedProposeQueue(ctx);
@@ -1305,7 +1320,7 @@ void TPipeline::ForgetTx(ui64 txId) {
 TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
-                                           const TActorContext &ctx)
+                                           const TActorContext &ctx, NWilson::TSpan &&operationSpan)
 {
     auto &rec = ev->Get()->Record;
     Y_ABORT_UNLESS(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1322,6 +1337,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     tx->SetTxBody(rec.GetTxBody());
     tx->SetCookie(ev->Cookie);
     tx->Orbit = std::move(ev->Get()->Orbit);
+    tx->OperationSpan = std::move(operationSpan);
 
     auto malformed = [&](const TStringBuf txType, const TString& txBody) {
         const TString error = TStringBuilder() << "Malformed " << txType << " tx"
@@ -1555,6 +1571,58 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     return tx;
 }
 
+TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr& ev,
+                                           TInstant receivedAt, ui64 tieBreakerIndex,
+                                           NTabletFlatExecutor::TTransactionContext& txc,
+                                           const TActorContext& ctx, NWilson::TSpan &&operationSpan)
+{
+    const auto& rec = ev->Get()->Record;
+    TBasicOpInfo info(rec.GetTxId(), EOperationKind::WriteTx, EvWrite::Convertor::GetProposeFlags(rec.GetTxMode()), 0, receivedAt, tieBreakerIndex);
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, ev, Self, txc, ctx);
+    writeOp->OperationSpan = std::move(operationSpan);
+    auto writeTx = writeOp->GetWriteTx();
+    Y_ABORT_UNLESS(writeTx);
+
+    auto badRequest = [&](const TString& error) {
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << error << " at tablet# " << Self->TabletID(), Self->TabletID());
+        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+    };
+
+    if (!writeTx->Ready()) {
+        badRequest(TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        return writeOp;
+    }
+
+    writeTx->ExtractKeys(true);
+
+    switch (rec.txmode()) {
+        case NKikimrDataEvents::TEvWrite::MODE_PREPARE:
+            break;
+        case NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE:
+            writeOp->SetVolatilePrepareFlag();
+            break;
+        case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
+            writeOp->SetImmediateFlag();
+            break;
+        default:
+            badRequest(TStringBuilder() << "Unknown txmode: " << rec.txmode());
+            return writeOp;
+    }
+
+    // Make config checks for immediate op.
+    if (writeOp->IsImmediate()) {
+        if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
+            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Force immediate writeOp " << writeOp->GetTxId() << " to online according to config, at tablet #" << Self->TabletID());
+            writeOp->SetForceOnlineFlag();
+        } else {
+            if (Config.DirtyImmediate())
+                writeOp->SetForceDirtyFlag();
+        }
+    }
+
+    return writeOp;
+}
+
 void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
 {
     auto dataTx = tx->BuildDataTx(Self, txc, ctx);
@@ -1655,9 +1723,15 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
+        NWilson::TSpan unitSpan(TWilsonTablet::Tablet, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
+        
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
+        
+        unitSpan.Attribute("Type", TypeName(unit))
+                .Attribute("Status", static_cast<int>(status))
+                .EndOk();
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Execution status for " << *op << " at " << Self->TabletID()
@@ -1826,7 +1900,7 @@ void TPipeline::MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const {
     }
 }
 
-bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+bool TPipeline::CheckInflightLimit() const {
     // check in-flight limit
     size_t totalInFly =
         Self->ReadIteratorsInFly() + Self->TxInFly() + Self->ImmediateInFly()
@@ -1834,24 +1908,39 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
     if (totalInFly > Self->GetMaxTxInFly())
         return false; // let tx to be rejected
 
+    return true;
+}
+
+bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+    if (!CheckInflightLimit())
+        return false;
+
     if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
-        WaitingDataTxOps.emplace(TRowVersion::Min(), std::move(ev)); // postpone tx processing till mvcc state switch is finished
+        WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
     } else {
-        bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
         Y_DEBUG_ABORT_UNLESS(ev->Get()->Record.HasMvccSnapshot());
         TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
-        WaitingDataTxOps.emplace(snapshot, std::move(ev));
-        const ui64 waitStep = prioritizedReads ? snapshot.Step : snapshot.Step + 1;
+        WaitingDataTxOps.emplace(snapshot, IEventHandle::Upcast<TEvDataShard::TEvProposeTransaction>(std::move(ev)));
+        const ui64 waitStep = snapshot.Step;
         TRowVersion unreadableEdge;
-        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge(prioritizedReads))) {
-            ActivateWaitingTxOps(unreadableEdge, prioritizedReads, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
+        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+            ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
         }
     }
 
     return true;
 }
 
-void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx) {
+bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+    if (!CheckInflightLimit())
+        return false;
+
+    WaitingDataTxOps.emplace(TRowVersion::Min(), IEventHandle::Upcast<NEvents::TDataEvents::TEvWrite>(std::move(ev)));  // postpone tx processing till mvcc state switch is finished
+
+    return true;
+}
+
+void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ActivateWaitingTxOps for version# " << edge
         << ", txOps: " << (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))
         << ", readIterators: "
@@ -1886,8 +1975,8 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, co
         }
 
         if (minWait == TRowVersion::Max() ||
-            Self->WaitPlanStep(prioritizedReads ? minWait.Step : minWait.Step + 1) ||
-            minWait >= (edge = GetUnreadableEdge(prioritizedReads)))
+            Self->WaitPlanStep(minWait.Step) ||
+            minWait >= (edge = GetUnreadableEdge()))
         {
             break;
         }
@@ -1905,8 +1994,7 @@ void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     if (isEmpty || Self->MvccSwitchState == TSwitchState::SWITCHING)
         return;
 
-    bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-    ActivateWaitingTxOps(GetUnreadableEdge(prioritizedReads), prioritizedReads, ctx);
+    ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
 }
 
 void TPipeline::AddWaitingReadIterator(
@@ -1926,12 +2014,11 @@ void TPipeline::AddWaitingReadIterator(
     auto readId = ev->Get()->Record.GetReadId();
     WaitingDataReadIterators.emplace(version, std::move(ev));
 
-    bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-    const ui64 waitStep = prioritizedReads ? version.Step : version.Step + 1;
+    const ui64 waitStep = version.Step;
     TRowVersion unreadableEdge = TRowVersion::Min();
-    if (!Self->WaitPlanStep(waitStep) && version < (unreadableEdge = GetUnreadableEdge(prioritizedReads))) {
+    if (!Self->WaitPlanStep(waitStep) && version < (unreadableEdge = GetUnreadableEdge())) {
         // Async MediatorTimeCastEntry update, need to reschedule transaction
-        ActivateWaitingTxOps(unreadableEdge, prioritizedReads, ctx);
+        ActivateWaitingTxOps(unreadableEdge, ctx);
     }
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " put read iterator# " << readId
@@ -1985,7 +2072,7 @@ TRowVersion TPipeline::GetReadEdge() const {
     return TRowVersion(step, Max<ui64>());
 }
 
-TRowVersion TPipeline::GetUnreadableEdge(bool prioritizeReads) const {
+TRowVersion TPipeline::GetUnreadableEdge() const {
     const auto last = TRowVersion(
         GetLastActivePlannedOpStep(),
         GetLastActivePlannedOpId());
@@ -2019,17 +2106,10 @@ TRowVersion TPipeline::GetUnreadableEdge(bool prioritizeReads) const {
     // distributed transactions up to the end of that step.
     const TRowVersion mediatorEdge(mediatorStep, ::Max<ui64>());
 
-    if (prioritizeReads) {
-        // We are prioritizing reads, and we are ok with blocking immediate writes
-        // in the current step. So the first unreadable version is actually in
-        // the next step.
-        return mediatorEdge.Next();
-    } else {
-        // We cannot block immediate writes up to this edge, thus we actually
-        // need to wait until the edge progresses above this version. This
-        // would happen when mediator timecast moves to the next step.
-        return mediatorEdge;
-    }
+    // We are prioritizing reads, and we are ok with blocking immediate writes
+    // in the current step. So the first unreadable version is actually in
+    // the next step.
+    return mediatorEdge.Next();
 }
 
 void TPipeline::AddCompletingOp(const TOperation::TPtr& op) {

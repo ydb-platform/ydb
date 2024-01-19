@@ -7,6 +7,7 @@ SRCS(
     re2_udf.cpp
     string_udf.cpp
     columnshard.cpp
+    datetime2_udf.cpp
 )
 
 PEERDIR(

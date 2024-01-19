@@ -57,10 +57,10 @@ class TestSqsSplitMergeTables(KikimrSqsTestBase):
         ydb.retry_operation_sync(lambda: session.alter_table(
             table_path,
             alter_partitioning_settings=ydb.PartitioningSettings()
-                                        .with_min_partitions_count(1)
-                                        .with_partition_size_mb(1)
-                                        .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
-                                        .with_partitioning_by_load(ydb.FeatureFlag.ENABLED),
+                                           .with_min_partitions_count(1)
+                                           .with_partition_size_mb(1)
+                                           .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
+                                           .with_partitioning_by_load(ydb.FeatureFlag.ENABLED),
             add_columns=(
                 ydb.Column(
                     self.__column_to_force_split,

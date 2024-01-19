@@ -31,7 +31,7 @@ namespace NKikimr {
                 : Rec(rec)
                 , GType(gtype)
             {}
-                    
+
             void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope*, const TKeyLogoBlob&, ui64) {
                 Process(memRec, nullptr);
             }

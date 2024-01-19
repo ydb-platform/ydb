@@ -225,12 +225,15 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
+        const ui64 ownerId = 0;
         const ui64 tableId = 1;
+        const ui64 schemaVersion = 1;
         const std::vector<std::pair<TString, TTypeInfo>> schema = {
                                                                     {"key1", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"key2", TTypeInfo(NTypeIds::Uint64) },
                                                                     {"field", TTypeInfo(NTypeIds::Utf8) }
                                                                 };
+        const std::vector<ui32> columnsIds = { 1, 2, 3};
         PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
@@ -243,7 +246,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)); evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, 1, schema, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        ui64 payloadIndex = NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
         TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());

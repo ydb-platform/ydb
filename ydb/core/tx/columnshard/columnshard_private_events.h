@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 
@@ -32,6 +33,10 @@ struct TEvPrivate {
         EvTieringModified,
         EvStartResourceUsageTask,
         EvNormalizerResult,
+
+        EvWritingAddDataToBuffer,
+        EvWritingFlushBuffer,
+
         EvEnd
     };
 
@@ -105,97 +110,6 @@ struct TEvPrivate {
         }
     };
 
-    struct TEvS3Settings : public TEventLocal<TEvS3Settings, EvS3Settings> {
-        NKikimrSchemeOp::TS3Settings Settings;
-
-        explicit TEvS3Settings(const NKikimrSchemeOp::TS3Settings& settings)
-            : Settings(settings)
-        {}
-    };
-
-    struct TEvExport : public TEventLocal<TEvExport, EvExport> {
-        using TBlobDataMap = THashMap<TUnifiedBlobId, TString>;
-
-        NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
-        ui64 ExportNo = 0;
-        TString TierName;
-        TActorId DstActor;
-        TBlobDataMap Blobs; // src: blobId -> data map; dst: exported blobIds set
-        THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
-        TMap<TString, TString> ErrorStrings;
-
-        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId,
-                           const THashSet<TUnifiedBlobId>& blobIds)
-            : ExportNo(exportNo)
-            , TierName(tierName)
-        {
-            Y_ABORT_UNLESS(ExportNo);
-            Y_ABORT_UNLESS(!TierName.empty());
-            Y_ABORT_UNLESS(pathId);
-            Y_ABORT_UNLESS(!blobIds.empty());
-
-            for (auto& blobId : blobIds) {
-                Blobs.emplace(blobId, TString());
-                SrcToDstBlobs[blobId] = blobId.MakeS3BlobId(pathId);
-            }
-        }
-
-        explicit TEvExport(ui64 exportNo, const TString& tierName, const THashSet<NOlap::TEvictedBlob>& evictSet)
-            : ExportNo(exportNo)
-            , TierName(tierName)
-        {
-            Y_ABORT_UNLESS(ExportNo);
-            Y_ABORT_UNLESS(!TierName.empty());
-            Y_ABORT_UNLESS(!evictSet.empty());
-
-            for (auto& evict : evictSet) {
-                Y_ABORT_UNLESS(evict.IsEvicting());
-                Y_ABORT_UNLESS(evict.ExternBlob.IsS3Blob());
-
-                Blobs.emplace(evict.Blob, TString());
-                SrcToDstBlobs[evict.Blob] = evict.ExternBlob;
-            }
-        }
-
-        void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
-            if (hasError) {
-                Status = NKikimrProto::ERROR;
-                Y_ABORT_UNLESS(ErrorStrings.emplace(key, errStr).second, "%s", key.data());
-                Blobs.erase(blobId);
-            } else if (!ErrorStrings.contains(key)) { // (OK + !OK) == !OK
-                Y_ABORT_UNLESS(Blobs.contains(blobId));
-                if (Status == NKikimrProto::UNKNOWN) {
-                    Status = NKikimrProto::OK;
-                }
-            }
-        }
-
-        bool Finished() const {
-            return (Blobs.size() + ErrorStrings.size()) == SrcToDstBlobs.size();
-        }
-
-        TString SerializeErrorsToString() const {
-            TStringBuilder sb;
-            for (auto&& i : ErrorStrings) {
-                sb << i.first << "=" << i.second << ";";
-            }
-            return sb;
-        }
-    };
-
-    struct TEvForget: public TEventLocal<TEvForget, EvForget> {
-        NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
-        std::vector<NOlap::TEvictedBlob> Evicted;
-        TString ErrorStr;
-    };
-
-    struct TEvGetExported : public TEventLocal<TEvGetExported, EvGetExported> {
-        TActorId DstActor; // It's a BlobCache actor. S3 actor sends TEvReadBlobRangesResult to it as result
-        ui64 DstCookie;
-        NOlap::TEvictedBlob Evicted;
-        std::vector<NOlap::TBlobRange> BlobRanges;
-    };
-
     struct TEvScanStats : public TEventLocal<TEvScanStats, EvScanStats> {
         TEvScanStats(ui64 rows, ui64 bytes) : Rows(rows), Bytes(bytes) {}
         ui64 Rows;
@@ -220,89 +134,28 @@ struct TEvPrivate {
     };
 
     class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    private:
+        NColumnShard::TBlobPutResult::TPtr PutResult;
+        NOlap::TWritingBuffer WritesBuffer;
     public:
-        class TPutBlobData {
-            YDB_READONLY_DEF(TBlobRange, BlobRange);
-            YDB_READONLY_DEF(NKikimrTxColumnShard::TLogicalMetadata, LogicalMeta);
-            YDB_ACCESSOR(ui64, RowsCount, 0);
-            YDB_ACCESSOR(ui64, RawBytes, 0);
-        public:
-            TPutBlobData() = default;
-
-            TPutBlobData(const TBlobRange& blobRange, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
-                : BlobRange(blobRange)
-                , RowsCount(rowsCount)
-                , RawBytes(rawBytes)
-            {
-                LogicalMeta.SetNumRows(rowsCount);
-                LogicalMeta.SetRawBytes(rawBytes);
-                LogicalMeta.SetDirtyWriteTimeSeconds(dirtyTime.Seconds());
-                LogicalMeta.SetSpecialKeysRawData(specialKeys.SerializeToString());
-            }
-        };
-
-        TString GetBlobVerified(const TBlobRange& bRange) const {
-            for (auto&& i : Actions) {
-                for (auto&& b : i->GetBlobsForWrite()) {
-                    if (bRange.GetBlobId() == b.first) {
-                        AFL_VERIFY(bRange.Size + bRange.Offset <= b.second.size());
-                        if (bRange.Size == b.second.size()) {
-                            return b.second;
-                        } else {
-                            return b.second.substr(bRange.Offset, bRange.Size);
-                        }
-                    }
-                }
-            }
-            AFL_VERIFY(false);
-            return "";
-        }
-
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, NOlap::TWritingBuffer&& writesBuffer)
             : PutResult(putResult)
-            , WriteMeta(writeMeta)
+            , WritesBuffer(std::move(writesBuffer))
         {
             Y_ABORT_UNLESS(PutResult);
-        }
-
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
-            : TEvWriteBlobsResult(putResult, writeMeta)
-        {
-            Actions = actions;
-            BlobData = std::move(blobData);
-            SchemaVersion = schemaVersion;
-        }
-
-        const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& GetActions() const {
-            return Actions;
-        }
-
-        const TVector<TPutBlobData>& GetBlobData() const {
-            return BlobData;
         }
 
         const NColumnShard::TBlobPutResult& GetPutResult() const {
             return *PutResult;
         }
 
-        const NColumnShard::TBlobPutResult::TPtr GetPutResultPtr() {
-            return PutResult;
+        const NOlap::TWritingBuffer& GetWritesBuffer() const {
+            return WritesBuffer;
         }
 
-        const NEvWrite::TWriteMeta& GetWriteMeta() const {
-            return WriteMeta;
+        NOlap::TWritingBuffer& MutableWritesBuffer() {
+            return WritesBuffer;
         }
-
-        ui64 GetSchemaVersion() const {
-            return SchemaVersion;
-        }
-
-    private:
-        NColumnShard::TBlobPutResult::TPtr PutResult;
-        TVector<TPutBlobData> BlobData;
-        std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>> Actions;
-        NEvWrite::TWriteMeta WriteMeta;
-        ui64 SchemaVersion = 0;
     };
 };
 

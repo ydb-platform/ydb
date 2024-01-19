@@ -57,6 +57,12 @@ public:
     ui16 Chunk = 0;
     TBlobRange BlobRange;
 
+
+    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        BlobRange.BlobId = blobId;
+    }
+
     TColumnRecord(const TChunkAddress& address, const TBlobRange& range, TChunkMeta&& meta)
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
@@ -77,6 +83,13 @@ public:
             return result;
         }
     };
+
+    ui32 GetColumnId() const { 
+        return ColumnId;
+    }
+    ui16 GetChunkIdx() const {
+        return Chunk;
+    }
 
     TColumnSerializationStat GetSerializationStat(const std::string& columnName) const {
         TColumnSerializationStat result(ColumnId, columnName);
@@ -148,10 +161,11 @@ protected:
     virtual const TString& DoGetData() const override {
         return Data;
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return ColumnRecord.GetMeta().GetNumRowsVerified();
     }
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& /*saver*/, std::shared_ptr<NColumnShard::TSplitterCounters> /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
+                                                                                const std::vector<ui64>& /*splitSizes*/) const override {
         Y_ABORT_UNLESS(false);
         return {};
     }
@@ -166,10 +180,9 @@ protected:
     }
 public:
     TSimpleOrderedColumnChunk(const TColumnRecord& cRecord, const TString& data)
-        : TBase(cRecord.ColumnId)
+        : TBase(cRecord.ColumnId, cRecord.Chunk)
         , ColumnRecord(cRecord)
         , Data(data) {
-        ChunkIdx = cRecord.Chunk;
     }
 };
 

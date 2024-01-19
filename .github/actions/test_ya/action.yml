@@ -41,9 +41,12 @@ inputs:
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
-  cache_tests:
+  bazel_remote_username:
     required: false
-    description: "Use cache for tests"
+    description: "bazel-remote username"
+  bazel_remote_password:
+    required: false
+    description: "bazel-remote password"
 runs:
   using: "composite"
   steps:
@@ -57,16 +60,20 @@ runs:
         echo "LOG_DIR=$TMP_DIR/logs" >> $GITHUB_ENV
         echo "OUT_DIR=$TMP_DIR/out" >> $GITHUB_ENV
         echo "ARTIFACTS_DIR=$TMP_DIR/artifacts" >> $GITHUB_ENV
+        echo "REPORTS_ARTIFACTS_DIR=$TMP_DIR/artifacts/test_reports" >> $GITHUB_ENV
         echo "JUNIT_REPORT_XML=$TMP_DIR/junit.xml" >> $GITHUB_ENV
+        echo "JUNIT_REPORT_PARTS=$TMP_DIR/junit-split" >> $GITHUB_ENV
         echo "TESTMO_TOKEN=${{ inputs.testman_token }}" >> $GITHUB_ENV
         echo "TESTMO_URL=${{ inputs.testman_url }}" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$(mktemp)" >> $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ github.token }}" >> $GITHUB_ENV
+        echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
     
     - name: prepare
       shell: bash
       run: |
-        rm -rf $TMP_DIR $JUNIT_REPORT_XML
-        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR
+        rm -rf $TMP_DIR $JUNIT_REPORT_XML $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
+        mkdir -p $TMP_DIR $OUT_DIR $ARTIFACTS_DIR $LOG_DIR $JUNIT_REPORT_PARTS $REPORTS_ARTIFACTS_DIR
     
     - name: Install Node required for Testmo CLI
       uses: actions/setup-node@v3
@@ -76,7 +83,8 @@ runs:
     - name: Install Testmo CLI
       shell: bash
       run: npm install -g @testmo/testmo-cli
-    - name: Test history run create
+
+    - name: Upload tests result to testmo
       id: th
       if: inputs.testman_token
       shell: bash
@@ -87,7 +95,6 @@ runs:
         BRANCH_TAG="$GITHUB_REF_NAME"
         ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         
-        BUILD_PRESET="${{ inputs.build_preset }}"
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${ARCH}"
@@ -99,29 +106,33 @@ runs:
             TESTMO_SOURCE="ya-${ARCH}-${BUILD_PRESET/release-/}"
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
         
         case $GITHUB_EVENT_NAME in
-        workflow_dispatch)
-         TESTMO_RUN_NAME="${{ github.run_id }} manual"
-         EXTRA_TAG="manual"
-         ;;
-        pull_request | pull_request_target)
-         TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
-         EXTRA_TAG="pr"
-         BRANCH_TAG=""
-         ;;
-        schedule)
-         TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-         EXTRA_TAG="schedule"
-         ;;
-        *)
-         TESTMO_RUN_NAME="${{ github.run_id }}"
-         EXTRA_TAG=""
-         ;;
+          workflow_dispatch)
+            TESTMO_RUN_NAME="${{ github.run_id }} manual"
+            EXTRA_TAG="manual"
+            ;;
+          pull_request | pull_request_target)
+            TESTMO_RUN_NAME="${{ github.run_id }} PR #${PR_NUMBER}"
+            EXTRA_TAG="pr"
+            BRANCH_TAG=""
+            ;;
+          schedule)
+            TESTMO_RUN_NAME="${{ github.run_id }} schedule"
+            EXTRA_TAG="schedule"
+            ;;
+          push)
+            TESTMO_RUN_NAME="${{ github.run_id }} POST"
+            EXTRA_TAG="post-commit"
+            ;;
+          *)
+            TESTMO_RUN_NAME="${{ github.run_id }}"
+            EXTRA_TAG=""
+            ;;
         esac
         
         testmo automation:resources:add-link --name build --url "$RUN_URL" --resources testmo.json
@@ -136,6 +147,7 @@ runs:
 
     - name: Print test history link
       shell: bash
+      if: inputs.testman_token
       run: |
         echo "10 [Test history](${TEST_HISTORY_URL})" >> $SUMMARY_LINKS
 
@@ -147,123 +159,140 @@ runs:
     - name: ya test
       shell: bash
       run: |
-        extra_params=()
+        readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
+        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
+
+        params=(
+          -T -k -D'BUILD_LANGUAGES=CPP PY3 PY2 GO'
+          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
+          --cache-size 512G --do-not-output-stderrs
+          --stat --canonization-backend=ydb-canondata.storage.yandexcloud.net
+          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
+        )
         
         # FIXME: copy-paste from build_ya
-        case "${{ inputs.build_preset }}" in
+        case "$BUILD_PRESET" in
           debug)
-            build_type=debug
+            params+=(--build "debug")
             ;;
           relwithdebinfo)
-            build_type=relwithdebinfo
+            params+=(--build "relwithdebinfo")
             ;;
           release-asan)
-            build_type=release
-            extra_params+=(--sanitize="address")
-            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            params+=(
+              --build "release" --sanitize="address"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
             ;;
           release-tsan)
-            build_type=release
-            extra_params+=(--sanitize="thread")
-            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            params+=(
+              --build "release" --sanitize="thread"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
             ;;
           release-msan)
-            build_type=release
-            extra_params+=(--sanitize="memory")
-            extra_params+=(-DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY)
+            params+=(
+              --build "release" --sanitize="memory"
+              -DSKIP_JUNK -DUSE_EAT_MY_DATA -DDEBUGINFO_LINES_ONLY
+            )
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
-
-
+        
         if [ ! -z "${{ inputs.build_target }}" ]; then
-          extra_params+=(--target="${{ inputs.build_target }}")
+          params+=(--target="${{ inputs.build_target }}")
         fi
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          extra_params+=(--bazel-remote-store)
-          extra_params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
         
-        if [ "${{ inputs.cache_tests }}" = "true" ]; then
-          extra_params+=(--cache-tests)
+        echo "::debug::get version"
+        ./ya --version
+        
+        echo "Tests are running..." | .github/scripts/tests/comment-pr.py
+        
+        if [ ! -z "${{ inputs.bazel_remote_username }}" ]; then
+          echo "::debug::start tests"
+
+          ./ya test "${params[@]}" \
+            --bazel-remote-put --bazel-remote-username "${{ inputs.bazel_remote_username }}" --bazel-remote-password "${{ inputs.bazel_remote_password }}" -DCONSISTENT_DEBUG \
+            --log-file "$LOG_DIR/ya_log_prewarm.txt" --evlog-file "$LOG_DIR/ya_evlog_prewarm.jsonl" \
+            --dist-cache-evict-bins --cache-tests --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests || (
+              RC=$?
+              echo "::debug::ya test RC=$RC"
+            )
         fi
         
-        readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
-        readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
-        
-        ./ya test -k --build "${build_type}" -D'BUILD_LANGUAGES=CPP PY3 PY2 GO' \
-          ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=} \
-          --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}" \
-          --cache-size 512G --do-not-output-stderrs -T \
-          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" \
-          --canonization-backend=ydb-canondata.storage.yandexcloud.net \
-          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" "${extra_params[@]}" || (
+        echo "::debug::save tests reports"
+        ./ya test "${params[@]}" \
+          --stat --log-file "$LOG_DIR/ya_log.txt" --evlog-file "$LOG_DIR/ya_evlog.jsonl" -DCONSISTENT_DEBUG \
+          --cache-tests --dist-cache-evict-bins --no-dir-outputs --test-node-output-limit 100000 --drop-graph-result-before-tests \
+          --junit "$JUNIT_REPORT_XML" --output "$OUT_DIR" || (
             RC=$?
-            if [[ $RC -ge 10 && $RC -le 14 ]]; then
-              echo "ya test returned failed tests status, recovering.."
-            else
-              exit $RC
+            if [ $RC -ne 0 ]; then
+              echo "ya test returned $RC, check existence $JUNIT_REPORT_XML"
+              if [ -s "$JUNIT_REPORT_XML" ]; then
+                echo "$JUNIT_REPORT_XML exists"
+                ls -la "$JUNIT_REPORT_XML"
+              else
+                echo "$JUNIT_REPORT_XML doesn't exist or has zero size"
+                ls -la "$JUNIT_REPORT_XML" || true
+                exit $RC
+              fi
             fi
         )
 
+    - name: archive unitest reports (orig)
+      shell: bash
+      run: |
+        gzip -c $JUNIT_REPORT_XML > $REPORTS_ARTIFACTS_DIR/orig_junit.xml.gz
+    
     - name: postprocess junit report
       shell: bash
       run: |
         .github/scripts/tests/transform-ya-junit.py -i \
-          --mu .github/config/muted_test.txt \
-          --mf .github/config/muted_functest.txt \
+          -m .github/config/muted_ya.txt \
           --ya-out "$OUT_DIR" \
           --log-url-prefix "$S3_URL_PREFIX/logs/" \
           --log-out-dir "$ARTIFACTS_DIR/logs/" \
           "$JUNIT_REPORT_XML"
-
-    - name: write tests summary
+    
+        .github/scripts/tests/split-junit.py -o "$JUNIT_REPORT_PARTS" "$JUNIT_REPORT_XML"
+    
+    - name: archive unitest reports (transformed)
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
       run: |
-        mkdir $ARTIFACTS_DIR/summary/
-
-        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
-        
-        platform_name=$(uname | tr '[:upper:]' '[:lower:]')-$(arch)
-        
-        .github/scripts/tests/generate-summary.py \
-          --summary-out-path $ARTIFACTS_DIR/summary/ \
-          --summary-url-prefix $S3_URL_PREFIX/summary/ \
-          --test-history-url $TEST_HISTORY_URL \
-          --build-preset "${platform_name}-${{ inputs.build_preset }}" \
-          "Tests" ya-test.html "$JUNIT_REPORT_XML"
-
+        tar -C $JUNIT_REPORT_PARTS/.. -czf $REPORTS_ARTIFACTS_DIR/junit_parts.xml.tar.gz $(basename $JUNIT_REPORT_PARTS)
 
     - name: Unit test history upload results
       if: inputs.testman_token
       shell: bash
       run: |
-        testmo automation:run:submit-thread \
-          --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }} \
-          --results "$JUNIT_REPORT_XML"
+        PROXY_ADDR=127.0.0.1:8888
 
-    - name: sync test results to s3
-      if: always()
-      shell: bash
-      run: |
-        echo "::group::s3-sync"
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
-        echo "::endgroup::"
-
-    - name: sync logs results to s3
-      if: always()
-      shell: bash
-      run: |
-        echo "::group::s3-sync"
-        s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
-        echo "::endgroup::"
-
+        openssl req -x509 -newkey rsa:2048 \
+          -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
+          -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
+        
+        ./ydb/ci/testmo-proxy/testmo-proxy.py -l $PROXY_ADDR \
+          --cert-file "$TMP_DIR/cert.pem" \
+          --cert-key "$TMP_DIR/key.pem" \
+          --target-timeout 3,10 \
+          --max-request-time 55 \
+          "$TESTMO_URL" &
+        
+        proxy_pid=$!
+        
+        NODE_TLS_REJECT_UNAUTHORIZED=0 testmo automation:run:submit-thread \
+          --instance "https://$PROXY_ADDR" --run-id "${{ steps.th.outputs.runid }}" \
+          --results "$JUNIT_REPORT_PARTS/*.xml"
+        
+        kill $proxy_pid
 
     - name: Test history run complete
       if: always() && inputs.testman_token
@@ -271,6 +300,37 @@ runs:
       run: |
         testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{ steps.th.outputs.runid }}
 
+    - name: write tests summary
+      shell: bash
+      if: always()
+      run: |
+        mkdir $ARTIFACTS_DIR/summary/
+        
+        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
+        
+        .github/scripts/tests/generate-summary.py \
+          --summary-out-path $ARTIFACTS_DIR/summary/ \
+          --summary-url-prefix $S3_URL_PREFIX/summary/ \
+          --test-history-url $TEST_HISTORY_URL \
+          --build-preset "$BUILD_PRESET" \
+          "Tests" ya-test.html "$JUNIT_REPORT_XML"
+
+    - name: sync test results to s3
+      if: always()
+      shell: bash
+      run: |
+        echo "::group::s3-sync"
+        s3cmd sync -r --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$ARTIFACTS_DIR/" "$S3_BUCKET_PATH/"
+        echo "::endgroup::"
+    
+    - name: sync logs results to s3
+      if: always()
+      shell: bash
+      run: |
+        echo "::group::s3-sync"
+        s3cmd sync --follow-symlinks --acl-private --no-progress --stats --no-check-md5 "$LOG_DIR/" "$S3_BUCKET_PATH/test_logs/"
+        echo "::endgroup::"
+        
     - name: check test results
       shell: bash
       run: |

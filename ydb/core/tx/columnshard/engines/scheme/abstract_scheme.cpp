@@ -12,7 +12,7 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
     }
     return schema->field(index);
 }
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnId(const ui32 columnId) const {
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
 
@@ -29,8 +29,8 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         return batch;
     }
-    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
     Y_ABORT_UNLESS(dataSchema.GetSnapshot() < GetSnapshot());
+    const std::shared_ptr<arrow::Schema>& resultArrowSchema = GetSchema();
     std::vector<std::shared_ptr<arrow::Array>> newColumns;
     newColumns.reserve(resultArrowSchema->num_fields());
 
@@ -78,7 +78,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
         return nullptr;
     }
 
-    const auto& sortingKey = GetIndexInfo().GetSortingKey();
+    const auto& sortingKey = GetIndexInfo().GetPrimaryKey();
     Y_ABORT_UNLESS(sortingKey);
 
     // Check PK is NOT NULL
@@ -108,6 +108,12 @@ ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
     auto id = GetColumnIdOptional(columnName);
     AFL_VERIFY(id)("column_name", columnName)("schema", JoinSeq(",", GetSchema()->field_names()));
     return *id;
+}
+
+std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
+    auto result = GetFieldByColumnIdOptional(columnId);
+    AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId)("schema", DebugString());
+    return result;
 }
 
 }

@@ -1,30 +1,27 @@
 #pragma once
 
-#include "write_data.h"
-
 #include <library/cpp/lwtrace/shuttle.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
-
 
 namespace NKikimr::NEvents {
 
 struct TDataEvents {
 
     class TCoordinatorInfo {
-        YDB_READONLY_DEF(ui64, TabletId);
         YDB_READONLY(ui64, MinStep, 0);
         YDB_READONLY(ui64, MaxStep, 0);
         YDB_READONLY_DEF(google::protobuf::RepeatedField<ui64>, DomainCoordinators);
 
     public:
-        TCoordinatorInfo(const ui64 tabletId, const ui64 minStep, const ui64 maxStep, const google::protobuf::RepeatedField<ui64>& coordinators)
-            : TabletId(tabletId)
-            , MinStep(minStep)
+        TCoordinatorInfo(const ui64 minStep, const ui64 maxStep, const google::protobuf::RepeatedField<ui64>& coordinators)
+            : MinStep(minStep)
             , MaxStep(maxStep)
             , DomainCoordinators(coordinators) {}
     };
@@ -48,8 +45,7 @@ struct TDataEvents {
             Record.SetTxMode(txMode);
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, ui64 tableId, 
-            ui64 schemaVersion, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema,
+        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -58,11 +54,10 @@ struct TDataEvents {
             operation->SetType(operationType);
             operation->SetPayloadFormat(payloadFormat);
             operation->SetPayloadIndex(payloadIndex);
-            operation->MutableTableId()->SetTableId(tableId);
-            operation->MutableTableId()->SetSchemaVersion(schemaVersion);
-            for (ui32 i = 0; i < ydbSchema.size(); ++i) {
-                operation->AddColumnIds(i + 1);
-            }
+            operation->MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+            operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
         }
 
         ui64 GetTxId() const {
@@ -81,9 +76,10 @@ struct TDataEvents {
     public:
         TEvWriteResult() = default;
 
-        static std::unique_ptr<TEvWriteResult> BuildError(const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
+        static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
             auto result = std::make_unique<TEvWriteResult>();
             ACFL_ERROR("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
             auto issue = result->Record.AddIssues();
@@ -91,15 +87,17 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildCommited(const ui64 txId) {
+        static std::unique_ptr<TEvWriteResult> BuildCommited(const ui64 origin, const ui64 txId) {
             auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildPrepared(const ui64 txId, const TCoordinatorInfo& transactionInfo) {
+        static std::unique_ptr<TEvWriteResult> BuildPrepared(const ui64 origin, const ui64 txId, const TCoordinatorInfo& transactionInfo) {
             auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
@@ -108,6 +106,16 @@ struct TDataEvents {
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
         }
+
+        TString GetError() const {
+            return TStringBuilder() << "Status: " << Record.GetStatus() << " Issues: " << Record.GetIssues();
+        }
+
+        NKikimrDataEvents::TEvWriteResult::EStatus GetStatus() const { return Record.GetStatus(); }
+
+        bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
+        bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
+        bool IsError() const { return !IsPrepared() && !IsComplete(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

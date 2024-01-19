@@ -3,13 +3,9 @@
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
-#include <library/cpp/string_utils/base64/base64.h>
-
-#include <util/stream/output.h>
 #include <util/random/random.h>
 #include <util/random/fast.h>
-
-#include <util/string/printf.h>
+#include <util/stream/output.h>
 
 #include <array>
 
@@ -185,6 +181,8 @@ namespace NWilson {
             return TTraceId();
         }
 
+        static TTraceId FromTraceparentHeader(const TStringBuf header);
+
         TTraceId Span(ui8 verbosity) const {
             Validate();
             if (!*this || !TimeToLive) {
@@ -221,6 +219,8 @@ namespace NWilson {
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
         const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
+
+        TString GetHexTraceId() const;
 
         void Validate() const {
             Y_DEBUG_ABORT_UNLESS(*this || !SpanId);

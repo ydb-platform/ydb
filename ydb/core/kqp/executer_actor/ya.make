@@ -33,6 +33,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert
+    ydb/services/metadata/abstract
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/actors/compute

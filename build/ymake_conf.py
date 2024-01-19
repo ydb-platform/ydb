@@ -64,7 +64,7 @@ class Platform(object):
 
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
-        self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
+        self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
@@ -75,6 +75,7 @@ class Platform(object):
         self.is_riscv32 = self.is_rv32imc
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
+        self.is_tc32 = self.arch in ('tc32_elf',)
 
         self.is_xtensa = self.arch in ('xtensa_hifi5',)
 
@@ -89,6 +90,7 @@ class Platform(object):
         self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
         self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
         self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',)
+        self.is_cortex_m23 = self.arch in ('armv8m_cortex_m23',)
         self.is_cortex_m4 = self.arch in ('armv7em_cortex_m4',)
         self.is_cortex_m7 = self.arch in ('armv7em_cortex_m7')
 
@@ -99,7 +101,7 @@ class Platform(object):
         self.is_wasm64 = self.arch == 'wasm64'
         self.is_wasm = self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa
+        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -182,6 +184,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
+            (self.is_tc32, 'ARCH_TC32'),
             (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
@@ -744,10 +747,7 @@ class YMake(object):
         if presets:
             print('# Variables set from command line by -D options')
             for key in sorted(presets):
-                if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
-                    emit_with_ignore_comment(key, opts().presets[key])
-                else:
-                    emit(key, opts().presets[key])
+                emit(key, opts().presets[key])
 
     @staticmethod
     def _print_conf_content(path):
@@ -758,7 +758,7 @@ class YMake(object):
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):
-        emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
+        pass
 
 
 class System(object):
@@ -1046,7 +1046,14 @@ class GnuToolchainOptions(ToolchainOptions):
             self.sys_lib = self.target.find_in_dict(self.sys_lib, [])
 
         self.os_sdk = preset('OS_SDK') or self._default_os_sdk()
-        self.os_sdk_local = self.os_sdk == 'local'
+
+        self.os_sdk_local = False
+
+        if build.host.is_apple and build.target.is_apple and to_bool(preset('APPLE_SDK_LOCAL'), default=False):
+            self.os_sdk_local = True
+
+        if self.os_sdk == 'local':
+            self.os_sdk_local = True
 
     def _default_os_sdk(self):
         if self.target.is_linux:
@@ -1165,9 +1172,6 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            if not self.tc.is_system_cxx:
-                if 'CLANG' in self.tc.name_marker:
-                    self.c_flags_platform.append('-isystem{}/share/include'.format(self.tc.name_marker))
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[
@@ -1229,6 +1233,9 @@ class GnuToolchain(Toolchain):
         elif target.is_cortex_m7:
             self.c_flags_platform.append('-mcpu=cortex-m7 -mfpu=fpv5-sp-d16')
 
+        elif target.is_cortex_m23:
+            self.c_flags_platform.append('-mcpu=cortex-m23')
+
         elif target.is_cortex_m33:
             self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')
 
@@ -1267,15 +1274,10 @@ class GnuToolchain(Toolchain):
             if target.is_ios:
                 self.c_flags_platform.append('-D__IOS__=1')
 
-            if self.tc.is_from_arcadia or self.tc.is_system_cxx:
-                if target.is_apple:
-                    if target.is_ios:
-                        self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/internal/platform/macos_system_stl')
-                    if target.is_macos:
-                        self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-                        self.platform_projects.append('build/internal/platform/macos_system_stl')
+            if target.is_apple:
+                self.setup_apple_sdk(target)
 
+            if self.tc.is_from_arcadia or self.tc.is_system_cxx:
                 if target.is_linux:
                     if not tc.os_sdk_local:
                         self.setup_sdk(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL')
@@ -1292,22 +1294,42 @@ class GnuToolchain(Toolchain):
 
                 if target.is_yocto:
                     self.setup_sdk(project='build/platform/yocto_sdk/yocto_sdk', var='${YOCTO_SDK_ROOT_RESOURCE_GLOBAL}')
-            elif self.tc.params.get('local'):
-                if target.is_apple:
-                    if not tc.os_sdk_local:
-                        if target.is_ios:
-                            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
-                            self.platform_projects.append('build/internal/platform/macos_system_stl')
-                        if target.is_macos:
-                            self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
-                            self.platform_projects.append('build/internal/platform/macos_system_stl')
-                    else:
-                        if target.is_iossim:
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphonesimulator', '--show-sdk-path']).strip())
-                        elif target.is_ios:
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'iphoneos', '--show-sdk-path']).strip())
-                        elif target.is_macos:
-                            self.env.setdefault('SDKROOT', subprocess.check_output(['xcrun', '-sdk', 'macosx', '--show-sdk-path']).strip())
+
+    def setup_apple_sdk(self, target):
+        if not self.tc.os_sdk_local:
+            self.setup_apple_arcadia_sdk(target)
+        else:
+            self.setup_apple_local_sdk(target)
+
+    def setup_apple_arcadia_sdk(self, target):
+        if target.is_ios:
+            self.setup_xcode_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+            self.platform_projects.append('build/internal/platform/macos_system_stl')
+        if target.is_macos:
+            self.setup_xcode_sdk(project='build/internal/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+            self.platform_projects.append('build/internal/platform/macos_system_stl')
+
+    def setup_apple_local_sdk(self, target):
+        def get_output(*args):
+            return six.ensure_str(subprocess.check_output(tuple(args))).strip()
+
+        def get_sdk_root(sdk):
+            root = self.env.get('SDKROOT')
+            if root not in (None, '', ['']):
+                return root
+
+            root = os.environ.get('SDKROOT')
+            if root:
+                return root
+
+            return get_output('xcrun', '-sdk', sdk, '--show-sdk-path')
+
+        if target.is_iossim:
+            self.env['SDKROOT'] = get_sdk_root('iphonesimulator')
+        elif target.is_ios:
+            self.env['SDKROOT'] = get_sdk_root('iphoneos')
+        elif target.is_macos:
+            self.env['SDKROOT'] = get_sdk_root('macosx')
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
@@ -1386,8 +1408,8 @@ class GnuCompiler(Compiler):
                 '-fdebug-default-version=4',
             ]
         elif self.tc.is_gcc:
-            if self.target.is_xtensa:
-                # Xtensa toolchain does not support this flag
+            if self.target.is_xtensa or self.target.is_tc32:
+                # Xtensa and tc32 toolchains does not support this flag
                 pass
             else:
                 self.c_foptions += [
@@ -2306,7 +2328,7 @@ class Cuda(object):
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $NVCC_CFLAGS $SRCFLAGS ${input;hide:"build/platform/cuda/cuda_runtime_include.h"} $CUDA_HOST_COMPILER_ENV ${kv;hide:"p CC"} ${kv;hide:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${kv;hide:"p CU"} ${kv;hide:"pc green"}'  # noqa E501
 
@@ -2499,8 +2521,6 @@ def main():
     build.print_build()
 
     custom_conf.print_epilogue()
-
-    emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
 
 
 if __name__ == '__main__':

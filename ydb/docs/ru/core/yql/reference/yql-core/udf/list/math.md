@@ -139,3 +139,31 @@ SELECT Math::FuzzyEquals(1.01, 1.0, 0.05); -- true
 SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```
+
+## Функции округления до целого числа в заданном режиме
+
+**Список функций**
+
+* ```Math::RoundDownward() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards negative infinity
+* ```Math::RoundToNearest() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards nearest representable value
+* ```Math::RoundTowardZero() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards zero
+* ```Math::RoundUpward() -> Tagged<Uint32, MathRoundingMode>``` -- rounding towards positive infinity
+* ```Math::NearbyInt(AutoMap<Double>, Tagged<Uint32, MathRoundingMode>) -> Optional<Int64>```
+
+Функция Math::NearbyInt округляет первый аргумент до целого числа в соответсвии с режимом, заданным вторым аргументом.
+Если результат выходит за пределы 64-битного целого числа, возращается NULL.
+
+**Примеры**
+
+```sql
+SELECT Math::NearbyInt(1.5, Math::RoundDownward()); -- 1
+SELECT Math::NearbyInt(1.5, Math::RoundToNearest()); -- 2
+SELECT Math::NearbyInt(2.5, Math::RoundToNearest()); -- 2
+SELECT Math::NearbyInt(1.5, Math::RoundTowardZero()); -- 1
+SELECT Math::NearbyInt(1.5, Math::RoundUpward()); -- 2
+SELECT Math::NearbyInt(-1.5, Math::RoundDownward()); -- -2
+SELECT Math::NearbyInt(-1.5, Math::RoundToNearest()); -- -2
+SELECT Math::NearbyInt(-2.5, Math::RoundToNearest()); -- -2
+SELECT Math::NearbyInt(-1.5, Math::RoundTowardZero()); -- -1
+SELECT Math::NearbyInt(-1.5, Math::RoundUpward()); -- -1
+```

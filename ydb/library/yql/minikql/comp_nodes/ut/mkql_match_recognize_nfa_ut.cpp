@@ -30,7 +30,7 @@ struct TNfaSetup {
         }
 
         auto& pgmBuilder = *Setup.PgmBuilder;
-        TCallableBuilder callableBuilder(env, "TestNfa", env.GetTypeOfVoid());
+        TCallableBuilder callableBuilder(env, "TestNfa", env.GetTypeOfVoidLazy());
         callableBuilder.Add(pgmBuilder.Arg(matchedVarsTypeBuilder.Build()));
         for (size_t i = 0; i != VarCount; ++i) {
             callableBuilder.Add(pgmBuilder.Arg(pgmBuilder.NewDataType(NUdf::EDataSlot::Bool)));

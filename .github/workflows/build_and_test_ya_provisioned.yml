@@ -53,6 +53,9 @@ on:
         type: string
         default: "auto-provisioned"
         description: "runner label"
+      put_build_results_to_cache:
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       build_target:
@@ -103,5 +106,5 @@ jobs:
       test_type: ${{ inputs.test_type }}
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
-      put_build_results_to_cache: ${{ inputs.put_build_results_to_cache || true }}
+      put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
     secrets: inherit

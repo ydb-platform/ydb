@@ -92,23 +92,49 @@ class TestS3Formats:
 
         stat = json.loads(client.describe_query(query_id).result.query.statistics.json)
         if yq_version == "v1":
-            assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PushChunks"]["sum"] == 1
-            assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PopChunks"]["sum"] == 1
-            if type_format == "parquet":
-                assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PushRows"]["sum"] == 3
-                assert stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]["PopRows"]["sum"] == 3
-            elif type_format != "json_list":
-                assert "PushRows" not in stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]
-                assert "PopRows" not in stat["Graph=0"]["TaskRunner"]["Source=0"]["Stage=Total"]
+            assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressBytes"]["sum"] > 0
+            if type_format != "json_list":
+                assert stat["Graph=0"]["TaskRunner"]["Stage=Total"]["IngressRows"]["sum"] == 3
         else:  # v2
-            assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]["Chunks"]["sum"] == 1
-            assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]["Chunks"]["sum"] == 1
-            if type_format == "parquet":
-                assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]["Rows"]["sum"] == 3
-                assert stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]["Rows"]["sum"] == 3
-            elif type_format != "json_list":
-                assert "Rows" not in stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Push"]
-                assert "Rows" not in stat["ResultSet"]["01_1_Stage-Source"]["Ingress=S3Source"]["Pop"]
+            assert stat["ResultSet"]["IngressBytes"]["sum"] > 0
+            if type_format != "json_list":
+                assert stat["ResultSet"]["IngressRows"]["sum"] == 3
+
+    @yq_all
+    def test_btc(self, kikimr, s3, client, yq_version):
+        self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
+        client.create_storage_connection("btct", "fbucket")
+
+        sql = '''
+            PRAGMA s3.UseBlocksSource="true";
+            SELECT
+                *
+            FROM btct.`btct.parquet`
+            WITH (format=`parquet`,
+                SCHEMA=(
+                    hash STRING,
+                    version INT64,
+                    size INT64,
+                    block_hash UTF8,
+                    block_number INT64,
+                    virtual_size INT64,
+                    lock_time INT64,
+                    input_count INT64,
+                    output_count INT64,
+                    is_coinbase BOOL,
+                    output_value DOUBLE,
+                    block_timestamp DATETIME,
+                    date DATE
+                )
+            );
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        issues = describe_result.query.issue[0].issues
+        assert "Error while reading file btct.parquet" in issues[0].message
+        assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

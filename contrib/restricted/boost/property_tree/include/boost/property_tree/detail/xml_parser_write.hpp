@@ -13,6 +13,7 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/detail/xml_parser_utils.hpp>
+#include <boost/optional/optional.hpp>
 #include <string>
 #include <ostream>
 #include <iomanip>
@@ -186,6 +187,7 @@ namespace boost { namespace property_tree { namespace xml_parser
                 << settings.encoding
                 << detail::widen<Str>("\"?>\n");
         write_xml_element(stream, Str(), pt, -1, settings);
+        stream.flush();
         if (!stream)
             BOOST_PROPERTY_TREE_THROW(xml_parser_error("write error", filename, 0));
     }

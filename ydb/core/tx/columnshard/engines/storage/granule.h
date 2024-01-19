@@ -206,8 +206,7 @@ public:
     std::shared_ptr<NOlap::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
         auto result = std::make_shared<NOlap::TSerializationStats>();
         for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
-            auto field = schema->GetFieldByColumnId(i.first);
-            AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
+            auto field = schema->GetFieldByColumnIdVerified(i.first);
             NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
             columnInfo.Merge(i.second);
             result->AddStat(columnInfo);

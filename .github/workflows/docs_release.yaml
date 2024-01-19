@@ -5,10 +5,15 @@ on:
     branches:
       - 'main'
       - 'stable-**'
+    paths: 
+      - 'ydb/docs/**'
   workflow_dispatch:
 
 jobs:
   release:
+    concurrency:
+      group: release-documentation-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -33,7 +33,6 @@ Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {
         TString s;
         s = "aba\\ca\"ba";
         transform.Transform(s);
-        Cerr << "###" << s << Endl;
         UNIT_ASSERT_EQUAL(s, "aba\\\\\\\\ca\\\\\\\"ba");
     }
 }
@@ -52,7 +51,6 @@ Y_UNIT_TEST_SUITE(TDoubleUnescapeTransform) {
         TString s;
         s = "abacaba";
         transform.Transform(s);
-        Cerr << "###" << s << Endl;
         UNIT_ASSERT_EQUAL("abacaba", s);
     }
 

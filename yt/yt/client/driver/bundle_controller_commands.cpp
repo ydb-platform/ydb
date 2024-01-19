@@ -22,10 +22,24 @@ void TGetBundleConfigCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(BuildYsonStringFluently()
-        .BeginMap()
-            .Item("bundle_name").Value(result.BundleName)
-        .EndMap());
+    context->ProduceOutputValue(ConvertToYsonString(result));
+}
+
+void TSetBundleConfigCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("bundle_name", &TThis::BundleName_);
+
+    registrar.Parameter("bundle_config", &TThis::BundleConfig_)
+        .DefaultNew();
+}
+
+void TSetBundleConfigCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->SetBundleConfig(
+        BundleName_,
+        BundleConfig_,
+        Options))
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

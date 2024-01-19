@@ -35,6 +35,7 @@ target_link_libraries(core-rpc-grpc PUBLIC
   yutil
   yt-yt-core
   contrib-libs-grpc
+  cpp-string_utils-quote
   contrib-libs-protobuf
 )
 target_proto_messages(core-rpc-grpc PRIVATE

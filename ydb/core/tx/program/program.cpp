@@ -33,13 +33,26 @@ public:
     }
 private:
     NSsa::TColumnInfo GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const {
-        const ui32 columnId = column.GetId();
-        const TString name = ColumnResolver.GetColumnName(columnId, false);
-        if (name.Empty()) {
-            return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
+        if (column.HasId() && column.GetId()) {
+            const ui32 columnId = column.GetId();
+            const TString name = ColumnResolver.GetColumnName(columnId, false);
+            if (name.Empty()) {
+                return NSsa::TColumnInfo::Generated(columnId, GenerateName(column));
+            } else {
+                Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));
+                return NSsa::TColumnInfo::Original(columnId, name);
+            }
+        } else if (column.HasName() && !!column.GetName()) {
+            const TString name = column.GetName();
+            const std::optional<ui32> columnId = ColumnResolver.GetColumnIdOptional(name);
+            if (columnId) {
+                Sources.emplace(*columnId, NSsa::TColumnInfo::Original(*columnId, name));
+                return NSsa::TColumnInfo::Original(*columnId, name);
+            } else {
+                return NSsa::TColumnInfo::Generated(0, GenerateName(column));
+            }
         } else {
-            Sources.emplace(columnId, NSsa::TColumnInfo::Original(columnId, name));
-            return NSsa::TColumnInfo::Original(columnId, name);
+            return NSsa::TColumnInfo::Generated(0, GenerateName(column));
         }
     }
 
@@ -237,6 +250,14 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const
     switch (constant.GetValueCase()) {
         case TId::kBool:
             return TAssign(name, constant.GetBool());
+        case TId::kInt8:
+            return TAssign(name, i8(constant.GetInt8()));
+        case TId::kUint8:
+            return TAssign(name, ui8(constant.GetUint8()));
+        case TId::kInt16:
+            return TAssign(name, i16(constant.GetInt16()));
+        case TId::kUint16:
+            return TAssign(name, ui16(constant.GetUint16()));
         case TId::kInt32:
             return TAssign(name, constant.GetInt32());
         case TId::kUint32:

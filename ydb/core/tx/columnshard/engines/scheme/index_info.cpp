@@ -22,11 +22,17 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
     return out;
 }
 
-TIndexInfo::TIndexInfo(const TString& name, ui32 id)
+TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
-    , Id(id)
     , Name(name)
 {}
+
+bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
+    if (!other.GetPrimaryKey()->Equals(GetPrimaryKey())) {
+        return false;
+    }
+    return true;
+}
 
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
     Y_ABORT_UNLESS(batch);
@@ -230,19 +236,14 @@ void TIndexInfo::SetAllKeys() {
     /// @note Setting replace and sorting key to PK we are able to:
     /// * apply REPLACE by MergeSort
     /// * apply PK predicate before REPLACE
-    const auto& primaryKeyNames = NamesOnly(GetPrimaryKey());
+    const auto& primaryKeyNames = NamesOnly(GetPrimaryKeyColumns());
     // Update set of required columns with names from primary key.
     for (const auto& name: primaryKeyNames) {
         RequiredColumns.insert(name);
     }
-
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    if (primaryKeyNames.size()) {
-        SortingKey = ArrowSchema(primaryKeyNames);
-        ReplaceKey = SortingKey;
-        fields = ReplaceKey->fields();
-        IndexKey = ReplaceKey;
-    }
+    AFL_VERIFY(primaryKeyNames.size());
+    PrimaryKey = ArrowSchema(primaryKeyNames);
+    std::vector<std::shared_ptr<arrow::Field>> fields = PrimaryKey->fields();
 
     fields.push_back(arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()));
     fields.push_back(arrow::field(SPEC_COL_TX_ID, arrow::uint64()));
@@ -261,8 +262,8 @@ void TIndexInfo::SetAllKeys() {
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
-    if (GetSortingKey()) {
-        auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
+    if (GetPrimaryKey()) {
+        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
         Y_ABORT_UNLESS(key && key->num_fields() > 2);
         auto description = std::make_shared<NArrow::TSortDescription>(key);
         description->Directions[key->num_fields() - 1] = -1;
@@ -274,10 +275,10 @@ std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortDescription() const {
 }
 
 std::shared_ptr<NArrow::TSortDescription> TIndexInfo::SortReplaceDescription() const {
-    if (GetSortingKey()) {
-        auto key = GetExtendedKey(); // Sort with extended key, greater snapshot first
+    if (GetPrimaryKey()) {
+        auto key = ExtendedKey; // Sort with extended key, greater snapshot first
         Y_ABORT_UNLESS(key && key->num_fields() > 2);
-        auto description = std::make_shared<NArrow::TSortDescription>(key, GetReplaceKey());
+        auto description = std::make_shared<NArrow::TSortDescription>(key, GetPrimaryKey());
         description->Directions[key->num_fields() - 1] = -1;
         description->Directions[key->num_fields() - 2] = -1;
         description->NotNull = true; // TODO
@@ -322,6 +323,12 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     } else {
         return TColumnSaver(transformer, std::make_shared<NArrow::NSerialization::TFullDataSerializer>(options));
     }
+}
+
+std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
+    auto result = GetColumnLoaderOptional(columnId);
+    AFL_VERIFY(result);
+    return result;
 }
 
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
@@ -449,7 +456,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 }
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    TIndexInfo result("", 0);
+    TIndexInfo result("");
     if (!result.DeserializeFromProto(schema)) {
         return std::nullopt;
     }

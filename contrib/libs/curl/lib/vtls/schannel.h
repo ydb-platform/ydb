@@ -68,13 +68,16 @@
  * BoringSSL's <openssl/x509.h>: So just undefine those defines here
  * (and only here).
  */
-#if defined(HAVE_BORINGSSL) || defined(OPENSSL_IS_BORINGSSL)
+#if defined(OPENSSL_IS_BORINGSSL)
 # undef X509_NAME
 # undef X509_CERT_PAIR
 # undef X509_EXTENSIONS
 #endif
 
 extern const struct Curl_ssl Curl_ssl_schannel;
+
+CURLcode Curl_verify_host(struct Curl_cfilter *cf,
+                          struct Curl_easy *data);
 
 CURLcode Curl_verify_certificate(struct Curl_cfilter *cf,
                                  struct Curl_easy *data);

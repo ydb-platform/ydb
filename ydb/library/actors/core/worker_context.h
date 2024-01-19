@@ -17,6 +17,8 @@
 #include <library/cpp/lwtrace/shuttle.h>
 
 namespace NActors {
+    struct TExecutorThreadCtx;
+    
     struct TWorkerContext {
         TWorkerId WorkerId;
         const TCpuId CpuId;
@@ -136,13 +138,13 @@ namespace NActors {
         }
 
         void UpdateThreadTime() {
-            RelaxedStore(&WorkerStats.SafeElapsedTicks, (ui64)RelaxedLoad(&WorkerStats.ElapsedTicks));
-            RelaxedStore(&WorkerStats.CpuUs, ThreadCPUTime());
+            RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
+            RelaxedStore(&Stats->CpuUs, ThreadCPUTime());
         }
 
         void IncreaseNotEnoughCpuExecutions() {
-            RelaxedStore(&WorkerStats.NotEnoughCpuExecutions,
-                    (ui64)RelaxedLoad(&WorkerStats.NotEnoughCpuExecutions) + 1);
+            RelaxedStore(&Stats->NotEnoughCpuExecutions,
+                    (ui64)RelaxedLoad(&Stats->NotEnoughCpuExecutions) + 1);
         }
 #else
         void GetCurrentStats(TExecutorThreadStats&) const {}

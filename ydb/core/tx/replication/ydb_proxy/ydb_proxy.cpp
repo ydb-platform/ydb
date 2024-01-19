@@ -160,8 +160,12 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+        WaitEvent(ev->Sender, ev->Cookie);
+    }
+
+    void WaitEvent(const TActorId& sender, ui64 cookie) {
         auto request = MakeRequest(SelfId());
-        auto cb = [request, sender = ev->Sender, cookie = ev->Cookie](const NThreading::TFuture<void>&) {
+        auto cb = [request, sender, cookie](const NThreading::TFuture<void>&) {
             if (auto r = request.lock()) {
                 r->Complete(new TEvPrivate::TEvTopicEventReady(sender, cookie));
             }
@@ -173,7 +177,31 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
         auto event = Session->GetEvent(true);
         Y_ABORT_UNLESS(event.Defined());
-        Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(std::move(*event)), 0, ev->Get()->Cookie);
+
+        if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+            x->Confirm();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+            x->Confirm();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
+        } else if (std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+        } else if (std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+            return Leave(ev->Get()->Sender);
+        } else if (std::get_if<TSessionClosedEvent>(&*event)) {
+            return Leave(ev->Get()->Sender);
+        } else {
+            Y_ABORT("Unexpected event");
+        }
+    }
+
+    void Leave(const TActorId& client) {
+        Send(client, new TEvents::TEvGone());
+        PassAway();
     }
 
     void PassAway() override {
@@ -354,6 +382,10 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(RegisterWithSameMailbox(new TTopicReader(session))));
     }
 
+    void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+        Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
+    }
+
     static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
@@ -405,6 +437,7 @@ public:
             hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeConsumerRequest, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
         default:
             return StateBase(ev);

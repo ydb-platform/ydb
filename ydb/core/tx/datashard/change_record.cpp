@@ -79,13 +79,6 @@ bool TChangeRecord::IsBroadcast() const {
     }
 }
 
-TString TChangeRecord::ToString() const {
-    TString result;
-    TStringOutput out(result);
-    Out(out);
-    return result;
-}
-
 void TChangeRecord::Out(IOutputStream& out) const {
     out << "{"
         << " Order: " << Order
@@ -101,83 +94,6 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " LockId: " << LockId
         << " LockOffset: " << LockOffset
     << " }";
-}
-
-TChangeRecordBuilder::TChangeRecordBuilder(EKind kind) {
-    Record.Kind = kind;
-}
-
-TChangeRecordBuilder::TChangeRecordBuilder(TChangeRecord&& record) {
-    Record = std::move(record);
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithLockId(ui64 lockId) {
-    Record.LockId = lockId;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithLockOffset(ui64 lockOffset) {
-    Record.LockOffset = lockOffset;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithOrder(ui64 order) {
-    Record.Order = order;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithGroup(ui64 group) {
-    Record.Group = group;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithStep(ui64 step) {
-    Record.Step = step;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithTxId(ui64 txId) {
-    Record.TxId = txId;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithPathId(const TPathId& pathId) {
-    Record.PathId = pathId;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithTableId(const TPathId& tableId) {
-    Record.TableId = tableId;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithSchemaVersion(ui64 version) {
-    Record.SchemaVersion = version;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithSchema(TUserTable::TCPtr schema) {
-    Record.Schema = schema;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithBody(const TString& body) {
-    Record.Body = body;
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithBody(TString&& body) {
-    Record.Body = std::move(body);
-    return *this;
-}
-
-TChangeRecordBuilder& TChangeRecordBuilder::WithSource(ESource source) {
-    Record.Source = source;
-    return *this;
-}
-
-TChangeRecord&& TChangeRecordBuilder::Build() {
-    return std::move(Record);
 }
 
 }

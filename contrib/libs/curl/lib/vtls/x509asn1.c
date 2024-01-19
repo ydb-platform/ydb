@@ -24,21 +24,15 @@
 
 #include "curl_setup.h"
 
-#if defined(USE_GSKIT) || defined(USE_NSS) || defined(USE_GNUTLS) ||    \
-  defined(USE_WOLFSSL) || defined(USE_SCHANNEL) || defined(USE_SECTRANSP)
+#if defined(USE_GNUTLS) || defined(USE_WOLFSSL) ||      \
+  defined(USE_SCHANNEL) || defined(USE_SECTRANSP)
 
-#if defined(USE_GSKIT) || defined(USE_WOLFSSL) || defined(USE_SCHANNEL)
+#if defined(USE_WOLFSSL) || defined(USE_SCHANNEL)
 #define WANT_PARSEX509 /* uses Curl_parseX509() */
 #endif
 
-#if defined(USE_GSKIT) || defined(USE_NSS) || defined(USE_GNUTLS) ||    \
-  defined(USE_SCHANNEL) || defined(USE_SECTRANSP)
+#if defined(USE_GNUTLS) || defined(USE_SCHANNEL) || defined(USE_SECTRANSP)
 #define WANT_EXTRACT_CERTINFO /* uses Curl_extract_certinfo() */
-#define WANT_PARSEX509 /* ... uses Curl_parseX509() */
-#endif
-
-#if defined(USE_GSKIT)
-#define WANT_VERIFYHOST /* uses Curl_verifyhost () */
 #define WANT_PARSEX509 /* ... uses Curl_parseX509() */
 #endif
 
@@ -973,7 +967,7 @@ static int do_pubkey(struct Curl_easy *data, int certnum,
       infof(data, "   ECC Public Key (%lu bits)", len);
     if(data->set.ssl.certinfo) {
       char q[sizeof(len) * 8 / 3 + 1];
-      (void)msnprintf(q, sizeof(q), "%lu", len);
+      (void)msnprintf(q, sizeof(q), "%zu", len);
       if(ssl_push_certinfo(data, certnum, "ECC Public Key", q))
         return 1;
     }
@@ -1007,7 +1001,7 @@ static int do_pubkey(struct Curl_easy *data, int certnum,
       infof(data, "   RSA Public Key (%lu bits)", len);
     if(data->set.ssl.certinfo) {
       char r[sizeof(len) * 8 / 3 + 1];
-      msnprintf(r, sizeof(r), "%lu", len);
+      msnprintf(r, sizeof(r), "%zu", len);
       if(ssl_push_certinfo(data, certnum, "RSA Public Key", r))
         return 1;
     }
@@ -1261,8 +1255,7 @@ CURLcode Curl_extract_certinfo(struct Curl_easy *data,
 
 #endif /* WANT_EXTRACT_CERTINFO */
 
-#endif /* USE_GSKIT or USE_NSS or USE_GNUTLS or USE_WOLFSSL or USE_SCHANNEL
-        * or USE_SECTRANSP */
+#endif /* USE_GNUTLS or USE_WOLFSSL or USE_SCHANNEL or USE_SECTRANSP */
 
 #ifdef WANT_VERIFYHOST
 
@@ -1324,16 +1317,16 @@ CURLcode Curl_verifyhost(struct Curl_cfilter *cf,
   if(Curl_parseX509(&cert, beg, end))
     return CURLE_PEER_FAILED_VERIFICATION;
 
-  hostlen = strlen(connssl->hostname);
+  hostlen = strlen(connssl->peer.hostname);
 
   /* Get the server IP address. */
 #ifdef ENABLE_IPV6
   if(cf->conn->bits.ipv6_ip &&
-     Curl_inet_pton(AF_INET6, connssl->hostname, &addr))
+     Curl_inet_pton(AF_INET6, connssl->peer.hostname, &addr))
     addrlen = sizeof(struct in6_addr);
   else
 #endif
-  if(Curl_inet_pton(AF_INET, connssl->hostname, &addr))
+  if(Curl_inet_pton(AF_INET, connssl->peer.hostname, &addr))
     addrlen = sizeof(struct in_addr);
 
   /* Process extensions. */
@@ -1368,7 +1361,7 @@ CURLcode Curl_verifyhost(struct Curl_cfilter *cf,
                             name.beg, name.end);
           if(len > 0 && (size_t)len == strlen(dnsname))
             matched = Curl_cert_hostcheck(dnsname, (size_t)len,
-                                          connssl->hostname, hostlen);
+                                          connssl->peer.hostname, hostlen);
           else
             matched = 0;
           free(dnsname);
@@ -1428,7 +1421,7 @@ CURLcode Curl_verifyhost(struct Curl_cfilter *cf,
     if(strlen(dnsname) != (size_t) len)         /* Nul byte in string ? */
       failf(data, "SSL: illegal cert name field");
     else if(Curl_cert_hostcheck((const char *) dnsname,
-                                len, connssl->hostname, hostlen)) {
+                                len, connssl->peer.hostname, hostlen)) {
       infof(data, "  common name: %s (matched)", dnsname);
       free(dnsname);
       return CURLE_OK;

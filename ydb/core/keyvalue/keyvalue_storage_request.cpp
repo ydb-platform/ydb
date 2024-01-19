@@ -1,10 +1,12 @@
 #include "keyvalue_flat_impl.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/public/lib/base/msgbus.h>
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -62,6 +64,8 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     TStackVec<ui32, 16> YellowMoveChannels;
     TStackVec<ui32, 16> YellowStopChannels;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -84,6 +88,7 @@ public:
         , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
+        , Span(TWilsonTablet::Tablet, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
     {
         IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
     }
@@ -377,6 +382,7 @@ public:
                     YellowMoveChannels.begin(), YellowMoveChannels.end());
             TActorId keyValueActorId = IntermediateResults->KeyValueActorId;
             ctx.Send(keyValueActorId, new TEvKeyValue::TEvIntermediate(std::move(IntermediateResults)));
+            Span.EndOk();
             Die(ctx);
             return true;
         }
@@ -482,7 +488,9 @@ public:
         ctx.Send(keyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResults->RequestUid,
             IntermediateResults->CreatedAtGeneration, IntermediateResults->CreatedAtStep,
-            IntermediateResults->Stat, status, std::move(IntermediateResults->RefCountsIncr)));
+            IntermediateResults->Stat, status, std::move(IntermediateResults->RefCountsIncr)), 0, 0, Span.GetTraceId());
+
+        Span.EndError(TStringBuilder() << status << ": " << errorDescription);
         Die(ctx);
     }
 
@@ -588,7 +596,7 @@ public:
 
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(readQueries, readQueryCount, IntermediateResults->Deadline, handleClass, false);
         ev->ReaderTabletData = {TabletInfo->TabletID, TabletGeneration};
-        SendToBSProxy(ctx, prevGroup, ev.release(), cookie);
+        SendToBSProxy(ctx, prevGroup, ev.release(), cookie, Span.GetTraceId());
         return true;
     }
 
@@ -599,7 +607,7 @@ public:
                 Y_ABORT_UNLESS(getStatus.Status == NKikimrProto::UNKNOWN);
                 SendToBSProxy(
                         ctx, getStatus.GroupId,
-                        new TEvBlobStorage::TEvStatus(IntermediateResults->Deadline), i);
+                        new TEvBlobStorage::TEvStatus(IntermediateResults->Deadline), i, Span.GetTraceId());
                 ++GetStatusRequestsSent;
             }
         }
@@ -616,7 +624,7 @@ public:
                 TLogoBlobID from(tabletId, 0, 0, channel, 0, 0);
                 TLogoBlobID to(tabletId, Max<ui32>(), Max<ui32>(), channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
                 auto request = MakeHolder<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
-                SendToBSProxy(ctx, groupId, request.Release());
+                SendToBSProxy(ctx, groupId, request.Release(), 0, Span.GetTraceId());
                 ++RangeRequestsSent;
             }
         }
@@ -647,7 +655,7 @@ public:
                                 << " Send TEvPut# " << put->ToString() << " to groupId# " << groupId
                                 << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV60");
 
-                        SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i);
+                        SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i, Span.GetTraceId());
 
                         ++WriteRequestsSent;
                     }

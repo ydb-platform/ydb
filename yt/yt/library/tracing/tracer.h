@@ -2,9 +2,9 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/ref_counted.h>
-
 #include <yt/yt/core/tracing/public.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 namespace NYT::NTracing {
 

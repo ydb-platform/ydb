@@ -97,7 +97,7 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable>
+template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
 class TStringBlockReader final : public IBlockReader {
 public:
     using TOffset = typename TStringType::offset_type;
@@ -364,8 +364,8 @@ struct TReaderTraits {
     using TTuple = TTupleBlockReader<Nullable>;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeBlockReader<T, Nullable>;
-    template <typename TStringType, bool Nullable>
-    using TStrings = TStringBlockReader<TStringType, Nullable>;
+    template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
+    using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
@@ -373,7 +373,7 @@ struct TReaderTraits {
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true>>();
+            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
         }
     }
 };
@@ -396,12 +396,12 @@ std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isO
     }
 }
 
-template <typename TTraits, typename T>
+template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal>
 std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional) {
     if (isOptional) {
-        return std::make_unique<typename TTraits::template TStrings<T, true>>();
+        return std::make_unique<typename TTraits::template TStrings<T, true, TOriginal>>();
     } else {
-        return std::make_unique<typename TTraits::template TStrings<T, false>>();
+        return std::make_unique<typename TTraits::template TStrings<T, false, TOriginal>>();
     }
 }
 
@@ -489,12 +489,15 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         case NUdf::EDataSlot::Double:
             return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional);
         case NUdf::EDataSlot::Yson:
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional);
         case NUdf::EDataSlot::JsonDocument:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional);
         case NUdf::EDataSlot::Utf8:
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional);
         case NUdf::EDataSlot::Json:
-            return MakeStringBlockReaderImpl<TTraits, arrow::StringType>(isOptional);
+            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");
         }

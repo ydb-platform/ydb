@@ -772,10 +772,10 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!lambda->GetTypeAnn()) {
             return TStatus::Repeat;
         }
-        const TTypeAnnotationNode* lambdaItemType = nullptr;
-        if (!EnsureNewSeqType<false, false>(*lambda, ctx, &lambdaItemType)) {
+        if (!EnsureFlowType(*lambda, ctx)) {
             return TStatus::Error;
         }
+        const TTypeAnnotationNode* lambdaItemType = lambda->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         if (!EnsurePersistableType(lambda->Pos(), *lambdaItemType, ctx)) {
             return TStatus::Error;
         }

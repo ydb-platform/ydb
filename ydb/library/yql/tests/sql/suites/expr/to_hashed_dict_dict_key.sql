@@ -13,21 +13,28 @@ $l = AsList(
 );
 
 $d = ToDict($l);
-select DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(ListFlatten(ListMap(DictItems($d), ($x) -> {return ListMap(DictItems($x.0), ($y) -> {return ($y, $x.1)})}))),
+    ListSort(ListFlatten(ListMap(DictKeys($d), ($x) -> {return DictItems($x)}))),
+    ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
 select DictContains($d,$i), DictContains($d,$k);
 
 $d = ToMultiDict($l);
-select DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(ListFlatten(ListMap(DictItems($d), ($x) -> {return ListMap(DictItems($x.0), ($y) -> {return ($y, $x.1)})}))),
+    ListSort(ListFlatten(ListMap(DictKeys($d), ($x) -> {return DictItems($x)}))),
+    ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
 select DictContains($d,$i), DictContains($d,$k);
 
 $d = Yql::ToDict($l,$first,$second,AsTuple(AsAtom("Compact"),AsAtom("Hashed"),AsAtom("One")));
-select DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(ListFlatten(ListMap(DictItems($d), ($x) -> {return ListMap(DictItems($x.0), ($y) -> {return ($y, $x.1)})}))),
+    ListSort(ListFlatten(ListMap(DictKeys($d), ($x) -> {return DictItems($x)}))),
+    ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
 select DictContains($d,$i), DictContains($d,$k);
 
 $d = Yql::ToDict($l,$first,$second,AsTuple(AsAtom("Compact"),AsAtom("Hashed"),AsAtom("Many")));
-select DictKeys($d),DictPayloads($d),DictItems($d);
+select ListSort(ListFlatten(ListMap(DictItems($d), ($x) -> {return ListMap(DictItems($x.0), ($y) -> {return ($y, $x.1)})}))),
+    ListSort(ListFlatten(ListMap(DictKeys($d), ($x) -> {return DictItems($x)}))),
+    ListSort(DictPayloads($d));
 select DictLookup($d,$i), DictLookup($d,$k);
-select DictContains($d,$i), DictContains($d,$k);

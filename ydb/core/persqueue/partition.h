@@ -755,6 +755,7 @@ private:
     TInstant LastUsedStorageMeterTimestamp;
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
+    TRowVersion LastEmittedHeartbeat;
 };
 
 } // namespace NKikimr::NPQ

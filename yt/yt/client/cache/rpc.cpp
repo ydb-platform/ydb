@@ -1,9 +1,10 @@
 #include "rpc.h"
-#include "options.h"
 
 #include <yt/yt_proto/yt/client/cache/proto/config.pb.h>
 
 #include <yt/yt/client/api/client.h>
+
+#include <yt/yt/client/api/options.h>
 
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
@@ -74,7 +75,9 @@ NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config)
     if (config.HasEnableLegacyRpcCodecs()) {
         connectionConfig->EnableLegacyRpcCodecs = config.GetEnableLegacyRpcCodecs();
     }
-
+    if (config.HasEnableSelectQueryTracingTag()) {
+        connectionConfig->EnableSelectQueryTracingTag = config.GetEnableSelectQueryTracingTag();
+    }
     if (config.HasRetryBackoffTime()) {
         connectionConfig->RetryingChannel->RetryBackoffTime = TDuration::MilliSeconds(config.GetRetryBackoffTime());
     }
@@ -132,7 +135,7 @@ NApi::IClientPtr CreateClient(const TConfig& config, const NApi::TClientOptions&
 
 NApi::IClientPtr CreateClient(const NApi::NRpcProxy::TConnectionConfigPtr& config)
 {
-    return CreateClient(config, GetClientOpsFromEnvStatic());
+    return CreateClient(config, NApi::GetClientOpsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateClient(const TConfig& config)
@@ -142,7 +145,7 @@ NApi::IClientPtr CreateClient(const TConfig& config)
 
 NApi::IClientPtr CreateClient(TStringBuf clusterUrl)
 {
-    return CreateClient(clusterUrl, GetClientOpsFromEnvStatic());
+    return CreateClient(clusterUrl, NApi::GetClientOpsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateClient(TStringBuf cluster, TStringBuf proxyRole)

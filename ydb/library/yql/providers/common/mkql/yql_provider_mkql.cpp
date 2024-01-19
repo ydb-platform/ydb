@@ -2147,7 +2147,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         if (RuntimeVersion < 11) {
             return ctx.ProgramBuilder.NewEmptyList(ctx.ProgramBuilder.NewVoid().GetStaticType());
         } else {
-            return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyList(), true);
+            return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
         }
     });
 
@@ -2158,7 +2158,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
            auto dictType = ctx.ProgramBuilder.NewDictType(voidType, voidType, false);
            return ctx.ProgramBuilder.NewDict(dictType, {});
         } else {
-           return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDict(), true);
+           return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
         }
     });
 

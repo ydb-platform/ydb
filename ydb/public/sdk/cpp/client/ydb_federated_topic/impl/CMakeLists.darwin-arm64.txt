@@ -27,6 +27,7 @@ target_link_libraries(client-ydb_federated_topic-impl PUBLIC
 target_sources(client-ydb_federated_topic-impl PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_read_session.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_read_session_event.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_write_session.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federation_observer.cpp

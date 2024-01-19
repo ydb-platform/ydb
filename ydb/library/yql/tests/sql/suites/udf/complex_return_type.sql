@@ -1,1 +1,1 @@
-select SimpleUdf::ComplexReturnType("banana");
+select ListSort(DictItems(SimpleUdf::ComplexReturnType("banana")));

@@ -17,6 +17,7 @@ from ydb.core.protos import (
     cms_pb2,
     config_pb2,
     feature_flags_pb2,
+    key_pb2,
     netclassifier_pb2,
     pqconfig_pb2,
     resource_broker_pb2,
@@ -99,6 +100,7 @@ class StaticConfigGenerator(object):
             "netclassifier.txt": None,
             "pqcd.txt": None,
             "failure_injection.txt": None,
+            "pdisk_key.txt": None,
         }
         self.__optional_config_files = set(
             (
@@ -107,15 +109,18 @@ class StaticConfigGenerator(object):
                 "audit.txt",
                 "fq.txt",
                 "failure_injection.txt",
+                "pdisk_key.txt",
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
         if "tracing" in template:
+            tracing = template["tracing"]
             self.__tracing = (
-                template["tracing"]["host"],
-                template["tracing"]["port"],
-                template["tracing"]["root_ca"],
-                template["tracing"]["service_name"],
+                tracing["host"],
+                tracing["port"],
+                tracing["root_ca"],
+                tracing["service_name"],
+                tracing.get("auth_config")
             )
         else:
             self.__tracing = None
@@ -252,6 +257,14 @@ class StaticConfigGenerator(object):
     @property
     def fq_txt_enabled(self):
         return self.__proto_config("fq.txt").ByteSize() > 0
+
+    @property
+    def pdisk_key_txt(self):
+        return self.__proto_config("pdisk_key.txt", key_pb2.TKeyConfig, self.__cluster_details.pdisk_key_config)
+
+    @property
+    def pdisk_key_txt_enabled(self):
+        return self.__proto_config("pdisk_key.txt").ByteSize() > 0
 
     @property
     def mbus_enabled(self):
@@ -499,6 +512,8 @@ class StaticConfigGenerator(object):
         if self.hive_config.ByteSize() > 0:
             app_config.HiveConfig.CopyFrom(self.hive_config)
         app_config.MergeFrom(self.tracing_txt)
+        if self.pdisk_key_txt_enabled:
+            app_config.PDiskKeyConfig.CopyFrom(self.pdisk_key_txt)
         return app_config
 
     def __proto_config(self, config_file, config_class=None, cluster_details_for_field=None):
@@ -1108,12 +1123,36 @@ class StaticConfigGenerator(object):
     def __generate_tracing_txt(self):
         pb = config_pb2.TAppConfig()
         if self.__tracing:
+            tracing_pb = pb.TracingConfig
             (
-                pb.TracingConfig.Host,
-                pb.TracingConfig.Port,
-                pb.TracingConfig.RootCA,
-                pb.TracingConfig.ServiceName,
+                tracing_pb.Host,
+                tracing_pb.Port,
+                tracing_pb.RootCA,
+                tracing_pb.ServiceName,
+                auth_config
             ) = self.__tracing
+
+            if auth_config:
+                auth_pb = tracing_pb.AuthConfig
+                if "tvm" in auth_config:
+                    tvm = auth_config.get("tvm")
+                    tvm_pb = auth_pb.Tvm
+
+                    if "host" in tvm:
+                        tvm_pb.Host = tvm["host"]
+                    if "port" in tvm:
+                        tvm_pb.Port = tvm["port"]
+                    tvm_pb.SelfTvmId = tvm["self_tvm_id"]
+                    tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
+                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+
+                    if "plain_text_secret" in tvm:
+                        tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
+                    elif "secret_file" in tvm:
+                        tvm_pb.SecretFile = tvm["secret_file"]
+                    elif "secret_environment_variable" in tvm:
+                        tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+
         self.__proto_configs["tracing.txt"] = pb
 
     def __generate_sys_txt_advanced(self):

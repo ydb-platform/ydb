@@ -56,17 +56,6 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lru_cache.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/math.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/memtrace.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c
@@ -82,6 +71,17 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
 )
 target_sources_custom(restricted-aws-aws-c-common
   .avx2

@@ -186,7 +186,7 @@ struct TReadRequestBuilder {
     TBuilderResult Build(TActorId respondTo, TActorId keyValueActorId, ui32 channelGeneration = 1, ui32 channelStep = 1)
     {
         std::unique_ptr<TIntermediate> intermediate = std::make_unique<TIntermediate>(respondTo, keyValueActorId,
-                channelGeneration, channelStep, TRequestType::ReadOnly);
+                channelGeneration, channelStep, TRequestType::ReadOnly, NWilson::TTraceId());
         TStringBuilder valueBuilder;
         for (auto &[value, blobId, offset, size] : Items) {
                 valueBuilder << value;
@@ -231,7 +231,7 @@ struct TRangeReadRequestBuilder {
     TBuilderResult Build(TActorId respondTo, TActorId keyValueActorId, ui32 channelGeneration = 1, ui32 channelStep = 1)
     {
         std::unique_ptr<TIntermediate> intermediate = std::make_unique<TIntermediate>(respondTo, keyValueActorId,
-                channelGeneration, channelStep, TRequestType::ReadOnly);
+                channelGeneration, channelStep, TRequestType::ReadOnly, NWilson::TTraceId());
 
         TBuilderResult res;
         intermediate->ReadCommand = TIntermediate::TRangeRead();

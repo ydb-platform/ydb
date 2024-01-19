@@ -265,8 +265,8 @@ namespace NKikimr::NBlobDepot {
 
     void TData::OnCommitHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
-        record.ClearInFlight(this);
         record.HardGenStep = hardGenStep;
+        record.ClearInFlight(this);
     }
 
     void TData::TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {

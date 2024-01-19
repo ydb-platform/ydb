@@ -70,6 +70,25 @@ TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
         .Build();
 }
 
+TExprNode::TPtr OptimizePgCastOverPgConst(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (input->ChildrenSize() != 2) {
+        return input;
+    }
+    auto val = input->Child(0);
+    if (!val->IsCallable("PgConst")) { 
+        return input;
+    }
+
+    auto castFromType = val->Child(1);
+    auto castToType = input->Child(1);
+    if (castFromType->Child(0)->Content() == "unknown" && castToType->Child(0)->Content() == "text") {
+        YQL_CLOG(DEBUG, Core) << "Remove PgCast unknown->text over PgConst";
+        return ctx.ChangeChild(*val, 1, castToType);
+    }
+    
+    return input;
+}
+
 template<typename TInt>
 class TMinAggregate {
 public:
@@ -4646,6 +4665,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["IsDistinctFrom"] = std::bind(&OptimizeDistinctFrom<false>, _1, _2);
 
     map["StartsWith"] = map["EndsWith"] = map["StringContains"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg || node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            TExprNodeList converted;
+            for (auto& child : node->ChildrenList()) {
+                const bool isPg = child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
+                converted.emplace_back(ctx.WrapByCallableIf(isPg, "FromPg", std::move(child)));
+            }
+            YQL_CLOG(DEBUG, Core) << "Converting Pg strings to YQL strings in " << node->Content();
+            return ctx.ChangeChildren(*node, std::move(converted));
+        }
+
         if (node->Tail().IsCallable("String") && node->Tail().Head().Content().empty()) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with empty string in second argument";
             if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
@@ -6235,6 +6264,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
+    map["PgCast"] = std::bind(&OptimizePgCastOverPgConst, _1, _2);
 
     map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
         TCoEnsure self(node);

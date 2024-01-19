@@ -43,7 +43,6 @@ from hypothesis.internal.conjecture.utils import (
     combine_labels,
 )
 from hypothesis.internal.coverage import check_function
-from hypothesis.internal.lazyformat import lazyformat
 from hypothesis.internal.reflection import (
     get_pretty_function_description,
     is_identity_function,
@@ -544,23 +543,19 @@ class SampledFromStrategy(SearchStrategy):
         # Start with ordinary rejection sampling. It's fast if it works, and
         # if it doesn't work then it was only a small amount of overhead.
         for _ in range(3):
-            i = cu.integer_range(data, 0, len(self.elements) - 1)
+            i = data.draw_integer(0, len(self.elements) - 1)
             if i not in known_bad_indices:
                 element = self.get_element(i)
                 if element is not filter_not_satisfied:
                     return element
                 if not known_bad_indices:
-                    FilteredStrategy.note_retried(self, data)
+                    data.events[f"Retried draw from {self!r} to satisfy filter"] = ""
                 known_bad_indices.add(i)
 
         # If we've tried all the possible elements, give up now.
         max_good_indices = len(self.elements) - len(known_bad_indices)
         if not max_good_indices:
             return filter_not_satisfied
-
-        # Figure out the bit-length of the index that we will write back after
-        # choosing an allowed element.
-        write_length = len(self.elements).bit_length()
 
         # Impose an arbitrary cutoff to prevent us from wasting too much time
         # on very large element lists.
@@ -570,7 +565,7 @@ class SampledFromStrategy(SearchStrategy):
         # Before building the list of allowed indices, speculatively choose
         # one of them. We don't yet know how many allowed indices there will be,
         # so this choice might be out-of-bounds, but that's OK.
-        speculative_index = cu.integer_range(data, 0, max_good_indices - 1)
+        speculative_index = data.draw_integer(0, max_good_indices - 1)
 
         # Calculate the indices of allowed values, so that we can choose one
         # of them at random. But if we encounter the speculatively-chosen one,
@@ -585,14 +580,14 @@ class SampledFromStrategy(SearchStrategy):
                     if len(allowed) > speculative_index:
                         # Early-exit case: We reached the speculative index, so
                         # we just return the corresponding element.
-                        data.draw_bits(write_length, forced=i)
+                        data.draw_integer(0, len(self.elements) - 1, forced=i)
                         return element
 
         # The speculative index didn't work out, but at this point we've built
         # and can choose from the complete list of allowed indices and elements.
         if allowed:
             i, element = cu.choice(data, allowed)
-            data.draw_bits(write_length, forced=i)
+            data.draw_integer(0, len(self.elements) - 1, forced=i)
             return element
         # If there are no allowed indices, the filter couldn't be satisfied.
         return filter_not_satisfied
@@ -944,9 +939,6 @@ class FilteredStrategy(SearchStrategy[Ex]):
         data.mark_invalid(f"Aborted test because unable to satisfy {self!r}")
         raise NotImplementedError("Unreachable, for Mypy")
 
-    def note_retried(self, data):
-        data.note_event(lazyformat("Retried draw from %r to satisfy filter", self))
-
     def do_filtered_draw(self, data):
         for i in range(3):
             start_index = data.index
@@ -958,7 +950,7 @@ class FilteredStrategy(SearchStrategy[Ex]):
             else:
                 data.stop_example(discard=True)
                 if i == 0:
-                    self.note_retried(data)
+                    data.events[f"Retried draw from {self!r} to satisfy filter"] = ""
                 # This is to guard against the case where we consume no data.
                 # As long as we consume data, we'll eventually pass or raise.
                 # But if we don't this could be an infinite loop.

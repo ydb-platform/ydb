@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
 
         NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
-        NPar::LocalExecutor().ExecRange([kikimr, sessions, WaitDuration](int id) mutable {
+        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
             if (id == (i32)sessions.size()) {
                 Sleep(WaitDuration);
                 Cerr << "start sessions close....." << Endl;
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 do {
                     Sleep(WaitDuration);
                     pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
-                    Cerr << "still active sessions ... " << pendingCompilations << Endl;
+                    Cerr << "still active sessions ... " << pendingSessions << Endl;
                 } while (pendingSessions != 0);
 
                 Sleep(TDuration::Seconds(5));

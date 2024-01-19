@@ -147,7 +147,7 @@ public:
         : Header_(reinterpret_cast<const TVersionedRowHeader*>(erased.OpaqueHeader))
     { }
 
-    explicit operator bool()
+    explicit operator bool() const
     {
         return Header_ != nullptr;
     }

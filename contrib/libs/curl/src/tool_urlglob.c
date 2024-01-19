@@ -66,13 +66,23 @@ static CURLcode glob_fixed(struct URLGlob *glob, char *fixed, size_t len)
  */
 static int multiply(curl_off_t *amount, curl_off_t with)
 {
-  curl_off_t sum = *amount * with;
-  if(!with) {
-    *amount = 0;
-    return 0;
+  curl_off_t sum;
+  DEBUGASSERT(*amount >= 0);
+  DEBUGASSERT(with >= 0);
+  if((with <= 0) || (*amount <= 0)) {
+    sum = 0;
   }
-  if(sum/with != *amount)
-    return 1; /* didn't fit, bail out */
+  else {
+#if defined(__GNUC__) && \
+  ((__GNUC__ > 5) || ((__GNUC__ == 5) && (__GNUC_MINOR__ >= 1)))
+    if(__builtin_mul_overflow(*amount, with, &sum))
+      return 1;
+#else
+    sum = *amount * with;
+    if(sum/with != *amount)
+      return 1; /* didn't fit, bail out */
+#endif
+  }
   *amount = sum;
   return 0;
 }
@@ -591,7 +601,7 @@ CURLcode glob_next_url(char **globbed, struct URLGlob *glob)
       }
       break;
     case UPTNumRange:
-      msnprintf(buf, buflen, "%0*lu",
+      msnprintf(buf, buflen, "%0*" CURL_FORMAT_CURL_OFF_T,
                 pat->content.NumRange.padlength,
                 pat->content.NumRange.ptr_n);
       len = strlen(buf);
@@ -661,14 +671,14 @@ CURLcode glob_match_url(char **result, char *filename, struct URLGlob *glob)
           appendlen = 1;
           break;
         case UPTNumRange:
-          msnprintf(numbuf, sizeof(numbuf), "%0*lu",
+          msnprintf(numbuf, sizeof(numbuf), "%0*" CURL_FORMAT_CURL_OFF_T,
                     pat->content.NumRange.padlength,
                     pat->content.NumRange.ptr_n);
           appendthis = numbuf;
           appendlen = strlen(numbuf);
           break;
         default:
-          fprintf(stderr, "internal error: invalid pattern type (%d)\n",
+          fprintf(tool_stderr, "internal error: invalid pattern type (%d)\n",
                   (int)pat->type);
           curlx_dyn_free(&dyn);
           return CURLE_FAILED_INIT;
@@ -692,7 +702,7 @@ CURLcode glob_match_url(char **result, char *filename, struct URLGlob *glob)
   if(curlx_dyn_addn(&dyn, "", 0))
     return CURLE_OUT_OF_MEMORY;
 
-#if defined(MSDOS) || defined(WIN32)
+#if defined(_WIN32) || defined(MSDOS)
   {
     char *sanitized;
     SANITIZEcode sc = sanitize_file_name(&sanitized, curlx_dyn_ptr(&dyn),
@@ -707,5 +717,5 @@ CURLcode glob_match_url(char **result, char *filename, struct URLGlob *glob)
 #else
   *result = curlx_dyn_ptr(&dyn);
   return CURLE_OK;
-#endif /* MSDOS || WIN32 */
+#endif /* _WIN32 || MSDOS */
 }

@@ -11,7 +11,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/threading
     library/cpp/yt/memory
-    
+
     yt/yt/library/profiling
 )
 

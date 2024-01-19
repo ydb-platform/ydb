@@ -23,11 +23,6 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto EvictionPeriod = TDuration::Seconds(1);
-static constexpr auto EvictionTickTimeCheckPeriod = 1024;
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TResponseKeeper
     : public IResponseKeeper
 {
@@ -47,7 +42,7 @@ public:
         EvictionExecutor_ = New<TPeriodicExecutor>(
             Invoker_,
             BIND(&TResponseKeeper::OnEvict, MakeWeak(this)),
-            EvictionPeriod);
+            Config_->EvictionPeriod);
         EvictionExecutor_->Start();
 
         profiler.AddFuncGauge("/response_keeper/kept_response_count", MakeStrong(this), [this] {
@@ -108,6 +103,7 @@ public:
         return DoFindRequest(id, isRetry);
     }
 
+    [[nodiscard]]
     std::function<void()> EndRequest(
         TMutationId id,
         TSharedRefArray response,
@@ -162,6 +158,7 @@ public:
         }
     }
 
+    [[nodiscard]]
     std::function<void()> EndRequest(
         TMutationId id,
         TErrorOr<TSharedRefArray> responseOrError,
@@ -232,10 +229,13 @@ public:
             context->GetAsyncResponseMessage()
                 .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<TSharedRefArray>& responseMessageOrError) {
                     if (!responseMessageOrError.IsOK()) {
-                        EndRequest(
+                        if (auto setResponseKeeperPromise = EndRequest(
                             mutationId,
                             CreateErrorResponseMessage(responseMessageOrError),
-                            /*remember*/ false);
+                            /*remember*/ false))
+                        {
+                            setResponseKeeperPromise();
+                        }
                         return;
                     }
 
@@ -245,10 +245,9 @@ public:
                     YT_VERIFY(TryParseResponseHeader(responseMessage, &header));
                     bool remember = FromProto<NRpc::EErrorCode>(header.error().code()) != NRpc::EErrorCode::Unavailable;
 
-                    EndRequest(
-                        mutationId,
-                        responseMessage,
-                        remember);
+                    if (auto setResponseKeeperPromise = EndRequest(mutationId, responseMessage, remember)) {
+                        setResponseKeeperPromise();
+                    }
                 }).Via(Invoker_));
         }
 
@@ -298,7 +297,7 @@ private:
 
         auto result = DoFindRequest(id, isRetry);
         if (!result) {
-            EmplaceOrCrash(PendingResponses_, std::make_pair(id, NewPromise<TSharedRefArray>()));
+            EmplaceOrCrash(PendingResponses_, std::pair(id, NewPromise<TSharedRefArray>()));
         }
         return result;
     }
@@ -349,7 +348,7 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Response Keeper eviction tick started");
+        YT_LOG_DEBUG("Response keeper eviction tick started");
 
         NProfiling::TWallTimer timer;
         int counter = 0;
@@ -361,9 +360,9 @@ private:
                 break;
             }
 
-            if (++counter % EvictionTickTimeCheckPeriod == 0) {
+            if (++counter % Config_->EvictionTickTimeCheckPeriod == 0) {
                 if (timer.GetElapsedTime() > Config_->MaxEvictionTickTime) {
-                    YT_LOG_DEBUG("Response Keeper eviction tick interrupted (ResponseCount: %v)",
+                    YT_LOG_DEBUG("Response keeper eviction tick interrupted (ResponseCount: %v)",
                         counter);
                     return;
                 }
@@ -377,7 +376,7 @@ private:
             ResponseEvictionQueue_.pop();
         }
 
-        YT_LOG_DEBUG("Response Keeper eviction tick completed (ResponseCount: %v)",
+        YT_LOG_DEBUG("Response keeper eviction tick completed (ResponseCount: %v)",
             counter);
     }
 };

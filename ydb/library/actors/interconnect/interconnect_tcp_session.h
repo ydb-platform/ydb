@@ -33,6 +33,9 @@
 #include <unordered_map>
 
 namespace NActors {
+
+    static constexpr ui64 StarvingInRowForNotEnoughCpu = 32;
+
     class TSlowPathChecker {
         using TTraceCallback = std::function<void(double)>;
         TTraceCallback Callback;
@@ -298,6 +301,8 @@ namespace NActors {
         std::shared_ptr<IInterconnectMetrics> Metrics;
         std::array<ui32, 16> InputTrafficArray;
         THashMap<ui16, ui32> InputTrafficMap;
+
+        ui64 StarvingInRow = 0;
 
         bool CloseInputSessionRequested = false;
 
@@ -634,6 +639,8 @@ namespace NActors {
         bool StartHandshakeOnSessionClose = false;
 
         ui64 EqualizeCounter = 0;
+
+        ui64 StarvingInRow = 0;
     };
 
     class TInterconnectSessionKiller

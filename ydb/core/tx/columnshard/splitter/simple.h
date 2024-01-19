@@ -24,14 +24,12 @@ public:
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const;
     std::shared_ptr<arrow::Scalar> GetLastScalar() const;
 
-    TSaverSplittedChunk(std::shared_ptr<arrow::RecordBatch> batch, TString&& serializedChunk)
+    TSaverSplittedChunk(const std::shared_ptr<arrow::RecordBatch>& batch, TString&& serializedChunk)
         : SlicedBatch(batch)
-        , SerializedChunk(std::move(serializedChunk))
-    {
+        , SerializedChunk(std::move(serializedChunk)) {
         Y_ABORT_UNLESS(SlicedBatch);
         Y_ABORT_UNLESS(SlicedBatch->num_columns() == 1);
         Y_ABORT_UNLESS(SlicedBatch->num_rows());
-
     }
 
     bool IsCompatibleColumn(const std::shared_ptr<arrow::Field>& f) const {
@@ -39,9 +37,11 @@ public:
             return false;
         }
         if (SlicedBatch->num_columns() != 1) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected columns count")("expectation", 1)("actual", SlicedBatch->num_columns());
             return false;
         }
         if (!SlicedBatch->schema()->fields().front()->Equals(f)) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected column type")("expectation", f->ToString())("actual", SlicedBatch->schema()->fields().front()->ToString());
             return false;
         }
         return true;
@@ -110,7 +110,7 @@ public:
 class TSimpleSplitter {
 private:
     TColumnSaver ColumnSaver;
-    YDB_ACCESSOR_DEF(std::optional<TColumnSerializationStat>, Stats);
+    YDB_ACCESSOR_DEF(std::optional<TBatchSerializationStat>, Stats);
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
 public:
     explicit TSimpleSplitter(const TColumnSaver& columnSaver, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
@@ -140,7 +140,7 @@ public:
         return TLinearSplitInfo(countPacksMax, stepPackMin, objectsCount);
     }
 
-    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const;
+    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const;
     std::vector<TSaverSplittedChunk> SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
@@ -152,18 +152,18 @@ private:
     TSaverSplittedChunk Data;
     ISchemaDetailInfo::TPtr SchemaInfo;
 protected:
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
         return Data.GetSerializedChunk();
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return Data.GetRecordsCount();
     }
 
     virtual TString DoDebugString() const override;
 
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
-        return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(ColumnId), SchemaInfo->IsSortedColumn(ColumnId));
+        return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(GetColumnId()), SchemaInfo->IsSortedColumn(GetColumnId()));
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {

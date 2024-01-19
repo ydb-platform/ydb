@@ -27,7 +27,7 @@
 
 #if !defined(CURL_DISABLE_SMB) && defined(USE_CURL_NTLM_CORE)
 
-#ifdef WIN32
+#ifdef _WIN32
 #define getpid GetCurrentProcessId
 #endif
 
@@ -564,12 +564,11 @@ static CURLcode smb_send(struct Curl_easy *data, ssize_t len,
                          size_t upload_size)
 {
   struct connectdata *conn = data->conn;
-  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
   struct smb_conn *smbc = &conn->proto.smbc;
   ssize_t bytes_written;
   CURLcode result;
 
-  result = Curl_write(data, sockfd, data->state.ulbuf,
+  result = Curl_nwrite(data, FIRSTSOCKET, data->state.ulbuf,
                       len, &bytes_written);
   if(result)
     return result;
@@ -587,7 +586,6 @@ static CURLcode smb_send(struct Curl_easy *data, ssize_t len,
 static CURLcode smb_flush(struct Curl_easy *data)
 {
   struct connectdata *conn = data->conn;
-  curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
   struct smb_conn *smbc = &conn->proto.smbc;
   ssize_t bytes_written;
   ssize_t len = smbc->send_size - smbc->sent;
@@ -596,9 +594,9 @@ static CURLcode smb_flush(struct Curl_easy *data)
   if(!smbc->send_size)
     return CURLE_OK;
 
-  result = Curl_write(data, sockfd,
-                      data->state.ulbuf + smbc->sent,
-                      len, &bytes_written);
+  result = Curl_nwrite(data, FIRSTSOCKET,
+                       data->state.ulbuf + smbc->sent,
+                       len, &bytes_written);
   if(result)
     return result;
 
@@ -1049,9 +1047,7 @@ static CURLcode smb_request_state(struct Curl_easy *data, bool *done)
         break;
       }
     }
-    data->req.bytecount += len;
     data->req.offset += len;
-    Curl_pgrsSetDownloadCounter(data, data->req.bytecount);
     next_state = (len < MAX_PAYLOAD_SIZE) ? SMB_CLOSE : SMB_DOWNLOAD;
     break;
 

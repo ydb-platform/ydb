@@ -184,7 +184,7 @@ private:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, AppData(ctx)->FunctionRegistry, false, false, std::move(TempTablesState));
+            FederatedQuerySetup, UserToken, AppData(ctx)->FunctionRegistry, false, false, std::move(TempTablesState));
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
@@ -506,6 +506,10 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
+
+    if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
+        kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
+    }
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

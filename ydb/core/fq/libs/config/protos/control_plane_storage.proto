@@ -73,4 +73,5 @@ message TControlPlaneStorageConfig {
     bool DumpRawStatistics = 32;
     bool IgnorePrivateSources = 33;
     Ydb.Query.StatsMode StatsMode = 34;
+    repeated string AvailableStreamingConnection = 35;
 }

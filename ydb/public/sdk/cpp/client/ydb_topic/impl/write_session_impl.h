@@ -103,6 +103,7 @@ public:
 private:
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
+
 #define DECLARE_HANDLER(type, handler, answer)                      \
         bool operator()(type&) {                                    \
             if (this->PushHandler<type>(                            \
@@ -115,14 +116,13 @@ private:
         }                                                           \
         /**/
         DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
-        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
+        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHandler_, true);
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
         bool Visit() {
             return std::visit(*this, Event);
         }
-
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
@@ -354,6 +354,10 @@ public:
     bool Close(TDuration closeTimeout = TDuration::Max());
 
     TWriterCounters::TPtr GetCounters() {Y_ABORT("Unimplemented"); } //ToDo - unimplemented;
+
+    const TWriteSessionSettings& GetSettings() const {
+        return Settings;
+    }
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
 

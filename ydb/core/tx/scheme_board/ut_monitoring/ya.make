@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/actors/core
     library/cpp/testing/unittest
     ydb/core/testlib/basics/default
+    ydb/library/yql/minikql/comp_nodes/llvm
 )
 
 YQL_LAST_ABI_VERSION()

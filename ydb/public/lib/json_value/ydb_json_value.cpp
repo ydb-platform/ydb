@@ -677,22 +677,20 @@ namespace {
                 ValueBuilder.Decimal(jsonValue.GetString());
                 break;
 
-            case TTypeParser::ETypeKind::Pg: {
-                    TPgType pgType(""); // TODO: correct type?
-                    if (jsonValue.GetType() == NJson::JSON_STRING) {
-                        ValueBuilder.Pg(TPgValue(TPgValue::VK_TEXT, jsonValue.GetString(), pgType));
-                    } else if (jsonValue.GetType() == NJson::JSON_NULL) {
-                        ValueBuilder.Pg(TPgValue(TPgValue::VK_NULL, {}, pgType));
-                    } else {
-                        EnsureType(jsonValue, NJson::JSON_ARRAY);
-                        if (jsonValue.GetArray().size() != 1) {
-                            ThrowFatalError(TStringBuilder() << "Pg type should be encoded as array with size 1, but not " << jsonValue.GetArray().size());
-                        }
-                        auto& innerJsonValue = jsonValue.GetArray().at(0);
-                        EnsureType(innerJsonValue, NJson::JSON_STRING);
-                        auto binary = JsonStringToBinaryString(innerJsonValue.GetString());
-                        ValueBuilder.Pg(TPgValue(TPgValue::VK_BINARY, binary, pgType));
+            case TTypeParser::ETypeKind::Pg:
+                if (jsonValue.GetType() == NJson::JSON_STRING) {
+                    ValueBuilder.Pg(TPgValue(TPgValue::VK_TEXT, jsonValue.GetString(), TypeParser.GetPg()));
+                } else if (jsonValue.GetType() == NJson::JSON_NULL) {
+                    ValueBuilder.Pg(TPgValue(TPgValue::VK_NULL, {}, TypeParser.GetPg()));
+                } else {
+                    EnsureType(jsonValue, NJson::JSON_ARRAY);
+                    if (jsonValue.GetArray().size() != 1) {
+                        ThrowFatalError(TStringBuilder() << "Pg type should be encoded as array with size 1, but not " << jsonValue.GetArray().size());
                     }
+                    auto& innerJsonValue = jsonValue.GetArray().at(0);
+                    EnsureType(innerJsonValue, NJson::JSON_STRING);
+                    auto binary = JsonStringToBinaryString(innerJsonValue.GetString());
+                    ValueBuilder.Pg(TPgValue(TPgValue::VK_BINARY, binary, TypeParser.GetPg()));
                 }
                 break;
 

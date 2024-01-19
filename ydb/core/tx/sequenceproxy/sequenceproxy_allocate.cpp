@@ -142,6 +142,7 @@ namespace NSequenceProxy {
         auto& info = AllocateInFlight[cookie];
         info.Database = database;
         info.PathId = pathId;
+        Counters->SequenceShardAllocateCount->Collect(cache);
         Register(new TAllocateActor(SelfId(), cookie, tabletId, pathId, cache));
         return cookie;
     }

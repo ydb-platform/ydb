@@ -134,9 +134,9 @@ bool TSkiffExecuteResOrPull::WriteNext(const NYT::TNode& item) {
     }
 
     TStringStream err;
-    auto value = NCommon::ParseYsonNode(HolderFactory, item, Specs.Outputs[0].RowType, &err);
+    auto value = NCommon::ParseYsonNodeInResultFormat(HolderFactory, item, Specs.Outputs[0].RowType, &err);
     if (!value) {
-        throw yexception() << "Could not parse yson node";
+        throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
     SkiffWriter.AddRow(*value);
 
@@ -169,7 +169,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNod
     TStringStream err;
     auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[tableIndex].RowType, &err);
     if (!value) {
-        throw yexception() << "Could not parse yson node";
+        throw yexception() << "Could not parse yson node with error: " << err.Str();
     }
     SkiffWriter.AddRow(*value);
 

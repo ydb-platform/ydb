@@ -9,6 +9,7 @@ namespace NKikimr::NTable {
         using TCells = NPage::TCells;
 
         virtual EReady Seek(TRowId rowId) = 0;
+        virtual EReady SeekLast() = 0;
         virtual EReady Seek(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) = 0;
         virtual EReady SeekReverse(ESeek seek, TCells key, const TKeyCellDefaults *keyDefaults) = 0;
         virtual EReady Next() = 0;

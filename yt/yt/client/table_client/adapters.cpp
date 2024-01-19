@@ -160,7 +160,8 @@ void PipeReaderToWriter(
 void PipeReaderToWriterByBatches(
     const ITableReaderPtr& reader,
     const NFormats::ISchemalessFormatWriterPtr& writer,
-    const TRowBatchReadOptions& options)
+    const TRowBatchReadOptions& options,
+    TDuration pipeDelay)
 {
     TPeriodicYielder yielder(TDuration::Seconds(1));
 
@@ -171,6 +172,10 @@ void PipeReaderToWriterByBatches(
             WaitFor(reader->GetReadyEvent())
                 .ThrowOnError();
             continue;
+        }
+
+        if (!batch->IsEmpty() && pipeDelay != TDuration::Zero()) {
+            TDelayedExecutor::WaitForDuration(pipeDelay);
         }
 
         if (!writer->WriteBatch(batch)) {

@@ -110,7 +110,7 @@ public:
 class TSimpleSplitter {
 private:
     TColumnSaver ColumnSaver;
-    YDB_ACCESSOR_DEF(std::optional<TColumnSerializationStat>, Stats);
+    YDB_ACCESSOR_DEF(std::optional<TBatchSerializationStat>, Stats);
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
 public:
     explicit TSimpleSplitter(const TColumnSaver& columnSaver, std::shared_ptr<NColumnShard::TSplitterCounters> counters)

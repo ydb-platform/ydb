@@ -8,8 +8,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <CScalable<double> TValue, class TRandomGenerator>
-    requires std::is_invocable_r<double, TRandomGenerator>::value
+template <CScalable<double> TValue, CInvocable<double()> TRandomGenerator>
 constexpr inline TValue ApplyJitter(TValue average, double jitter, const TRandomGenerator& randomGenerator)
 {
     YT_VERIFY(jitter >= 0 && jitter <= 1);

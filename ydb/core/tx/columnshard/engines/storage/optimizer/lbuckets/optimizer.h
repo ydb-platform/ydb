@@ -713,7 +713,8 @@ public:
         }
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(512 * 1024 * 1024, stopPoint);
+        const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
+        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);

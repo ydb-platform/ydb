@@ -1,5 +1,6 @@
 #include "utils.h"
 
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/yson/json2yson.h>
 
 #include <ydb/core/metering/bill_record.h>
@@ -304,17 +305,7 @@ TString GetPrettyStatistics(const TString& statistics) {
 
 namespace {
 
-const NJson::TJsonValue* GetStatisticsRoot(const NJson::TJsonValue& allStatistics) {
-    const NJson::TJsonValue* root = nullptr;
-    if (!allStatistics.GetValuePointer("ResultSet", &root)) {
-        allStatistics.GetValuePointer("Graph=0", &root);
-    }
-    return root;
-}
-
-std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJsonValue& root) {
-    std::unordered_map<TString, i64> aggregatedStats;
-
+void AggregateStatisticsBySources(const NJson::TJsonValue& root, std::unordered_map<TString, i64>& aggregatedStats) {
     for (const auto& [stageName, stageStats] : root.GetMap()) {
         if (!stageStats.IsMap()) {
             continue;
@@ -325,19 +316,51 @@ std::unordered_map<TString, i64> AggregateStatisticsBySources(const NJson::TJson
                 continue;
             }
 
+            constexpr std::string_view v1Prefix = "Source=";
             constexpr std::string_view v2Prefix = "Ingress=";
-            if (!partKey.StartsWith(v2Prefix)) {
+            std::string_view matchedPrefix;
+            std::string_view ingressPath;
+            if (partKey.StartsWith(v1Prefix)) {
+                matchedPrefix = v1Prefix;
+                ingressPath = "Stage=Total.IngressBytes.sum";
+            } else if (partKey.StartsWith(v2Prefix)) {
+                matchedPrefix = v2Prefix;
+                ingressPath = "Ingress.Bytes.sum";
+            } else {
                 continue;
             }
-            if (auto valuePtr = partStats.GetValueByPath("Ingress.Bytes.sum")) {
-                TString valueKey{partKey, v2Prefix.size(), partKey.size() - v2Prefix.size()};
+            if (auto valuePtr = partStats.GetValueByPath(ingressPath)) {
+                TString valueKey{partKey, matchedPrefix.size(), partKey.size() - matchedPrefix.size()};
                 i64 value = valuePtr->GetIntegerSafe();
                 aggregatedStats[valueKey] += value;
                 break;
             }
         }
     }
-    return aggregatedStats;
+}
+
+void CollectTotalStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+    using namespace std::string_view_literals;
+    auto fieldToPath = {
+        std::make_pair(TString{"IngressBytes"}, "IngressBytes.sum"sv),
+        {"EgressBytes", "EgressBytes.sum"},
+        {"InputBytes", "InputBytes.sum"},
+        {"OutputBytes", "OutputBytes.sum"}};
+
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        bool isV1 = rootKey.find('=') != TString::npos;
+        for (auto [field, path] : fieldToPath) {
+            if (auto jsonField = graph.GetValueByPath(fmt::format("{}{}", (isV1 ? "TaskRunner.Stage=Total." : ""), path))) {
+                aggregatedStatistics[field] += jsonField->GetIntegerSafe();
+            }
+        }
+    }
+}
+
+void CollectDetalizationStatistics(const NJson::TJsonValue& stats, std::unordered_map<TString, i64>& aggregatedStatistics) {
+    for (const auto& [rootKey, graph] : stats.GetMap()) {
+        AggregateStatisticsBySources(graph, aggregatedStatistics);
+    }
 }
 }
 
@@ -347,31 +370,18 @@ void PackStatisticsToProtobuf(google::protobuf::RepeatedPtrField<FederatedQuery:
         return;
     }
 
-    auto root = GetStatisticsRoot(statsJson);
-    if (!root || !root->IsMap()) {
+    if (!statsJson.IsMap()) {
         return;
     }
 
-    using namespace std::string_view_literals;
-    auto field_to_path = {
-        std::make_pair("IngressBytes"sv, "IngressBytes.sum"sv),
-        {"EgressBytes", "EgressBytes.sum"},
-        {"InputBytes", "InputBytes.sum"},
-        {"OutputBytes", "OutputBytes.sum"}};
+    std::unordered_map<TString, i64> aggregatedStatistics;
+    CollectTotalStatistics(statsJson, aggregatedStatistics);
+    CollectDetalizationStatistics(statsJson, aggregatedStatistics);
 
-    for (auto [field, path] : field_to_path) {
-        if (auto jsonField = root->GetValueByPath(path)) {
-            auto newValue = dest.Add();
-            newValue->set_name(TString{field});
-            newValue->set_value(jsonField->GetIntegerSafe());
-        }
-    }
-
-    std::unordered_map<TString, i64> aggregatedStatistics = AggregateStatisticsBySources(*root);
-    for (const auto& [source, ingress] : aggregatedStatistics) {
-        auto newEntry = dest.Add();
-        newEntry->set_name(source);
-        newEntry->set_value(ingress);
+    for (auto [field, stat] : aggregatedStatistics) {
+        auto newStat = dest.Add();
+        newStat->set_name(TString{field});
+        newStat->set_value(stat);
     }
 }
 

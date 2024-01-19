@@ -74,7 +74,7 @@ public:
                     result.emplace_back(*this);
                 } else {
                     Counters->SimpleSplitter.OnTrashSerialized(blob.size());
-                    TSimpleSerializationStat stats(blob.size(), Data->num_rows(), NArrow::GetBatchDataSize(Data));
+                    TBatchSerializationStat stats(blob.size(), Data->num_rows(), NArrow::GetBatchDataSize(Data));
                     SplitFactor = stats.PredictOptimalSplitFactor(Data->num_rows(), MaxBlobSize).value_or(1);
                     if (SplitFactor == 1) {
                         SplitFactor = 2;
@@ -105,7 +105,7 @@ public:
                         if (badStartPosition) {
                             AFL_VERIFY(badBatchRecordsCount && badBatchCount)("count", badBatchCount)("records", badBatchRecordsCount);
                             auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
-                            TSimpleSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
+                            TBatchSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
                             result.emplace_back(std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) + 1, MaxBlobSize, badSlice, ColumnSaver, Counters);
                             badStartPosition = {};
                             badBatchRecordsCount = 0;
@@ -118,7 +118,7 @@ public:
                 }
                 if (badStartPosition) {
                     auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
-                    TSimpleSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
+                    TBatchSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
                     result.emplace_back(std::max<ui32>(stats.PredictOptimalSplitFactor(badBatchRecordsCount, MaxBlobSize).value_or(1), badBatchCount) + 1, MaxBlobSize, badSlice, ColumnSaver, Counters);
                 }
                 ++SplitFactor;

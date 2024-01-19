@@ -1015,5 +1015,6 @@ message TActivity {
         STATISTICS_AGGREGATOR = 622;
         KAFKA_READ_SESSION_ACTOR = 623;
         GRAPH_SERVICE = 624;
+        REPLICATION_WORKER = 625;
     };
 };

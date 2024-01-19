@@ -1,5 +1,0 @@
-(
-# make a opaque callable without arguments that returns given value
-(let id (lambda '(x) (Apply (Callable (CallableType '() '((TypeOf x))) (lambda '() x)))))
-(export id)
-)

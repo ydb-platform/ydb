@@ -1,3 +1,0 @@
-$factory = AGGREGATION_FACTORY('COUNT');
-
-export $factory;

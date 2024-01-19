@@ -1,3 +1,0 @@
-#include "probes.h"
-
-LWTRACE_DEFINE_PROVIDER(KESUS_QUOTER_PROVIDER);

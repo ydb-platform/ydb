@@ -1,7 +1,0 @@
-$do_foo = ($value) -> {
-    return AsStruct(
-        $value as foo
-    );
-};
-
-export $do_foo;

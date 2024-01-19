@@ -1,1 +1,0 @@
-CREATE TABLE t4 (rowid int, a Utf8, c int, PRIMARY KEY(rowid));

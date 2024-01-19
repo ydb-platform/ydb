@@ -1,1 +1,0 @@
-{% include [discovery-whoami.md](_includes/discovery-whoami.md) %}

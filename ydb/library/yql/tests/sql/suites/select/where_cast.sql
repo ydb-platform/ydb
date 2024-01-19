@@ -1,1 +1,0 @@
-select value from plato.Input where cast(key as int) > 100;

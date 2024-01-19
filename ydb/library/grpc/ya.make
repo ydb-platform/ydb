@@ -1,5 +1,0 @@
-RECURSE(
-    client
-    common
-    server
-)

@@ -43,6 +43,7 @@ class TColumnRenameDescriptor;
 class THunkChunkRef;
 class TColumnMetaExt;
 class TVersionedRowDigestExt;
+class TCompressionDictionaryExt;
 
 } // namespace NProto
 
@@ -215,6 +216,18 @@ DEFINE_ENUM(EMisconfiguredPartitionTactics,
     ((Skip)     (1))
 );
 
+//! NB: This enum is part of the persistent state.
+DEFINE_ENUM(EDictionaryCompressionPolicy,
+    // Placeholder representing null dictionary.
+    ((None)                  (0))
+
+    // Sample chunks according to weight.
+    ((LargeChunkFirst)       (1))
+
+    // Sample chunks according to creation time.
+    ((FreshChunkFirst)       (2))
+);
+
 using TTableId = NCypressClient::TNodeId;
 using TTableCollocationId = NObjectClient::TObjectId;
 using TMasterTableSchemaId = NObjectClient::TObjectId;
@@ -334,6 +347,8 @@ DECLARE_REFCOUNTED_CLASS(TChunkWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TKeyFilterWriterConfig)
 DECLARE_REFCOUNTED_CLASS(TKeyPrefixFilterWriterConfig)
+
+DECLARE_REFCOUNTED_CLASS(TDictionaryCompressionConfig)
 
 DECLARE_REFCOUNTED_CLASS(TBatchHunkReaderConfig)
 

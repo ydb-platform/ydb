@@ -1,9 +1,0 @@
-RECURSE(
-    decimal
-    embedded
-    fastcheck
-    issue
-    purecalc
-    types
-    udf
-)

@@ -1,6 +1,0 @@
-package NKikimrMetricsProto;
-
-message TMaximumValueUI64 {
-    optional uint64 LastBucketStartTime = 1;
-    repeated uint64 Values = 2;
-}

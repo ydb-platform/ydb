@@ -1,1 +1,0 @@
-select key, subkey, case value when "jar" then "JAR" when "foo" then "FOO" else value end as value from plato.Input;

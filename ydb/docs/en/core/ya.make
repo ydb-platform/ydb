@@ -1,3 +1,0 @@
-DOCS_LIBRARY()
-
-END()

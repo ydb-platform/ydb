@@ -1,9 +1,0 @@
-RECURSE(
-    callables
-    dicts
-    dummylog
-    lists
-    structs
-    tagged
-    type_inspection
-)

@@ -1,5 +1,0 @@
-import lib2 symbols $mul;
-
-$sqr = ($x)->{ return $mul($x, $x); };
-
-export $sqr;

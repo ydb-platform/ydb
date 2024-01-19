@@ -1,8 +1,0 @@
-<tmp_path>/program.sql:<main>: Fatal: Execution
-
-    <tmp_path>/program.sql:<main>:8:1: Fatal: Execution of node: YtMap!
-    	SELECT $match(value) AS match FROM Input;
-	^
-        <tmp_path>/program.sql:<main>:6:21: Fatal: library/cpp/regex/hyperscan/hyperscan.cpp:100: Failed to compile regex: ^*$. Error message (hyperscan): Invalid repeat at index 1.
-        	$match = Hyperscan::Match("*");
-	                    ^

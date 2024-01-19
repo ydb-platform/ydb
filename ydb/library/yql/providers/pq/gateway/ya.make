@@ -1,4 +1,0 @@
-RECURSE(
-    dummy
-    native
-)

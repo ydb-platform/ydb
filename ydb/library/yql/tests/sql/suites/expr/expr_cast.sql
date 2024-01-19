@@ -1,1 +1,0 @@
-select cast(3.14 as Uint32);

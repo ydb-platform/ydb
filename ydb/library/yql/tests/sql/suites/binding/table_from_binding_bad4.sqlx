@@ -1,3 +1,0 @@
-/* postgres can not */
-$x = a.b;
-SELECT count(*) FROM $x;

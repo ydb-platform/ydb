@@ -1,1 +1,0 @@
-SELECT * FROM Input1 ORDER BY Group, Name LIMIT 5;

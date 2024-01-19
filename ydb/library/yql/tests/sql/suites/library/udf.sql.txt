@@ -1,2 +1,0 @@
-$f = Unicode::ToUpper("foo"u);
-export $f;

@@ -1,1 +1,0 @@
-select count(value) from plato.Input;

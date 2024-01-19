@@ -819,6 +819,14 @@ void RegisterWideToDateCastsImpl(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
 }
 
+template <typename TInput, typename TOutput,
+    typename TInput::TLayout UpperBound = std::numeric_limits<typename TInput::TLayout>::max(),
+    typename TInput::TLayout LowerBound = std::numeric_limits<typename TInput::TLayout>::min()>
+void RegisterWideToBigDateCastsImpl(IBuiltinFunctionRegistry& registry) {
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
+    RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout, UpperBound, LowerBound>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
+}
+
 void RegisterWideToIntervalCasts(IBuiltinFunctionRegistry& registry) {
     constexpr auto TimestampLimit = static_cast<i64>(NUdf::MAX_TIMESTAMP - 1ULL);
     RegisterFunctionImpl<TWideToShort<i64, i64, TimestampLimit, -TimestampLimit>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>, false>, TUnaryStub>(registry, integral);
@@ -870,9 +878,9 @@ void RegisterWideToDatetimeCasts(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterWideToBigDateCasts(IBuiltinFunctionRegistry& registry) {
-    RegisterWideToDateCastsImpl<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NYql::NUdf::MIN_DATE32>(registry);
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NYql::NUdf::MIN_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
 }
 

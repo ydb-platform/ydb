@@ -25,6 +25,8 @@ common:
     to: /getting_started/kubernetes.md
   - from: /getting_started/index.md
     to: /getting_started/quickstart.md
+  - from: /reference/ydb-cli/export_import/*  
+    to: /reference/ydb-cli/export-import/* 
 
 ru:
   - from: /concepts/column-table.md

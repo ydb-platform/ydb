@@ -2026,8 +2026,7 @@ public:
                                     snapshotUnavailable = true;
                                 }
                             } else {
-                                auto prioritizedMvccSnapshotReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
+                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
                                 if (state.ReadVersion >= unreadableEdge) {
                                     LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
                                     Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(Ev), ctx);

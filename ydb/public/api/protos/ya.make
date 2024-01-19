@@ -11,7 +11,6 @@ SRCS(
     draft/fq.proto
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
-    draft/ydb_long_tx.proto
     draft/ydb_maintenance.proto
     draft/ydb_logstore.proto
     draft/ydb_dynamic_config.proto

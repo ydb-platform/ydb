@@ -23,7 +23,6 @@ CLUSTER_CONFIG = dict(
     erasure=Erasure.NONE,
     nodes=1,
     enable_metering=True,
-    disable_mvcc=True,
     additional_log_configs={
         'TX_PROXY': LogLevels.DEBUG,
         'KQP_PROXY': LogLevels.DEBUG,
@@ -48,7 +47,10 @@ CLUSTER_CONFIG = dict(
     },
     enforce_user_token_requirement=True,
     default_user_sid='user@builtin',
-    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes']
+    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
+    datashard_config={
+        'keep_snapshot_timeout': 5000,
+    },
 )
 
 

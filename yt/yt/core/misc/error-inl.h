@@ -325,11 +325,11 @@ TArg&& TErrorAdaptor::operator << (TArg&& rhs) const
     return std::forward<TArg>(rhs);
 }
 
-template <class TLikeError, class... TArgs>
+template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TLikeError>> &&
+        std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
         std::constructible_from<TError, TArgs...>
-void ThrowErrorExceptionIfFailed(TLikeError&& error, TArgs&&... args)
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args)
 {
     if (!error.IsOK()) {
         THROW_ERROR std::move(error).Wrap(std::forward<TArgs>(args)...);

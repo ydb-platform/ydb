@@ -54,8 +54,8 @@ message TFeatureFlags {
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = true];
     optional bool EnableVPatch = 45 [default = true];
-    optional bool EnableMvccSnapshotReads = 46 [default = true];
-    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
+    optional bool EnableMvccSnapshotReads = 46 [default = true]; // deprecated: always true
+    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE]; // deprecated: always true
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];

@@ -30,6 +30,18 @@ message TInstanceResources
     optional int32 vcpu = 4;
 }
 
+message TBundleConfig
+{
+    optional TCpuLimits cpu_limits = 1;
+    optional TMemoryLimits memory_limits = 2;
+
+    optional int32 rpc_proxy_count = 3;
+    optional TInstanceResources rpc_proxy_resource_guarantee = 4;
+
+    optional int32 tablet_node_count = 5;
+    optional TInstanceResources tablet_node_resource_guarantee = 6;
+}
+
 message TReqGetBundleConfig
 {
     required string bundle_name = 1;
@@ -38,15 +50,17 @@ message TReqGetBundleConfig
 message TRspGetBundleConfig
 {
     optional string bundle_name = 1;
+    optional TBundleConfig bundle_config = 2;
+}
 
-    optional TCpuLimits cpu_limits = 2;
-    optional TMemoryLimits memory_limits = 3;
+message TReqSetBundleConfig
+{
+    optional string bundle_name = 1;
+    optional TBundleConfig bundle_config = 2;
+}
 
-    optional int32 rpc_proxy_count = 4;
-    optional TInstanceResources rpc_proxy_resource_guarantee = 5;
-
-    optional int32 tablet_node_count = 6;
-    optional TInstanceResources tablet_node_resource_guarantee = 7;
+message TRspSetBundleConfig
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////

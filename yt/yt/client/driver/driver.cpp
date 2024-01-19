@@ -359,6 +359,7 @@ public:
         REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    false, false, ApiVersion4);
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false,  false);
+        REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       false,  false);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false,  true );

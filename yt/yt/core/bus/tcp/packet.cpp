@@ -421,8 +421,7 @@ public:
                 const auto& part = Message_[index];
                 if (part) {
                     PartSizes_[index] = part.Size();
-                    PartChecksums_[index] =
-                        generateChecksums && (index < checksummedPartCount || checksummedPartCount == TSendOptions::AllParts)
+                    PartChecksums_[index] = generateChecksums && index < checksummedPartCount
                         ? GetChecksum(part)
                         : NullChecksum;
                 } else {

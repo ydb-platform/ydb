@@ -88,31 +88,32 @@ public:
 
 class TGeneralSerializedSlice {
 protected:
-    std::vector<TSplittedColumn> Columns;
+    std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
-    ui32 RecordsCount = 0;
+    std::optional<ui32> RecordsCount;
     ISchemaDetailInfo::TPtr Schema;
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     TSplitSettings Settings;
     TGeneralSerializedSlice() = default;
 
-    const TSplittedColumn& GetColumnVerified(const std::string& fieldName) const {
-        for (auto&& i : Columns) {
-            if (i.GetField()->name() == fieldName) {
+    const TSplittedEntity& GetEntityDataVerified(const ui32& entityId) const {
+        for (auto&& i : Data) {
+            if (i.GetEntityId() == entityId) {
                 return i;
             }
         }
         Y_ABORT_UNLESS(false);
-        return Columns.front();
+        return Data.front();
     }
+
 public:
     std::shared_ptr<arrow::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
         std::vector<std::shared_ptr<arrow::Array>> pkColumns;
         for (auto&& i : pkSchema->fields()) {
             auto aBuilder = NArrow::MakeBuilder(i);
-            const TSplittedColumn& splittedColumn = GetColumnVerified(i->name());
-            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedColumn.GetFirstScalar()));
-            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedColumn.GetLastScalar()));
+            const TSplittedEntity& splittedEntity = GetEntityDataVerified(Schema->GetColumnId(i->name()));
+            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedEntity.GetFirstScalar()));
+            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedEntity.GetLastScalar()));
             pkColumns.emplace_back(NArrow::TStatusValidator::GetValid(aBuilder->Finish()));
         }
         return arrow::RecordBatch::Make(pkSchema, 2, pkColumns);
@@ -121,12 +122,18 @@ public:
     ui64 GetSize() const {
         return Size;
     }
-    ui32 GetRecordsCount() const {
+
+    ui32 GetRecordsCountVerified() const {
+        AFL_VERIFY(RecordsCount);
+        return *RecordsCount;
+    }
+
+    std::optional<ui32> GetRecordsCount() const {
         return RecordsCount;
     }
 
-    std::vector<std::vector<IPortionColumnChunk::TPtr>> GroupChunksByBlobs() {
-        std::vector<std::vector<IPortionColumnChunk::TPtr>> result;
+    std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> GroupChunksByBlobs() {
+        std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         std::vector<TSplittedBlob> blobs;
         GroupBlobs(blobs);
         for (auto&& i : blobs) {
@@ -142,7 +149,7 @@ public:
             MergeSlice(std::move(objects[i]));
         }
     }
-    TGeneralSerializedSlice(const std::map<ui32, std::vector<IPortionColumnChunk::TPtr>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
     TGeneralSerializedSlice(ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
     void MergeSlice(TGeneralSerializedSlice&& slice);

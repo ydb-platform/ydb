@@ -34,7 +34,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
-    TIndexInfo(const TString& name, ui32 id);
+    TIndexInfo(const TString& name);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
@@ -54,7 +54,6 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
-            << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
             << ")";
@@ -92,16 +91,11 @@ public:
 
 public:
     static TIndexInfo BuildDefault() {
-        TIndexInfo result("dummy", 0);
+        TIndexInfo result("dummy");
         return result;
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
-
-    /// Returns id of the index.
-    ui32 GetId() const noexcept {
-        return Id;
-    }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
         static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
@@ -206,7 +200,6 @@ public:
     bool CheckCompatible(const TIndexInfo& other) const;
 
 private:
-    ui32 Id;
     ui64 Version = 0;
     TString Name;
     std::shared_ptr<arrow::Schema> Schema;

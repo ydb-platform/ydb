@@ -67,18 +67,14 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
             AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
             self.UpsertPortion(portionInfo, &oldInfo);
 
-            for (auto& record : portionInfo.Records) {
-                context.DB.WriteColumn(portionInfo, record);
-            }
+            portionInfo.SaveToDatabase(context.DB);
         }
         for (auto& portionInfoWithBlobs : AppendedPortions) {
             auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
             Y_ABORT_UNLESS(!portionInfo.Empty());
             AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
             self.UpsertPortion(portionInfo);
-            for (auto& record : portionInfo.Records) {
-                context.DB.WriteColumn(portionInfo, record);
-            }
+            portionInfo.SaveToDatabase(context.DB);
         }
     }
 
@@ -115,7 +111,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(cons
     auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
     TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
 
-    std::vector<std::vector<IPortionColumnChunk::TPtr>> chunkByBlobs;
+    std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunkByBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
     while (limiter.Next(chunkByBlobs, portionBatch)) {
         TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(chunkByBlobs, nullptr, granule, snapshot, SaverContext.GetStorageOperator());

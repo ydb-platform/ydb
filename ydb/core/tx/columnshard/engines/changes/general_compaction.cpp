@@ -189,13 +189,13 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slice(std::move(i));
-            auto b = batchResult->Slice(recordIdx, slice.GetRecordsCountVerified());
+            auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunksByBlobs = slice.GroupChunksByBlobs();
             AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetPathId(), resultSchema->GetSnapshot(), SaverContext.GetStorageOperator()));
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
             AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
-            recordIdx += slice.GetRecordsCountVerified();
+            recordIdx += slice.GetRecordsCount();
         }
     }
 }

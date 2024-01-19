@@ -997,22 +997,27 @@ private:
 
         auto currentRows = rows.Slice(sameTableRangeBeginRowIndex, rows.size());
         WriteRowsForSingleTable(currentRows, tableIndex);
+        ++EncodedRowBatchCount_;
     }
 
     void DoWriteBatch(NTableClient::IUnversionedRowBatchPtr rowBatch) override
     {
+        if (TableCount_ > 1) {
+            DoWrite(rowBatch->MaterializeRows());
+            return;
+        }
+
         auto columnarBatch = rowBatch->TryAsColumnar();
         if (!columnarBatch) {
-            YT_LOG_DEBUG("Encoding non-columnar batch; running write rows (RowCount: %v)", rowBatch->GetRowCount());
             DoWrite(rowBatch->MaterializeRows());
-        } else {
-            YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
-            YT_VERIFY(TableCount_ == 1);
-            Reset();
-            RowCount_ = rowBatch->GetRowCount();
-            PrepareColumns(columnarBatch->MaterializeColumns(), 0);
-            Encode(0);
+            return;
         }
+
+        Reset();
+        RowCount_ = rowBatch->GetRowCount();
+        PrepareColumns(columnarBatch->MaterializeColumns(), 0);
+        Encode(0);
+        ++EncodedColumnarBatchCount_;
     }
 
     void Encode(i32 tableIndex)
@@ -1034,6 +1039,16 @@ private:
         TryFlushBuffer(true);
     }
 
+    i64 GetEncodedRowBatchCount() const override
+    {
+        return EncodedRowBatchCount_;
+    }
+
+    i64 GetEncodedColumnarBatchCount() const override
+    {
+        return EncodedColumnarBatchCount_;
+    }
+
 private:
     int TableCount_ = 0;
     bool IsFirstBatch_ = true;
@@ -1045,6 +1060,9 @@ private:
     std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
     std::vector<bool> IsFirstBatchForSpecificTable_;
+
+    i64 EncodedRowBatchCount_ = 0;
+    i64 EncodedColumnarBatchCount_ = 0;
 
     struct TMessage
     {

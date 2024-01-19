@@ -360,13 +360,12 @@ public:
         std::sort(sorted.begin(), sorted.end(), pred);
 
         std::vector<std::shared_ptr<TPortionInfo>> result;
-        ui64 currentSize = 0;
+        std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         for (auto&& i : sorted) {
-            if (currentSize > sizeLimit && result.size() > 1) {
+            result.emplace_back(i);
+            if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
                 break;
             }
-            result.emplace_back(i);
-            currentSize += i->GetBlobBytes();
         }
         if (result.size() < sorted.size()) {
             separatePoint = sorted[result.size()]->IndexKeyStart();

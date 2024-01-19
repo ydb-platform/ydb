@@ -34,8 +34,7 @@ public:
         bool found = false;
         for (auto it = Records.begin(); it != Records.end(); ++it) {
             if (it->ColumnId == address.GetEntityId() && it->Chunk == address.GetChunkIdx()) {
-                AFL_VERIFY(!it->BlobRange.BlobId.IsValid());
-                it->BlobRange.BlobId = blobId;
+                it->RegisterBlobId(blobId);
                 found = true;
                 break;
             }

@@ -57,6 +57,12 @@ public:
     ui16 Chunk = 0;
     TBlobRange BlobRange;
 
+
+    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        BlobRange.BlobId = blobId;
+    }
+
     TColumnRecord(const TChunkAddress& address, const TBlobRange& range, TChunkMeta&& meta)
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())

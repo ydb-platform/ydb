@@ -10,9 +10,9 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 
 * Added configuration management commands for the cluster `ydb admin config` and `ydb admin volatile-config`.
 
-* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md) command. Only for row-oriented tables.
+* Added support for loading PostgreSQL-compatible data types by [ydb import file csv|tsv|json](reference/ydb-cli/export-import/import-file.md) command. Only for row-oriented tables.
 
-* Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export_import/s3_import.md) command. Currently only available on Linux and Mac OS.
+* Added support for directory load from an S3-compatible storage in the [ydb import s3](reference/ydb-cli/export-import/import-s3.md) command. Currently only available on Linux and Mac OS.
 
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 

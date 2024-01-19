@@ -92,11 +92,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     sb << "[";
                     std::set<ui32> blobColumnChunks;
                     for (auto&& iData : chunks) {
-                        auto i = dynamic_pointer_cast<IPortionColumnChunk>(iData);
+                        auto i = dynamic_pointer_cast<NKikimr::NOlap::IPortionColumnChunk>(iData);
                         AFL_VERIFY(i);
                         ++chunksCount;
                         const ui32 columnId = i->GetColumnId();
-                        recordsCountByColumn[columnId] += i->GetRecordsCount();
+                        recordsCountByColumn[columnId] += i->GetRecordsCountVerified();
                         restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));
                         blobSize += i->GetData().size();
                         if (i->GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {

@@ -4,6 +4,7 @@ import subprocess
 import yatest.common
 
 
+# TODO: avoid duplication with ydb/library/yql/providers/generic/connector/tests/utils/docker_compose.py
 class EndpointDeterminer:
     docker_compose_bin: os.PathLike
     docker_compose_yml: os.PathLike

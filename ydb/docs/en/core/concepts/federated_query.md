@@ -1,1 +1,1 @@
-{% include [NoTraslationAlert](../_includes/alerts/no_translation.md) %}
+{% include [no-translation](../_includes/alerts/no-translation.md) %}

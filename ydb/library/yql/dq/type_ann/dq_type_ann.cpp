@@ -85,6 +85,46 @@ const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStruc
     return result;
 }
 
+bool CheckConnectionTypes(const TVector<TExprNode::TPtr>& connectionTypes, TExprContext& ctx)
+{
+    if (connectionTypes.size() == 0) {
+        ctx.AddError(TIssue("Internal Error: Empty Connections List"));
+        return false;
+    }
+
+    // any connection allowed
+    if (connectionTypes.size() == 1) {
+        return true;
+    }
+
+    if (TDqCnBroadcast::Match(connectionTypes[0].Get())) {
+        ctx.AddError(TIssue(ctx.GetPosition(connectionTypes[0]->Pos()), TStringBuilder() << "Unexpected first stage input: " << connectionTypes[0]->Content()));
+        return false;
+    }
+
+    for (size_t i = 1; i < connectionTypes.size(); i++) {
+        auto& input = connectionTypes[i];
+        if (TDqPhyPrecompute::Match(input.Get())
+            || TDqCnHashShuffle::Match(input.Get())
+            || TDqCnBroadcast::Match(input.Get())
+            || input->Content() == "KqpCnStreamLookup"sv)
+        {
+            continue;
+        }
+
+        if (TDqCnUnionAll::Match(input.Get()) || TDqCnMerge::Match(input.Get())) {
+            if (!TDqCnMap::Match(input.Get())) {
+                continue;
+            }
+        }
+
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unexpected stage input: " << input->Content()));
+        return false;
+    }
+
+    return true;
+}
+
 template <typename TStage>
 TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) {
@@ -112,6 +152,9 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
 
     TVector<const TTypeAnnotationNode*> argTypes;
     argTypes.reserve(inputsTuple->ChildrenSize());
+
+    TVector<TExprNode::TPtr> connectionTypes;
+    connectionTypes.reserve(inputsTuple->ChildrenSize());
 
     for (const auto& input: inputsTuple->Children()) {
         if (!TDqPhyPrecompute::Match(input.Get()) &&
@@ -144,6 +187,8 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             }
         }
 
+        connectionTypes.emplace_back(input);
+
         if (!TDqPhyPrecompute::Match(input.Get()) && input->Content() != "KqpTxResultBinding") {
             if (argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* listItemType = argType->Cast<TListExprType>()->GetItemType();
@@ -155,6 +200,10 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             }
         }
         argTypes.emplace_back(argType);
+    }
+
+    if (!CheckConnectionTypes(connectionTypes, ctx)) {
+        return TStatus::Error;
     }
 
     if (!UpdateLambdaAllArgumentsTypes(programLambda, argTypes, ctx)) {

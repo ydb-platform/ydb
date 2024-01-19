@@ -90,12 +90,12 @@ TString TEvChangeExchange::TEvRemoveRecords::ToString() const {
 }
 
 /// TEvRecords
-TEvChangeExchange::TEvRecords::TEvRecords(const TVector<TChangeRecord>& records)
+TEvChangeExchange::TEvRecords::TEvRecords(const TVector<NChangeExchange::IChangeRecord::TPtr>& records)
     : Records(records)
 {
 }
 
-TEvChangeExchange::TEvRecords::TEvRecords(TVector<TChangeRecord>&& records)
+TEvChangeExchange::TEvRecords::TEvRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records)
     : Records(std::move(records))
 {
 }

@@ -47,7 +47,7 @@ public:
         return ResultBatch.GetRecordsCount();
     }
 
-    static std::vector<TPartialReadResult> SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax);
+    static std::vector<TPartialReadResult> SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult);
 
     const NArrow::TShardedRecordBatch& GetShardedBatch() const {
         return ResultBatch;

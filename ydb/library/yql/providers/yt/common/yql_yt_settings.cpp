@@ -468,6 +468,7 @@ TYtConfiguration::TYtConfiguration()
             return res;
         });
     REGISTER_SETTING(*this, ViewIsolation);
+    REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

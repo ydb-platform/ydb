@@ -1,5 +1,6 @@
 #include "tpch.h"
 
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <util/string/split.h>
 #include <util/stream/file.h>
 #include <util/string/strip.h>
@@ -216,10 +217,19 @@ void TTpchCommandInit::Config(TConfig& config) {
             TablesPath = arg;
         });
     config.Opts->AddLongOption("store", "Storage type."
-            " Options: row, column\n"
+            " Options: row, column, s3\n"
             "row - use row-based storage engine;\n"
-            "column - use column-based storage engine.")
+            "column - use column-based storage engine.\n"
+            "s3 - use cloud tpc bucket")
         .DefaultValue("row").StoreResult(&StoreType);
+    config.Opts->AddLongOption('s', "scale", "TPC-H dataset scale. One of 1, 10, 100, 1000. Default is 1")
+        .Optional()
+        .DefaultValue("1")
+        .StoreResult(&Scale);
+    config.Opts->AddLongOption('b', "bucket", "S3 bucket with TPC-H dataset")
+        .Optional()
+        .DefaultValue("")
+        .StoreResult(&Bucket);
 };
 
 void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
@@ -248,10 +258,28 @@ int TTpchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
     TString storageType = "";
     TString notNull = "";
+    TString createExternalDataSource;
+    TString external;
+    TString partitioning = "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT";
+    TString primaryKey = ", PRIMARY KEY";
     if (StoreType == "column") {
-        storageType = "STORE = COLUMN,";
+        storageType = "STORE = COLUMN, --";
         notNull = "NOT NULL";
+    } else if (StoreType == "s3") {
+        storageType = R"(DATA_SOURCE = "_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )";
+        notNull = "NOT NULL";
+        createExternalDataSource = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `_tpc_s3_external_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="https://storage.yandexcloud.net/{}/",
+                AUTH_METHOD="NONE"
+            );
+        )", Bucket);
+        external = "EXTERNAL";
+        partitioning = "--";
+        primaryKey = "--";
     } else if (StoreType != "row") {
+        storageType = "-- ";
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
     }
 
@@ -260,10 +288,17 @@ int TTpchCommandInit::Run(TConfig& config) {
     TString createSql = NResource::Find("tpch_schema.sql");
     TTableClient client(driver);
 
+    SubstGlobal(createSql, "{createExternal}", createExternalDataSource);
+    SubstGlobal(createSql, "{external}", external);
     SubstGlobal(createSql, "{notnull}", notNull);
+    SubstGlobal(createSql, "{partitioning}", partitioning);
+    SubstGlobal(createSql, "{primary_key}", primaryKey);
     SubstGlobal(createSql, "{path}", TablesPath);
+    SubstGlobal(createSql, "{scale}", Scale);
     SubstGlobal(createSql, "{store}", storageType);
     SetPartitionByCols(createSql);
+
+    Cout << createSql << Endl;
 
     ThrowOnError(client.RetryOperationSync([createSql](TSession session) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
@@ -281,24 +316,29 @@ TTpchCommandClean::TTpchCommandClean()
 void TTpchCommandClean::Config(TConfig& config) {
     NYdb::NConsoleClient::TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption('e', "external", "Drop tables as external. Use if initialized with external storage")
+        .Optional()
+        .StoreTrue(&IsExternal);
 };
 
 int TTpchCommandClean::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     TTableClient client(driver);
 
-    static const char DropDdlTmpl[] = "DROP TABLE `%s`;";
-    char dropDdl[sizeof(DropDdlTmpl) + 8192*3]; // 32*256 for DbPath
+    TString dropDdl;
     for (auto& table : Tables) {
         TString fullPath = FullTablePath(config.Database, table);
-        int res = std::snprintf(dropDdl, sizeof(dropDdl), DropDdlTmpl, fullPath.c_str());
-        if (res < 0) {
-            Cerr << "Failed to generate DROP DDL query for `" << fullPath << "` table." << Endl;
-            return -1;
-        }
+        fmt::format_to(std::back_inserter(dropDdl), "DROP {} TABLE `{}`", IsExternal ? "EXTERNAL" : "", fullPath);
 
-        ThrowOnError(client.RetryOperationSync([dropDdl](TSession session) {
+        ThrowOnError(client.RetryOperationSync([&dropDdl](TSession session) {
             return session.ExecuteSchemeQuery(dropDdl).GetValueSync();
+        }));
+        dropDdl.clear();
+    }
+
+    if (IsExternal) {
+        ThrowOnError(client.RetryOperationSync([](TSession session) {
+            return session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE `_tpc_s3_external_source`;").GetValueSync();
         }));
     }
 

@@ -685,6 +685,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             std::unique_ptr<NOlap::NTests::TShardReader> reader;
             if (!misconfig) {
                 reader = std::make_unique<NOlap::NTests::TShardReader>(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+                reader->SetReplyColumns({specs[i].TtlColumn});
                 counter.CaptureReadEvents = specs[i].WaitEmptyAfter ? 0 : 1; // TODO: we need affected by tiering blob here
                 counter.WaitReadsCaptured(runtime);
                 reader->InitializeScanner();

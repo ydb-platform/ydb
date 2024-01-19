@@ -2061,11 +2061,19 @@ TFuture<void> TClient::AlterQuery(
     ThrowUnimplemented("AlterQuery");
 }
 
-TFuture<TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
+TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
     const TString& /*bundleName*/,
-    const TGetBundleConfigOptions& /*options*/)
+    const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
+}
+
+TFuture<void> TClient::SetBundleConfig(
+    const TString& /*bundleName*/,
+    const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
+    const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
+{
+    ThrowUnimplemented("SetBundleConfig");
 }
 
 TFuture<void> TClient::SetUserPassword(

@@ -172,9 +172,9 @@ public:
             Hostheader = (char*)malloc((HostheaderLen = reqHostheaderLen));
         }
         if (port == 80)
-            sprintf(Hostheader, "Host: %s\r\n", hostname);
+            snprintf(Hostheader, HostheaderLen, "Host: %s\r\n", hostname);
         else
-            sprintf(Hostheader, "Host: %s:%u\r\n", hostname, port);
+            snprintf(Hostheader, HostheaderLen, "Host: %s:%u\r\n", hostname, port);
         pHostBeg = strchr(Hostheader, ' ') + 1;
         pHostEnd = strchr(pHostBeg, '\r');
         // convert hostname to lower case since some web server don't like
@@ -195,7 +195,7 @@ public:
             delete[] Hostheader;
             Hostheader = new char[(HostheaderLen = reqHostheaderLen)];
         }
-        sprintf(Hostheader, "Host: %s\r\n", host);
+        snprintf(Hostheader, HostheaderLen, "Host: %s\r\n", host);
     }
 
     void SetSocket(SOCKET fd) {

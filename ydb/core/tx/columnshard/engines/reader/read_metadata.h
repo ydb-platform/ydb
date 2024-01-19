@@ -25,7 +25,6 @@ class TReadContext;
 
 struct TReadStats {
     TInstant BeginTimestamp;
-    ui32 SelectedIndex{0};
     ui64 IndexGranules{0};
     ui64 IndexPortions{0};
     ui64 IndexBatches{0};
@@ -42,9 +41,8 @@ struct TReadStats {
 
     ui32 SelectedRows = 0;
 
-    TReadStats(ui32 indexNo = 0)
+    TReadStats()
         : BeginTimestamp(TInstant::Now())
-        , SelectedIndex(indexNo)
     {}
 
     void PrintToLog();
@@ -166,7 +164,7 @@ public:
         , IndexVersions(info)
         , Snapshot(snapshot)
         , ResultIndexSchema(info.GetSchema(Snapshot))
-        , ReadStats(std::make_shared<TReadStats>(info.GetLastSchema()->GetIndexInfo().GetId()))
+        , ReadStats(std::make_shared<TReadStats>())
     {
     }
 
@@ -271,7 +269,7 @@ public:
         if (!ResultIndexSchema) {
             return {};
         }
-        auto f = ResultIndexSchema->GetFieldByColumnId(columnId);
+        auto f = ResultIndexSchema->GetFieldByColumnIdOptional(columnId);
         if (!f) {
             return {};
         }

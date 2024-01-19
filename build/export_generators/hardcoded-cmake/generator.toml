@@ -4,6 +4,7 @@ templates=[
     { path="root_global_vars.jinja", dest="cmake/global_vars.cmake" },
 ]
 copy=[
+    "cmake/global_flags.compiler.gnu.march.cmake",
 	"cmake/global_flags.compiler.gnu.cmake",
     "cmake/global_flags.compiler.msvc.cmake",
     "cmake/global_flags.linker.gnu.cmake",

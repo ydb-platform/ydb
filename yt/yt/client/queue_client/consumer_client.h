@@ -11,9 +11,22 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/ytree/yson_struct.h>
+
 namespace NYT::NQueueClient {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TConsumerMeta
+    : public NYTree::TYsonStructLite
+{
+    std::optional<i64> CumulativeDataWeight;
+    std::optional<ui64> OffsetTimestamp;
+
+    REGISTER_YSON_STRUCT_LITE(TConsumerMeta);
+
+    static void Register(TRegistrar registrar);
+};
 
 struct TPartitionInfo
 {
@@ -22,6 +35,7 @@ struct TPartitionInfo
     i64 NextRowIndex = -1;
     //! Latest time instant the corresponding partition was consumed.
     TInstant LastConsumeTime;
+    std::optional<TConsumerMeta> ConsumerMeta;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

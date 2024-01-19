@@ -11,6 +11,7 @@ ydb/core/persqueue/ut [31/40]*
 ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kqp/ut/federated_query/generic *
+ydb/core/kqp/ut/olap *
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
@@ -19,8 +20,10 @@ ydb/core/tx/columnshard/ut_schema TColumnShardTestSchema.RebootForgetAfterFail
 ydb/core/tx/columnshard/engines/ut *
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
+ydb/library/actors/http/ut HttpProxy.TooLongHeader
+ydb/library/actors/http/ut sole*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
-ydb/library/yql/tests/sql/dq_file/part16 test.py.test[expr-as_dict_list_key-default.txt-Analyze]
+ydb/library/yql/tests/sql/dq_file/part16 *
 ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-default.txt-Analyze]
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*

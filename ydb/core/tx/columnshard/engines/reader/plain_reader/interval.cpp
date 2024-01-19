@@ -45,11 +45,7 @@ private:
 
     bool EmptyFiltersOnly() const {
         for (auto&& [_, i] : Sources) {
-            if (!i->GetFilterStageData().GetBatch() || !i->GetFilterStageData().GetBatch()->num_rows()) {
-                continue;
-            }
-            auto f = i->GetFilterStageData().GetNotAppliedEarlyFilter();
-            if (!f || !f->IsTotalDenyFilter()) {
+            if (!i->IsEmptyData()) {
                 return false;
             }
         }
@@ -64,7 +60,7 @@ protected:
     }
     virtual bool DoExecute() override {
         if (MergingContext->IsExclusiveInterval()) {
-            ResultBatch = Sources.begin()->second->GetBatch();
+            ResultBatch = Sources.begin()->second->GetStageData().GetBatch();
             if (ResultBatch && ResultBatch->num_rows()) {
                 LastPK = Sources.begin()->second->GetLastPK();
                 ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
@@ -85,8 +81,8 @@ protected:
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
         for (auto&& [_, i] : Sources) {
-            if (auto rb = i->GetBatch()) {
-                merger->AddSource(rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
+            if (auto rb = i->GetStageData().GetBatch()) {
+                merger->AddSource(rb, i->GetStageData().GetNotAppliedFilter());
             }
         }
         AFL_VERIFY(merger->GetSourcesCount() <= Sources.size());
@@ -196,7 +192,7 @@ void TFetchingInterval::DoOnAllocationSuccess(const std::shared_ptr<NResourceBro
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("interval_idx", IntervalIdx)("event", "resources_allocated")
         ("resources", guard->DebugString())("start", MergingContext->GetIncludeStart())("finish", MergingContext->GetIncludeFinish())("sources", Sources.size());
     for (auto&& [_, i] : Sources) {
-        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(MergingContext->IsExclusiveInterval()), i);
+        i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i, MergingContext->IsExclusiveInterval()), i, MergingContext->IsExclusiveInterval());
     }
     OnInitResourcesGuard(guard);
 }

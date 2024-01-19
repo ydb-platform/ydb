@@ -51,7 +51,7 @@ public:
 
     ui32 GetColumnId(const std::string& columnName) const;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
-    std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
 
     TString DebugString() const {

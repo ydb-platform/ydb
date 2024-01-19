@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_record.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
 #include "datashard_impl.h"
@@ -7,6 +8,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
@@ -125,7 +128,9 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
-        for (const auto& record : ev->Get()->Records) {
+        for (auto recordPtr : ev->Get()->Records) {
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+
             if (record.GetOrder() <= LastRecordOrder) {
                 continue;
             }
@@ -325,7 +330,7 @@ class TAsyncIndexChangeSenderMain
     : public TActorBootstrapped<TAsyncIndexChangeSenderMain>
     , public TBaseChangeSender
     , public IChangeSenderResolver
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -705,11 +710,11 @@ class TAsyncIndexChangeSenderMain
         return KeyDesc && KeyDesc->GetPartitions();
     }
 
-    ui64 GetPartitionId(const TChangeRecord& record) const override {
+    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
         Y_ABORT_UNLESS(KeyDesc);
         Y_ABORT_UNLESS(KeyDesc->GetPartitions());
 
-        const auto range = TTableRange(record.GetKey());
+        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
         Y_ABORT_UNLESS(range.Point);
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(

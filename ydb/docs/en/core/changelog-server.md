@@ -1,5 +1,31 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 23.3.17 {#23-3-17}
+
+Release date: January 5, 2024.
+
+**Bugfixes:**
+
+* Fix InFlightTxCount become negative during split/merge
+* Allow compatibility between non-stable versions of different applications
+* Various stability improvements (segfault, handle balancer and boot queue events in StateInit, data race when reporting issue counters, memory leak in TRopeArena)
+* CPU over utilization in case of numerous topic consumers
+* Fix import multiple converted csv columns
+* Fix mem table merge when writing over committed deltas in tablets
+* Check errors during read_table_scan and export
+* Throttle datashard log messages
+
+**Features:**
+* Enable ANSI settings for generic query
+* DML logging
+* Request unit trailing header for ScanQuery/ScanYql scripts
+* Grpc KV api
+* Change default metering mode of topics to request units
+* Pqv0 support on server side
+* Allow to maintain unavailable nodes in tablets checker
+* Allow to reboot unavailable node
+* Add Lazy Histogram for grpc request
+
 ## Version 23.3 {#23-3}
 
 Release date: October 12, 2023.

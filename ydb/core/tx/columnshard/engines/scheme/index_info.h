@@ -34,7 +34,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
-    TIndexInfo(const TString& name, ui32 id);
+    TIndexInfo(const TString& name);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
@@ -54,7 +54,6 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
-            << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
             << ")";
@@ -92,16 +91,11 @@ public:
 
 public:
     static TIndexInfo BuildDefault() {
-        TIndexInfo result("dummy", 0);
+        TIndexInfo result("dummy");
         return result;
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
-
-    /// Returns id of the index.
-    ui32 GetId() const noexcept {
-        return Id;
-    }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
         static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
@@ -114,6 +108,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnId(const std::string& name) const;
@@ -206,7 +201,6 @@ public:
     bool CheckCompatible(const TIndexInfo& other) const;
 
 private:
-    ui32 Id;
     ui64 Version = 0;
     TString Name;
     std::shared_ptr<arrow::Schema> Schema;

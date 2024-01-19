@@ -11,6 +11,7 @@
 namespace NKikimr::NOlap {
 
 struct TIndexInfo;
+class IDbWrapper;
 
 class TPortionInfo {
 private:
@@ -34,6 +35,22 @@ public:
     ui64 GetPathId() const {
         return PathId;
     }
+
+    void RegisterBlobId(const TChunkAddress& address, const TUnifiedBlobId& blobId) {
+        bool found = false;
+        for (auto it = Records.begin(); it != Records.end(); ++it) {
+            if (it->ColumnId == address.GetEntityId() && it->Chunk == address.GetChunkIdx()) {
+                it->RegisterBlobId(blobId);
+                found = true;
+                break;
+            }
+        }
+        AFL_VERIFY(found)("address", address.DebugString());
+    }
+
+    void RemoveFromDatabase(IDbWrapper& db) const;
+
+    void SaveToDatabase(IDbWrapper& db) const;
 
     bool OlderThen(const TPortionInfo& info) const {
         return RecordSnapshotMin() < info.RecordSnapshotMin();

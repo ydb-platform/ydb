@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
             NKikimr::NColumnShard::TIndexationCounters counters("test");
             NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
-            std::vector<std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr>> chunksForBlob;
+            std::vector<std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>>> chunksForBlob;
             std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
             std::vector<i64> blobsSize;
             bool hasMultiSplit = false;
@@ -91,10 +91,12 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     ui64 blobSize = 0;
                     sb << "[";
                     std::set<ui32> blobColumnChunks;
-                    for (auto&& i : chunks) {
+                    for (auto&& iData : chunks) {
+                        auto i = dynamic_pointer_cast<NKikimr::NOlap::IPortionColumnChunk>(iData);
+                        AFL_VERIFY(i);
                         ++chunksCount;
                         const ui32 columnId = i->GetColumnId();
-                        recordsCountByColumn[columnId] += i->GetRecordsCount();
+                        recordsCountByColumn[columnId] += i->GetRecordsCountVerified();
                         restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));
                         blobSize += i->GetData().size();
                         if (i->GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {

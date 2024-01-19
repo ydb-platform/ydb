@@ -41,7 +41,7 @@ class Client:
                     host=self.settings.host_external,
                     port=self.settings.port_external,
                     database=dbname,
-                    timeout=1,
+                    timeout=10,
                 )
                 conn.autocommit = True
 

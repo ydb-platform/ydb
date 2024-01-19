@@ -15,7 +15,7 @@ namespace {
     using TUnboxedValuePod = NKikimr::NUdf::TUnboxedValuePod;
 
     ui8 GetAddressRangePrefix(const TIpAddressRange &range) {
-        if (range.IsComplete()) {
+        if (range.Contains(TIpv6Address(ui128(0), TIpv6Address::Ipv6)) && range.Contains(TIpv6Address(ui128(-1), TIpv6Address::Ipv6))) {
             return 0;
         }
         if (range.Size() == 0) {

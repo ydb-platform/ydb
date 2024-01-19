@@ -1,23 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    notboring.go
-    pkcs1v15.go
-    pss.go
-    rsa.go
-)
-
-GO_TEST_SRCS(rsa_export_test.go)
-
-GO_XTEST_SRCS(
-    equal_test.go
-    example_test.go
-    pkcs1v15_test.go
-    pss_test.go
-    rsa_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		notboring.go
+		pkcs1v15.go
+		pss.go
+		rsa.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

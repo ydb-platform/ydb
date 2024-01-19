@@ -1,31 +1,96 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    cbc.go
-    cfb.go
-    cipher.go
-    ctr.go
-    gcm.go
-    io.go
-    ofb.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(
-    benchmark_test.go
-    cbc_aes_test.go
-    cfb_test.go
-    cipher_test.go
-    common_test.go
-    ctr_aes_test.go
-    ctr_test.go
-    example_test.go
-    gcm_test.go
-    ofb_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		cbc.go
+		cfb.go
+		cipher.go
+		ctr.go
+		gcm.go
+		io.go
+		ofb.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

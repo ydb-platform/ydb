@@ -1,28 +1,92 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    doc.go
-    exec.go
-    funcs.go
-    helper.go
-    option.go
-    template.go
-)
-
-GO_TEST_SRCS(
-    exec_test.go
-    multi_test.go
-)
-
-GO_XTEST_SRCS(
-    example_test.go
-    examplefiles_test.go
-    examplefunc_test.go
-    link_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		doc.go
+		exec.go
+		funcs.go
+		helper.go
+		option.go
+		template.go
+    )
+ENDIF()
 END()
 
+
 RECURSE(
-    parse
+	parse
 )

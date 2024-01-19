@@ -1,32 +1,114 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    dec_helpers.go
-    decode.go
-    decoder.go
-    doc.go
-    enc_helpers.go
-    encode.go
-    encoder.go
-    error.go
-    type.go
-)
-
-GO_TEST_SRCS(
-    codec_test.go
-    encoder_test.go
-    gobencdec_test.go
-    timing_test.go
-    type_test.go
-)
-
-GO_XTEST_SRCS(
-    example_encdec_test.go
-    example_interface_test.go
-    example_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		dec_helpers.go
+		decode.go
+		decoder.go
+		doc.go
+		enc_helpers.go
+		encode.go
+		encoder.go
+		error.go
+		type.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

@@ -1,55 +1,78 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    match.go
-    path.go
-    symlink.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(
-    example_test.go
-    match_test.go
-    path_test.go
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        path_unix.go
-        symlink_unix.go
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
     )
-
-    GO_XTEST_SRCS(
-        example_unix_test.go
-        example_unix_walk_test.go
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		match.go
+		path.go
+		path_unix.go
+		symlink.go
+		symlink_unix.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		match.go
+		path.go
+		path_windows.go
+		symlink.go
+		symlink_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		match.go
+		path.go
+		path_windows.go
+		symlink.go
+		symlink_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		match.go
+		path.go
+		path_windows.go
+		symlink.go
+		symlink_windows.go
     )
 ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        path_unix.go
-        symlink_unix.go
-    )
-
-    GO_XTEST_SRCS(
-        example_unix_test.go
-        example_unix_walk_test.go
-    )
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        path_windows.go
-        symlink_windows.go
-    )
-
-    GO_TEST_SRCS(export_windows_test.go)
-
-    GO_XTEST_SRCS(path_windows_test.go)
-ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -1,52 +1,132 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    elf.go
-    label.go
-    map.go
-    pe.go
-    pprof.go
-    proto.go
-    protobuf.go
-    protomem.go
-    runtime.go
-)
-
-GO_TEST_SRCS(
-    label_test.go
-    mprof_test.go
-    pprof_test.go
-    proto_test.go
-    protomem_test.go
-    runtime_test.go
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        pprof_rusage.go
-        proto_other.go
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
     )
-
-    GO_TEST_SRCS(rusage_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_LINUX AND ARCH_ARM64)
     SRCS(
-        pprof_rusage.go
-        proto_other.go
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
     )
-
-    GO_TEST_SRCS(rusage_test.go)
-ENDIF()
-
-IF (OS_WINDOWS)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        pprof_windows.go
-        proto_windows.go
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_rusage.go
+		proto.go
+		proto_other.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_windows.go
+		proto.go
+		proto_windows.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_windows.go
+		proto.go
+		proto_windows.go
+		protobuf.go
+		protomem.go
+		runtime.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		elf.go
+		label.go
+		map.go
+		pe.go
+		pprof.go
+		pprof_windows.go
+		proto.go
+		proto_windows.go
+		protobuf.go
+		protomem.go
+		runtime.go
     )
 ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -9,7 +9,7 @@ namespace NYql::NDq {
 class IDqComputeStorageActor
 {
 public:
-    using TPtr = TIntrusivePtr<IDqComputeStorageActor>;
+    using TPtr = std::shared_ptr<IDqComputeStorageActor>;
     using TKey = ui64;
 
     virtual ~IDqComputeStorageActor() = default;
@@ -25,6 +25,6 @@ public:
     virtual NThreading::TFuture<void> Delete(TKey key) = 0;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId);
+IDqComputeStorageActor::TPtr CreateDqComputeStorageActor(TTxId txId);
 
 } // namespace NYql::NDq

@@ -218,8 +218,8 @@ private:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId) {
-    return new TDqComputeStorageActor(txId);
+IDqComputeStorageActor::TPtr CreateDqComputeStorageActor(TTxId txId) {
+    return std::make_shared<TDqComputeStorageActor>(txId);
 }
 
 } // namespace NYql::NDq

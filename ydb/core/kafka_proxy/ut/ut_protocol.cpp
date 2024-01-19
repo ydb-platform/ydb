@@ -634,6 +634,25 @@ public:
         return WriteAndRead<TCreateTopicsResponseData>(header, request);
     }
 
+    TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TopicToCreate> topicsToCreate, bool validateOnly = false) {
+        Cerr << ">>>>> TCreateTopicsRequestData\n";
+        
+        TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);
+        TCreatePartitionsRequestData request;
+        request.ValidateOnly = validateOnly;
+        request.TimeoutMs = 100;
+
+        for (auto& topicToCreate : topicsToCreate) {
+            NKafka::TCreatePartitionsRequestData::TCreatePartitionsTopic topic;
+            topic.Name = topicToCreate.Name;
+            topic.Count = topicToCreate.PartitionsNumber;
+
+            request.Topics.push_back(topic);
+        }
+
+        return WriteAndRead<TCreatePartitionsResponseData>(header, request);
+    }
+
     void UnknownApiKey() {
         Cerr << ">>>>> Unknown apiKey\n";
 
@@ -1729,6 +1748,159 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
     } // Y_UNIT_TEST(CreateTopicsScenario)
+
+    Y_UNIT_TEST(CreatePartitionsScenario) {
+
+        TInsecureTestServer testServer("2");
+
+        TString topic1Name = "/Root/topic-1-test";
+        TString shortTopic1Name = "topic-1-test";
+
+        TString topic2Name = "/Root/topic-2-test";
+        TString shortTopic2Name = "topic-2-test";
+
+        TString key = "record-key";
+        TString value = "record-value";
+        TString headerKey = "header-key";
+        TString headerValue = "header-value";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topic1Name,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                 .PartitioningSettings(10, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topic2Name,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                 .PartitioningSettings(20, 100))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 15u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
+        {
+            // Validate only
+            auto msg = client.CreatePartitions({
+                TopicToCreate(topic1Name, 11),
+                TopicToCreate(topic2Name, 21)
+            }, true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), topic2Name);
+
+            auto result0 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_EQUAL(result0.GetTopicDescription().GetPartitions().size(), 10);
+
+            auto result1 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 20);
+        }
+
+        {
+            // Increase partitions number
+            auto msg = client.CreatePartitions({
+                TopicToCreate(shortTopic1Name, 11),
+                TopicToCreate(shortTopic2Name, 21)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), shortTopic2Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, NONE_ERROR);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+
+            auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result2.IsSuccess());
+            UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetPartitions().size(), 21);
+        }
+
+        {
+            // Check with two same topic names
+            auto msg = client.CreatePartitions({
+                TopicToCreate(shortTopic1Name, 11),
+                TopicToCreate(shortTopic1Name, 11)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, DUPLICATE_RESOURCE);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+
+            auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result2.IsSuccess());
+            UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetPartitions().size(), 21);
+        }
+
+        {
+            // Check with lesser partitions number
+            auto msg = client.CreatePartitions({ TopicToCreate(shortTopic1Name, 1) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+        }
+
+        {
+            // Check with nonexistent topic name
+            auto topicName = "NonExTopicName";
+            auto msg = client.CreatePartitions({ TopicToCreate(topicName, 1) });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
+
+            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result1.IsSuccess());
+            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
+        }
+    } // Y_UNIT_TEST(CreatePartitionsScenario)
 
     Y_UNIT_TEST(LoginWithApiKey) {
         TInsecureTestServer testServer;

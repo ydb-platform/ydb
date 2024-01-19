@@ -294,7 +294,7 @@ public:
     }
 
     void ActualizeTabletStatistics(TInstant now);
-    ui64 GetRestartsPerPeriod(TInstant barrier);
+    ui64 GetRestartsPerPeriod(TInstant barrier) const;
     bool RestartsOften() const;
 
     bool HasCounter() {

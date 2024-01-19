@@ -76,6 +76,8 @@ namespace {
             UNIT_ASSERT_GE(part->Stat.Bytes, 100ull*1024*1024);
             UNIT_ASSERT_LE(part->Stat.Bytes, 100ull*1024*1024 + 10ull*1024*1024);
 
+            UNIT_ASSERT_VALUES_EQUAL(part->Slices->size(), 1);
+
             GroupId = TGroupId(groups ? 1 : 0);
         }
 
@@ -192,18 +194,19 @@ BENCHMARK_DEFINE_F(TPartIndexSeekFixture, SeekKey)(benchmark::State& state) {
 
 BENCHMARK_DEFINE_F(TPartIndexIteratorFixture, DoReads)(benchmark::State& state) {
     const bool reverse = state.range(3);
-    const ui32 items = state.range(4);
+    const ESeek seek = static_cast<ESeek>(state.range(4));
+    const ui32 items = state.range(5);
 
     for (auto _ : state) {
         auto it = Mass->Saved.Any(Rnd);
 
         if (reverse) {
-            CheckerReverse->Seek(*it, ESeek::Lower);
+            CheckerReverse->Seek(*it, seek);
             for (ui32 i = 1; CheckerReverse->GetReady() == EReady::Data && i < items; i++) {
                 CheckerReverse->Next();
             }
         } else {
-            Checker->Seek(*it, ESeek::Lower);
+            Checker->Seek(*it, seek);
             for (ui32 i = 1; Checker->GetReady() == EReady::Data && i < items; i++) {
                 Checker->Next();
             }
@@ -242,6 +245,7 @@ BENCHMARK_REGISTER_F(TPartIndexIteratorFixture, DoReads)
         /* groups: */ {0, 1},
         /* history: */ {0, 1},
         /* reverse: */ {0, 1},
+        /* ESeek: */ {1, 2, 3},
         /* items */ {1, 10, 100}})
     ->Unit(benchmark::kMicrosecond);
 

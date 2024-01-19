@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -533,67 +533,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, bool withSomeNulls = false) {
         UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
-
         TLocalHelper lHelper(kikimr);
-        if (withSomeNulls)
+        if (withSomeNulls) {
             lHelper.WithSomeNulls();
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
+        }
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForClickBench(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
         UNIT_ASSERT(testTable == "/Root/benchTable"); // TODO: check schema instead
-
         TClickHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
         UNIT_ASSERT(testTable == "/Root/tableWithNulls"); // TODO: check schema instead
         TTableWithNullsHelper lHelper(kikimr.GetTestServer());
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
-        NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
-        auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch();
-        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
-        NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
+        lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
@@ -1634,6 +1593,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` * 3 > 4)",
             R"(`level` / 2 <= 1)",
             R"(`level` % 3 != 1)",
+            R"(-`level` < -2)",
+            R"(Abs(`level` - 3) >= 1)",
+            R"(LENGTH(`message`) > 1037U)",
+            R"(LENGTH(`uid`) > 1U OR `resource_id` = "10001")",
+            R"((LENGTH(`uid`) > 2U AND `resource_id` = "10001") OR `resource_id` = "10002")",
+            R"((LENGTH(`uid`) > 3U OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U AND `resource_id` = "10001"))",
+            R"(NOT(LENGTH(`uid`) > 0U OR `resource_id` = "10001"))",
+            R"(`level` IS NULL OR `message` IS NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NULL)",
+            R"(`level` IS NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NOT NULL)",
+            R"(`level` IS NULL XOR `message` IS NULL)",
 #endif
         };
 
@@ -1702,6 +1675,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
             // We can handle this case in future
             R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
+            R"(`level` * 3.14 > 4)",
 #if SSA_RUNTIME_VERSION < 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1817,7 +1791,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             { R"(`uid` NOT LIKE "%30000%")", "TableFullScan" },
             { R"(`uid` LIKE "uid%")", "TableFullScan" },
             { R"(`uid` LIKE "%001")", "TableFullScan" },
+#if SSA_RUNTIME_VERSION >= 4U
+            { R"(`uid` LIKE "uid%001")", "TableFullScan" },
+#else
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
+#endif
         };
         std::string query = R"(
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
@@ -5282,6 +5260,76 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Cout << output << Endl;
         CompareYson(output, R"([[10u;]])");
     }
+
+    Y_UNIT_TEST(DuplicatesInIncomingBatch) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(runnerSettings);
+        Tests::NCommon::TLoggerInit(testHelper.GetRuntime()).Initialize();
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id_second").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
+        };
+        TTestHelper::TColumnTable testTable;
+
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val1").AddNull();
+            tableInserter.AddRow().Add(3).Add("test_res_3").Add("val3").AddNull();
+            tableInserter.AddRow().Add(2).Add("test_res_2").Add("val2").AddNull();
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        while (csController->GetIndexations().Val() == 0) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+    }
+
+    Y_UNIT_TEST(BulkUpsertUpdate) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(10);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        while (csController->GetIndexations().Val() < 1) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[10]]");
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(110);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
+        while (csController->GetIndexations().Val() < 2) {
+            Cout << "Wait indexation..." << Endl;
+            Sleep(TDuration::Seconds(2));
+        }
+        testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[110]]");
+    }
+
 }
 
 } // namespace NKqp

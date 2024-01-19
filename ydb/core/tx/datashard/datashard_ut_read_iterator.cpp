@@ -47,7 +47,7 @@ TVector<TShardedTableOptions::TColumn> GetMoviesColumns() {
     return columns;
 }
 
-std::tuple<TVector<ui64>, ui64> CreateTable(Tests::TServer::TPtr server,
+std::tuple<TVector<ui64>, TTableId> CreateTable(Tests::TServer::TPtr server,
                  TActorId sender,
                  const TString &root,
                  const TString &name,
@@ -64,7 +64,7 @@ std::tuple<TVector<ui64>, ui64> CreateTable(Tests::TServer::TPtr server,
     return CreateShardedTable(server, sender, root, name, opts);
 }
 
-std::tuple<TVector<ui64>, ui64> CreateMoviesTable(Tests::TServer::TPtr server,
+std::tuple<TVector<ui64>, TTableId> CreateMoviesTable(Tests::TServer::TPtr server,
                        TActorId sender,
                        const TString &root,
                        const TString &name)
@@ -317,9 +317,8 @@ void AddRangeQuery(
 struct TTableInfo {
     TString Name;
 
-    ui64 TableId;
+    TTableId TableId;
     ui64 TabletId;
-    ui64 OwnerId;
     NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
 
     TActorId ClientId;
@@ -376,7 +375,6 @@ struct TTestHelper {
             table1.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table1.TabletId);
-            table1.OwnerId = ownerId;
             table1.UserTable = tables["table-1"];
 
             table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
@@ -401,7 +399,6 @@ struct TTestHelper {
             table2.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table2.TabletId);
-            table2.OwnerId = ownerId;
             table2.UserTable = tables["movies"];
 
             table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetTestPipeConfig());
@@ -418,7 +415,6 @@ struct TTestHelper {
             table3.TabletId = shards.at(0);
 
             auto [tables, ownerId] = GetTables(Server, table3.TabletId);
-            table3.OwnerId = ownerId;
             table3.UserTable = tables["table-1-many"];
 
             table3.ClientId = runtime.ConnectToPipe(table3.TabletId, Sender, 0, GetTestPipeConfig());
@@ -508,7 +504,7 @@ struct TTestHelper {
         auto& record = request->Record;
 
         record.SetReadId(readId);
-        record.MutableTableId()->SetOwnerId(table.OwnerId);
+        record.MutableTableId()->SetOwnerId(table.TableId.PathId.OwnerId);
         record.MutableTableId()->SetTableId(table.UserTable.GetPathId());
 
         const auto& description = table.UserTable.GetDescription();
@@ -764,7 +760,7 @@ struct TTestHelper {
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, txMode);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, table.TableId, 1, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, table.TableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
         return Write(*Server->GetRuntime(), Sender, table.TabletId, std::move(evWrite));
     }
@@ -3618,13 +3614,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false}});
-        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)"));
         SimulateSleep(runtime, TDuration::Seconds(1));
 
-        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
-        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        const auto shard1 = shards.at(0);
         CompactTable(runtime, shard1, tableId1, false);
         RebootTablet(runtime, shard1, sender);
         SimulateSleep(runtime, TDuration::Seconds(1));

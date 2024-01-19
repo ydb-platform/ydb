@@ -3,6 +3,8 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/docker-compose.yml)
+
 IF (AUTOCHECK) 
     # Split tests to chunks only when they're running on different machines with distbuild,
     # otherwise this directive will slow down local test execution.
@@ -61,6 +63,7 @@ PEERDIR(
 DEPENDS(
     ydb/library/yql/tools/dqrun
     ydb/tests/tools/kqprun
+    library/recipes/docker_compose/bin
 )
 
 END()

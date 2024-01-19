@@ -441,7 +441,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
-       .ValueOrThrow();
+        .ValueOrThrow();
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }
@@ -783,13 +783,6 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
-
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "use_canonical_null_relations",
-        [] (TThis* command) -> auto& {
-            return command->Options.UseCanonicalNullRelations;
-        })
-        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

@@ -176,16 +176,15 @@ namespace NTest {
             return index.GetLastRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetRecord(const TPartStore& part, TPageId pageId) {
+        inline const TPartIndexIt::TRecord * GetRecord(const TPartStore& part, TPageId pageIndex) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
 
             Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
-            for (TPageId p = 0; p < pageId; p++) {
+            for (TPageId p = 0; p < pageIndex; p++) {
                 Y_ABORT_UNLESS(index.Next() == EReady::Data);
             }
 
-            Y_ABORT_UNLESS(index.GetPageId() == pageId);
             return index.GetRecord();
         }
     }

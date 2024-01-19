@@ -94,7 +94,15 @@ namespace NYdb::NConsoleClient {
 
             return description.Str();
         }
-        
+
+        TVector<NYdb::NTopic::ECodec> InitAllowedCodecs() {
+            return TVector<NYdb::NTopic::ECodec>{
+                NYdb::NTopic::ECodec::RAW,
+                    NYdb::NTopic::ECodec::ZSTD,
+                    NYdb::NTopic::ECodec::GZIP,
+            };
+        }
+
 namespace {
             NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
                 auto exists = ExistingCodecs.find(to_lower(codecStr));

@@ -37,9 +37,10 @@ const auto SleepQuantum = TDuration::MilliSeconds(100);
 
 #define EXPECT_DURATION_NEAR(a, b) EXPECT_NEAR(a.MilliSeconds(), b.MilliSeconds(), 1)
 
-NApi::IClientPtr CreateTestHedgingClient(std::initializer_list<NApi::IClientPtr> clients,
-                                              std::initializer_list<TCounterPtr> counters,
-                                              TDuration banDuration = SleepQuantum * 5)
+NApi::IClientPtr CreateTestHedgingClient(
+    std::initializer_list<NApi::IClientPtr> clients,
+    std::initializer_list<TCounterPtr> counters,
+    TDuration banDuration = SleepQuantum * 5)
 {
     THedgingClientOptions options;
     options.BanPenalty = SleepQuantum * 2;
@@ -77,8 +78,9 @@ TEST(THedgingClientCountersTest, CountersAfterSuccessFromFirstClient)
     auto firstClientCounter = New<TCounter>(registry.WithTag("c", "first"));
     auto secondClientCounter = New<TCounter>(registry.WithTag("c", "first"));
 
-    auto client = CreateTestHedgingClient({firstMockClient, secondMockClient},
-                                          {firstClientCounter, secondClientCounter});
+    auto client = CreateTestHedgingClient(
+        {firstMockClient, secondMockClient},
+        {firstClientCounter, secondClientCounter});
     auto queryResult = NConcurrency::WaitFor(client->ListNode(path, options));
 
     // Wait for cancelled request finish.
@@ -120,9 +122,10 @@ TEST(THedgingClientCountersTest, CountersAfterFirstClientHasFailed)
     auto firstClientCounter = New<TCounter>(registry.WithTag("c", "first"));
     auto secondClientCounter = New<TCounter>(registry.WithTag("c", "second"));
 
-    auto client = CreateTestHedgingClient({firstMockClient, secondMockClient},
-                                          {firstClientCounter, secondClientCounter},
-                                          TDuration::Seconds(5));
+    auto client = CreateTestHedgingClient(
+        {firstMockClient, secondMockClient},
+        {firstClientCounter, secondClientCounter},
+        TDuration::Seconds(5));
     auto queryResult = NConcurrency::WaitFor(client->ListNode(path, options));
 
     // Error result from first client with effective initial penalty equals to 0 ms
@@ -163,8 +166,9 @@ TEST(THedgingClientCountersTest, CountersWhenFirstClientIsBanned)
     auto firstClientCounter = New<TCounter>(registry.WithTag("c", "first"));
     auto secondClientCounter = New<TCounter>(registry.WithTag("c", "second"));
 
-    auto client = CreateTestHedgingClient({firstMockClient, secondMockClient},
-                                          {firstClientCounter, secondClientCounter});
+    auto client = CreateTestHedgingClient(
+        {firstMockClient, secondMockClient},
+        {firstClientCounter, secondClientCounter});
     auto firstQueryResult = NConcurrency::WaitFor(client->ListNode(path, options));
 
     auto secondQueryResult = NConcurrency::WaitFor(client->ListNode(path, options));
@@ -212,9 +216,10 @@ TEST(THedgingClientCountersTest, CountersAfterFirstClientBanHasElapsed)
 
     auto banDuration = SleepQuantum * 2;
 
-    auto client = CreateTestHedgingClient({firstMockClient, secondMockClient},
-                                          {firstClientCounter, secondClientCounter},
-                                          banDuration);
+    auto client = CreateTestHedgingClient(
+        {firstMockClient, secondMockClient},
+        {firstClientCounter, secondClientCounter},
+        banDuration);
     auto firstQueryResult = NConcurrency::WaitFor(client->ListNode(path, options));
 
     Sleep(banDuration);

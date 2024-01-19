@@ -210,7 +210,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
-    UNSUPPORTED_METHOD(TFuture<TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const TGetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
 
 private:
     THedgingExecutorPtr Executor_;
@@ -225,8 +226,9 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options)
     return New<THedgingClient>(options, CreateDummyPenaltyProvider());
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientOptions& options,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptions& options,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return New<THedgingClient>(options, penaltyProvider);
 }
@@ -241,9 +243,10 @@ NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config, const I
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache));
 }
 
-NApi::IClientPtr CreateHedgingClient(const THedgingClientConfig& config,
-                                          const IClientsCachePtr& clientsCache,
-                                          const IPenaltyProviderPtr& penaltyProvider)
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientConfig& config,
+    const IClientsCachePtr& clientsCache,
+    const IPenaltyProviderPtr& penaltyProvider)
 {
     return CreateHedgingClient(GetHedgingClientOptions(config, clientsCache), penaltyProvider);
 }

@@ -57,7 +57,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                             data['Truncated'] = True
                         if 'Data' in data and len(data['Data']) == 0:
                             del data['Data']
-                # return res # TODO: uncomment it in future
+                return res
 
             program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
             with codecs.open(program_sql, encoding='utf-8') as program_file_descr:

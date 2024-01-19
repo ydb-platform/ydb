@@ -35,7 +35,6 @@ namespace NActors {
         bool IsNeededToWaitNextActivation = true;
         i64 HPStart = 0;
         ui32 ExecutedEvents = 0;
-        TExecutorThreadCtx *ThreadCtx;
 
         TWorkerContext(TWorkerId workerId, TCpuId cpuId)
             : WorkerId(workerId)

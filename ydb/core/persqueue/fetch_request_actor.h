@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include "user_info.h"
+
 namespace NKikimr::NPQ {
 
 struct TPartitionFetchRequest {
@@ -14,7 +16,7 @@ struct TPartitionFetchRequest {
     ui64 MaxBytes;
     ui64 ReadTimestampMs;
     
-    TPartitionFetchRequest(const TString& topic, const TString& clientId, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0)
+    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0, const TString& clientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER)
         : Topic(topic)
         , ClientId(clientId)
         , Partition(partition)

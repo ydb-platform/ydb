@@ -319,6 +319,8 @@ namespace NActors {
             TEventObserverHolder& operator=(TEventObserverHolder&& other) noexcept {
                 if (this != &other)
                 {
+                    Remove();
+                    
                     List = std::move(other.List);
                     Iter = std::move(other.Iter);
 
@@ -347,6 +349,7 @@ namespace NActors {
             TEventObserverCollection* List;
             TEventObserverCollection::iterator Iter;
         };
+        using TEventObserverHolderPair = std::pair<TEventObserverHolder,TEventObserverHolder>;
 
         // An example of using AddObserver in unit tests
         /*

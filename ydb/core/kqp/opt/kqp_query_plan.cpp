@@ -267,7 +267,7 @@ private:
                 }
                 return res;
             }
-        };    
+        };
     };
 
     struct TOperator {
@@ -345,7 +345,7 @@ private:
                     else {
                         TArgContext c = std::get<TArgContext>(input);
                         writer.BeginObject();
-                      
+
                         auto input = LambdaInputs.find(c);
                         if (input != LambdaInputs.end()){
                             if (std::holds_alternative<ui32>(input->second)) {
@@ -516,17 +516,23 @@ private:
     }
 
     TString DescribeValue(const NKikimr::NClient::TValue& value) {
-        auto str = value.GetDataText();
-        switch (value.GetType().GetData().GetScheme()) {
-        case NScheme::NTypeIds::Utf8:
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-            return "«" + str + "»";
-        default:
-            return str;
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Data) {
+            auto str = value.GetDataText();
+            switch (value.GetType().GetData().GetScheme()) {
+            case NScheme::NTypeIds::Utf8:
+            case NScheme::NTypeIds::Json:
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::String4k:
+            case NScheme::NTypeIds::String2m:
+                return "«" + str + "»";
+            default:
+                return str;
+            }
         }
+        if (value.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::Pg) {
+            return value.GetPgText();
+        }
+        Y_ENSURE(false, TStringBuilder() << "unexpected NKikimrMiniKQL::ETypeKind: " << ETypeKind_Name(value.GetType().GetKind()));
     }
 
     void Visit(const TKqpReadRangesSourceSettings& sourceSettings, TQueryPlanNode& planNode) {
@@ -808,10 +814,13 @@ private:
         }
 
         // Common settings that can be overwritten by provider
-        op.Properties["Name"] = "Read from external data source";
         op.Properties["SourceType"] = dataSourceCategory;
         if (auto cluster = TryGetCluster(dataSource)) {
-            op.Properties["ExternalDataSource"] = RemovePathPrefix(std::move(*cluster));
+            TString dataSource = RemovePathPrefix(std::move(*cluster));
+            op.Properties["ExternalDataSource"] = dataSource;
+            op.Properties["Name"] = TStringBuilder() << "Read " << dataSource;
+        } else {
+            op.Properties["Name"] = "Read from external data source";
         }
 
         if (dqIntegration) {
@@ -836,10 +845,13 @@ private:
         }
 
         // Common settings that can be overwritten by provider
-        op.Properties["Name"] = "Write to external data source";
         op.Properties["SinkType"] = dataSinkCategory;
         if (auto cluster = TryGetCluster(dataSink)) {
-            op.Properties["ExternalDataSource"] = RemovePathPrefix(std::move(*cluster));
+            TString dataSource = RemovePathPrefix(std::move(*cluster));
+            op.Properties["ExternalDataSource"] = dataSource;
+            op.Properties["Name"] = TStringBuilder() << "Write " << dataSource;
+        } else {
+            op.Properties["Name"] = "Write to external data source";
         }
 
         if (dqIntegration) {
@@ -1030,7 +1042,7 @@ private:
                 inputIds.insert(inputIds.end(), flatMapLambdaInputs.begin(), flatMapLambdaInputs.end());
 
             }
-            else { 
+            else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
                         auto ids = Visit(child, planNode);
@@ -1272,7 +1284,7 @@ private:
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         Visit(flatMap, planNode);
-        
+
         return operatorId;
     }
 
@@ -1327,7 +1339,7 @@ private:
         AddOptimizerEstimates(op, join);
 
         Visit(flatMap, planNode);
- 
+
         return operatorId;
     }
 
@@ -2095,7 +2107,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 }
 
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
-                
+
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
                 if ((*stat)->HasDurationUs()) {

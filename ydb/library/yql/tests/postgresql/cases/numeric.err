@@ -2772,12 +2772,7 @@ COPY width_bucket_test (operand_num) FROM stdin;
 10.0000000000001
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "-"
-
-    	-5.2
-	^
+Metacommand \. is not supported
 <sql-statement>
 UPDATE width_bucket_test SET operand_f8 = operand_num::float8;
 </sql-statement>
@@ -3617,6 +3612,6 @@ select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
 <sql-statement>
 select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
 </sql-statement>
-pgrun: /storage/d/arcc/mount/1/a0a05244-a249bf61-ec2999f5-6661a47b/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
+pgrun: /-S/ydbwork/ydb/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
 pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
 ?? at ??:0:0

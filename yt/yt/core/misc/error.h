@@ -36,30 +36,29 @@ public:
     constexpr TErrorCode();
     explicit constexpr TErrorCode(int value);
     template <class E>
-    requires std::is_enum_v<E>
+        requires std::is_enum_v<E>
     constexpr TErrorCode(E value);
 
     constexpr operator int() const;
 
     template <class E>
-    requires std::is_enum_v<E>
+        requires std::is_enum_v<E>
     constexpr operator E() const;
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 
+    template <class E>
+        requires std::is_enum_v<E>
+    constexpr bool operator == (E rhs) const;
+
+    constexpr bool operator == (TErrorCode rhs) const;
 private:
     int Value_;
 };
 
 void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec);
 TString ToString(TErrorCode code);
-
-template <class E>
-requires std::is_enum_v<E>
-constexpr bool operator == (TErrorCode lhs, E rhs);
-
-constexpr bool operator == (TErrorCode lhs, TErrorCode rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -343,7 +342,7 @@ struct TErrorAdaptor
 // Make these to correctly forward TError to Wrap call.
 template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TErrorLike>> &&
+        std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
         std::constructible_from<TError, TArgs...>
 void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args);
 

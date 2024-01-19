@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     ydb_dynamic_config.cpp
     ydb_scripting.cpp
-    ydb_long_tx.cpp
 )
 
 PEERDIR(

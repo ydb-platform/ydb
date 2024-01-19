@@ -429,15 +429,14 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
         Y_ABORT_UNLESS(bJsonDoc.AppendNull().ok());
     }
 
-    auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})");
-    Y_ABORT_UNLESS(maybeJsonDoc.Defined());
+    const auto maybeJsonDoc = std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})");
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
         Y_ABORT_UNLESS(bId.Append(i).ok());
         Y_ABORT_UNLESS(bResourceId.Append(std::to_string(i)).ok());
         Y_ABORT_UNLESS(bLevel.AppendNull().ok());
         Y_ABORT_UNLESS(bBinaryStr.Append(std::to_string(i)).ok());
         Y_ABORT_UNLESS(bJsonVal.AppendNull().ok());
-        Y_ABORT_UNLESS(bJsonDoc.Append(maybeJsonDoc->Data(), maybeJsonDoc->Size()).ok());
+        Y_ABORT_UNLESS(bJsonDoc.Append(maybeJsonDoc.data(), maybeJsonDoc.length()).ok());
     }
 
     std::shared_ptr<arrow::Int32Array> aId;

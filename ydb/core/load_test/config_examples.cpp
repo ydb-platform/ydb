@@ -28,6 +28,20 @@ TVector<TConfigTemplate> BuildExamples() {
 })_"
         },
         TConfigTemplate{
+            .LoadName = "KeyValueLoad",
+            .Template = R"_(KeyValueLoad: {
+    TargetTabletId: xxx
+    DurationSeconds: 120
+    Workers {
+        KeyPrefix: "LoadTest_"
+        MaxInFlight: 128
+        Size: 1024
+        IsInline: false
+        LoopAtKeyCount: 0
+    }
+})_"
+        },
+        TConfigTemplate{
             .LoadName = "StorageLoad",
             .Template = R"_(StorageLoad: {
     DurationSeconds: 60

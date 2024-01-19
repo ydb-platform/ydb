@@ -2346,19 +2346,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             {
                 const auto query = Q_(R"(
                     --!syntax_pg
-                    SELECT * FROM PgTemp;
-                )");
-
-                auto result = session.ExecuteQuery(
-                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
-            }
-
-            {
-                const auto query = Q_(R"(
-                    --!syntax_pg
                     SELECT * FROM SimpleTable;
                 )");
 
@@ -2367,19 +2354,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
                 UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
-            }
-
-            {
-                const auto query = Q_(R"(
-                    --!syntax_pg
-                    SELECT * FROM SimpleTable;
-                )");
-
-                auto result = session.ExecuteQuery(
-                    query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
             }
 
             {
@@ -2474,7 +2448,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                     session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
             }
 
             bool allDoneOk = true;

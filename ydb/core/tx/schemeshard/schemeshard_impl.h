@@ -333,6 +333,11 @@ public:
         return IsServerlessDomain(domain.DomainInfo());
     }
 
+    bool IsServerlessDomainGlobal(TPathId domainPathId, TSubDomainInfo::TConstPtr domainInfo) const {
+        const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+        return IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != domainPathId;
+    }
+
     TPathId MakeLocalId(const TLocalPathId& localPathId) const {
         return TPathId(TabletID(), localPathId);
     }

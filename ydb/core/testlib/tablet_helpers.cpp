@@ -1447,8 +1447,12 @@ namespace NKikimr {
             
             const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
             NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
-            domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
-
+            if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
+                domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+            } else {
+                domainInfo.ServerlessComputeResourcesMode.Clear();
+            }
+            
             auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetOrigin(TabletID());

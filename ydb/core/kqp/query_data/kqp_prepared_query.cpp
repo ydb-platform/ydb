@@ -107,7 +107,7 @@ bool TKqpPhyTxHolder::IsLiteralTx() const {
     return LiteralTx;
 }
 
-std::optional<std::pair<std::pair<TString, TString>, bool>>
+std::optional<std::pair<bool, std::pair<TString, TString>>>
 TKqpPhyTxHolder::GetSchemeOpTempTablePath() const {
     if (GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
         return std::nullopt;
@@ -131,8 +131,7 @@ TKqpPhyTxHolder::GetSchemeOpTempTablePath() const {
             }
             if (tableDesc->HasTemporary()) {
                 if (tableDesc->GetTemporary()) {
-                    return {{{modifyScheme.GetWorkingDir(), tableDesc->GetName()},
-                            true}};
+                    return {{true, {modifyScheme.GetWorkingDir(), tableDesc->GetName()}}};
                 }
             }
             break;
@@ -141,8 +140,7 @@ TKqpPhyTxHolder::GetSchemeOpTempTablePath() const {
             auto modifyScheme = schemeOperation.GetDropTable();
             auto* dropTable = modifyScheme.MutableDrop();
 
-            return {{{modifyScheme.GetWorkingDir(), dropTable->GetName()},
-                    false}};
+            return {{false, {modifyScheme.GetWorkingDir(), dropTable->GetName()}}};
         }
         default:
             return std::nullopt;
@@ -274,6 +272,7 @@ bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTabl
     if (!tempTablesState) {
         return false;
     }
+    YQL_ENSURE(tempTablesState->SessionId);
     auto tempTables = THashSet<TString>();
     for (const auto& [path, info] : tempTablesState->TempTables) {
         tempTables.insert(path.second + *tempTablesState->SessionId);
@@ -289,7 +288,7 @@ bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTabl
         if (!optPath) {
             continue;
         } else {
-            const auto& [path, isCreate] = *optPath;
+            const auto& [isCreate, path] = *optPath;
             if (isCreate) {
                 return true;
             } else {

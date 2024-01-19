@@ -117,7 +117,7 @@ public:
 
     bool IsLiteralTx() const;
 
-    std::optional<std::pair<std::pair<TString, TString>, bool>>
+    std::optional<std::pair<bool, std::pair<TString, TString>>>
     GetSchemeOpTempTablePath() const;
 };
 

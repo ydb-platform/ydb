@@ -741,7 +741,7 @@ private:
 
         bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
 
-        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState) == nullptr;
+        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState, true) == nullptr;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
@@ -815,18 +815,35 @@ private:
     }
 
     TKqpCompileResult::TConstPtr WithCache(
-            TKqpCompileResult::TConstPtr cacheResult, TKqpTempTablesState::TConstPtr tempTablesState) {
-        if (!cacheResult) {
+            TKqpCompileResult::TConstPtr compileResult,
+            TKqpTempTablesState::TConstPtr tempTablesState, bool forInsert = false) {
+        if (!compileResult) {
             return nullptr;
         }
-        if (!cacheResult->PreparedQuery) {
-            return cacheResult;
+        if (!compileResult->PreparedQuery) {
+            return compileResult;
         }
-        auto hasTempTables = cacheResult->PreparedQuery->HasTempTables(tempTablesState);
-        if (hasTempTables) {
-            return nullptr;
+        if (forInsert) {
+            auto hasTempTables = compileResult->PreparedQuery->HasTempTables(tempTablesState);
+            if (hasTempTables) {
+                return nullptr;
+            }
+            return compileResult;
         }
-        return cacheResult;
+        if (!tempTablesState) {
+            return compileResult;
+        }
+        auto tables = compileResult->PreparedQuery->GetQueryTables();
+        auto tempTables = THashSet<TString>();
+        for (const auto& [path, info] : tempTablesState->TempTables) {
+            tempTables.insert(path.second);
+        }
+        for (const auto& path: tables) {
+            if (tempTables.contains(path)) {
+                return nullptr;
+            }
+        }
+        return compileResult;
     }
 
     void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache) {

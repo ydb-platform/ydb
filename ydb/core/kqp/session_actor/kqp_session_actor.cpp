@@ -1160,39 +1160,34 @@ public:
         }
     }
 
-    std::optional<TKqpTempTablesState::TTempTableInfo> GetTemporaryTableInfo(TKqpPhyTxHolder::TConstPtr tx) {
+    std::optional<std::pair<bool, TKqpTempTablesState::TTempTableInfo>>
+    GetTemporaryTableInfo(TKqpPhyTxHolder::TConstPtr tx) {
         if (!tx) {
             return std::nullopt;
         }
-        const auto& schemeOperation = tx->GetSchemeOperation();
-        switch (schemeOperation.GetOperationCase()) {
-            case NKqpProto::TKqpSchemeOperation::kCreateTable: {
-                const auto& modifyScheme = schemeOperation.GetCreateTable();
-                const NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-                switch (modifyScheme.GetOperationType()) {
-                    case NKikimrSchemeOp::ESchemeOpCreateTable: {
-                        tableDesc = &modifyScheme.GetCreateTable();
-                        break;
-                    }
-                    case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
-                        tableDesc = &modifyScheme.GetCreateIndexedTable().GetTableDescription();
-                        break;
-                    }
-                    default:
-                        YQL_ENSURE(false, "Unexpected operation type");
-                }
-                auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-                if (tableDesc->HasTemporary()) {
-                    if (tableDesc->GetTemporary()) {
-                        return {{tableDesc->GetName(), modifyScheme.GetWorkingDir(), Settings.Cluster, userToken, Settings.Database}};
-                    }
-                }
-                break;
-            }
-            default:
-                return std::nullopt;
+        auto optPath = tx->GetSchemeOpTempTablePath();
+        if (!optPath) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        const auto& [isCreate, path] = *optPath;
+        if (isCreate) {
+            auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
+            return {{true, {path.second, path.first, Settings.Cluster, userToken, Settings.Database}}};
+        }
+
+        TString name = path.second;
+        auto pos = name.find(*TempTablesState.SessionId);
+
+        if (pos == TString::npos) {
+            return std::nullopt;
+        }
+        name.erase(pos, name.size());
+
+        auto it = TempTablesState.TempTables.find(std::make_pair(Settings.Cluster, JoinPath({path.first, name})));
+        if (it == TempTablesState.TempTables.end()) {
+            return std::nullopt;
+        }
+        return {{false, it->second}};
     }
 
     void UpdateTempTablesState() {
@@ -1203,8 +1198,14 @@ public:
         if (!tx) {
             return;
         }
-        if (auto tempTableInfo = GetTemporaryTableInfo(tx)) {
-            TempTablesState.TempTables[std::make_pair(tempTableInfo->Database, JoinPath({tempTableInfo->WorkingDir, tempTableInfo->Name}))] = std::move(*tempTableInfo);
+        auto optInfo = GetTemporaryTableInfo(tx);
+        if (optInfo) {
+            auto [isCreate, tempTableInfo] = *optInfo;
+            if (isCreate) {
+                TempTablesState.TempTables[std::make_pair(tempTableInfo.Database, JoinPath({tempTableInfo.WorkingDir, tempTableInfo.Name}))] = tempTableInfo;
+            } else {
+                TempTablesState.TempTables.erase(std::make_pair(tempTableInfo.Database, JoinPath({tempTableInfo.WorkingDir, tempTableInfo.Name})));
+            }
             QueryState->UpdateTempTablesState(TempTablesState);
         }
     }

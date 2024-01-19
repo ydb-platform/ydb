@@ -1112,13 +1112,14 @@ message TImmediateControlsConfig {
             MaxValue: 134217728,
             DefaultValue: 0 }];
 
+        // Note: these settings are deprecated (always enabled)
         optional uint64 PrioritizedMvccSnapshotReads = 8 [(ControlOptions) = {
-            Description: "Enables prioritized mvcc snapshot reads over immediate writes",
+            Description: "Enables prioritized mvcc snapshot reads over immediate writes (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
         optional uint64 UnprotectedMvccSnapshotReads = 9 [(ControlOptions) = {
-            Description: "Enables unprotected (fully readonly) mvcc snapshot reads",
+            Description: "Enables unprotected (fully readonly) mvcc snapshot reads (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];

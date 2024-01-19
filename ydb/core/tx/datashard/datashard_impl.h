@@ -1646,16 +1646,6 @@ public:
         return TtlReadAheadHi;
     }
 
-    bool GetEnablePrioritizedMvccSnapshotReads() const {
-        ui64 value = EnablePrioritizedMvccSnapshotReads;
-        return value != 0;
-    }
-
-    bool GetEnableUnprotectedMvccSnapshotReads() const {
-        ui64 value = EnableUnprotectedMvccSnapshotReads;
-        return value != 0;
-    }
-
     bool GetEnableLockedWrites() const {
         ui64 value = EnableLockedWrites;
         return value != 0;
@@ -2649,8 +2639,6 @@ private:
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
 
-    TControlWrapper EnablePrioritizedMvccSnapshotReads;
-    TControlWrapper EnableUnprotectedMvccSnapshotReads;
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;
 

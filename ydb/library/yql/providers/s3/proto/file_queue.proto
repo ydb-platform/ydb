@@ -6,9 +6,7 @@ package NYql.NS3.FileQueue;
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
-message TEvGetNextFile {
-    uint64 RequestedAmount = 1;
-
+message TEvGetNextBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 

@@ -147,7 +147,7 @@ using TObjectPath = NS3::FileQueue::TObjectPath;
 struct TEvS3FileQueue {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
-        EvGetNextFile = EvBegin,
+        EvGetNextBatch = EvBegin,
         EvObjectPathBatch,
         EvObjectPathReadError,
         EvEnd
@@ -155,13 +155,7 @@ struct TEvS3FileQueue {
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
 
 
-    struct TEvGetNextFile : TEventPB<TEvGetNextFile, NS3::FileQueue::TEvGetNextFile, EvGetNextFile> {
-        TEvGetNextFile() {
-            Record.SetRequestedAmount(1);
-        };
-        TEvGetNextFile(ui64 requestedAmount) {
-            Record.SetRequestedAmount(requestedAmount);
-        }
+    struct TEvGetNextBatch : TEventPB<TEvGetNextBatch, NS3::FileQueue::TEvGetNextBatch, EvGetNextBatch> {
     };
 
     struct TEvObjectPathBatch :
@@ -335,7 +329,7 @@ public:
         enum {
             EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvNextListingChunkReceived = EvBegin + 1,
-            EvStartStageTimeout,
+            EvRoundRobinStageTimeout,
             EvEnd
         };
         static_assert(
@@ -351,8 +345,8 @@ public:
             TEvNextListingChunkReceived(NS3Lister::TListResult listingResult)
                 : ListingResult(std::move(listingResult)){};
         };
-        struct TEvStartStageTimeout :
-            public TEventLocal<TEvStartStageTimeout, EvStartStageTimeout> {
+        struct TEvRoundRobinStageTimeout :
+            public TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
         };
     };
     using TBase = TActorBootstrapped<TS3FileQueueActor>;
@@ -380,7 +374,8 @@ public:
         , ConsumersCount(consumersCount)
         , BatchSizeLimit(batchSizeLimit)
         , BatchObjectCountLimit(batchObjectCountLimit)
-        , StartStageFinished(false)
+        , ObjectsTotalSize(0)
+        , RoundRobinStageFinished(false)
         , HasPendingRequests(false)
         , Gateway(std::move(gateway))
         , Url(std::move(url))
@@ -419,9 +414,9 @@ public:
     STATEFN(ThereAreDirectoriesToListState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFile);
+                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
-                cFunc(TEvPrivatePrivate::EvStartStageTimeout, HandleStartStageTimeout);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -437,17 +432,15 @@ public:
         }
     }
 
-    void HandleGetNextFile(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextBatch(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
         UpdateEventsQueue(ev->Sender);
-        auto requestAmount = ev->Get()->Record.GetRequestedAmount();
-        LOG_D("TS3FileQueueActor", "HandleGetNextFile requestAmount:" << requestAmount);
-        if (Objects.size() > requestAmount) {
-            LOG_D("TS3FileQueueActor", "HandleGetNextFile sending right away");
-            TrySendObjects(ev->Sender, requestAmount);
+        if (HasEnoughToSend()) {
+            LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
+            TrySendObjects(ev->Sender);
             TryPreFetch();
         } else {
-            LOG_D("TS3FileQueueActor", "HandleGetNextFile have not enough objects cached. Start fetching");
-            PendingRequests[ev->Sender].emplace_back(requestAmount);
+            LOG_D("TS3FileQueueActor", "HandleGetNextBatch have not enough objects cached. Start fetching");
+            ScheduleRequest(ev->Sender);
             TryFetch();
         }
     }
@@ -457,8 +450,8 @@ public:
         ListingFuture = Nothing();
         LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived");
         if (SaveRetrievedResults(ev->Get()->ListingResult)) {
-            ForEachRequest([&](const auto& recipient, auto amount) { 
-                SendObjects(recipient, amount); 
+            ForEachRequest([&](const auto& consumer) { 
+                SendObjects(consumer); 
             }, true);
             if (!HasPendingRequests) {
                 LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
@@ -469,37 +462,6 @@ public:
             }
         } else {
             TransitToErrorState();
-        }
-    }
-
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-        Y_UNUSED(ev);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.Retry();
-        }
-    }
-
-    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_T("TS3FileQueueActor", "Handle disconnected consumer at node " << ev->Get()->NodeId);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.HandleNodeDisconnected(ev->Get()->NodeId);
-        }
-    }
-
-    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3FileQueueActor","Handle connected consumer at node " << ev->Get()->NodeId);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.HandleNodeConnected(ev->Get()->NodeId);
-        }
-    }
-    
-    void HandleStartStageTimeout() {
-        LOG_T("TS3FileQueueActor","Handle start stage timeout");
-        if (!StartStageFinished) {
-            StartStageFinished = true;
-            ForEachRequest([&](const auto& recipient, auto amount) { 
-                SendObjects(recipient, amount); 
-            });
         }
     }
 
@@ -533,6 +495,7 @@ public:
             objectPath.SetSize(object.Size);
             objectPath.SetPathIndex(CurrentDirectoryPathIndex);
             Objects.emplace_back(std::move(objectPath));
+            ObjectsTotalSize += object.Size;
         }
         return true;
     }
@@ -541,13 +504,16 @@ public:
 
     void TransitToNoMoreDirectoriesToListState() {
         LOG_I("TS3FileQueueActor", "TransitToNoMoreDirectoriesToListState no more directories to list");
+        ForEachRequest([&](const auto& consumer) { 
+            SendObjects(consumer); 
+        });
         Become(&TS3FileQueueActor::NoMoreDirectoriesState);
     }
 
     void TransitToErrorState() {
         Y_ENSURE(MaybeIssues.Defined());
         LOG_I("TS3FileQueueActor", "TransitToErrorState an error occurred sending ");
-        ForEachRequest([&](const auto& recipient, auto) {
+        ForEachRequest([&](const auto& recipient) {
             ReadActorToEvents[recipient].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues)); 
         });
         Objects.clear();
@@ -558,8 +524,8 @@ public:
     STATEFN(NoMoreDirectoriesState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForEmptyState);
-                cFunc(TEvPrivatePrivate::EvStartStageTimeout, HandleStartStageTimeout);
+                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -575,16 +541,19 @@ public:
         }
     }
 
-    void HandleGetNextFileForEmptyState(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextBatchForEmptyState(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
+        LOG_T(
+            "TS3FileQueueActor",
+            "HandleGetNextBatchForEmptyState Giving away rest of Objects");
         UpdateEventsQueue(ev->Sender);
-        TrySendObjects(ev->Sender, ev->Get()->Record.GetRequestedAmount());
+        TrySendObjects(ev->Sender);
     }
 
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
-                hFunc(TEvS3FileQueue::TEvGetNextFile, HandleGetNextFileForErrorState);
-                cFunc(TEvPrivatePrivate::EvStartStageTimeout, HandleStartStageTimeout);
+                hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -598,12 +567,43 @@ public:
         }
     }
 
-    void HandleGetNextFileForErrorState(TEvS3FileQueue::TEvGetNextFile::TPtr& ev) {
+    void HandleGetNextBatchForErrorState(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
         LOG_D(
             "TS3FileQueueActor",
-            "HandleGetNextFileForErrorState Giving away rest of Objects");
+            "HandleGetNextBatchForErrorState Giving away rest of Objects");
         UpdateEventsQueue(ev->Sender);
         ReadActorToEvents[ev->Sender].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
+    }
+
+    void HandleStartStageTimeout() {
+        LOG_T("TS3FileQueueActor","Handle start stage timeout");
+        if (!RoundRobinStageFinished) {
+            RoundRobinStageFinished = true;
+            ForEachRequest([&](const auto& recipient) { 
+                SendObjects(recipient); 
+            });
+        }
+    }
+
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        Y_UNUSED(ev);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.Retry();
+        }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        LOG_T("TS3FileQueueActor", "Handle disconnected consumer at node " << ev->Get()->NodeId);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.HandleNodeDisconnected(ev->Get()->NodeId);
+        }
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        LOG_T("TS3FileQueueActor","Handle connected consumer at node " << ev->Get()->NodeId);
+        for (auto& [_, events] : ReadActorToEvents) {
+            events.HandleNodeConnected(ev->Get()->NodeId);
+        }
     }
     
     void Handle(TEvents::TEvPoison::TPtr& ev) {
@@ -621,11 +621,11 @@ public:
         LOG_D("TS3FileQueueActor", "PassAway");
 
         if (!MaybeIssues.Defined()) {
-            ForEachRequest([&](const auto& recipient, auto amount) { 
-                SendObjects(recipient, amount); 
+            ForEachRequest([&](const auto& recipient) { 
+                SendObjects(recipient); 
             });
         } else {
-            ForEachRequest([&](const auto& recipient, auto) {
+            ForEachRequest([&](const auto& recipient) {
                 ReadActorToEvents[recipient].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues)); 
             });
         }
@@ -640,15 +640,15 @@ public:
     }
 
 private:
-    void TrySendObjects(const TActorId& recipient, size_t amount) {
-        if (CanSendToConsumer(recipient)) {
-            SendObjects(recipient, amount);
+    void TrySendObjects(const TActorId& consumer) {
+        if (CanSendToConsumer(consumer)) {
+            SendObjects(consumer);
         } else {
-            PendingRequests[recipient].emplace_back(amount);
+            ScheduleRequest(consumer);
             HasPendingRequests = true;
         }
     }
-    void SendObjects(const TActorId& recipient, size_t) {
+    void SendObjects(const TActorId& consumer) {
         Y_ENSURE(!MaybeIssues.Defined());
         std::vector<TObjectPath> result;
         if (Objects.size() > 0) {
@@ -658,29 +658,34 @@ private:
                 Objects.pop_back();
                 totalSize += result.back().GetSize();
             } while (Objects.size() > 0 && result.size() < BatchObjectCountLimit && totalSize < BatchSizeLimit);
+            ObjectsTotalSize -= totalSize;
         }
 
-        LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << recipient);
-        ReadActorToEvents[recipient].Send(
+        LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
+        ReadActorToEvents[consumer].Send(
             new TEvS3FileQueue::TEvObjectPathBatch(
                 std::move(result), HasNoMoreItems()));
 
-        if (!StartStageFinished) {
+        if (!RoundRobinStageFinished) {
             if (StartedConsumers.empty()) {
-                Schedule(StartStageTimeout, new TEvPrivatePrivate::TEvStartStageTimeout());
+                Schedule(RoundRobinStageTimeout, new TEvPrivatePrivate::TEvRoundRobinStageTimeout());
             }
-            StartedConsumers.insert(recipient);
+            StartedConsumers.insert(consumer);
             if (StartedConsumers.size() == ConsumersCount || HasNoMoreItems()) {
-                StartStageFinished = true;
-                ForEachRequest([&](const auto& recipient, auto amount) { 
-                    SendObjects(recipient, amount); 
+                RoundRobinStageFinished = true;
+                ForEachRequest([&](const auto& consumer) { 
+                    SendObjects(consumer); 
                 });
             }
         }
     }
 
+    bool HasEnoughToSend() {
+        return Objects.size() >= BatchObjectCountLimit || ObjectsTotalSize >= BatchSizeLimit;
+    }
+
     bool CanSendToConsumer(const TActorId& consumer) {
-        return !UseRuntimeListing || StartStageFinished || 
+        return !UseRuntimeListing || RoundRobinStageFinished || 
                (StartedConsumers.size() < ConsumersCount && !StartedConsumers.contains(consumer));
     }
 
@@ -756,25 +761,34 @@ private:
             ReadActorToEvents[actor].OnNewRecipientId(actor);
         }
     }
+    
+    void ScheduleRequest(const TActorId& consumer) {
+        if (PendingRequests.contains(consumer)) {
+            ++PendingRequests[consumer];
+        } else {
+            PendingRequests[consumer] = 1;
+        }
+    }
 
-    void ForEachRequest(std::function<void(const TActorId&, size_t)> func, bool earlyStop = false) {
+    void ForEachRequest(std::function<void(const TActorId&)> func, bool earlyStop = false) {
         bool handledRequest = true;
         while (HasPendingRequests && (!earlyStop || handledRequest)) {
             bool isEmpty = true;
             handledRequest = false;
-            for (auto& [consumer, requests] : PendingRequests) {
-                if (!CanSendToConsumer(consumer)) {
+            for (auto& [consumer, requestCount] : PendingRequests) {
+                if (!CanSendToConsumer(consumer) || (earlyStop && !HasEnoughToSend())) {
                     continue;
                 }
-                if (!requests.empty()) {
-                    func(consumer, requests.front());
-                    requests.pop_front();
+                if (requestCount > 0) {
+                    func(consumer);
+                    --requestCount;
                     handledRequest = true;
                 }
-                if (!requests.empty()) {
+                if (requestCount > 0) {
                     isEmpty = false;
                 }
             }
+            std::erase_if(PendingRequests, [](const auto& val) { return val.second == 0; });
             if (isEmpty) {
                 HasPendingRequests = false;
             }
@@ -792,15 +806,16 @@ private:
     TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
     TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
     size_t CurrentDirectoryPathIndex = 0;
-    THashMap<TActorId, std::deque<size_t>> PendingRequests;
+    std::unordered_map<TActorId, ui64> PendingRequests;
     TMaybe<TIssues> MaybeIssues;
     bool UseRuntimeListing;
     TMaybe<size_t> ConsumersCount;
     ui64 BatchSizeLimit;
     ui64 BatchObjectCountLimit;
+    ui64 ObjectsTotalSize;
     THashMap<TActorId, TRetryEventsQueue> ReadActorToEvents;
     THashSet<TActorId> FinishedConsumers;
-    bool StartStageFinished;
+    bool RoundRobinStageFinished;
     bool HasPendingRequests;
     THashSet<TActorId> StartedConsumers;
 
@@ -812,7 +827,7 @@ private:
     const ES3PatternType PatternType;
     
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
-    static constexpr TDuration StartStageTimeout = TDuration::Seconds(5);
+    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(5);
 };
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
@@ -902,13 +917,18 @@ public:
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
-        SendPathRequest();
+        SendPathBatchRequest();
         Become(&TS3ReadActor::StateFunc);
     }
 
     bool TryStartDownload() {
-        if (ObjectPathCache.empty()) {
+        TrySendPathBatchRequest();
+        if (PathBatchQueue.empty()) {
             // no path is pending
+            return false;
+        }
+        if (IsCurrentBatchEmpty) {
+            // waiting for batch to finish
             return false;
         }
         if (QueueTotalDataSize > ReadActorFactoryCfg.DataInflight) {
@@ -946,20 +966,26 @@ public:
     }
 
     TObjectPath ReadPathFromCache() {
-        Y_ENSURE(!ObjectPathCache.empty());
-        auto object = ObjectPathCache.back();
-        ObjectPathCache.pop_back();
-        if (ObjectPathCache.empty() && !IsObjectQueueEmpty && !ConsumedEnoughFiles()) {
-            SendPathRequest();
+        Y_ENSURE(!PathBatchQueue.empty());
+        auto& currentBatch = PathBatchQueue.front();
+        Y_ENSURE(!currentBatch.empty());
+        auto object = currentBatch.back();
+        currentBatch.pop_back();
+        if (currentBatch.empty()) {
+            PathBatchQueue.pop_front();
+            IsCurrentBatchEmpty = true;
         }
+        TrySendPathBatchRequest();
         return object;
     }
-    void SendPathRequest() {
+    void TrySendPathBatchRequest() {
+        if (PathBatchQueue.size() < 2 && !IsFileQueueEmpty && !ConsumedEnoughFiles() && !IsWaitingObjectQueueResponse) {
+            SendPathBatchRequest();
+        }
+    }
+    void SendPathBatchRequest() {
         Y_ENSURE(!IsWaitingObjectQueueResponse);
-        const ui64 requestedAmount = std::min(ReadActorFactoryCfg.MaxInflight, FilesRemained.value_or(std::numeric_limits<ui64>::max()));
-        FileQueueEvents.Send(
-            new TEvS3FileQueue::TEvGetNextFile(
-                requestedAmount));
+        FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
         IsWaitingObjectQueueResponse = true;
     }
 
@@ -1001,11 +1027,12 @@ private:
         IsWaitingObjectQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
-        IsObjectQueueEmpty = objectBatch.GetNoMoreFiles();
-        ObjectPathCache.insert(
-            ObjectPathCache.end(),
-            std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
-            std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
+        IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
+        if (!objectBatch.GetObjectPaths().empty()) {
+            PathBatchQueue.emplace_back(
+                std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
+                std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
+        }
         while (TryStartDownload()) {}
 
         if (LastFileWasProcessed()) {
@@ -1013,7 +1040,7 @@ private:
         }
     }
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
-        IsObjectQueueEmpty = true;
+        IsFileQueueEmpty = true;
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
@@ -1073,7 +1100,7 @@ private:
         return total;
     }
     bool LastFileWasProcessed() const {
-        return Blocks.empty() && (ListedFiles == CompletedFiles) && IsObjectQueueEmpty;
+        return Blocks.empty() && (ListedFiles == CompletedFiles) && IsFileQueueEmpty;
     }
 
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
@@ -1103,6 +1130,9 @@ private:
             }
             Blocks.emplace(std::make_tuple(std::move(result->Get()->Result), id));
             DownloadInflight--;
+            if (IsCurrentBatchEmpty && DownloadInflight == 0) {
+                IsCurrentBatchEmpty = false;
+            }
             if (FilesRemained) {
                 *FilesRemained = SubtractSaturating(*FilesRemained, 1);
             }
@@ -1186,8 +1216,9 @@ private:
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
-    std::vector<TObjectPath> ObjectPathCache;
-    bool IsObjectQueueEmpty = false;
+    TDeque<TVector<TObjectPath>> PathBatchQueue;
+    bool IsCurrentBatchEmpty = false;
+    bool IsFileQueueEmpty = false;
     bool IsWaitingObjectQueueResponse = false;
     size_t ListedFiles = 0;
     size_t CompletedFiles = 0;
@@ -2543,14 +2574,19 @@ public:
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
-        SendPathRequest();
+        SendPathBatchRequest();
         Become(&TS3StreamReadActor::StateFunc);
         Bootstrapped = true;
     }
 
     bool TryRegisterCoro() {
-        if (ObjectPathCache.empty()) {
+        TrySendPathBatchRequest();
+        if (PathBatchQueue.empty()) {
             // no path is pending
+            return false;
+        }
+        if (IsCurrentBatchEmpty) {
+            // waiting for batch to finish
             return false;
         }
         if (QueueBufferCounter->IsFull()) {
@@ -2625,20 +2661,26 @@ public:
     }
 
     TObjectPath ReadPathFromCache() {
-        Y_ENSURE(!ObjectPathCache.empty());
-        auto object = ObjectPathCache.back();
-        ObjectPathCache.pop_back();
-        if (ObjectPathCache.empty() && !IsObjectQueueEmpty) {
-            SendPathRequest();
+        Y_ENSURE(!PathBatchQueue.empty());
+        auto& currentBatch = PathBatchQueue.front();
+        Y_ENSURE(!currentBatch.empty());
+        auto object = currentBatch.back();
+        currentBatch.pop_back();
+        if (currentBatch.empty()) {
+            PathBatchQueue.pop_front();
+            IsCurrentBatchEmpty = true;
         }
+        TrySendPathBatchRequest();
         return object;
     }
-    void SendPathRequest() {
+    void TrySendPathBatchRequest() {
+        if (PathBatchQueue.size() < 2 && !IsFileQueueEmpty && !IsWaitingObjectQueueResponse) {
+            SendPathBatchRequest();
+        }
+    }
+    void SendPathBatchRequest() {
         Y_ENSURE(!IsWaitingObjectQueueResponse);
-        LOG_D("TS3StreamReadActor", "SendPathRequest " << ReadActorFactoryCfg.MaxInflight);
-        FileQueueEvents.Send(
-            new TEvS3FileQueue::TEvGetNextFile(
-                ReadActorFactoryCfg.MaxInflight));
+        FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
         IsWaitingObjectQueueResponse = true;
     }
 
@@ -2800,15 +2842,15 @@ private:
         IsWaitingObjectQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
-        IsObjectQueueEmpty = objectBatch.GetNoMoreFiles();
-        ObjectPathCache.insert(
-            ObjectPathCache.end(),
-            std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
-            std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
+        IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
+        if (!objectBatch.GetObjectPaths().empty()) {
+            PathBatchQueue.emplace_back(
+                std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
+                std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
+        }
         LOG_D(
             "TS3StreamReadActor",
-            "HandleObjectPathBatch " << ObjectPathCache.size() << " IsObjectQueueEmpty "
-                                     << IsObjectQueueEmpty << " MaxInflight " << ReadActorFactoryCfg.MaxInflight);
+            "HandleObjectPathBatch of size " << objectBatch.GetObjectPaths().size());
         while (TryRegisterCoro()) {}
 
         if (LastFileWasProcessed()) {
@@ -2817,7 +2859,7 @@ private:
     }
 
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
-        IsObjectQueueEmpty = true;
+        IsFileQueueEmpty = true;
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
@@ -2863,6 +2905,9 @@ private:
 
     void HandleFileFinished(TEvPrivate::TEvFileFinished::TPtr& ev) {
         CoroActors.erase(ev->Sender);
+        if (IsCurrentBatchEmpty && CoroActors.size() == 0) {
+            IsCurrentBatchEmpty = false;
+        }
         if (ev->Get()->IngressDelta) {
             IngressStats.Bytes += ev->Get()->IngressDelta;
             IngressStats.Chunks++;
@@ -2894,7 +2939,7 @@ private:
         }
         CompletedFiles++;
         IngressStats.Splits++;
-        if (!ObjectPathCache.empty()) {
+        if (!PathBatchQueue.empty()) {
             TryRegisterCoro();
         } else {
             /*
@@ -2924,7 +2969,7 @@ private:
     }
 
     bool LastFileWasProcessed() const {
-        return Blocks.empty() && (ListedFiles == CompletedFiles) && IsObjectQueueEmpty;
+        return Blocks.empty() && (ListedFiles == CompletedFiles) && IsFileQueueEmpty;
     }
 
     void StopLoadsIfEnough(ui64 consumedRows) {
@@ -2964,8 +3009,9 @@ private:
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
-    std::vector<TObjectPath> ObjectPathCache;
-    bool IsObjectQueueEmpty = false;
+    TDeque<TVector<TObjectPath>> PathBatchQueue;
+    bool IsCurrentBatchEmpty = false;
+    bool IsFileQueueEmpty = false;
     bool IsWaitingObjectQueueResponse = false;
     const bool AddPathIndex;
     size_t ListedFiles = 0;

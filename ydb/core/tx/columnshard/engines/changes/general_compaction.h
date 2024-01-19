@@ -19,9 +19,10 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
+        auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result += 2 * p.GetBlobBytes();
+            result = predictor->AddPortion(p);
         }
         return result;
     }
@@ -30,7 +31,7 @@ public:
 
     class IMemoryPredictor {
     public:
-        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) = 0;
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
         virtual ~IMemoryPredictor() = default;
     };
 
@@ -38,8 +39,8 @@ public:
     private:
         ui64 SumMemory = 0;
     public:
-        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) override {
-            for (auto&& i : portionInfo->GetRecords()) {
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
+            for (auto&& i : portionInfo.GetRecords()) {
                 SumMemory += i.BlobRange.Size;
                 SumMemory += i.GetMeta().GetRawBytesVerified();
             }
@@ -52,19 +53,18 @@ public:
         ui64 SumMemory = 0;
         THashMap<ui32, ui64> MaxMemoryByColumnChunk;
     public:
-        virtual ui64 AddPortion(const std::shared_ptr<TPortionInfo>& portionInfo) override {
-            SumMemory += portionInfo->GetRecordsCount() * 24;
-            for (auto&& i : portionInfo->GetRecords()) {
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
+            SumMemory += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
+            for (auto&& i : portionInfo.GetRecords()) {
                 SumMemory += i.BlobRange.Size;
-                SumMemory += i.GetMeta().GetRawBytesVerified();
                 auto it = MaxMemoryByColumnChunk.find(i.GetColumnId());
                 if (it == MaxMemoryByColumnChunk.end()) {
-                    MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
+                    it = MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified()).first;
                 } else if (it->second < i.GetMeta().GetRawBytesVerified()) {
                     SumMemory -= it->second;
                     it->second = i.GetMeta().GetRawBytesVerified();
-                    SumMemory += it->second;
                 }
+                SumMemory += it->second;
             }
             return SumMemory;
         }

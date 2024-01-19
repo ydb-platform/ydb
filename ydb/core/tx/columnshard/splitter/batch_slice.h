@@ -87,10 +87,11 @@ public:
 };
 
 class TGeneralSerializedSlice {
+private:
+    YDB_READONLY(ui32, RecordsCount, 0);
 protected:
     std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
-    std::optional<ui32> RecordsCount;
     ISchemaDetailInfo::TPtr Schema;
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     TSplitSettings Settings;
@@ -123,15 +124,6 @@ public:
         return Size;
     }
 
-    ui32 GetRecordsCountVerified() const {
-        AFL_VERIFY(RecordsCount);
-        return *RecordsCount;
-    }
-
-    std::optional<ui32> GetRecordsCount() const {
-        return RecordsCount;
-    }
-
     std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> GroupChunksByBlobs() {
         std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         std::vector<TSplittedBlob> blobs;
@@ -150,7 +142,7 @@ public:
         }
     }
     TGeneralSerializedSlice(const std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
-    TGeneralSerializedSlice(ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
@@ -166,10 +158,9 @@ private:
     using TBase = TGeneralSerializedSlice;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 public:
-    TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
-    explicit TBatchSerializedSlice(TVectorView<TBatchSerializedSlice>&& objects)
-    {
+    explicit TBatchSerializedSlice(TVectorView<TBatchSerializedSlice>&& objects) {
         Y_ABORT_UNLESS(objects.size());
         std::swap(*this, objects.front());
         for (ui32 i = 1; i < objects.size(); ++i) {

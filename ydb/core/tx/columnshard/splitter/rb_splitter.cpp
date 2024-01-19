@@ -34,7 +34,7 @@ TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters
     Y_ABORT_UNLESS(chunkStartPosition == slices.size());
     ui32 recordsCountCheck = 0;
     for (auto&& i : Slices) {
-        recordsCountCheck += i.GetRecordsCountVerified();
+        recordsCountCheck += i.GetRecordsCount();
     }
     Y_ABORT_UNLESS(recordsCountCheck == batch->num_rows());
 }

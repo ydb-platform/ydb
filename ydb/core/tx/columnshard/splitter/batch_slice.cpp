@@ -1,5 +1,6 @@
 #include "batch_slice.h"
 #include "simple.h"
+#include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NOlap {
 
@@ -114,22 +115,22 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vecto
         Data.emplace_back(std::move(entity));
     }
     Y_ABORT_UNLESS(recordsCount);
-    RecordsCount = recordsCount;
+    RecordsCount = *recordsCount;
 }
 
-TGeneralSerializedSlice::TGeneralSerializedSlice(ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
-    : Schema(schema)
+TGeneralSerializedSlice::TGeneralSerializedSlice(const ui32 recordsCount, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
+    : RecordsCount(recordsCount)
+    , Schema(schema)
     , Counters(counters)
     , Settings(settings)
 {
 }
 
-TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
-    : TBase(schema, counters, settings)
+TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings)
+    : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters, settings)
     , Batch(batch)
 {
     Y_ABORT_UNLESS(batch);
-    RecordsCount = batch->num_rows();
     Data.reserve(batch->num_columns());
     for (auto&& i : batch->schema()->fields()) {
         TSplittedEntity c(schema->GetColumnId(i->name()));
@@ -155,11 +156,7 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
 
 void TGeneralSerializedSlice::MergeSlice(TGeneralSerializedSlice&& slice) {
     Y_ABORT_UNLESS(Data.size() == slice.Data.size());
-    if (!RecordsCount) {
-        RecordsCount = slice.GetRecordsCountVerified();
-    } else {
-        *RecordsCount += slice.GetRecordsCountVerified();
-    }
+    RecordsCount += slice.GetRecordsCount();
     for (ui32 i = 0; i < Data.size(); ++i) {
         Size += slice.Data[i].GetSize();
         Data[i].Merge(std::move(slice.Data[i]));

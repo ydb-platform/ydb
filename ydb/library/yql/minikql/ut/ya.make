@@ -38,7 +38,6 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins/llvm14
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/actors/testlib
 )
 
 YQL_LAST_ABI_VERSION()

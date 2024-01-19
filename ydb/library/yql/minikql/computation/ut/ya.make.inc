@@ -31,7 +31,6 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/dq/proto
-    ydb/library/actors/testlib
 )
 
 YQL_LAST_ABI_VERSION()

@@ -379,6 +379,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #undef DECLARE_YSON_STRUCT_LITE
 #undef REGISTER_YSON_STRUCT_LITE
 #undef DEFINE_YSON_STRUCT
+#undef DEFINE_YSON_STRUCT_LITE
 #undef REGISTER_EXTERNALIZED_YSON_STRUCT
 
 #define YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \

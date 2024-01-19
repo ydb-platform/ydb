@@ -326,8 +326,11 @@ private:
 
         evWrite->AddOperation(
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE,
-            Settings.GetTable().GetTableId(),
-            Settings.GetTable().GetVersion() + 1, // TODO: SchemeShard returns wrong version.
+            {
+                Settings.GetTable().GetOwnerId(),
+                Settings.GetTable().GetTableId(),
+                Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
+            },
             ColumnIds,
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);

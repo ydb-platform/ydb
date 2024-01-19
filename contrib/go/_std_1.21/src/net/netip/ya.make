@@ -1,25 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    leaf_alts.go
-    netip.go
-    uint128.go
-)
-
-GO_TEST_SRCS(
-    export_test.go
-    inlining_test.go
-    netip_pkg_test.go
-    uint128_test.go
-)
-
-GO_XTEST_SRCS(
-    fuzz_test.go
-    netip_test.go
-    slow_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		leaf_alts.go
+		netip.go
+		uint128.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

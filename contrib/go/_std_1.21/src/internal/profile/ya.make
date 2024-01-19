@@ -1,21 +1,96 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    encode.go
-    filter.go
-    legacy_profile.go
-    merge.go
-    profile.go
-    proto.go
-    prune.go
-)
-
-GO_TEST_SRCS(
-    profile_test.go
-    proto_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		encode.go
+		filter.go
+		legacy_profile.go
+		merge.go
+		profile.go
+		proto.go
+		prune.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

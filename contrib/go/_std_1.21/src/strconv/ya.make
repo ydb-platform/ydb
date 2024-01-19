@@ -1,44 +1,159 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    atob.go
-    atoc.go
-    atof.go
-    atoi.go
-    bytealg.go
-    ctoa.go
-    decimal.go
-    doc.go
-    eisel_lemire.go
-    ftoa.go
-    ftoaryu.go
-    isprint.go
-    itoa.go
-    quote.go
-)
-
-GO_TEST_SRCS(
-    export_test.go
-    internal_test.go
-)
-
-GO_XTEST_SRCS(
-    atob_test.go
-    atoc_test.go
-    atof_test.go
-    atoi_test.go
-    ctoa_test.go
-    decimal_test.go
-    example_test.go
-    fp_test.go
-    ftoa_test.go
-    ftoaryu_test.go
-    itoa_test.go
-    quote_test.go
-    strconv_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		atob.go
+		atoc.go
+		atof.go
+		atoi.go
+		bytealg.go
+		ctoa.go
+		decimal.go
+		doc.go
+		eisel_lemire.go
+		ftoa.go
+		ftoaryu.go
+		isprint.go
+		itoa.go
+		quote.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

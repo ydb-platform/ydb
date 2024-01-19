@@ -1,22 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    reader.go
-    register.go
-    struct.go
-    writer.go
-)
-
-GO_TEST_SRCS(
-    fuzz_test.go
-    reader_test.go
-    writer_test.go
-    zip_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		reader.go
+		register.go
+		struct.go
+		writer.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

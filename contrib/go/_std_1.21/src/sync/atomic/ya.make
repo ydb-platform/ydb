@@ -16,13 +16,4 @@ ELSE()
     )
 ENDIF()
 
-GO_XTEST_SRCS(
-    atomic_test.go
-    example_test.go
-    value_test.go
-)
-
 END()
-
-RECURSE(
-)

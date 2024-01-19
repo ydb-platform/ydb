@@ -1,42 +1,66 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    rand.go
-    util.go
-)
-
-GO_TEST_SRCS(rand_test.go)
-
-GO_XTEST_SRCS(
-    example_test.go
-    util_test.go
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        rand_getrandom.go
-        rand_unix.go
+		rand.go
+		rand_getrandom.go
+		rand_unix.go
+		util.go
     )
-
-    GO_TEST_SRCS(rand_batched_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_LINUX AND ARCH_ARM64)
     SRCS(
-        rand_getentropy.go
-        rand_unix.go
+		rand.go
+		rand_getrandom.go
+		rand_unix.go
+		util.go
     )
-
-    GO_TEST_SRCS(rand_batched_test.go)
-ENDIF()
-
-IF (OS_WINDOWS)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        rand_windows.go
+		rand.go
+		rand_getrandom.go
+		rand_unix.go
+		util.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		rand.go
+		rand_getentropy.go
+		rand_unix.go
+		util.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		rand.go
+		rand_getentropy.go
+		rand_unix.go
+		util.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		rand.go
+		rand_getentropy.go
+		rand_unix.go
+		util.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		rand.go
+		rand_windows.go
+		util.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		rand.go
+		rand_windows.go
+		util.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		rand.go
+		rand_windows.go
+		util.go
     )
 ENDIF()
-
 END()
-
-RECURSE(
-)

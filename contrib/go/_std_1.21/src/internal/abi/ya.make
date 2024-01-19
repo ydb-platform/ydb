@@ -1,35 +1,132 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    abi.go
-    abi_test.s
-    compiletype.go
-    funcpc.go
-    map.go
-    stack.go
-    stub.s
-    symtab.go
-    type.go
-    unsafestring_go120.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(abi_test.go)
-
-IF (ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        abi_amd64.go
+		abi.go
+		abi_amd64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		abi.go
+		abi_amd64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		abi.go
+		abi_amd64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		abi.go
+		abi_arm64.go
+		abi_test.s
+		compiletype.go
+		funcpc.go
+		map.go
+		stack.go
+		stub.s
+		symtab.go
+		type.go
+		unsafestring_go120.go
     )
 ENDIF()
-
-IF (ARCH_ARM64)
-    SRCS(
-        abi_arm64.go
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -51,9 +51,6 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             Domains[key].Path = path;
             if (entry.DomainInfo) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
-                if (Domains[key].ServerlessComputeResourcesMode.Empty()) {
-                    Domains[key].ServerlessComputeResourcesMode = entry.DomainInfo->ServerlessComputeResourcesMode;
-                }
             }
             BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);
             Execute(CreateUpdateDomain(key));
@@ -78,18 +75,11 @@ void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
 }
 
 TString THive::GetDomainName(TSubDomainKey domain) {
-    auto itDomain = Domains.find(domain);
-    if (itDomain != Domains.end()) {
-        if (!itDomain->second.Path.empty()) {
-            return itDomain->second.Path;
-        }
-    } else {
-        SeenDomain(domain);
-    }
     if (domain == TSubDomainKey()) {
         return "<empty-subdomain-key>";
     }
-    return TStringBuilder() << domain;
+    SeenDomain(domain);
+    return Domains.at(domain).Path;
 }
 
 } // NHive

@@ -39,7 +39,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        BoundaryPartition = ChoosePartitionSync(ctx);
+        BoundaryPartition = ChoosePartitionSync();
 
         if (TThis::SourceId) {
             TThis::Initialize(ctx);
@@ -247,7 +247,7 @@ private:
         TThis::StartGetOwnership(ctx);
     }
 
-    const TPartitionInfo* ChoosePartitionSync(const TActorContext& /*ctx*/) const {
+    const TPartitionInfo* ChoosePartitionSync() const {
         if (TThis::PreferedPartition) {
             return TThis::Chooser->GetPartition(TThis::PreferedPartition.value());
         } else if (TThis::SourceId) {

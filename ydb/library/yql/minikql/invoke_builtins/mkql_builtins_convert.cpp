@@ -861,16 +861,6 @@ void RegisterWideToDateCasts(IBuiltinFunctionRegistry& registry) {
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TTzDate>, NUdf::MAX_DATE - 1U>(registry);
 }
 
-void RegisterWideToDate32Casts(IBuiltinFunctionRegistry& registry) {
-/*     RegisterWideToDateCastsImpl<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TDate32>>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TDate32>>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<ui16>, NUdf::TDataType<NUdf::TDate32>>(registry); */
-    RegisterWideToDateCastsImpl<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
-    RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
-}
-
 void RegisterWideToDatetimeCasts(IBuiltinFunctionRegistry& registry) {
     RegisterWideToDateCastsImpl<NUdf::TDataType<i8>, NUdf::TDataType<NUdf::TDatetime>>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<i16>, NUdf::TDataType<NUdf::TDatetime>>(registry);

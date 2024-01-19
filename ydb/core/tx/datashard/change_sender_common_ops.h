@@ -62,7 +62,7 @@ public:
     virtual void RemoveRecords() = 0;
 
     virtual void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
-    virtual void ProcessRecords(TVector<TChangeRecord>&& records) = 0;
+    virtual void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) = 0;
     virtual void ForgetRecords(TVector<ui64>&& records) = 0;
     virtual void OnReady(ui64 partitionId) = 0;
     virtual void OnGone(ui64 partitionId) = 0;
@@ -75,7 +75,7 @@ public:
     virtual void Resolve() = 0;
     virtual bool IsResolving() const = 0;
     virtual bool IsResolved() const = 0;
-    virtual ui64 GetPartitionId(const TChangeRecord& record) const = 0;
+    virtual ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const = 0;
 };
 
 class TBaseChangeSender: public IChangeSender {
@@ -86,7 +86,7 @@ class TBaseChangeSender: public IChangeSender {
         TActorId ActorId;
         bool Ready = false;
         TVector<TEnqueuedRecord> Pending;
-        TVector<TChangeRecord> Prepared;
+        TVector<NChangeExchange::IChangeRecord::TPtr> Prepared;
         TVector<ui64> Broadcasting;
     };
 
@@ -108,7 +108,7 @@ class TBaseChangeSender: public IChangeSender {
     void SendPreparedRecords(ui64 partitionId);
     void ReEnqueueRecords(const TSender& sender);
 
-    TBroadcast& EnsureBroadcast(const TChangeRecord& record);
+    TBroadcast& EnsureBroadcast(NChangeExchange::IChangeRecord::TPtr record);
     bool AddBroadcastPartition(ui64 order, ui64 partitionId);
     bool RemoveBroadcastPartition(ui64 order, ui64 partitionId);
     bool CompleteBroadcastPartition(ui64 order, ui64 partitionId);
@@ -137,7 +137,7 @@ protected:
     void RemoveRecords() override;
 
     void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
-    void ProcessRecords(TVector<TChangeRecord>&& records) override;
+    void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) override;
     void ForgetRecords(TVector<ui64>&& records) override;
     void OnReady(ui64 partitionId) override;
     void OnGone(ui64 partitionId) override;
@@ -162,7 +162,7 @@ private:
     THashMap<ui64, TSender> Senders; // ui64 is partition id
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TRequestedRecord> PendingBody;
-    TMap<ui64, TChangeRecord> PendingSent; // ui64 is order
+    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingSent; // ui64 is order
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;

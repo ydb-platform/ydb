@@ -1,5 +1,6 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
+#include "change_record.h"
 #include "change_record_cdc_serializer.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
@@ -93,7 +94,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
-        for (const auto& record : ev->Get()->Records) {
+        for (auto recordPtr : ev->Get()->Records) {
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+
             if (record.GetSeqNo() <= MaxSeqNo) {
                 continue;
             }
@@ -653,13 +656,13 @@ class TCdcChangeSenderMain
         return KeyDesc && KeyDesc->Partitions;
     }
 
-    ui64 GetPartitionId(const TChangeRecord& record) const override {
+    ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
         Y_ABORT_UNLESS(KeyDesc);
         Y_ABORT_UNLESS(KeyDesc->Partitions);
 
         switch (Stream.Format) {
             case NKikimrSchemeOp::ECdcStreamFormatProto: {
-                const auto range = TTableRange(record.GetKey());
+                const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
                 Y_ABORT_UNLESS(range.Point);
 
                 TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
@@ -683,7 +686,7 @@ class TCdcChangeSenderMain
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
                 using namespace NKikimr::NDataStreams::V1;
-                const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
+                const auto hashKey = HexBytesToDecimal(record->Get<TChangeRecord>()->GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());
             }
 

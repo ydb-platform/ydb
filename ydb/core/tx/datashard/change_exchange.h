@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include "change_record.h"
 
+#include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
@@ -105,10 +105,10 @@ struct TEvChangeExchange {
     };
 
     struct TEvRecords: public TEventLocal<TEvRecords, EvRecords> {
-        TVector<TChangeRecord> Records;
+        TVector<NChangeExchange::IChangeRecord::TPtr> Records;
 
-        explicit TEvRecords(const TVector<TChangeRecord>& records);
-        explicit TEvRecords(TVector<TChangeRecord>&& records);
+        explicit TEvRecords(const TVector<NChangeExchange::IChangeRecord::TPtr>& records);
+        explicit TEvRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records);
         TString ToString() const override;
     };
 

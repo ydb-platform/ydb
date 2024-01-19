@@ -166,14 +166,14 @@ public:
                     key1PageId = level[i].GetShortChild(pos).PageId;
                     // move row1 to the first key <= key1
                     row1 = Min(row1, level[i].GetShortChild(pos).RowCount - 1);
-                }
+                                    }
                 if (level[i].PageId == key2PageId) {
                     TRecIdx pos = level[i].SeekReverse(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                     key2PageId = level[i].GetShortChild(pos).PageId;
                     // move row2 to the first key > key2
                     if (pos) {
                         row2 = Max(row2, level[i].GetShortChild(pos - 1).RowCount - 1);
-                        // always charge row1, no matter what keys are
+                                                // always charge row1, no matter what keys are
                         row2 = Min(row2, row1);
                     }
                 }
@@ -218,7 +218,6 @@ public:
 
         iterateLevel(hasDataPage);
 
-        // TODO: overshot for keys search
         return {ready, row2 == sliceRow2};
     }
 

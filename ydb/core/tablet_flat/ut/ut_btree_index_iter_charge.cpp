@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             auto result = reverse
-                ? charge.DoReverse(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit)
+                ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit);
             if (result.Ready) {
                 return result.Overshot;

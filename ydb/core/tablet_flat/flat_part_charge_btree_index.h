@@ -108,7 +108,7 @@ public:
         };
 
         const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
-                        return HasDataPage(current.GetShortChild(pos).PageId, { });
+            return HasDataPage(current.GetShortChild(pos).PageId, { });
         };
 
         ready &= TryLoadRoot(meta, level);

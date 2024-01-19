@@ -158,6 +158,7 @@ class KikimrConfigGenerator(object):
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
             hive_config=None,
+            datashard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None
     ):
@@ -343,6 +344,9 @@ class KikimrConfigGenerator(object):
 
         if hive_config:
             self.yaml_config["hive_config"] = hive_config
+
+        if datashard_config:
+            self.yaml_config["data_shard_config"] = datashard_config
 
         self.__build()
 

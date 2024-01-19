@@ -15,7 +15,7 @@ class TNamedPipe
 {
 public:
     ~TNamedPipe();
-    static TNamedPipePtr Create(const TString& path, int permissions = 0660);
+    static TNamedPipePtr Create(const TString& path, int permissions = 0660, std::optional<int> capacity = {});
     static TNamedPipePtr FromPath(const TString& path);
 
     NNet::IConnectionReaderPtr CreateAsyncReader();
@@ -25,12 +25,13 @@ public:
 
 private:
     const TString Path_;
+    const std::optional<int> Capacity_;
 
     //! Whether pipe was created by this class
     //! and should be removed in destructor.
     const bool Owning_;
 
-    explicit TNamedPipe(const TString& path, bool owning);
+    explicit TNamedPipe(const TString& path, std::optional<int> capacity, bool owning);
     void Open(int permissions);
     DECLARE_NEW_FRIEND()
 };

@@ -32,9 +32,9 @@ void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
 
 void TRetryingPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
 {
-    registrar.ExternalClassParameter("periodic_options", &TThat::PeriodicOptions)
+    registrar.ExternalClassParameter("periodic", &TThat::Periodic)
         .Default();
-    registrar.ExternalClassParameter("backoff_options", &TThat::BackoffOptions)
+    registrar.ExternalClassParameter("backoff_strategy", &TThat::BackoffStrategy)
         .Default();
 }
 

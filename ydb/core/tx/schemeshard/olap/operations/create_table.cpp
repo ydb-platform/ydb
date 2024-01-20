@@ -1,7 +1,6 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_olap_types.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -109,7 +108,7 @@ private:
                     return false;
                 }
                 for (const TString& columnName : sharding.GetColumns()) {
-                    auto* pColumn = schema.GetColumnByName(columnName);
+                    auto* pColumn = schema.GetColumns().GetByName(columnName);
                     if (!pColumn) {
                         errors.AddError(Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str()));
                         return false;

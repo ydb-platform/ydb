@@ -1,8 +1,9 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,7 +16,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapStore TDropParts"
+                << "TDropColumnTable TDropParts"
                 << " operationId#" << OperationId;
     }
 
@@ -26,6 +27,10 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -34,16 +39,51 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
-        NIceDb::TNiceDb db(context.GetDB());
+        TPathId pathId = txState->TargetPathId;
 
         txState->ClearShardsInProgress();
 
-        // We don't actually propose any transactions right now, just move to Propose state
+        auto seqNo = context.SS->StartRound(*txState);
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        return true;
+        TString columnShardTxBody;
+        {
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            context.SS->FillSeqNo(tx, seqNo);
+
+            auto* drop = tx.MutableDropTable();
+
+            drop->SetPathId(pathId.LocalPathId);
+
+            Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
+        }
+
+        for (auto& shard : txState->Shards) {
+            Y_ABORT_UNLESS(shard.TabletType == ETabletType::ColumnShard);
+
+            TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+
+            {
+                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                    NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                    context.SS->TabletID(),
+                    context.Ctx.SelfID,
+                    ui64(OperationId.GetTxId()),
+                    columnShardTxBody,
+                    context.SS->SelectProcessingParams(txState->TargetPathId));
+
+                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
+            }
+
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " ProgressState"
+                                    << " Propose modify scheme on shard"
+                                    << " tabletId: " << tabletId);
+        }
+
+        txState->UpdateShardsInProgress();
+        return false;
     }
 };
 
@@ -54,7 +94,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapStore TPropose"
+                << "TDropColumnTable TPropose"
                 << " operationId#" << OperationId;
     }
 
@@ -76,7 +116,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
@@ -121,10 +161,15 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
-        // We don't actually propose any transactions right now
         TSet<TTabletId> shardSet;
+        for (const auto& shard : txState->Shards) {
+            TShardIdx idx = shard.Idx;
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(idx));
+            TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
+            shardSet.insert(tablet);
+        }
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
         return false;
@@ -138,7 +183,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapStore TProposedWaitParts"
+                << "TDropColumnTable TProposedWaitParts"
                 << " operationId#" << OperationId;
     }
 
@@ -154,7 +199,7 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -183,7 +228,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
         txState->ClearShardsInProgress();
 
@@ -213,10 +258,34 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapStore TProposedDeleteParts"
+                << "TDropColumnTable TProposedDeleteParts"
                 << " operationId#" << OperationId;
     }
 
+    bool Finish(TOperationContext& context) {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
+
+        bool isStandalone = false;
+        {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
+            auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
+            isStandalone = tableInfo->IsStandalone();
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
+
+        if (isStandalone) {
+            for (auto& shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        }
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
 public:
     TProposedDeleteParts(TOperationId id)
         : OperationId(id)
@@ -227,31 +296,42 @@ public:
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
+    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
+        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
+        return Finish(context);
+    }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
-
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropOlapStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTable);
 
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistOlapStoreRemove(db, txState->TargetPathId);
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            DebugHint() << " ProgressState"
+            << ", at schemeshard: " << ssId);
 
-        for (auto& shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
+        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
+            return Finish(context);
+        }
+        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
+        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
+        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetUseTiering();
+        if (!tieringId) {
+            return Finish(context);
         }
 
-        context.OnComplete.DoneOperation(OperationId);
-
-        return true;
+        {
+            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
+                tieringId, txState->TargetPathId.LocalPathId), nullptr);
+            task.SetId(OperationId.SerializeToString());
+            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
+            return false;
+        }
     }
 };
 
-class TDropOlapStore: public TSubOperation {
+class TDropColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
@@ -262,15 +342,16 @@ public:
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
+        auto opTxId = OperationId.GetTxId();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropOlapStore Propose"
+                     "TDropColumnTable Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", pathId: " << drop.GetId()
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(opTxId), ui64(ssId));
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
@@ -284,14 +365,13 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsOlapStore()
+                .IsColumnTable()
                 .NotUnderDeleting()
-                .NotUnderOperation()
-                .NotChildren(NKikimrScheme::StatusNameConflict);
+                .NotUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved() && path.Base()->IsOlapStore() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsColumnTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
@@ -322,47 +402,79 @@ public:
             return result;
         }
 
-        Y_ABORT_UNLESS(context.SS->OlapStores.contains(path.Base()->PathId));
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path.Base()->PathId);
-
-        if (!storeInfo->ColumnTables.empty()) {
-            errStr = TStringBuilder() << "OlapStore cannot be dropped until all tables are dropped";
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropOlapStore, path.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropColumnTable, path.Base()->PathId);
         txState.State = TTxState::DropParts;
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.GetDB());
 
-        for (auto shardIdx : storeInfo->GetColumnShards()) {
-            Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
+        Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path.Base()->PathId));
+        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
+        if (tableInfo->IsStandalone()) {
+            NIceDb::TNiceDb db(context.GetDB());
+            for (auto shardIdx : tableInfo->OwnedColumnShards) {
+                Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 
-            context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-            context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+                context.SS->ShardInfos[shardIdx].CurrentTxId = opTxId;
+                context.SS->PersistShardTx(db, shardIdx, opTxId);
+            }
+        } else {
+            auto& storePathId = *tableInfo->OlapStorePathId;
+            TPath storePath = TPath::Init(storePathId, context.SS);
+            {
+                TPath::TChecker checks = storePath.Check();
+                checks
+                    .NotEmpty()
+                    .IsResolved()
+                    .IsOlapStore()
+                    .NotUnderOperation();
+
+                if (!checks) {
+                    result->SetError(checks.GetStatus(), checks.GetError());
+                    return result;
+                }
+            }
+
+            Y_ABORT_UNLESS(context.SS->OlapStores.contains(storePathId));
+            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
+
+            Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));
+            storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
+
+            // Sequentially chain operations in the same olap store
+            if (context.SS->Operations.contains(storePath.Base()->LastTxId)) {
+                context.OnComplete.Dependence(storePath.Base()->LastTxId, opTxId);
+            }
+            storePath.Base()->LastTxId = opTxId;
+
+            NIceDb::TNiceDb db(context.GetDB());
+            context.SS->PersistLastTxId(db, storePath.Base());
+
+            // TODO: we need to know all shards where this table has ever been created
+            for (ui64 columnShardId : tableInfo->ColumnShards) {
+                auto tabletId = TTabletId(columnShardId);
+                auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
+
+                Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
+
+                context.SS->ShardInfos[shardIdx].CurrentTxId = opTxId;
+                context.SS->PersistShardTx(db, shardIdx, opTxId);
+            }
         }
-
-        // Sequentially chain operations in the same olap store
-        if (context.SS->Operations.contains(path.Base()->LastTxId)) {
-            context.OnComplete.Dependence(path.Base()->LastTxId, OperationId.GetTxId());
-        }
-        path.Base()->LastTxId = OperationId.GetTxId();
-        context.SS->PersistLastTxId(db, path.Base());
 
         context.OnComplete.ActivateTx(OperationId);
 
         path.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
-        path.Base()->DropTxId = OperationId.GetTxId();
-        path.Base()->LastTxId = OperationId.GetTxId();
-        context.SS->PersistLastTxId(db, path.Base());
+        path.Base()->DropTxId = opTxId;
+        path.Base()->LastTxId = opTxId;
 
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistLastTxId(db, path.Base());
         context.SS->PersistTxState(db, OperationId);
 
-        context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Sub(1);
+        context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Sub(1);
 
         Y_VERIFY_S(context.SS->PathsById.contains(path.Base()->ParentPathId),
                    "no parent with id: " << path.Base()->ParentPathId << " for node with id: " << path.Base()->PathId);
@@ -381,12 +493,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TDropOlapStore");
+        Y_ABORT("no AbortPropose for TDropColumnTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropOlapStore AbortUnsafe"
+                     "TDropColumnTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -442,13 +554,13 @@ private:
 
 }
 
-ISubOperation::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropOlapStore>(id, tx);
+ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropColumnTable>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TDropOlapStore>(id, state);
+    return MakeSubOperation<TDropColumnTable>(id, state);
 }
 
 }

@@ -1,7 +1,6 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_olap_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/scheme/scheme_types_proto.h>

@@ -87,6 +87,8 @@ ENDIF()
         ydb/core/fq/libs/db_id_async_resolver_impl
 
         ydb/library/yql/udfs/common/clickhouse/client
+
+        ydb/library/yql/dq/actors/spilling
     )
 
     YQL_LAST_ABI_VERSION()

@@ -1,4 +1,5 @@
 #include "abstract.h"
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract.h>
 
 namespace NKikimr::NKqp {
 
@@ -11,7 +12,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TUpsertIndexOperation>(GetTypeName());
 private:
     TString IndexName;
-    TInterfaceProtoContainer<NOlap::IIndexMetaConstructor> IndexMetaConstructor;
+    NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexMetaConstructor;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

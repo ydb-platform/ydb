@@ -113,7 +113,7 @@ public:
 
     bool Initialize(const TString& className) {
         AFL_VERIFY(!Object)("problem", "initialize for not-empty-object");
-        Object = (TFactory::Construct(className));
+        Object.reset(TFactory::Construct(className));
         if (!Object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
             return false;

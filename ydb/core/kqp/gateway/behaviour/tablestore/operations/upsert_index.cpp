@@ -1,5 +1,6 @@
 #include "upsert_index.h"
 #include <util/string/type.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NKqp {
 
@@ -25,7 +26,7 @@ TConclusionStatus TUpsertIndexOperation::DoDeserialize(NYql::TObjectSettingsImpl
             return TConclusionStatus::Fail("can't find alter parameter FEATURES");
         }
         if (!IndexMetaConstructor.Initialize(indexType)) {
-            return TConclusionStatus::Fail("can't initialize index meta object for type \"" + IndexType + "\"");
+            return TConclusionStatus::Fail("can't initialize index meta object for type \"" + indexType + "\"");
         }
         NJson::TJsonValue jsonData;
         if (!NJson::ReadJsonFastTree(*fValue, &jsonData)) {

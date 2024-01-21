@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
-    GLOBAL bloom.cpp
 )
 
 PEERDIR(

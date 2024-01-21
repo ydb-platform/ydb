@@ -12,17 +12,16 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(TString, TypeName);
     protected:
-        NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta> IndexConstructor;
+        NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
     public:
         TOlapIndexUpsert() = default;
 
-        const NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>& GetIndexConstructor() const {
+        const NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor>& GetIndexConstructor() const {
             return IndexConstructor;
         }
 
-        bool ParseFromRequest(const NKikimrSchemeOp::TOlapIndexDescription& columnSchema, IErrorCollector& errors);
-        void ParseFromLocalDB(const NKikimrSchemeOp::TOlapIndexDescription& columnSchema);
-        void Serialize(NKikimrSchemeOp::TOlapIndexDescription& columnSchema) const;
+        void DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
+        void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
     };
 
     class TOlapIndexesUpdate {
@@ -30,7 +29,6 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
         YDB_READONLY_DEF(TSet<TString>, DropIndexes);
     public:
-        bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors);
         bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };
 }

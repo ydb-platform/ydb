@@ -3,32 +3,40 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TOlapIndexSchema: public TOlapIndexUpsert {
+class TOlapIndexSchema {
 private:
     using TBase = TOlapIndexUpsert;
     YDB_READONLY(ui32, Id, Max<ui32>());
+    YDB_READONLY_DEF(TString, Name);
+    NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta> IndexMeta;
 public:
     TOlapIndexSchema() = default;
 
-    TOlapIndexSchema(const TOlapIndexUpsert& base, const ui32 id)
-        : TBase(base)
-        , Id(id) {
+    TOlapIndexSchema(const ui32 id, const TString& name, const std::shared_ptr<NOlap::NIndexes::IIndexMeta>& meta)
+        : Id(id)
+        , Name(name)
+        , IndexMeta(meta)
+    {
 
     }
 
-    bool ApplyUpdate(const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
+    bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
         AFL_VERIFY(upsert.GetName() == GetName());
         AFL_VERIFY(!!upsert.GetIndexConstructor());
-        if (upsert.GetIndexConstructor().GetClassName() != GetIndexConstructor().GetClassName()) {
-            errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + GetIndexConstructor().GetClassName());
+        if (upsert.GetIndexConstructor().GetClassName() != IndexMeta.GetClassName()) {
+            errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
             return false;
         }
-        IndexConstructor = upsert.GetIndexConstructor();
+        auto object = upsert.GetIndexConstructor()->CreateIndexMeta(currentSchema, errors);
+        if (!object) {
+            return false;
+        }
+        IndexMeta = NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>(object);
         return true;
     }
 
-    void Serialize(NKikimrSchemeOp::TOlapIndexDescription& columnSchema) const;
-    void ParseFromLocalDB(const NKikimrSchemeOp::TOlapIndexDescription& columnSchema);
+    void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const;
+    void DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema);
 };
 
 class TOlapIndexesDescription {
@@ -76,7 +84,7 @@ public:
     const TOlapIndexSchema* GetByIdVerified(const ui32 id) const noexcept;
     TOlapIndexSchema* MutableByIdVerified(const ui32 id) noexcept;
 
-    bool ApplyUpdate(const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId);
+    bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId);
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;

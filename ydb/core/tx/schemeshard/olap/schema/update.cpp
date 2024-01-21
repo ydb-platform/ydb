@@ -11,10 +11,6 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        if (!Indexes.Parse(tableSchema, errors)) {
-            return false;
-        }
-
         return true;
     }
 

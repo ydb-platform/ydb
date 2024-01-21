@@ -5,6 +5,7 @@ SRCS(
     GLOBAL add_column.cpp
     GLOBAL alter_column.cpp
     GLOBAL drop_column.cpp
+    GLOBAL upsert_index.cpp
 )
 
 PEERDIR(

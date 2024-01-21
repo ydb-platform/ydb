@@ -3,26 +3,32 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TOlapIndexSchema::Serialize(NKikimrSchemeOp::TOlapIndexDescription& columnSchema) const {
-    TBase::Serialize(columnSchema);
-    columnSchema.SetId(Id);
+void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
+    indexSchema.SetId(Id);
+    indexSchema.SetName(Name);
+    IndexMeta.SerializeToProto(indexSchema);
 }
 
-void TOlapIndexSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapIndexDescription& columnSchema) {
-    TBase::ParseFromLocalDB(columnSchema);
-    Id = columnSchema.GetId();
+void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
+    Id = indexSchema.GetId();
+    Name = indexSchema.GetName();
+    AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
 }
 
-bool TOlapIndexesDescription::ApplyUpdate(const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
     for (auto&& index : schemaUpdate.GetUpsertIndexes()) {
         auto* currentIndex = MutableByName(index.GetName());
         if (currentIndex) {
-            if (!currentIndex->ApplyUpdate(index, errors)) {
+            if (!currentIndex->ApplyUpdate(currentSchema, index, errors)) {
                 return false;
             }
         } else {
+            auto meta = index.GetIndexConstructor()->CreateIndexMeta(currentSchema, errors);
+            if (!meta) {
+                return false;
+            }
             const ui32 id = nextEntityId++;
-            TOlapIndexSchema newIndex(index, id);
+            TOlapIndexSchema newIndex(id, index.GetName(), meta);
             Y_ABORT_UNLESS(IndexesByName.emplace(index.GetName(), id).second);
             Y_ABORT_UNLESS(Indexes.emplace(id, std::move(newIndex)).second);
         }
@@ -44,7 +50,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapIndexesUpdate& schemaUpdate
 void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     for (const auto& indexProto : tableSchema.GetIndexes()) {
         TOlapIndexSchema index;
-        index.ParseFromLocalDB(indexProto);
+        index.DeserializeFromProto(indexProto);
         Y_ABORT_UNLESS(IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second);
         Y_ABORT_UNLESS(Indexes.emplace(indexProto.GetId(), std::move(index)).second);
     }
@@ -52,7 +58,7 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
 
 void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
     for (const auto& index : Indexes) {
-        index.second.Serialize(*tableSchema.AddIndexes());
+        index.second.SerializeToProto(*tableSchema.AddIndexes());
     }
 }
 

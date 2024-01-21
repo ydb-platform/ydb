@@ -6,6 +6,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <library/cpp/object_factory/object_factory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
 #include <util/generic/string.h>
 
 #include <memory>
@@ -13,6 +14,11 @@
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
+}
+
+namespace NKikimr::NSchemeShard {
+class TOlapSchema;
+class IErrorCollector;
 }
 
 namespace NKikimr::NOlap::NIndexes {
@@ -48,8 +54,7 @@ class IIndexMeta {
 protected:
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
     virtual std::shared_ptr<IIndexChecker> DoBuildIndexChecker(const TProgramContainer& program) const = 0;
-    virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
+    virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
 
 public:
@@ -66,11 +71,7 @@ public:
         return DoBuildIndexChecker(program);
     }
 
-    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
-        return DoDeserializeFromJson(jsonInfo);
-    }
-
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
         return DoDeserializeFromProto(proto);
     }
 
@@ -81,29 +82,118 @@ public:
     virtual TString GetClassName() const = 0;
 };
 
-class TIndexMetaContainer {
-private:
-    YDB_READONLY(ui32, IndexId, 0);
-    YDB_READONLY_DEF(std::shared_ptr<IIndexMeta>, Object);
+class IIndexMetaConstructor {
+protected:
+    virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
+    virtual std::shared_ptr<IIndexMeta> DoCreateIndexMeta(const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) = 0;
+    virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const = 0;
 public:
+    using TFactory = NObjectFactory::TObjectFactory<IIndexMetaConstructor, TString>;
+    using TProto = NKikimrSchemeOp::TOlapIndexRequested;
+
+    virtual ~IIndexMetaConstructor() = default;
+
+    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        return DoDeserializeFromJson(jsonInfo);
+    }
+
+    std::shared_ptr<IIndexMeta> CreateIndexMeta(const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+        return DoCreateIndexMeta(currentSchema, errors);
+    }
+
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+
+    void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
+        return DoSerializeToProto(proto);
+    }
+
+    virtual TString GetClassName() const = 0;
+};
+
+class TIndexMetaContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta> {
+private:
+    using TBase = NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta>;
+    YDB_READONLY(ui32, IndexId, 0);
+public:
+    TIndexMetaContainer() = default;
     TIndexMetaContainer(const ui32 indexId, const std::shared_ptr<IIndexMeta>& object)
-        : IndexId(indexId)
-        , Object(object)
+        : TBase(object)
+        , IndexId(indexId)
     {
         AFL_VERIFY(IndexId);
         AFL_VERIFY(Object);
     }
 
-    const IIndexMeta* operator->() const {
-        return Object.get();
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+        if (!TBase::DeserializeFromProto(proto)) {
+            return false;
+        }
+        IndexId = proto.GetId();
+        return true;
     }
 
     std::optional<TIndexCheckerContainer> BuildIndexChecker(const TProgramContainer& program) const {
-        auto checker = Object->BuildIndexChecker(program);
+        auto checker = GetObjectPtr()->BuildIndexChecker(program);
         if (!checker) {
             return {};
         }
         return TIndexCheckerContainer(IndexId, checker);
+    }
+};
+
+class TPortionIndexChunk: public IPortionDataChunk {
+private:
+    using TBase = IPortionDataChunk;
+    const TString Data;
+protected:
+    virtual const TString& DoGetData() const override {
+        return Data;
+    }
+    virtual TString DoDebugString() const override {
+        return "";
+    }
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+        return {};
+    }
+    virtual bool DoIsSplittable() const override {
+        return false;
+    }
+    virtual std::optional<ui32> DoGetRecordsCount() const override {
+        return {};
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+        return nullptr;
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+        return nullptr;
+    }
+    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+public:
+    TPortionIndexChunk(const ui32 entityId, const TString& data)
+        : TBase(entityId, 0) 
+        , Data(data)
+    {
+    }
+
+};
+
+class TIndexByColumns: public IIndexMeta {
+private:
+    std::shared_ptr<TColumnSaver> Saver;
+protected:
+    std::set<ui32> ColumnIds;
+    virtual std::shared_ptr<arrow::RecordBatch> DoBuildIndexImpl(TChunkedBatchReader& reader) const = 0;
+
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const override final;
+public:
+    TIndexByColumns() = default;
+    TIndexByColumns(const std::set<ui32>& columnIds)
+        : ColumnIds(columnIds)
+    {
+
     }
 };
 

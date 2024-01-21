@@ -7,7 +7,7 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        if (!Indexes.ApplyUpdate(schemaUpdate.GetIndexes(), errors, NextColumnId)) {
+        if (!Indexes.ApplyUpdate(*this, schemaUpdate.GetIndexes(), errors, NextColumnId)) {
             return false;
         }
 

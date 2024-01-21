@@ -109,7 +109,6 @@ public:
     TCommonInterfaceContainer() = default;
     TCommonInterfaceContainer(std::shared_ptr<IInterface> object)
         : Object(object) {
-
     }
 
     bool Initialize(const TString& className) {
@@ -146,6 +145,16 @@ public:
 
     std::shared_ptr<IInterface> GetObjectPtr() const {
         return Object;
+    }
+
+    std::shared_ptr<IInterface> GetObjectPtrVerified() const {
+        AFL_VERIFY(Object);
+        return Object;
+    }
+
+    const IInterface& GetObjectVerified() const {
+        AFL_VERIFY(Object);
+        return *Object;
     }
 
     const IInterface* operator->() const {

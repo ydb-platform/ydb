@@ -218,7 +218,7 @@ public:
                 << message);
         };
 
-        auto taskRunner = CreateKqpTaskRunner(context, settings, log);
+        auto taskRunner = MakeDqTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
         auto taskSettings = NDq::TDqTaskSettings(&protoTask);

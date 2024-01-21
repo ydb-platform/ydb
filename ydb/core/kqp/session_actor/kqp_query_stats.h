@@ -11,9 +11,9 @@ struct TKqpQueryStats {
     std::optional<TKqpStatsCompile> Compilation;
 
     ui64 WorkerCpuTimeUs = 0;
-    ui64 ReadSetsCount = 0;
-    ui64 MaxShardProgramSize = 0;
-    ui64 MaxShardReplySize = 0;
+    ui64 ReadSetsCount;
+    ui64 MaxShardProgramSize;
+    ui64 MaxShardReplySize;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 

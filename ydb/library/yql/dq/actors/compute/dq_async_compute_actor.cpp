@@ -509,7 +509,7 @@ private:
         }
         ProcessOutputsImpl(status);
         if (status == ERunStatus::Finished) {
-            ReportStats(TInstant::Now());
+            ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
 
         if (UseCpuQuota()) {

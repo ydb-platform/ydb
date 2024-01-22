@@ -150,6 +150,7 @@ public:
     bool EnableResourceTracker;
     std::optional<double> ResourceTrackerVCpuFactor;
     THeapProfilerConfigPtr HeapProfiler;
+    NYson::TProtobufInteropConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsConfig);
 

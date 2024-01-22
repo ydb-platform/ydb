@@ -1020,7 +1020,7 @@ TEST(TYsonToProtobufTest, Entities)
 TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
 {
     for (auto option: {EUtf8Check::Disable, EUtf8Check::LogOnFail, EUtf8Check::ThrowOnFail}) {
-        auto config = New<TProtobufInteropDynamicConfig>();
+        auto config = New<TProtobufInteropConfig>();
         config->Utf8Check = option;
         SetProtobufInteropConfig(config);
 
@@ -2635,74 +2635,117 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 
 TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
 {
-    NProto::TMessageWithEnums message;
-    {
-        auto zero = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE0;
-        auto one = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE1;
+    for (auto storageType: {EEnumYsonStorageType::String, EEnumYsonStorageType::Int}) {
+        auto config = New<TProtobufInteropConfig>();
+        config->DefaultEnumYsonStorageType = storageType;
+        SetProtobufInteropConfig(config);
 
-        message.set_enum_int(zero);
-        message.add_enum_rep_not_packed_int(zero);
-        message.add_enum_rep_not_packed_int(one);
-        message.add_enum_rep_packed_int(zero);
-        message.add_enum_rep_packed_int(one);
+        NProto::TMessageWithEnums message;
+        {
+            auto zero = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE0;
+            auto one = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE1;
 
-        message.set_enum_string(one);
-        message.add_enum_rep_not_packed_string(one);
-        message.add_enum_rep_not_packed_string(zero);
-        message.add_enum_rep_packed_string(one);
-        message.add_enum_rep_packed_string(zero);
+            message.set_enum_int(zero);
+            message.add_enum_rep_not_packed_int(zero);
+            message.add_enum_rep_not_packed_int(one);
+            message.add_enum_rep_packed_int(zero);
+            message.add_enum_rep_packed_int(one);
+
+            message.set_enum_string(one);
+            message.add_enum_rep_not_packed_string(one);
+            message.add_enum_rep_not_packed_string(zero);
+            message.add_enum_rep_packed_string(one);
+            message.add_enum_rep_packed_string(zero);
+
+            message.set_enum_without_option(zero);
+            message.add_enum_rep_not_packed_without_option(zero);
+            message.add_enum_rep_not_packed_without_option(one);
+            message.add_enum_rep_packed_without_option(zero);
+            message.add_enum_rep_packed_without_option(one);
+        }
+
+        // Proto message to yson.
+        TString stringWithYson;
+        {
+            TString protobufString;
+            Y_UNUSED(message.SerializeToString(&protobufString));
+            TStringOutput ysonOutputStream(stringWithYson);
+            TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+            ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+            EXPECT_NO_THROW(ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NProto::TMessageWithEnums>()));
+        }
+
+        // Check enum representation in yson.
+        auto resultedNode = ConvertToNode(TYsonString(stringWithYson));
+        {
+            auto expectedNode = BuildYsonNodeFluently()
+                .BeginMap()
+                    .Item("enum_int").Value(0)
+                    .Item("enum_rep_not_packed_int").BeginList()
+                        .Item().Value(0)
+                        .Item().Value(1)
+                    .EndList()
+                    .Item("enum_rep_packed_int").BeginList()
+                        .Item().Value(0)
+                        .Item().Value(1)
+                    .EndList()
+
+                    .Item("enum_string").Value("VALUE1")
+                    .Item("enum_rep_not_packed_string").BeginList()
+                        .Item().Value("VALUE1")
+                        .Item().Value("VALUE0")
+                    .EndList()
+                    .Item("enum_rep_packed_string").BeginList()
+                        .Item().Value("VALUE1")
+                        .Item().Value("VALUE0")
+                    .EndList()
+                .EndMap();
+
+                auto map = expectedNode->AsMap();
+                switch (storageType) {
+                    case EEnumYsonStorageType::String:
+                        map->AsMap()->AddChild("enum_without_option", BuildYsonNodeFluently().Value("VALUE0"));
+                        map->AsMap()->AddChild("enum_rep_not_packed_without_option", BuildYsonNodeFluently()
+                            .BeginList()
+                                .Item().Value("VALUE0")
+                                .Item().Value("VALUE1")
+                            .EndList());
+                        map->AsMap()->AddChild("enum_rep_packed_without_option", BuildYsonNodeFluently()
+                            .BeginList()
+                                .Item().Value("VALUE0")
+                                .Item().Value("VALUE1")
+                            .EndList());
+                        break;
+                    case EEnumYsonStorageType::Int:
+                        map->AsMap()->AddChild("enum_without_option", BuildYsonNodeFluently().Value(0));
+                        map->AsMap()->AddChild("enum_rep_not_packed_without_option", BuildYsonNodeFluently()
+                            .BeginList()
+                                .Item().Value(0)
+                                .Item().Value(1)
+                            .EndList());
+                        map->AsMap()->AddChild("enum_rep_packed_without_option", BuildYsonNodeFluently()
+                            .BeginList()
+                                .Item().Value(0)
+                                .Item().Value(1)
+                            .EndList());
+                        break;
+                }
+
+            EXPECT_TRUE(AreNodesEqual(resultedNode, expectedNode));
+        }
+
+        // Yson to proto message.
+        NProto::TMessageWithEnums resultedMessage;
+        DeserializeProtobufMessage(
+            resultedMessage,
+            ReflectProtobufMessageType<NProto::TMessageWithEnums>(),
+            resultedNode,
+            TProtobufWriterOptions{});
+
+        // Check that original message is equal to its deserialized + serialized version
+        EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(message, resultedMessage));
     }
-
-    // Proto message to yson.
-    TString stringWithYson;
-    {
-        TString protobufString;
-        Y_UNUSED(message.SerializeToString(&protobufString));
-        TStringOutput ysonOutputStream(stringWithYson);
-        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
-        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
-
-        EXPECT_NO_THROW(ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NProto::TMessageWithEnums>()));
-    }
-
-    // Check enum representation in yson.
-    auto resultedNode = ConvertToNode(TYsonString(stringWithYson));
-    {
-        auto expectedNode = BuildYsonNodeFluently()
-            .BeginMap()
-                .Item("enum_int").Value(0)
-                .Item("enum_rep_not_packed_int").BeginList()
-                    .Item().Value(0)
-                    .Item().Value(1)
-                .EndList()
-                .Item("enum_rep_packed_int").BeginList()
-                    .Item().Value(0)
-                    .Item().Value(1)
-                .EndList()
-                .Item("enum_string").Value("VALUE1")
-                .Item("enum_rep_not_packed_string").BeginList()
-                    .Item().Value("VALUE1")
-                    .Item().Value("VALUE0")
-                .EndList()
-                .Item("enum_rep_packed_string").BeginList()
-                    .Item().Value("VALUE1")
-                    .Item().Value("VALUE0")
-                .EndList()
-            .EndMap();
-
-        EXPECT_TRUE(AreNodesEqual(resultedNode, expectedNode));
-    }
-
-    // Yson to proto message.
-    NProto::TMessageWithEnums resultedMessage;
-    DeserializeProtobufMessage(
-        resultedMessage,
-        ReflectProtobufMessageType<NProto::TMessageWithEnums>(),
-        resultedNode,
-        TProtobufWriterOptions{});
-
-    // Check that original message is equal to its deserialized + serialized version
-    EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(message, resultedMessage));
 }
 
 TEST(TYsonToProtobufTest, Casing)

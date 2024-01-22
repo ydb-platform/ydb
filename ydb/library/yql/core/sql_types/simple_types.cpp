@@ -51,10 +51,11 @@ std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_vie
         {"yaml",         "Yaml"},
 
         {"date",      "Date"},
-        {"date32",    "Date32"},
         {"datetime",  "Datetime"},
         {"timestamp", "Timestamp"},
         {"interval",  "Interval"},
+
+        {"date32",    "Date32"},
 
         {"tzdate",      "TzDate"},
         {"tzdatetime",  "TzDatetime"},

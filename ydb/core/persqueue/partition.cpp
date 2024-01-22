@@ -1569,34 +1569,35 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     DBGTRACE("TPartition::ContinueProcessTxsAndUserActs");
 
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
-    //Y_ABORT_UNLESS(!UserActionAndTransactionEvents.empty());
     Y_ABORT_UNLESS(!TxInProgress);
 
     auto visitor = [this, &ctx](const auto& event) -> bool {
         return this->ProcessUserActionOrTransaction(*event, ctx);
     };
 
-    size_t index = UserActionAndTransactionEvents.front().index();
-    while (!UserActionAndTransactionEvents.empty()) {
-        auto& front = UserActionAndTransactionEvents.front();
+    if (!UserActionAndTransactionEvents.empty()) {
+        size_t index = UserActionAndTransactionEvents.front().index();
+        while (!UserActionAndTransactionEvents.empty()) {
+            auto& front = UserActionAndTransactionEvents.front();
 
-        DBGTRACE_LOG("index=" << index << ", front.index=" << front.index());
+            DBGTRACE_LOG("index=" << index << ", front.index=" << front.index());
 
-        if (index != front.index()) {
-            break;
-        }
+            if (index != front.index()) {
+                break;
+            }
 
-        if (!std::visit(visitor, front)) {
-            break;
+            if (!std::visit(visitor, front)) {
+                break;
+            }
+
+            if (TxInProgress) {
+                break;
+            }
         }
 
         if (TxInProgress) {
-            break;
+            return;
         }
-    }
-
-    if (TxInProgress) {
-        return;
     }
 
 //    if (!DistrTxs.empty()) {

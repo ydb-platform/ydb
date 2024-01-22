@@ -878,8 +878,8 @@ void RegisterWideToDatetimeCasts(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterWideToBigDateCasts(IBuiltinFunctionRegistry& registry) {
-    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NYql::NUdf::MIN_DATE32>(registry);
-    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NYql::NUdf::MIN_DATE32>(registry);
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NUdf::MIN_DATE32>(registry);
+    RegisterWideToBigDateCastsImpl<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32, NUdf::MIN_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
     RegisterWideToDateCastsImpl<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TDate32>, NUdf::MAX_DATE32>(registry);
 }

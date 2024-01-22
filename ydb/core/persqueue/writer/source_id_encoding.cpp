@@ -92,7 +92,7 @@ TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGene
                    "DECLARE $AccessTime AS Uint64;\n"
                    "UPDATE `" << path << "` "
                    "SET AccessTime = $AccessTime "
-                   "WHERE Hash = $Hash AND Topic = $Topic AND Partition = $Partition AND SourceId = $SourceId;";
+                   "WHERE Hash = $Hash AND Topic = $Topic AND SourceId = $SourceId AND Partition = $Partition;";
         case ESourceIdTableGeneration::PartitionMapping:
             return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "

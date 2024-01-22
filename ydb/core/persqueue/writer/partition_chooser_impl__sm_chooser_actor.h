@@ -106,7 +106,7 @@ public:
 
     void OnOwnership(const TActorContext &ctx) override {
         DEBUG("OnOwnership");
-        TThis::SendUpdateRequests(ctx);
+        TThis::ReplyResult(ctx);
     }
 
 private:
@@ -203,7 +203,7 @@ private:
         }
 
         TThis::PartitionHelper.Close(ctx);
-        TThis::StartGetOwnership(ctx);
+        TThis::StartCheckPartitionRequest(ctx);
     }
 
     STATEFN(StateGetMaxSeqNo) {
@@ -240,7 +240,7 @@ private:
                             ctx);
         }
 
-        TThis::StartGetOwnership(ctx);
+        TThis::StartCheckPartitionRequest(ctx);
     }
 
     const TPartitionInfo* ChoosePartitionSync() const {

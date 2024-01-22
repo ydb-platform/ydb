@@ -162,8 +162,7 @@ protected:
             DEBUG("Update the table");
             TableHelper.SendUpdateRequest(Partition->PartitionId, SeqNo, ctx);
         } else {
-            ReplyResult(ctx);
-            StartIdle();
+            StartGetOwnership(ctx);
         }
     }
 
@@ -187,10 +186,11 @@ protected:
         }
 
         if (!PartitionPersisted) {
-            ReplyResult(ctx);
             PartitionPersisted = true;
             // Use tx only for query after select. Updating AccessTime without transaction.
             TableHelper.CloseKqpSession(ctx);
+
+            return StartGetOwnership(ctx);
         }
 
         StartIdle();
@@ -200,6 +200,31 @@ protected:
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleUpdate);
+            sFunc(TEvents::TEvPoison, ScheduleStop);
+        }
+    }
+
+protected:
+    void StartCheckPartitionRequest(const TActorContext &ctx) {
+        TThis::Become(&TThis::StateCheckPartition);
+        PartitionHelper.Open(Partition->TabletId, ctx);
+        PartitionHelper.SendCheckPartitionStatusRequest(Partition->PartitionId, ctx);
+    }
+
+    void Handle(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus()) {
+            PartitionHelper.Close(ctx);
+            return SendUpdateRequests(ctx);
+        }
+        ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "Partition isn`t active", ctx);
+    }
+
+    STATEFN(StateCheckPartition) {
+        TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, HandleOwnership);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleOwnership);
             sFunc(TEvents::TEvPoison, ScheduleStop);
         }
     }

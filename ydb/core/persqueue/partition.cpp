@@ -2616,4 +2616,23 @@ void TPartition::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext
     Send(ev->Sender, response.Release());
 }
 
+void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+
+    if (Partition != record.GetPartition()) {
+        LOG_INFO_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "TEvCheckPartitionStatusRequest for wrong partition " << record.GetPartition() << "." <<
+            " Topic: \"" << TopicName() << "\"." <<
+            " Partition: " << Partition << "."
+        );
+        return;
+    }
+
+    auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+    response->Record.SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
+
+    Send(ev->Sender, response.Release());
+}
+
 } // namespace NKikimr::NPQ

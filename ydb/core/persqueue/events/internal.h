@@ -169,6 +169,8 @@ struct TEvPQ {
         EvCacheProxyForgetRead,
         EvGetFullDirectReadData,
         EvProvideDirectReadInfo,
+        EvCheckPartitionStatusRequest,
+        EvCheckPartitionStatusResponse,
         EvEnd
     };
 
@@ -990,6 +992,18 @@ struct TEvPQ {
 
     struct TEvProvideDirectReadInfo : public TEventLocal<TEvProvideDirectReadInfo, EvProvideDirectReadInfo> {
     };
+
+    struct TEvCheckPartitionStatusRequest : public TEventPB<TEvCheckPartitionStatusRequest, NKikimrPQ::TEvCheckPartitionStatusRequest, EvCheckPartitionStatusRequest> {
+        TEvCheckPartitionStatusRequest() = default;
+
+        TEvCheckPartitionStatusRequest(ui32 partitionId) {
+            Record.SetPartition(partitionId);
+        }
+    };
+
+    struct TEvCheckPartitionStatusResponse : public TEventPB<TEvCheckPartitionStatusResponse, NKikimrPQ::TEvCheckPartitionStatusResponse, EvCheckPartitionStatusResponse> {
+    };
+
 
 };
 

@@ -61,7 +61,7 @@ public:
 
     void OnOwnership(const TActorContext &ctx) override {
         DEBUG("OnOwnership");
-        TThis::SendUpdateRequests(ctx);
+        TThis::ReplyResult(ctx);
     }
 
 private:
@@ -133,7 +133,7 @@ private:
                             ctx);
         }
 
-        TThis::StartGetOwnership(ctx);
+        TThis::SendUpdateRequests(ctx);
     }
 
     std::pair<bool, const TPartitionInfo*> ChoosePartitionSync(const TActorContext& ctx) const {

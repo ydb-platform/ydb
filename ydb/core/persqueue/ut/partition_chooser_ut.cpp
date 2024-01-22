@@ -362,10 +362,17 @@ private:
         ctx.Send(ev->Sender, response.Release());
     }
 
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+        auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+
+        ctx.Send(ev->Sender, response.Release());
+    }
+
     STFUNC(StateMockWork) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvRequest, Handle);
+            HFunc(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         }
     }
 
@@ -456,11 +463,9 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_
     CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
     CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
 
-    WriteToTable(server, "A_Source_3", 1, 13);
     auto r = ChoosePartition(server, config, "A_Source_3");
 
     UNIT_ASSERT(r->Error);
-    AssertTable(server, "A_Source_3", 1, 13);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_1_Test) {

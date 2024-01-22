@@ -194,29 +194,13 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
-        const auto dataQueryBlocks = TKiDataQueryBlocks(query);
-        if (IsOlapQuery(dataQueryBlocks)) {
-            TypesCtx.UseBlocks = true;
-            TypesCtx.ContinuousBlocksComputation = true;
-        }
+        TypesCtx.UseBlocks = true;
+        TypesCtx.ContinuousBlocksComputation = true;
 
-        return PrepareQueryInternal(cluster, dataQueryBlocks, ctx, settings);
+        return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }
 
 private:
-    bool IsOlapQuery(const TKiDataQueryBlocks& dataQueryBlocks) {
-        if (dataQueryBlocks.ArgCount() != 1) {
-            return false;
-        }
-        const auto& operations = dataQueryBlocks.Arg(0).Operations();
-        return std::any_of(
-                std::begin(operations),
-                std::end(operations),
-                [this](const auto& operation) {
-                    const auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
-                    return tableData.Metadata->IsOlap();
-                });
-    }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks, TExprContext& ctx,

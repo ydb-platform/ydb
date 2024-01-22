@@ -178,14 +178,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             }
         }
 
-        std::unique_ptr<TEvBlobStorage::TEvPut> MakePutMessage(ui64 tabletId, ui32 gen, ui32 step, ui32 channel,
-                bool enableFastDataGeneration) {
+        std::unique_ptr<TEvBlobStorage::TEvPut> MakePutMessage(ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
             Y_DEBUG_ABORT_UNLESS(CanSendRequest());
             ui32 blobSize = SizeGenerator.Generate();
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
-            const TSharedData buffer = enableFastDataGeneration
-                ? FastGenerateBuffer<TSharedData>(id)
-                : GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
             InFlightTracker.Request(blobSize);
             return std::move(ev);
@@ -440,7 +437,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TInitialAllocation InitialAllocation;
 
         bool MainCycleStarted = false;
-        bool EnableFastDataGeneration = true;
 
     public:
         TTabletWriter(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -450,7 +446,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 NKikimrBlobStorage::EGetHandleClass getHandleClass, const TRequestDispatchingSettings& readSettings,
                 TIntervalGenerator garbageCollectIntervalGen,
                 TDuration scriptedRoundDuration, TVector<TReqInfo>&& scriptedRequests,
-                const TInitialAllocation& initialAllocation, bool enableFastDataGeneration)
+                const TInitialAllocation& initialAllocation)
             : Self(self)
             , TagCounters(counters->GetSubgroup("tag", Sprintf("%" PRIu64, Self.Tag)))
             , Counters(TagCounters->GetSubgroup("channel", Sprintf("%" PRIu32, channel)))
@@ -488,7 +484,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , ScriptedRound(0)
             , ScriptedRequests(std::move(scriptedRequests))
             , InitialAllocation(initialAllocation)
-            , EnableFastDataGeneration(enableFastDataGeneration)
         {
             *Counters->GetCounter("tabletId") = tabletId;
             const auto& percCounters = Counters->GetSubgroup("sensor", "microseconds");
@@ -563,9 +558,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const ui32 size = 1;
             const ui32 lastStep = Max<ui32>();
             const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
-            const TSharedData buffer = EnableFastDataGeneration
-                ? FastGenerateBuffer<TSharedData>(id)
-                : GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), PutHandleClass);
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
@@ -627,8 +620,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         }
 
         void IssueInitialPut(const TActorContext& ctx) {
-            auto ev = InitialAllocation.MakePutMessage(TabletId, Generation, GarbageCollectStep, Channel,
-                    EnableFastDataGeneration);
+            auto ev = InitialAllocation.MakePutMessage(TabletId, Generation, GarbageCollectStep, Channel);
 
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult*>(event);
@@ -861,9 +853,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 putHandleClass = PutHandleClass;
             }
             const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
-            const TSharedData buffer = EnableFastDataGeneration
-                ? FastGenerateBuffer<TSharedData>(id)
-                : GenerateBuffer<TSharedData>(id);
+            const TSharedData buffer = GenerateBuffer<TSharedData>(id);
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), putHandleClass);
             const ui64 writeQueryId = ++WriteQueryId;
 
@@ -1195,8 +1185,6 @@ public:
 
             TIntervalGenerator garbageCollectIntervalGen(profile.GetFlushIntervals());
 
-            bool enableFastDataGeneration = profile.GetEnableFastDataGeneration();
-
             for (const auto& tablet : profile.GetTablets()) {
                 auto scriptedRoundDuration = TDuration::MicroSeconds(tablet.GetScriptedCycleDurationSec() * 1e6);
                 TVector<TReqInfo> scriptedRequests;
@@ -1242,7 +1230,7 @@ public:
                     getHandleClass, readSettings,
                     garbageCollectIntervalGen,
                     scriptedRoundDuration, std::move(scriptedRequests),
-                    initialAllocation, enableFastDataGeneration));
+                    initialAllocation));
 
                 WorkersInInitialState++;
             }
@@ -1443,26 +1431,7 @@ public:
 
     template <class ResultContainer = TString>
     static ResultContainer GenerateBuffer(const TLogoBlobID& id) {
-        return GenDataForLZ4<ResultContainer>(id.BlobSize());
-    }
-
-    template <class ResultContainer = TString>
-    static ResultContainer FastGenerateBuffer(const TLogoBlobID& id) {
-        constexpr static ui64 PreallocatedBufferSize = 50_MB;
-        static ResultContainer buffer;
-        if (!buffer) {
-            buffer = GenDataForLZ4<ResultContainer>(PreallocatedBufferSize);
-        }
-        ui32 size = id.BlobSize();
-        ui32 begin = RandomNumber(buffer.size() - size + 1);
-        if constexpr(std::is_same_v<ResultContainer, TString>) {
-            return TString(buffer.data() + begin, size); 
-        } else {
-            TStringBuf buf = buffer.Slice(begin, size); 
-            TSharedData res = TSharedData::Uninitialized(size);
-            memcpy(res.mutable_begin(), buf.data(), size);
-            return res;
-        }
+        return FastGenDataForLZ4<ResultContainer>(id.BlobSize());
     }
 
     STRICT_STFUNC(StateFunc,

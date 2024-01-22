@@ -185,6 +185,10 @@ public:
             HasInReadsets = false;
             Loaded = false;
         }
+
+        void SetLoaded() {
+            Loaded = true;
+        }
     };
 
     //-- error reporting

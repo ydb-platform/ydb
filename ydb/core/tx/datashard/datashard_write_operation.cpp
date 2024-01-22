@@ -163,11 +163,11 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
     return true;
 }
 
-TVector<TEngineBay::TColumnWriteMeta> GetColumnWrites(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnTags) {
-    TVector<TEngineBay::TColumnWriteMeta> writeColumns;
+TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnTags) {
+    TVector<TKeyValidator::TColumnWriteMeta> writeColumns;
     writeColumns.reserve(columnTags.size());
     for (ui32 columnTag : columnTags) {
-        TEngineBay::TColumnWriteMeta writeColumn;
+        TKeyValidator::TColumnWriteMeta writeColumn;
         writeColumn.Column = NTable::TColumn("", columnTag, {}, {});
 
         writeColumns.push_back(std::move(writeColumn));
@@ -186,7 +186,7 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << TableInfo->Path << ", shard: " << tabletId << ", "
                                                                 << "write point " << DebugPrintPoint(TableInfo->KeyColumnTypes, keyCells, typeRegistry));
         TTableRange tableRange(keyCells);
-        EngineBay.AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), false);
+        EngineBay.GetKeyValidator().AddWriteRange(TableId, tableRange, TableInfo->KeyColumnTypes, GetColumnWrites(columnTags), false);
     }
 }
 

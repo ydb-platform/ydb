@@ -406,9 +406,12 @@ public:
         return VolatileCommitOrdered;
     }
 
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override {
+    bool IsValidKey(TKeyDesc& key) const override {
         if (TSysTables::IsSystemTable(key.TableId))
             return DataShardSysTable(key.TableId).IsValidKey(key);
+
+        ui64 localTableId = Self->GetLocalTableId(key.TableId);
+        Y_ABORT_UNLESS(localTableId != 0, "Unexpected IsValidKey for an unknown table");
 
         if (LockTxId) {
             // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
@@ -426,7 +429,7 @@ public:
             }
         }
 
-        return TEngineHost::IsValidKey(key, maxSnapshotTime);
+        return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
     }
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -1088,64 +1091,15 @@ TEngineBay::~TEngineBay() {
     }
 }
 
-void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns,
-    const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit, bool reverse)
-{
-    TVector<TKeyDesc::TColumnOp> columnOps;
-    columnOps.reserve(columns.size());
-    for (auto& column : columns) {
-        TKeyDesc::TColumnOp op;
-        op.Column = column.Id;
-        op.Operation = TKeyDesc::EColumnOperation::Read;
-        op.ExpectedType = column.PType;
-        columnOps.emplace_back(std::move(op));
-    }
-
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-        "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
-
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit,
-        0 /* bytesLimit */, reverse);
-    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
-    // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134
-    ++Info.ReadsCount;
-    Info.Loaded = true;
-}
-
-void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
-    const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns,
-    bool isPureEraseOp)
-{
-    TVector<TKeyDesc::TColumnOp> columnOps;
-    for (const auto& writeColumn : columns) {
-        TKeyDesc::TColumnOp op;
-        op.Column = writeColumn.Column.Id;
-        op.Operation = TKeyDesc::EColumnOperation::Set;
-        op.ExpectedType = writeColumn.Column.PType;
-        op.ImmediateUpdateSize = writeColumn.MaxValueSizeBytes;
-        columnOps.emplace_back(std::move(op));
-    }
-
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-        "-- AddWriteRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
-
-    auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
-    Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true));
-    ++Info.WritesCount;
-    if (!range.Point) {
-        ++Info.DynKeysCount;
-    }
-    Info.Loaded = true;
-}
-
 TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     Y_ABORT_UNLESS(EngineHost);
 
+    const auto& info = KeyValidator.GetInfo();
+
     TSizes outSizes;
     TVector<const TKeyDesc*> readKeys;
-    readKeys.reserve(Info.ReadsCount);
-    for (const TValidatedKey& validKey : Info.Keys) {
+    readKeys.reserve(info.ReadsCount);
+    for (const TValidatedKey& validKey : info.Keys) {
         if (validKey.IsWrite)
             continue;
 

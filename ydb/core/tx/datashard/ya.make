@@ -161,6 +161,7 @@ SRCS(
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
+    key_validator.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     make_scan_snapshot_unit.cpp

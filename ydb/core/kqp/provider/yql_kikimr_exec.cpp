@@ -923,7 +923,7 @@ public:
             auto tableTypeItem = table.Metadata->TableType;
             if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "External table are disabled. Please contact your system administrator to enable it"));
+                    TStringBuilder() << "External tables are disabled. Please contact your system administrator to enable it"));
                 return SyncError();
             }
 

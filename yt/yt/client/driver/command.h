@@ -287,6 +287,7 @@ class TTabletWriteCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
+private:
     REGISTER_YSON_STRUCT_LITE(TTabletWriteCommandBase);
 
     static void Register(TRegistrar registrar);
@@ -307,6 +308,7 @@ class TSelectRowsCommandBase<
 >
     : public virtual TTypedCommandBase<TOptions>
 {
+private:
     REGISTER_YSON_STRUCT_LITE(TSelectRowsCommandBase);
 
     static void Register(TRegistrar registrar);

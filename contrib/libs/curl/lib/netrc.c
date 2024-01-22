@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -244,7 +244,7 @@ static int parsenetrc(const char *host,
       }
     } /* while Curl_get_line() */
 
-    out:
+out:
     if(!retcode) {
       /* success */
       if(login_alloc) {
@@ -327,7 +327,7 @@ int Curl_parsenetrc(const char *host, char **loginp, char **passwordp,
     }
     retcode = parsenetrc(host, loginp, passwordp, filealloc);
     free(filealloc);
-#ifdef WIN32
+#ifdef _WIN32
     if(retcode == NETRC_FILE_MISSING) {
       /* fallback to the old-style "_netrc" file */
       filealloc = curl_maprintf("%s%s_netrc", home, DIR_CHAR);

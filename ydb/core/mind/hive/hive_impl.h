@@ -392,6 +392,7 @@ protected:
     bool ProcessTabletBalancerPostponed = false;
     bool ProcessPendingOperationsScheduled = false;
     bool LogTabletMovesScheduled = false;
+    bool ProcessStorageBalancerScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -556,6 +557,7 @@ protected:
     void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvLogTabletMoves::TPtr& ev);
     void Handle(TEvPrivate::TEvStartStorageBalancer::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
 
@@ -653,6 +655,7 @@ public:
     void PostponeProcessBootQueue(TDuration after);
     void ProcessPendingOperations();
     void ProcessTabletBalancer();
+    void ProcessStorageBalancer();
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
     static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
     static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
@@ -681,7 +684,7 @@ public:
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
-    TDuration GetBalancerCooldown() const;
+    TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
 
@@ -912,6 +915,14 @@ public:
 
     ui64 GetMaxChannelHistorySize() const {
         return CurrentConfig.GetMaxChannelHistorySize();
+    }
+
+    TDuration GetStorageInfoRefreshFrequency() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetStorageInfoRefreshFrequency());
+    }
+
+    double GetMinStorageScatterToBalance() const {
+        return CurrentConfig.GetMinStorageScatterToBalance();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

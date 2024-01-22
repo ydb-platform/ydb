@@ -64,11 +64,6 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "OptDisableJoinReverseTableLookup"
-    Value: "true"
-}
-
-DefaultSettings {
     Name: "_KqpMaxComputeActors"
     Value: "10000"
 }

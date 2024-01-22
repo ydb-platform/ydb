@@ -6,6 +6,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/common/codec
+    ydb/library/yql/utils/failure_injector
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/common
     library/cpp/yson/node

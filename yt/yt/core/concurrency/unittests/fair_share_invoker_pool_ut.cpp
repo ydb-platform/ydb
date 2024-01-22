@@ -23,7 +23,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto Quantum = TDuration::MilliSeconds(100);
+constexpr auto Margin = TDuration::MilliSeconds(1);
+constexpr auto Quantum = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -287,11 +288,14 @@ protected:
         ExpectTotalCpuTime(1, TDuration::Zero());
     }
 
-    void DoTestGetAverageWaitTime(int invokerCount, std::vector<int> waitingActionCounts)
+    void DoTestGetTotalWaitEstimate(int invokerCount, std::vector<int> waitingActionCounts)
     {
         YT_VERIFY(std::ssize(waitingActionCounts) == invokerCount);
 
         auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), invokerCount);
+        invokerPool->UpdateActionTimeAggregatorParameters(THistoricUsageAggregationParameters(
+            EHistoricUsageAggregationMode::ExponentialMovingAverage,
+            /*emaAlpha=*/ 0.5));
 
         // Test plan:
         // - Each invoker in the pool will have a blocker action followed by |waitingActionCounts[i]| waiting actions.
@@ -303,6 +307,7 @@ protected:
         std::vector<NThreading::TEvent> stageStartedEvents(invokerCount);
         std::vector<NThreading::TEvent> stageFinishedEvents(invokerCount);
         std::vector<TInstant> blockingActionEnqueueTimes;
+        std::vector<TInstant> blockingActionDequeueTimes;
         std::vector<TFuture<void>> blockingActionFutures;
         std::vector<std::vector<TInstant>> waitingActionEnqueueTimesPerInvoker(invokerCount);
         std::vector<std::vector<TFuture<void>>> waitingActionFuturesPerInvoker(invokerCount);
@@ -318,7 +323,7 @@ protected:
                 .AsyncVia(invokerPool->GetInvoker(invokerIndex))
                 .Run());
             Spin(Quantum);
-
+            // Invoker has zero average wait time.
             auto waitingActionCount = waitingActionCounts[invokerIndex];
             auto& waitingActionEnqueueTimes = waitingActionEnqueueTimesPerInvoker[invokerIndex];
             auto& waitingActionFutures = waitingActionFuturesPerInvoker[invokerIndex];
@@ -338,54 +343,25 @@ protected:
             // Collect average wait times.
             std::vector<TDuration> averageWaitTimes(invokerCount);
             for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
-                averageWaitTimes[invokerIndex] = invokerPool->GetInvokerStatistics(invokerIndex).AverageWaitTime;
+                averageWaitTimes[invokerIndex] = invokerPool->GetInvokerStatistics(invokerIndex).TotalTimeEstimate;
             }
-            auto averageWaitTimesCollectedTime = NProfiling::GetInstant();
-
-            // Check the collected average wait times.
-            // We go through all enqueued actions of all invokers in reverse order.
-            // Actions were enqueued with an interval of 1 |Quantum|, so to estimate a lower bound of
-            // how long the current action has been waiting we will count the number of actions,
-            // which were enqueued after it.
-            int enqueuedAfterCurrentActionCount = 0;
-            for (int invokerIndex = invokerCount - 1; invokerIndex >= 0; --invokerIndex) {
-                static const auto Margin = TDuration::MicroSeconds(10);
-
-                auto averageWaitTime = averageWaitTimes[invokerIndex];
-                auto waitingActionCount = waitingActionCounts[invokerIndex];
-                auto blockingActionEnqueueTime = blockingActionEnqueueTimes[invokerIndex];
-                const auto& waitingActionEnqueueTimes = waitingActionEnqueueTimesPerInvoker[invokerIndex];
-
-                auto totalWaitTimeLowerBound = TDuration::Zero();
-                for (int i = 0; i < waitingActionCount; ++i) {
-                    totalWaitTimeLowerBound += (Quantum - Margin) * (enqueuedAfterCurrentActionCount + 1);
-                    ++enqueuedAfterCurrentActionCount;
-                }
-                // Account for the blocking action of this invoker.
-                if (invokerIndex > stage) {
-                    // Blocking action of this invoker is still waiting.
-                    totalWaitTimeLowerBound += (Quantum - Margin) * (enqueuedAfterCurrentActionCount + 1);
-                    ++waitingActionCount;
-                }
-                ++enqueuedAfterCurrentActionCount;
-
-                // Check upper bound too, to avoid monstrous numbers due to UB or other reasons.
-                auto totalWaitTimeUpperBound = TDuration::Zero();
-                for (auto actionEnqueueTime : waitingActionEnqueueTimes) {
-                    totalWaitTimeUpperBound += (averageWaitTimesCollectedTime - actionEnqueueTime) + Margin;
-                }
-                // Account for the blocking action of this invoker.
-                if (invokerIndex > stage) {
-                    // Blocking action of this invoker is still waiting.
-                    totalWaitTimeUpperBound += (averageWaitTimesCollectedTime - blockingActionEnqueueTime) + Margin;
-                }
-
-                EXPECT_GE(averageWaitTime * waitingActionCount, totalWaitTimeLowerBound);
-                EXPECT_LE(averageWaitTime * waitingActionCount, totalWaitTimeUpperBound);
-            }
-
-            // Finish current stage.
+            // Release invoker.
             stageFinishedEvents[stage].NotifyOne();
+            blockingActionDequeueTimes.push_back(NProfiling::GetInstant());
+
+            for (int invokerIndex = 0; invokerIndex < invokerCount; ++invokerIndex) {
+                auto actualWaitTime = averageWaitTimes[invokerIndex];
+
+                bool stillWaiting = invokerIndex > stage;
+                auto expectedWaitTime =
+                    blockingActionDequeueTimes[stillWaiting ? stage : invokerIndex] -
+                    blockingActionEnqueueTimes[invokerIndex];
+
+                EXPECT_GE(actualWaitTime, expectedWaitTime - Margin)
+                    << TError("Stage: %v, Invoker: %v", stage, invokerIndex).GetMessage();
+                EXPECT_LE(actualWaitTime, expectedWaitTime + Margin)
+                    << TError("Stage: %v, Invoker: %v", stage, invokerIndex).GetMessage();
+            }
         }
 
         // Wait for all actions to finish.
@@ -545,43 +521,43 @@ TEST_F(TFairShareInvokerPoolTest, CpuTimeAccountingBetweenContextSwitchesIsNotSu
     future.Get().ThrowOnError();
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetAverageWaitTimeIsZeroForEmptyPool)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateIsZeroForEmptyPool)
 {
     auto invokerPool = CreateInvokerPool(Queues_[0]->GetInvoker(), 1);
 
-    EXPECT_EQ(TDuration::Zero(), invokerPool->GetInvokerStatistics(0).AverageWaitTime);
+    EXPECT_EQ(TDuration::Zero(), invokerPool->GetInvokerStatistics(0).TotalTimeEstimate);
 
     WaitFor(BIND([] {
         Spin(Quantum);
     }).AsyncVia(invokerPool->GetInvoker(0)).Run()).ThrowOnError();
 
-    EXPECT_EQ(TDuration::Zero(), invokerPool->GetInvokerStatistics(0).AverageWaitTime);
+    EXPECT_LE(invokerPool->GetInvokerStatistics(0).TotalTimeEstimate, Quantum + Margin);
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetAverageWaitTimeOneBucketOneWaitingAction)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateOneBucketOneWaitingAction)
 {
-    DoTestGetAverageWaitTime(
+    DoTestGetTotalWaitEstimate(
         /* invokerCount */ 1,
         /* waitingActionCounts */ {1});
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetAverageWaitTimeOneBucketTenWaitingActions)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateOneBucketTenWaitingActions)
 {
-    DoTestGetAverageWaitTime(
+    DoTestGetTotalWaitEstimate(
         /* invokerCount */ 1,
         /* waitingActionCounts */ {10});
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetAverageWaitTimeTwoBuckets)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateTwoBuckets)
 {
-    DoTestGetAverageWaitTime(
+    DoTestGetTotalWaitEstimate(
         /* invokerCount */ 2,
         /* waitingActionCounts */ {4, 8});
 }
 
-TEST_F(TFairShareInvokerPoolTest, GetAverageWaitTimeThreeBuckets)
+TEST_F(TFairShareInvokerPoolTest, GetTotalWaitEstimateThreeBuckets)
 {
-    DoTestGetAverageWaitTime(
+    DoTestGetTotalWaitEstimate(
         /* invokerCount */ 3,
         /* waitingActionCounts */ {1, 2, 3});
 }

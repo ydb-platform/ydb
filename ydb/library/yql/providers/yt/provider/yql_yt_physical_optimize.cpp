@@ -1874,12 +1874,24 @@ private:
             }
         }
 
+        const bool canUseMapInsteadOfReduce = keySelectorLambda.Body().Ref().IsComplete() &&
+            partByKey.SortDirections().Maybe<TCoVoid>() &&
+            State_->Configuration->PartitionByConstantKeysViaMap.Get().GetOrElse(DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP);
+
+        if (canUseMapInsteadOfReduce) {
+            YQL_ENSURE(!canUseReduce);
+            YQL_ENSURE(sortByColumns.empty());
+            useSystemColumns = false;
+        }
+
         auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
-        settingsBuilder
-            .Add()
-                .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
-                .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
-            .Build();
+        if (!canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::ReduceBy)).Build()
+                    .Value(TExprBase(ToColumnPairList(reduceByColumns, node.Pos(), ctx)))
+                .Build();
+        }
 
         if (!sortByColumns.empty()) {
             settingsBuilder
@@ -2266,7 +2278,14 @@ private:
             TExprNode::TPtr keyExtractor;
             TExprNode::TPtr handler;
 
-            if (useSystemColumns) {
+            if (canUseMapInsteadOfReduce) {
+                groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                    .Args({"key", "item"})
+                    .Body<TCoBool>()
+                        .Literal().Build("false")
+                    .Build()
+                    .Done().Ptr();
+            } else if (useSystemColumns) {
                 groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                     .Args({"key", "item"})
                     .Body<TCoSqlExtractKey>()
@@ -2325,17 +2344,21 @@ private:
                     .Build()
                     .Done().Ptr();
 
-                handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
-                    .Args({"item"})
-                    .Body<TCoRemovePrefixMembers>()
-                        .Input("item")
-                        .Prefixes()
-                            .Add()
-                                .Value(YqlSysColumnKeySwitch)
+                if (canUseMapInsteadOfReduce) {
+                    handler = BuildIdentityLambda(handlerLambda.Pos(), ctx).Ptr();
+                } else {
+                    handler = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                        .Args({"item"})
+                        .Body<TCoRemovePrefixMembers>()
+                            .Input("item")
+                            .Prefixes()
+                                .Add()
+                                    .Value(YqlSysColumnKeySwitch)
+                                .Build()
                             .Build()
                         .Build()
-                    .Build()
-                    .Done().Ptr();
+                        .Done().Ptr();
+                }
             }
 
             handlerLambda = Build<TCoLambda>(ctx, handlerLambda.Pos())
@@ -2429,12 +2452,31 @@ private:
             return WrapOp(reduce, ctx);
         }
 
-        if (needMap && (builder.NeedMap() || multiInput)) {
+        if (needMap && (builder.NeedMap() || multiInput) && !canUseMapInsteadOfReduce) {
             settingsBuilder
                 .Add()
                     .Name().Value(ToString(EYtSettingType::ReduceFilterBy)).Build()
                     .Value(TExprBase(ToAtomList(filterColumns, node.Pos(), ctx)))
                 .Build();
+        }
+
+        if (canUseMapInsteadOfReduce && !filterColumns.empty()) {
+            reducer = Build<TCoLambda>(ctx, reducer.Pos())
+                .Args({"input"})
+                .Body<TExprApplier>()
+                    .Apply(reducer)
+                    .With<TCoMap>(0)
+                        .Input("input")
+                        .Lambda()
+                            .Args({"item"})
+                            .Body<TCoSelectMembers>()
+                                .Input("item")
+                                .Members(ToAtomList(filterColumns, node.Pos(), ctx))
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+                .Done();
         }
 
         bool unordered = ctx.IsConstraintEnabled<TSortedConstraintNode>();
@@ -2517,6 +2559,26 @@ private:
                 useMapFlow = useReduceFlow;
                 mapper = MakeJobLambda<false>(mapper.Cast<TCoLambda>(), useMapFlow, ctx);
             }
+        }
+
+        if (canUseMapInsteadOfReduce) {
+            settingsBuilder
+                .Add()
+                    .Name().Value(ToString(EYtSettingType::JobCount)).Build()
+                    .Value(TExprBase(ctx.NewAtom(node.Pos(), 1u)))
+                .Build();
+
+            auto result = Build<TYtMap>(ctx, node.Pos())
+                .World(ApplySyncListToWorld(world.Ptr(), syncList, ctx))
+                .DataSink(GetDataSink(input, ctx))
+                .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
+                .Output()
+                    .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+                .Build()
+                .Settings(settingsBuilder.Done())
+                .Mapper(reducer)
+                .Done();
+            return WrapOp(result, ctx);
         }
 
         if (forceMapper && mapper.Maybe<TCoVoid>()) {
@@ -4555,6 +4617,9 @@ private:
         if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
             return node;
         }
+        if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
+            return node;
+        }
         if (!path.Ranges().Maybe<TCoVoid>()) {
             return node;
         }
@@ -4688,6 +4753,9 @@ private:
             return node;
         }
         if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
+            return node;
+        }
+        if (NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
             return node;
         }
         if (outerMap.Input().Item(0).Settings().Size() != 0) {

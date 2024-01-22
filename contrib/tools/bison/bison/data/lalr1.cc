@@ -711,7 +711,7 @@ m4_if(b4_prefix, [yy], [],
     int yylen = 0;
 
     // Error handling.
-    int yynerrs_ = 0;
+    __attribute__((unused)) int yynerrs_ = 0;
     int yyerrstatus_ = 0;
 
     /// The lookahead symbol.

@@ -19,14 +19,61 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
+        auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result += 2 * p.GetBlobBytes();
+            result = predictor->AddPortion(p);
         }
         return result;
     }
 public:
     using TBase::TBase;
+
+    class IMemoryPredictor {
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ~IMemoryPredictor() = default;
+    };
+
+    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
+    private:
+        ui64 SumMemory = 0;
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
+            for (auto&& i : portionInfo.GetRecords()) {
+                SumMemory += i.BlobRange.Size;
+                SumMemory += 2 * i.GetMeta().GetRawBytesVerified();
+            }
+            return SumMemory;
+        }
+    };
+
+    class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
+    private:
+        ui64 SumMemory = 0;
+        ui32 PortionsCount = 0;
+        THashMap<ui32, ui64> MaxMemoryByColumnChunk;
+    public:
+        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
+            SumMemory += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16));
+            for (auto&& i : portionInfo.GetRecords()) {
+                SumMemory += i.BlobRange.Size;
+                auto it = MaxMemoryByColumnChunk.find(i.GetColumnId());
+                ++PortionsCount;
+                if (it == MaxMemoryByColumnChunk.end()) {
+                    it = MaxMemoryByColumnChunk.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified()).first;
+                    SumMemory += it->second * PortionsCount;
+                } else if (it->second < i.GetMeta().GetRawBytesVerified()) {
+                    SumMemory -= it->second * (PortionsCount - 1);
+                    it->second = i.GetMeta().GetRawBytesVerified();
+                    SumMemory += it->second * PortionsCount;
+                }
+            }
+            return SumMemory;
+        }
+    };
+
+    static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();
 
     void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position, const bool include = true, const bool validationDuplications = true);
 

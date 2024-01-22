@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(R"(
-                CREATE TABLE test (id int8,PRIMARY KEY (id)))"
+                CREATE TABLE test (id int16,PRIMARY KEY (id)))"
             ).GetValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

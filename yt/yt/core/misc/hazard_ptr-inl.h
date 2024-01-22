@@ -27,7 +27,7 @@ extern YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
 
 void InitHazardThreadState();
 
-template <class T, bool = std::is_base_of_v<TRefCountedBase, T>>
+template <class T, bool = std::derived_from<T, TRefCountedBase>>
 struct THazardPtrTraits
 {
     Y_FORCE_INLINE static void* GetBasePtr(T* object)

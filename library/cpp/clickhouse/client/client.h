@@ -87,7 +87,7 @@ namespace NClickHouse {
         void Select(const TQuery& query);
 
         /// Intends for insert block of data into a table \p table_name.
-        void Insert(const TString& table_name, const TBlock& block, const TString& query_id = "");
+        void Insert(const TString& table_name, const TBlock& block, const TString& query_id = "", const TString& deduplication_token = "");
 
         /// Ping server for aliveness.
         void Ping();

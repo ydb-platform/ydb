@@ -859,8 +859,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
 } // anonymous namespace
 
-TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const NYql::TKikimrConfiguration::TPtr& config)
+TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     if ((kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) || !node.Maybe<TDqJoin>()) {
         return node;
@@ -870,7 +869,7 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
     DBG("-- Join: " << KqpExprToPrettyString(join, ctx));
 
     // SqlIn support (preferred lookup direction)
-    if (join.JoinType().Value() == "LeftSemi" && !config->HasOptDisableJoinReverseTableLookupLeftSemi()) {
+    if (join.JoinType().Value() == "LeftSemi") {
         auto flipJoin = FlipLeftSemiJoin(join, ctx);
         DBG("-- Flip join");
 

@@ -168,6 +168,14 @@
             },
             "formula": "build/platform/python/ymake_python2/resources.json"
         },
+        "python3": {
+            "executable": {
+                "python3": [
+                    "python3"
+                ]
+            },
+            "formula": "build/platform/python/ymake_python3/resources.json"
+        },
         "ya-tc": {
             "executable": {
                 "ya-tc": [
@@ -191,14 +199,6 @@
                 ]
             },
             "formula": "build/external_resources/ymake/public.resources.json"
-        },
-        "ymake_python3": {
-            "executable": {
-                "python3": [
-                    "python3"
-                ]
-            },
-            "formula": "build/platform/python/ymake_python3/resources.json"
         },
         "ytexec": {
             "executable": {
@@ -1152,6 +1152,49 @@
                 }
             }
         },
+        "python3": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "python3": {
+                    "bottle": "python3",
+                    "executable": "python3"
+                }
+            }
+        },
         "ya-tc": {
             "platforms": [
                 {
@@ -1239,55 +1282,6 @@
                 }
             }
         },
-        "ymake_python3": {
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                }
-            ],
-            "tools": {
-                "ymake_python3": {
-                    "bottle": "ymake_python3",
-                    "executable": "python3"
-                }
-            }
-        },
         "ytexec": {
             "platforms": [
                 {
@@ -1367,6 +1361,10 @@
             "description": "Run pseudo-python",
             "visible": false
         },
+        "python3": {
+            "description": "Run Python 3",
+            "visible": false
+        },
         "strip": {
             "description": "Run strip utility"
         },
@@ -1380,10 +1378,6 @@
         },
         "ymake": {
             "description": "Run ymake",
-            "visible": false
-        },
-        "ymake_python3": {
-            "description": "Run pseudo-python3",
             "visible": false
         },
         "ytexec": {

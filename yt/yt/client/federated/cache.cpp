@@ -1,8 +1,9 @@
 #include "cache.h"
 #include "client.h"
 
+#include <yt/yt/client/api/options.h>
+
 #include <yt/yt/client/cache/cache_base.h>
-#include <yt/yt/client/cache/options.h>
 #include <yt/yt/client/cache/rpc.h>
 
 #include <util/string/split.h>
@@ -127,7 +128,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     return CreateFederatedClientsCache(
         std::move(chaosBundleName),
         config,
-        NCache::GetClientOpsFromEnvStatic(),
+        NApi::GetClientOpsFromEnvStatic(),
         std::move(clusterSeparator));
 }
 
@@ -138,7 +139,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     return CreateFederatedClientsCache(
         std::move(chaosBundleName),
         TClustersConfig{},
-        NCache::GetClientOpsFromEnvStatic(),
+        NApi::GetClientOpsFromEnvStatic(),
         std::move(clusterSeparator));
 }
 

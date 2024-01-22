@@ -265,6 +265,7 @@ struct TYtSettings {
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
+    NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

@@ -4,6 +4,7 @@
 
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
+#include <yt/yt/core/ytree/serialization_traits.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -17,6 +18,84 @@
 #include <array>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TTestTraitConfig
+{
+    int Field1;
+    double Field2;
+};
+
+class TTestTraitConfigSerializer
+    : public TExternalizedYsonStruct<TTestTraitConfig>
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestTraitConfig, TTestTraitConfigSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field1", &TThat::Field1);
+        registrar.ExternalClassParameter("field2", &TThat::Field2);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestProcessorsTraitConfig
+{
+    int Field1 = 11;
+    int Field2 = 33;
+
+    static inline bool PostprocessorCalled = false;
+    static inline bool PreprocessorCalled = false;
+};
+
+class TTestProcessorsTraitConfigSerializer
+    : public TExternalizedYsonStruct<TTestProcessorsTraitConfig>
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field1", &TThat::Field1)
+            .Default(42)
+            .CheckThat([] (const int& field1) {
+                return field1 % 2 == 0;
+            });
+        registrar.ExternalClassParameter("field2", &TThat::Field2)
+            .Default(180);
+
+        registrar.ExternalPreprocessor([] (TThat* podstruct) {
+            //! NB(arkady-e1ppa): Preprocessor is called twice during deserialization.
+            //! Same behavior is present for a normal YsonStructLite so I can't be
+            //! bothered fixing this for my struct and introduce inconsistent behavior.
+            // EXPECT_FALSE(TThat::PreprocessorCalled);
+            EXPECT_FALSE(TThat::PostprocessorCalled);
+            TThat::PreprocessorCalled = true;
+            podstruct->Field2 = 88;
+        });
+
+        registrar.ExternalPostprocessor([] (TThat* podstruct) {
+            EXPECT_TRUE(TThat::PreprocessorCalled);
+            EXPECT_FALSE(TThat::PostprocessorCalled);
+            TThat::PostprocessorCalled = true;
+            podstruct->Field1 = 37;
+        });
+    }
+};
+
+} // namespace
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestTraitConfig, TTestTraitConfigSerializer);
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace {
 
 using namespace NYson;
@@ -1667,6 +1746,88 @@ TEST(TYsonStructTest, TestOptionalNoInit)
     TTestOptionalNoInit x;
     EXPECT_EQ(0, x.FieldWithInit);
     EXPECT_EQ(1, x.FieldNoInit);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFieldTester
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestTraitConfig Field;
+
+    REGISTER_YSON_STRUCT_LITE(TFieldTester);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field);
+    }
+};
+
+TEST(TYsonStructTest, SerializableByTraitsField)
+{
+    TFieldTester writer = {};
+    writer.Field = {55, 34,};
+
+    TBufferStream stream;
+
+    ::Save(&stream, writer);
+
+    TFieldTester reader = {};
+    ::Load(&stream, reader);
+    EXPECT_EQ(writer.Field.Field1, 55);
+    EXPECT_EQ(writer.Field.Field2, 34);
+    EXPECT_EQ(reader.Field.Field1, 55);
+    EXPECT_EQ(reader.Field.Field2, 34);
+}
+
+class TFieldTesterForProcessor
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestProcessorsTraitConfig Field;
+
+    REGISTER_YSON_STRUCT_LITE(TFieldTesterForProcessor);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field);
+    }
+};
+
+TEST(TYsonStructTest, SerializableByTraitsPostPreprocessors)
+{
+    TTestProcessorsTraitConfig::PreprocessorCalled = false;
+    TTestProcessorsTraitConfig::PostprocessorCalled = false;
+
+    TFieldTesterForProcessor writer = {};
+
+    EXPECT_EQ(writer.Field.Field1, 11);
+    EXPECT_EQ(writer.Field.Field2, 33);
+
+    EXPECT_FALSE(TTestProcessorsTraitConfig::PreprocessorCalled);
+    EXPECT_FALSE(TTestProcessorsTraitConfig::PostprocessorCalled);
+
+    TBufferStream stream;
+
+    ::Save(&stream, writer);
+
+    EXPECT_TRUE(TTestProcessorsTraitConfig::PreprocessorCalled);
+    EXPECT_FALSE(TTestProcessorsTraitConfig::PostprocessorCalled);
+    EXPECT_EQ(writer.Field.Field1, 11);
+    EXPECT_EQ(writer.Field.Field2, 33);
+
+    TTestProcessorsTraitConfig::PreprocessorCalled = false;
+    TTestProcessorsTraitConfig::PostprocessorCalled = false;
+
+    TFieldTesterForProcessor reader = {};
+
+    ::Load(&stream, reader);
+
+    EXPECT_TRUE(TTestProcessorsTraitConfig::PreprocessorCalled);
+    EXPECT_TRUE(TTestProcessorsTraitConfig::PostprocessorCalled);
+    EXPECT_EQ(reader.Field.Field1, 37);
+    EXPECT_EQ(reader.Field.Field2, 33);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -24,6 +24,7 @@ import pytest  # type: ignore
 from google.auth import _helpers
 from google.auth import exceptions
 from google.auth import transport
+from google.auth.credentials import TokenState
 from google.oauth2 import credentials
 
 
@@ -62,6 +63,7 @@ class TestCredentials(object):
         assert not credentials.expired
         # Scopes aren't required for these credentials
         assert not credentials.requires_scopes
+        assert credentials.token_state == TokenState.INVALID
         # Test properties
         assert credentials.refresh_token == self.REFRESH_TOKEN
         assert credentials.token_uri == self.TOKEN_URI
@@ -912,7 +914,11 @@ class TestCredentials(object):
         assert list(creds.__dict__).sort() == list(unpickled.__dict__).sort()
 
         for attr in list(creds.__dict__):
-            assert getattr(creds, attr) == getattr(unpickled, attr)
+            # Worker should always be None
+            if attr == "_refresh_worker":
+                assert getattr(unpickled, attr) is None
+            else:
+                assert getattr(creds, attr) == getattr(unpickled, attr)
 
     def test_pickle_and_unpickle_universe_domain(self):
         # old version of auth lib doesn't have _universe_domain, so the pickled
@@ -946,7 +952,7 @@ class TestCredentials(object):
         for attr in list(creds.__dict__):
             # For the _refresh_handler property, the unpickled creds should be
             # set to None.
-            if attr == "_refresh_handler":
+            if attr == "_refresh_handler" or attr == "_refresh_worker":
                 assert getattr(unpickled, attr) is None
             else:
                 assert getattr(creds, attr) == getattr(unpickled, attr)
@@ -958,6 +964,8 @@ class TestCredentials(object):
         # this mimics a pickle created with a previous class definition with
         # fewer attributes
         del creds.__dict__["_quota_project_id"]
+        del creds.__dict__["_refresh_handler"]
+        del creds.__dict__["_refresh_worker"]
 
         unpickled = pickle.loads(pickle.dumps(creds))
 

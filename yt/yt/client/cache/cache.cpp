@@ -1,6 +1,7 @@
 #include "cache_base.h"
-#include "options.h"
 #include "rpc.h"
+
+#include <yt/yt/client/api/options.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -90,7 +91,7 @@ IClientsCachePtr CreateClientsCache(const TConfig& config, const NApi::TClientOp
 
 IClientsCachePtr CreateClientsCache(const TConfig& config)
 {
-    return CreateClientsCache(config, GetClientOpsFromEnvStatic());
+    return CreateClientsCache(config, NApi::GetClientOpsFromEnvStatic());
 }
 
 IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
@@ -100,7 +101,7 @@ IClientsCachePtr CreateClientsCache(const NApi::TClientOptions& options)
 
 IClientsCachePtr CreateClientsCache()
 {
-    return CreateClientsCache(GetClientOpsFromEnvStatic());
+    return CreateClientsCache(NApi::GetClientOpsFromEnvStatic());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

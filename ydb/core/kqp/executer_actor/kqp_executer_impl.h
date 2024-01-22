@@ -949,7 +949,7 @@ protected:
                 settings->SetMaxInFlightShards(*maxInFlightShards);
             }
 
-            if (!limitTasksPerNode && shardId) {
+            if (shardId) {
                 settings->SetShardIdHint(*shardId);
             }
 
@@ -1025,6 +1025,11 @@ protected:
                     NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
 
                     const auto& shardsRangesForTask = rangesDistribution[taskIndex];
+
+                    if (shardsRangesForTask.size() > 1) {
+                        settings->ClearShardIdHint();
+                    }
+
                     for (const auto& shardRanges : shardsRangesForTask) {
                         shardRanges->SerializeTo(settings);
                     }

@@ -74,11 +74,6 @@ public:
         return TxInfo().DynKeysCount != 0;
     }
 
-    // TODO: It's an expensive operation (Precharge() inside). We need avoid it.
-    TEngineBay::TSizes CalcReadSizes(bool needsTotalKeysSize) const {
-        return EngineBay.CalcSizes(needsTotalKeysSize);
-    }
-
     ui64 GetMemoryAllocated() const {
         return EngineBay.GetEngine() ? EngineBay.GetEngine()->GetMemoryAllocated() : 0;
     }
@@ -92,6 +87,14 @@ public:
     void DestroyEngine() {
         EngineBay.DestroyEngine();
     }
+
+    TKeyValidator& GetKeyValidator() {
+        return EngineBay.GetKeyValidator();
+    }
+    const TKeyValidator& GetKeyValidator() const {
+        return EngineBay.GetKeyValidator();
+    }
+
     const NMiniKQL::TEngineHostCounters& GetCounters() {
         return EngineBay.GetCounters();
     }
@@ -145,7 +148,7 @@ public:
     }
 
     bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds, const NScheme::TTypeRegistry& typeRegistry, ui64 tabletId, const TActorContext& ctx);
+    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);  
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
@@ -174,6 +177,9 @@ public:
 private:
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
     TEngineBay EngineBay;
+
+    const ui64 TabletId;
+    const TActorContext& Ctx;
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 
@@ -262,8 +268,8 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
-    void DbStoreArtifactFlags(ui64 tabletId, TTransactionContext& txc, const TActorContext& ctx);
+    void DbStoreLocksAccessLog(NTable::TDatabase& txcDb);
+    void DbStoreArtifactFlags(NTable::TDatabase& txcDb);
 
     ui64 GetMemoryConsumption() const;
 
@@ -335,7 +341,7 @@ public:
         return std::move(WriteResult);
     }
 
-    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg, ui64 tabletId);
+    void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
 private:
@@ -346,6 +352,9 @@ private:
     NEvents::TDataEvents::TEvWrite::TPtr Ev;
     TValidatedWriteTx::TPtr WriteTx;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
+
+    const ui64 TabletId;
+    const TActorContext& Ctx;
 
     YDB_READONLY_DEF(ui64, ArtifactFlags);
     YDB_ACCESSOR_DEF(ui64, TxCacheUsage);

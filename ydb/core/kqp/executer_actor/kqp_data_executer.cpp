@@ -1668,10 +1668,10 @@ private:
         for (const auto &tableOp : stage.GetTableOps()) {
             if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
                 && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     void Execute() {

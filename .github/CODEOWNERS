@@ -1,1 +1,4 @@
 /ydb/docs/ @ydb-platform/docs
+/ydb/library/yql/ @ydb-platform/yql
+/ydb/docs/ru/core/yql/reference/ @ydb-platform/yql
+/ydb/docs/en/core/yql/reference/ @ydb-platform/yql

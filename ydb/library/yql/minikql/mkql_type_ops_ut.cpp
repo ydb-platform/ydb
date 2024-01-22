@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         for (; value < NUdf::MAX_DATE32; ++value) {
             i32 year;
             ui32 month, day;
-            SplitDate32(value, year, month, day);
+            UNIT_ASSERT(SplitDate32(value, year, month, day));
             if (year < 0) {
                 year++;
             }

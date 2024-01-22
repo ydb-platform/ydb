@@ -25,6 +25,10 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
+#define PQ_LOG_ERROR_AND_DIE(expr) \
+    PQ_LOG_ERROR(expr); \
+    ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill())
+
 namespace NKikimr::NPQ {
 
 static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -824,7 +828,8 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
         break;
     }
     default:
-        Y_ABORT("Unexpected tx info read status: %d", read.GetStatus());
+        PQ_LOG_ERROR_AND_DIE("Unexpected tx info read status: " << read.GetStatus());
+        return;
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " LastStep " << LastStep << " LastTxId " << LastTxId);
@@ -866,7 +871,8 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
         break;
     }
     default:
-        Y_ABORT("Unexpected tx writes info read status: %d", read.GetStatus());
+        PQ_LOG_ERROR_AND_DIE("Unexpected tx writes info read status: " << read.GetStatus());
+        return;
     }
 }
 
@@ -974,7 +980,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
     } else {
-        Y_ABORT("Unexpected config read status: %d", read.GetStatus());
+        PQ_LOG_ERROR_AND_DIE("Unexpected config read status: " << read.GetStatus());
+        return;
     }
 
     THashMap<ui32, TVector<TTransaction>> partitionTxs;
@@ -1028,7 +1035,8 @@ void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& 
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
         TabletState = NKikimrPQ::ENormal;
     } else {
-        Y_ABORT("Unexpected state read status: %d", read.GetStatus());
+        PQ_LOG_ERROR_AND_DIE("Unexpected state read status: " << read.GetStatus());
+        return;
     }
 }
 
@@ -2538,7 +2546,8 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
     } else if (req.CmdWriteSize()) {
         HandleWriteRequestForShadowPartition(responseCookie, req, ctx);
     } else {
-        Y_ABORT("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        PQ_LOG_ERROR_AND_DIE("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        return;
     }
 }
 
@@ -2670,7 +2679,10 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, partActor, req, ctx);
-    } else Y_ABORT("unknown or empty command");
+    } else {
+        PQ_LOG_ERROR_AND_DIE("unknown or empty command");
+        return;
+    }
 }
 
 
@@ -3343,7 +3355,8 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             ScheduleProposeTransactionResult(tx);
             break;
         default:
-            Y_ABORT();
+            PQ_LOG_ERROR_AND_DIE("Unknown tx state: " << static_cast<int>(tx.State));
+            return;
         }
     }
 }

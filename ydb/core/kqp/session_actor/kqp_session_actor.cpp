@@ -2,6 +2,7 @@
 #include "kqp_tx.h"
 #include "kqp_worker_common.h"
 #include "kqp_query_state.h"
+#include "kqp_query_stats.h"
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
@@ -712,16 +713,15 @@ public:
         }
 
         try {
-            auto parameters = QueryState->GetYdbParameters();
-            if (QueryState->CompileResult && QueryState->CompileResult->Ast) {
-                auto& params = QueryState->CompileResult->Ast->PgAutoParamValues;
-                if (params) {
-                    for(const auto& [name, param] : *params) {
-                        parameters.insert({name, param});
+            const auto& parameters = QueryState->GetYdbParameters();
+            QueryState->QueryData->ParseParameters(parameters);
+            if (QueryState->CompileResult && QueryState->CompileResult->Ast && QueryState->CompileResult->Ast->PgAutoParamValues) {
+                for(const auto& [name, param] : *QueryState->CompileResult->Ast->PgAutoParamValues) {
+                    if (!parameters.contains(name)) {
+                        QueryState->QueryData->AddTypedValueParam(name, param);
                     }
                 }
             }
-            QueryState->QueryData->ParseParameters(parameters);
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
@@ -733,7 +733,7 @@ public:
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(QueryState->CompileResult, QueryResponse->Record);
 
-        auto ru = NRuCalc::CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.GetCpuTimeUs()));
+        auto ru = NRuCalc::CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.CpuTimeUs));
         auto& record = QueryResponse->Record.GetRef();
         record.SetConsumedRu(ru);
 
@@ -1151,7 +1151,7 @@ public:
                     NKqpProto::TKqpStatsQuery& stats = *ev->Get()->Record.MutableQueryStats();
                     NKqpProto::TKqpStatsQuery executionStats;
                     executionStats.Swap(&stats);
-                    stats = QueryState->Stats;
+                    stats = QueryState->QueryStats.ToProto();
                     stats.MutableExecutions()->MergeFrom(executionStats.GetExecutions());
                     ev->Get()->Record.SetQueryPlan(SerializeAnalyzePlan(stats));
                 }
@@ -1277,8 +1277,8 @@ public:
         }
 
         if (executerResults.HasStats()) {
-            auto* exec = QueryState->Stats.AddExecutions();
-            exec->Swap(executerResults.MutableStats());
+            QueryState->QueryStats.Executions.emplace_back();
+            QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
         if (!response->GetIssues().empty()){
@@ -1317,7 +1317,7 @@ public:
         }
     }
 
-    void CollectSystemViewQueryStats(const NKqpProto::TKqpStatsQuery* stats, TDuration queryDuration,
+    void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
         const TString& database, ui64 requestUnits)
     {
         auto type = QueryState->GetType();
@@ -1333,7 +1333,7 @@ public:
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
-                    NSysView::CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
+                    CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);
                 }
                 break;
@@ -1345,16 +1345,19 @@ public:
 
     void FillSystemViewQueryStats(NKikimrKqp::TEvQueryResponse* record) {
         YQL_ENSURE(QueryState);
-        auto* stats = &QueryState->Stats;
+        auto* stats = &QueryState->QueryStats;
 
-        stats->SetDurationUs((TInstant::Now() - QueryState->StartTime).MicroSeconds());
-        stats->SetWorkerCpuTimeUs(QueryState->GetCpuTime().MicroSeconds());
+        stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
+        stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
         if (QueryState->CompileResult) {
-            stats->MutableCompilation()->Swap(&QueryState->CompileStats);
+            stats->Compilation.emplace();
+            stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
+            stats->Compilation->DurationUs = (QueryState->CompileStats.DurationUs);
+            stats->Compilation->CpuTimeUs = (QueryState->CompileStats.CpuTimeUs);
         }
 
         if (IsExecuteAction(QueryState->GetAction())) {
-            auto ru = NRuCalc::CalcRequestUnit(*stats);
+            auto ru = CalcRequestUnit(*stats);
 
             if (record != nullptr) {
                 record->SetConsumedRu(ru);
@@ -1375,19 +1378,19 @@ public:
         auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
 
         if (IsExecuteAction(QueryState->GetAction())) {
-            auto queryDuration = TDuration::MicroSeconds(QueryState->Stats.GetDurationUs());
+            auto queryDuration = TDuration::MicroSeconds(QueryState->QueryStats.DurationUs);
             SlowLogQuery(TlsActivationContext->AsActorContext(), Config.Get(), requestInfo, queryDuration,
                 record->GetYdbStatus(), QueryState->UserToken, QueryState->ParametersSize, record,
                 [this]() { return this->QueryState->ExtractQueryText(); });
         }
 
-        auto* stats = &QueryState->Stats;
         if (QueryState->ReportStats()) {
+            auto stats = QueryState->QueryStats.ToProto();
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-                response->SetQueryPlan(SerializeAnalyzePlan(*stats));
+                response->SetQueryPlan(SerializeAnalyzePlan(stats));
                 response->SetQueryAst(QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst());
             }
-            response->MutableQueryStats()->Swap(stats);
+            response->MutableQueryStats()->Swap(&stats);
         }
     }
 
@@ -1427,7 +1430,7 @@ public:
             Counters->ReportQueryWithRangeScan(Settings.DbCounters);
         }
 
-        auto& stats = QueryState->Stats;
+        auto& stats = QueryState->QueryStats;
 
         ui32 affectedShardsCount = 0;
         ui64 readBytesCount = 0;
@@ -1443,9 +1446,9 @@ public:
         Counters->ReportQueryAffectedShards(Settings.DbCounters, affectedShardsCount);
         Counters->ReportQueryReadRows(Settings.DbCounters, readRowsCount);
         Counters->ReportQueryReadBytes(Settings.DbCounters, readBytesCount);
-        Counters->ReportQueryReadSets(Settings.DbCounters, stats.GetReadSetsCount());
-        Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, stats.GetMaxShardReplySize());
-        Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, stats.GetMaxShardProgramSize());
+        Counters->ReportQueryReadSets(Settings.DbCounters, stats.ReadSetsCount);
+        Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, stats.MaxShardReplySize);
+        Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, stats.MaxShardProgramSize);
     }
 
     void ReplySuccess() {

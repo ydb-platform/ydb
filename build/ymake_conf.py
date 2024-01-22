@@ -2260,6 +2260,7 @@ class Cuda(object):
 
         self.cuda_root = Setting('CUDA_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
+        self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
         self.use_arcadia_cuda_host_compiler = Setting('USE_ARCADIA_CUDA_HOST_COMPILER', auto=self.auto_use_arcadia_cuda_host_compiler, convert=to_bool)
         self.cuda_use_clang = Setting('CUDA_USE_CLANG', auto=False, convert=to_bool)
@@ -2307,6 +2308,7 @@ class Cuda(object):
 
         self.cuda_root.emit()
         self.cuda_version.emit()
+        self.cuda_architectures.emit()
         self.use_arcadia_cuda.emit()
         self.use_arcadia_cuda_host_compiler.emit()
         self.cuda_use_clang.emit()
@@ -2386,6 +2388,41 @@ class Cuda(object):
             return '11.3'
         else:
             return value
+
+    def auto_cuda_architectures(self):
+        # empty list does not mean "no architectures"
+        # it means "no restriction -- any available architecture"
+
+        host, target = self.build.host_target
+        if not target.is_linux_x86_64:
+            # do not impose any restrictions, when build not for "linux 64-bit"
+            return []
+
+        # do not include 'lto' type,
+        # because we already perform static linking
+        supported_types = ['compute', 'sm']
+
+        # Equality to CUDA 11.4 is rather strict comparison
+        # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
+        if self.cuda_version.value == '11.4':
+            # * use output of CUDA 11.4 `nvcc --help`
+            # * drop support for '53', '62', '72' and '87'
+            #   (these devices run only on arm64)
+            # * drop support for '37'
+            #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
+            supported_vers = ['35',
+                              '50', '52',
+                              '60', '61',
+                              '70', '75',
+                              '80', '86']
+        else:
+            supported_vers = []
+
+        cuda_architectures = ['{typ}_{ver}'.format(typ=typ, ver=ver)
+                              for typ in supported_types
+                              for ver in supported_vers]
+
+        return ','.join(cuda_architectures)
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user

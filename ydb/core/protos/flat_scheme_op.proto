@@ -972,6 +972,7 @@ message TS3Settings {
     optional string Region = 12;
     optional TSecretableVariable SecretableAccessKey = 13;
     optional TSecretableVariable SecretableSecretKey = 14;
+    optional bool UseVirtualAddressing = 15 [default = true];
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

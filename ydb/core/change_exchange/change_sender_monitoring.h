@@ -6,7 +6,7 @@
 
 #include <util/generic/maybe.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NChangeExchange {
 
 template <typename T>
 static void Link(IOutputStream& str, const TStringBuf path, const T& title) {

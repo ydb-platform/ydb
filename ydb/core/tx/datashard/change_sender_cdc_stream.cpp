@@ -2,10 +2,10 @@
 #include "change_exchange_impl.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
-#include "change_sender_common_ops.h"
-#include "change_sender_monitoring.h"
 #include "datashard_user_table.h"
 
+#include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
@@ -16,6 +16,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NDataShard {
@@ -75,7 +76,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Ready() {
         Pending.clear();
 
-        Send(Parent, new TEvChangeExchangePrivate::TEvReady(PartitionId));
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvReady(PartitionId));
         Become(&TThis::StateWaitingRecords);
     }
 
@@ -179,6 +180,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+        using namespace NChangeExchange;
+
         TStringStream html;
 
         HTML(html) {
@@ -219,7 +222,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Leave() {
-        Send(Parent, new TEvChangeExchangePrivate::TEvGone(PartitionId));
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(PartitionId));
         PassAway();
     }
 
@@ -291,8 +294,8 @@ private:
 
 class TCdcChangeSenderMain
     : public TActorBootstrapped<TCdcChangeSenderMain>
-    , public TBaseChangeSender
-    , public IChangeSenderResolver
+    , public NChangeExchange::TBaseChangeSender
+    , public NChangeExchange::IChangeSenderResolver
     , private NSchemeCache::TSchemeCacheHelpers
 {
     struct TPQPartitionInfo {
@@ -718,12 +721,12 @@ class TCdcChangeSenderMain
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
-    void Handle(TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
-    void Handle(TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
+    void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
@@ -742,7 +745,7 @@ class TCdcChangeSenderMain
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
-        RenderHtmlPage(ESenderType::CdcStream, ev, ctx);
+        RenderHtmlPage(DataShard.TabletId, ev, ctx);
     }
 
     void PassAway() override {
@@ -757,7 +760,8 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, dataShard, streamPathId)
+        , TBaseChangeSender(this, this, dataShard.ActorId, streamPathId)
+        , DataShard(dataShard)
         , TopicVersion(0)
     {
     }
@@ -772,8 +776,8 @@ public:
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
             hFunc(TEvChangeExchange::TEvRemoveSender, Handle);
-            hFunc(TEvChangeExchangePrivate::TEvReady, Handle);
-            hFunc(TEvChangeExchangePrivate::TEvGone, Handle);
+            hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
+            hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             HFunc(NMon::TEvRemoteHttpInfo, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -789,6 +793,7 @@ public:
     }
 
 private:
+    const TDataShardId DataShard;
     mutable TMaybe<TString> LogPrefix;
 
     TUserTable::TCdcStream Stream;

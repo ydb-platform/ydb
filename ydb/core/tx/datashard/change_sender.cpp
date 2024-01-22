@@ -1,9 +1,9 @@
 #include "change_exchange.h"
 #include "change_exchange_impl.h"
-#include "change_sender_monitoring.h"
 #include "datashard_impl.h"
 
 #include <ydb/core/change_exchange/change_exchange.h>
+#include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -165,6 +165,8 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+        using namespace NChangeExchange;
+
         const auto& cgi = ev->Get()->Cgi();
         if (const auto& str = cgi.Get("pathId")) {
             if (const auto& pathId = ParsePathId(str)) {

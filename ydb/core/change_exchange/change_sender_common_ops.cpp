@@ -1,13 +1,15 @@
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NChangeExchange {
 
 void TBaseChangeSender::LazyCreateSender(THashMap<ui64, TSender>& senders, ui64 partitionId) {
     auto res = senders.emplace(partitionId, TSender{});
@@ -82,7 +84,7 @@ void TBaseChangeSender::KillSenders() {
     }
 }
 
-void TBaseChangeSender::EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
+void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
     for (auto& record : records) {
         Y_VERIFY_S(PathId == record.PathId, "Unexpected record's path id"
             << ": expected# " << PathId
@@ -117,11 +119,11 @@ bool TBaseChangeSender::RequestRecords() {
         return false;
     }
 
-    ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRequestRecords(std::move(records)));
+    ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRequestRecords(std::move(records)));
     return true;
 }
 
-void TBaseChangeSender::ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) {
+void TBaseChangeSender::ProcessRecords(TVector<IChangeRecord::TPtr>&& records) {
     for (auto& record : records) {
         auto it = PendingBody.find(record->GetOrder());
         if (it == PendingBody.end()) {
@@ -290,7 +292,7 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
     }
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new NChangeExchange::TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
 }
 
 void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
@@ -306,7 +308,7 @@ void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
     }
 }
 
-TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(NChangeExchange::IChangeRecord::TPtr record) {
+TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(IChangeRecord::TPtr record) {
     Y_ABORT_UNLESS(record->IsBroadcast());
 
     auto it = Broadcasting.find(record->GetOrder());
@@ -430,17 +432,17 @@ void TBaseChangeSender::RemoveRecords() {
 }
 
 TBaseChangeSender::TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
-        const TDataShardId& dataShard, const TPathId& pathId)
+        const TActorId& changeServer, const TPathId& pathId)
     : ActorOps(actorOps)
     , Resolver(resolver)
-    , DataShard(dataShard)
+    , ChangeServer(changeServer)
     , PathId(pathId)
     , MemLimit(192_KB)
     , MemUsage(0)
 {
 }
 
-void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon::TEvRemoteHttpInfo::TPtr& ev,
+void TBaseChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev,
         const TActorContext& ctx)
 {
     const auto& cgi = ev->Get()->Cgi();
@@ -468,7 +470,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
     TStringStream html;
 
     HTML(html) {
-        Header(html, TStringBuilder() << type << " change sender", DataShard.TabletId);
+        Header(html, "Change sender", tabletId);
 
         SimplePanel(html, "Info", [this](IOutputStream& html) {
             HTML(html) {
@@ -479,7 +481,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
             }
         });
 
-        SimplePanel(html, "Partition senders", [this](IOutputStream& html) {
+        SimplePanel(html, "Partition senders", [this, tabletId](IOutputStream& html) {
             HTML(html) {
                 TABLE_CLASS("table table-hover") {
                     TABLEHEAD() {
@@ -503,7 +505,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                                 TABLED() { html << sender.Pending.size(); }
                                 TABLED() { html << sender.Prepared.size(); }
                                 TABLED() { html << sender.Broadcasting.size(); }
-                                TABLED() { ActorLink(html, DataShard.TabletId, PathId, partitionId); }
+                                TABLED() { ActorLink(html, tabletId, PathId, partitionId); }
                             }
                         }
                     }

@@ -1023,14 +1023,6 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
     WaitForPQWriteTxs();
 }
 
-//Y_UNIT_TEST_F(Write_In_Tx, TPQTabletFixture)
-//{
-//    UNIT_FAIL("Write_In_Tx");
-//    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-//
-//    SendReserveBytes({.WriteId=1});
-//}
-
 }
 
 }

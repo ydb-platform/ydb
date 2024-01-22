@@ -26,12 +26,13 @@ public:
         Pipe = ctx.RegisterWithSameMailbox(TPipeCreator::CreateClient(ctx.SelfID, tabletId, clientConfig));
     }
 
-    void SendGetOwnershipRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
+    void SendGetOwnershipRequest(ui32 partitionId, const TString& sourceId, bool registerIfNotExists, const TActorContext& ctx) {
         auto ev = MakeRequest(partitionId, Pipe);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
         cmd.SetOwner(sourceId ? sourceId : CreateGuidAsString());
         cmd.SetForce(true);
+        cmd.SetRegisterIfNotExists(registerIfNotExists);
 
         NTabletPipe::SendData(ctx, Pipe, ev.Release());
     }

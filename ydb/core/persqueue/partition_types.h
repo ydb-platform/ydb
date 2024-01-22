@@ -24,7 +24,6 @@ struct TWriteMsg {
 struct TOwnershipMsg {
     ui64 Cookie;
     TString OwnerCookie;
-    bool Registered;
 };
 
 struct TRegisterMessageGroupMsg {

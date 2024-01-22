@@ -344,10 +344,16 @@ private:
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
-        cmd->SetOwnerCookie("ower_cookie");
-        cmd->SetStatus(Status);
-        cmd->SetRegistered(!!SeqNo);
+        if (ev->Get()->Record.GetPartitionRequest().HasCmdGetOwnership()) {
+            auto& o = ev->Get()->Record.GetPartitionRequest().GetCmdGetOwnership();
+            if (o.GetRegisterIfNotExists() || SeqNo) {
+                auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
+                cmd->SetOwnerCookie("ower_cookie");
+                cmd->SetStatus(Status);
+            } else {
+                response->Record.SetErrorCode(NPersQueue::NErrorCode::SOURCEID_DELETED);
+            }
+        }
 
         auto* sn = response->Record.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult()->AddSourceIdInfo();
         sn->SetSeqNo(SeqNo.value_or(0));

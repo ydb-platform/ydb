@@ -214,7 +214,7 @@ protected:
         DEBUG("GetOwnership Partition TabletId=" << Partition->TabletId);
 
         PartitionHelper.Open(Partition->TabletId, ctx);
-        PartitionHelper.SendGetOwnershipRequest(Partition->PartitionId, SourceId, ctx);
+        PartitionHelper.SendGetOwnershipRequest(Partition->PartitionId, SourceId, true, ctx);
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {

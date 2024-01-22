@@ -119,7 +119,7 @@ private:
         DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
 
         TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
-        TThis::PartitionHelper.SendGetOwnershipRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
+        TThis::PartitionHelper.SendGetOwnershipRequest(BoundaryPartition->PartitionId, TThis::SourceId, false, ctx);
     }
 
     void HandleOwnershipFast(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -128,7 +128,7 @@ private:
 
         TString error;
         if (!BasicCheck(record, error)) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, std::move(error), ctx);
+            return TThis::InitTable(ctx);
         }
 
         const auto& response = record.GetPartitionResponse();
@@ -142,13 +142,9 @@ private:
 
         TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
 
-        if (response.GetCmdGetOwnershipResult().GetRegistered()) {
-            // Fast path: the partition ative and already written
-            TThis::SendUpdateRequests(ctx);
-            return TThis::ReplyResult(ctx);
-        }
-
-        TThis::InitTable(ctx);
+        // Fast path: the partition ative and already written
+        TThis::SendUpdateRequests(ctx);
+        return TThis::ReplyResult(ctx);
     }
 
     STATEFN(StateOwnershipFast) {

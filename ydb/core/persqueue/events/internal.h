@@ -491,12 +491,13 @@ struct TEvPQ {
     };
 
     struct TEvChangeOwner : public TEventLocal<TEvChangeOwner, EvChangeOwner> {
-        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force)
+        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force, const bool registerIfNotExists)
         : Cookie(cookie)
         , Owner(owner)
         , PipeClient(pipeClient)
         , Sender(sender)
         , Force(force)
+        , RegisterIfNotExists(registerIfNotExists)
         {}
 
         ui64 Cookie;
@@ -504,6 +505,7 @@ struct TEvPQ {
         TActorId PipeClient;
         TActorId Sender;
         bool Force;
+        bool RegisterIfNotExists;
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {

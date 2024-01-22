@@ -1117,8 +1117,9 @@ public:
 
                         if (hasNotNull && !hasDefaultValue) {
                             ctx.AddError(
-                                TIssue(ctx.GetPosition(columnTuple.Pos()),
-                                    "Cannot add not null column with default value"));
+                                YqlIssue(ctx.GetPosition(columnTuple.Pos()),
+                                    TIssuesIds::KIKIMR_BAD_REQUEST,
+                                    "Cannot add not null column without default value"));
                             return SyncError();
                         }
 

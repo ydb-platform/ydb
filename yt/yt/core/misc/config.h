@@ -65,6 +65,7 @@ DEFINE_ENUM(EHistoricUsageAggregationMode,
     ((ExponentialMovingAverage) (1))
 );
 
+// TODO(arkady-e1ppa): Use YsonExternalSerializer from pr5052145 once it's ready.
 class THistoricUsageConfig
     : public NYTree::TYsonStruct
 {
@@ -76,6 +77,8 @@ public:
     //! historic usage as the usage ratio alpha seconds ago.
     //! EMA for unevenly spaced time series was adapted from here: https://clck.ru/HaGZs
     double EmaAlpha;
+
+    bool ResetOnNewParameters;
 
     REGISTER_YSON_STRUCT(THistoricUsageConfig);
 

@@ -352,7 +352,7 @@ public:
     bool CheckInflightLimit() const;
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev);
-    void ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx);
+    void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
 
     ui64 WaitingReadIterators() const { return WaitingDataReadIterators.size(); }
@@ -366,7 +366,7 @@ public:
     bool HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
 
     TRowVersion GetReadEdge() const;
-    TRowVersion GetUnreadableEdge(bool prioritizedReads) const;
+    TRowVersion GetUnreadableEdge() const;
 
     void AddCompletingOp(const TOperation::TPtr& op);
     void RemoveCompletingOp(const TOperation::TPtr& op);

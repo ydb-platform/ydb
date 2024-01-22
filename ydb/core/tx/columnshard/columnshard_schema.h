@@ -508,34 +508,6 @@ struct Schema : NIceDb::Schema {
                                  NOlap::TInsertTableAccessor& insertTable,
                                  const TInstant& loadTime);
 
-    // IndexColumns activities
-
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
-        auto rowProto = row.GetMeta().SerializeToProto();
-        if (proto) {
-            *rowProto.MutablePortionMeta() = std::move(*proto);
-        }
-        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
-                NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
-                NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
-                NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
-                NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
-                NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
-                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
-                NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
-            );
-    }
-
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
-    }
-
-    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector,
-        const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback);
-
     // IndexCounters
 
     static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 counterId, ui64 value) {

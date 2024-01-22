@@ -460,7 +460,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/fq.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_long_tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_maintenance.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.proto

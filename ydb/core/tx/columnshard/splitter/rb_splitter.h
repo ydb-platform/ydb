@@ -56,7 +56,7 @@ public:
     TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters> counters,
         ISchemaDetailInfo::TPtr schemaInfo, const std::shared_ptr<arrow::RecordBatch> batch, const TSplitSettings& settings);
 
-    bool Next(std::vector<std::vector<IPortionColumnChunk::TPtr>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
+    bool Next(std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
 };
 
 }

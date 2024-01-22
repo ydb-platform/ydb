@@ -262,9 +262,14 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 break;
             }
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE: {
-                return storagePool->FindFreeAllocationUnit([&params](const TStorageGroupInfo& newGroup) -> bool {
+                auto channel = GetChannel(channelId);
+                auto filter = [&params](const TStorageGroupInfo& newGroup) -> bool {
                     return newGroup.IsMatchesParameters(*params);
-                });
+                };
+                auto calculateUsageWithTablet = [&channel](const TStorageGroupInfo* newGroup) -> double {
+                    return newGroup->GetUsageForChannel(channel);
+                };
+                return storagePool->FindFreeAllocationUnit(filter, calculateUsageWithTablet);
                 break;
             }
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_SPACE: {

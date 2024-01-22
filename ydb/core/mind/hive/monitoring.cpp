@@ -3933,8 +3933,8 @@ public:
     using TKindMap = THashMap<TUnitKind, ui32, TUnitKindHash>;
 
     void GetUnitKinds(const TStorageGroupInfo& group, TKindMap& kinds) {
-        for (const auto& [tablet, channel] : group.Units) {
-            const auto& boundChannels(tablet->BoundChannels[channel]);
+        for (const auto& channel : group.Units) {
+            const auto& boundChannels(*channel.ChannelInfo);
             kinds[TUnitKind{boundChannels.GetIOPS(), boundChannels.GetThroughput(), boundChannels.GetSize()}]++;
         }
     }
@@ -3970,11 +3970,11 @@ public:
                         out << "<td style='text-align:right'>" << kind.ToString() << "</td>";
                         out << "<td style='text-align:right'>" << units << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", kind.IOPS * units) << "</td>";
-                        out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.MaximumIOPS) << "</td>";
+                        out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.MaximumResources.IOPS) << "</td>";
                         out << "<td style='text-align:right'>" << kind.Size * units << "</td>";
-                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumSize << "</td>";
+                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Size << "</td>";
                         out << "<td style='text-align:right'>" << kind.Throughput * units << "</td>";
-                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumThroughput << "</td>";
+                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Throughput << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.StoragePool.GetOvercommit()) << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.GetUsage()) << "</td>";
                         out << "</tr>";
@@ -3985,12 +3985,12 @@ public:
                     out << "<td>" << prStoragePool.second.Name << "</td>";
                     out << "<td style='text-align:right'>" << group.Id << "</td>";
                     out << "<td style='text-align:right'>" << group.Units.size() << "</td>";
-                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.AcquiredIOPS) << "</td>";
-                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.MaximumIOPS) << "</td>";
-                    out << "<td style='text-align:right'>" << group.AcquiredSize << "</td>";
-                    out << "<td style='text-align:right'>" << group.MaximumSize << "</td>";
-                    out << "<td style='text-align:right'>" << group.AcquiredThroughput << "</td>";
-                    out << "<td style='text-align:right'>" << group.MaximumThroughput << "</td>";
+                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.AcquiredResources.IOPS) << "</td>";
+                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.MaximumResources.IOPS) << "</td>";
+                    out << "<td style='text-align:right'>" << group.AcquiredResources.Size << "</td>";
+                    out << "<td style='text-align:right'>" << group.MaximumResources.Size << "</td>";
+                    out << "<td style='text-align:right'>" << group.AcquiredResources.Throughput << "</td>";
+                    out << "<td style='text-align:right'>" << group.MaximumResources.Throughput << "</td>";
                     out << "<td style='text-align:right'>" << group.GroupParameters.GetAllocatedSize() << "</td>";
                     out << "<td style='text-align:right'>" << group.GroupParameters.GetAvailableSize() << "</td>";
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.StoragePool.GetOvercommit()) << "</td>";

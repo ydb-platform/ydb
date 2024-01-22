@@ -2,14 +2,13 @@ from dataclasses import dataclass
 import datetime
 from typing import Sequence
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.api.service.protos.connector_pb2 import EDateTimeFormat
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.test_cases.select_positive_common as select_positive_common
 import ydb.library.yql.providers.generic.connector.tests.utils.clickhouse as clickhouse
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -38,7 +37,7 @@ class TestCase(select_positive_common.TestCase):
 class Factory:
     _name = 'datetime'
 
-    def _make_test_clickhouse(self) -> TestCase:
+    def _make_test_yql_clickhouse(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
@@ -159,23 +158,22 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
         test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.CLICKHOUSE,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
-    def _make_test_postgresql(self) -> TestCase:
+    def _make_test_yql_postgresql(self) -> TestCase:
         schema = Schema(
             columns=ColumnList(
                 Column(
@@ -222,19 +220,18 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
         test_case_name = self._name + '_YQL'
 
         return TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.YQL_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -332,19 +329,18 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.CLICKHOUSE
         test_case_name = self._name + '_string'
 
         return TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
+            protocol=EProtocol.NATIVE,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.CLICKHOUSE,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
@@ -391,26 +387,25 @@ class Factory:
             ],
         ]
 
-        data_source_kind = EDataSourceKind.POSTGRESQL
         test_case_name = self._name + '_string'
 
         return TestCase(
-            name=test_case_name,
+            name_=test_case_name,
             date_time_format=EDateTimeFormat.STRING_FORMAT,
             data_in=data_in,
             data_out_=data_out,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
-            data_source_kind=data_source_kind,
+            data_source_kind=EDataSourceKind.POSTGRESQL,
+            protocol=EProtocol.NATIVE,
             schema=schema,
-            database=Database(test_case_name, data_source_kind),
             pragmas=dict(),
         )
 
     def make_test_cases(self) -> Sequence[TestCase]:
         return [
-            self._make_test_clickhouse(),
-            self._make_test_postgresql(),
+            self._make_test_yql_clickhouse(),
+            self._make_test_yql_postgresql(),
             self._make_test_string_clickhouse(),
             self._make_test_string_postgresql(),
         ]

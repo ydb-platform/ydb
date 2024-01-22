@@ -8,12 +8,19 @@ using namespace NKikimr;
 
 struct TAccessServiceSettings : TGrpcClientSettings {};
 
-IActor* CreateAccessService(const TAccessServiceSettings& settings);
+IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
+IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings);
 
-inline IActor* CreateAccessService(const TString& endpoint) {
+inline IActor* CreateAccessServiceV1(const TString& endpoint) {
     TAccessServiceSettings settings;
     settings.Endpoint = endpoint;
-    return CreateAccessService(settings);
+    return CreateAccessServiceV1(settings);
+}
+
+inline IActor* CreateAccessServiceV2(const TString& endpoint) {
+    TAccessServiceSettings settings;
+    settings.Endpoint = endpoint;
+    return CreateAccessServiceV2(settings);
 }
 
 IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings); // for compatibility with older code

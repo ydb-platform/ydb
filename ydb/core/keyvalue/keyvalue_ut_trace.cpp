@@ -132,10 +132,10 @@ Y_UNIT_TEST(WriteSmall) {
 }
 
 Y_UNIT_TEST(WriteHuge) {
-    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight "
-        "-> [(VDisk.HugeBlobKeeper.Write -> [(VDisk.Log.PutHuge)])])])]) , (Tablet.Transaction -> "
-        "[(Tablet.Transaction.Execute) , (Tablet.WriteLog -> [(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> "
-        "[(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
+    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight -> "
+        "[(VDisk.HullHugeBlobChunkAllocator) , (VDisk.HullHugeKeeper.InWaitQueue -> [(VDisk.HugeBlobKeeper.Write -> "
+        "[(VDisk.Log.PutHuge)])])])])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute) , (Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> [(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
     TestOneWrite(HugeValue, std::move(canon));
 }
 

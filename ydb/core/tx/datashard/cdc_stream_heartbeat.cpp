@@ -41,7 +41,7 @@ public:
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
 
         for (const auto& [streamPathId, info] : heartbeats) {
-            const auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcHeartbeat)
+            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcHeartbeat)
                 .WithOrder(Self->AllocateChangeRecordOrder(db))
                 .WithGroup(0)
                 .WithStep(info.Last.Step)
@@ -50,6 +50,9 @@ public:
                 .WithTableId(info.TablePathId)
                 .WithSchemaVersion(0) // not used
                 .Build();
+
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+            Self->PersistChangeRecord(db, record);
 
             ChangeRecords.push_back(IDataShardChangeCollector::TChange{
                 .Order = record.GetOrder(),
@@ -61,8 +64,6 @@ public:
                 .TableId = record.GetTableId(),
                 .SchemaVersion = record.GetSchemaVersion(),
             });
-
-            Self->PersistChangeRecord(db, record);
         }
 
         return true;

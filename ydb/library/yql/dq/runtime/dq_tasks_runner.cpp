@@ -238,28 +238,24 @@ public:
         }
 
         if (!Context.Alloc) {
-            SelfAlloc = std::shared_ptr<TScopedAlloc>(new TScopedAlloc(__LOCATION__, TAlignedPagePoolCounters(),
-                Context.FuncRegistry->SupportsSizedAllocators()), [](TScopedAlloc* ptr) {
-                    ptr->Acquire();
-                    delete ptr;
-            });
+            SelfAlloc = std::shared_ptr<TScopedAlloc>(new TScopedAlloc(
+                    __LOCATION__,
+                    TAlignedPagePoolCounters(),
+                    Context.FuncRegistry->SupportsSizedAllocators(),
+                    false
+            ));
         }
 
         if (!Context.TypeEnv) {
-            AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(Context.Alloc ? *Context.Alloc : *SelfAlloc);
-        }
-
-        if (SelfAlloc) {
-            SelfAlloc->Release();
+            AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(Alloc());
         }
     }
 
     ~TDqTaskRunner() {
         if (SelfAlloc) {
-            SelfAlloc->Acquire();
+            auto guard = Guard(*SelfAlloc.get());
             Stats.reset();
             AllocatedHolder.reset();
-            SelfAlloc->Release();
         }
     }
 

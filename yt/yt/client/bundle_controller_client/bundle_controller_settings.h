@@ -18,9 +18,9 @@ namespace NYT::NBundleControllerClient {
 struct TCpuLimits
     : public NYTree::TYsonStruct
 {
-    int LookupThreadPoolSize;
-    int QueryThreadPoolSize;
-    int WriteThreadPoolSize;
+    std::optional<int> LookupThreadPoolSize;
+    std::optional<int> QueryThreadPoolSize;
+    std::optional<int> WriteThreadPoolSize;
 
     REGISTER_YSON_STRUCT(TCpuLimits);
 
@@ -73,18 +73,43 @@ DEFINE_REFCOUNTED_TYPE(TInstanceResources)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TBundleTargetConfig
+    : public NYTree::TYsonStruct
+{
+    TCpuLimitsPtr CpuLimits;
+    TMemoryLimitsPtr MemoryLimits;
+    std::optional<int> RpcProxyCount;
+    TInstanceResourcesPtr RpcProxyResourceGuarantee;
+    std::optional<int> TabletNodeCount;
+    TInstanceResourcesPtr TabletNodeResourceGuarantee;
+
+    REGISTER_YSON_STRUCT(TBundleTargetConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBundleTargetConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NProto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ToProto(NBundleController::NProto::TCpuLimits* protoCpuLimits, const NBundleControllerClient::TCpuLimitsPtr cpuLimits);
-void FromProto(NBundleControllerClient::TCpuLimitsPtr cpuLimits, const NBundleController::NProto::TCpuLimits* protoCpuLimits);
+void ToProto(NBundleController::NProto::TCpuLimits* protoCpuLimits, const TCpuLimitsPtr cpuLimits);
+void FromProto(TCpuLimitsPtr cpuLimits, const NBundleController::NProto::TCpuLimits* protoCpuLimits);
 
-void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const NBundleControllerClient::TMemoryLimitsPtr memoryLimits);
-void FromProto(NBundleControllerClient::TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits);
+void ToProto(NBundleController::NProto::TMemoryLimits* protoMemoryLimits, const TMemoryLimitsPtr memoryLimits);
+void FromProto(TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::TMemoryLimits* protoMemoryLimits);
 
-void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const NBundleControllerClient::TInstanceResourcesPtr instanceResources);
-void FromProto(NBundleControllerClient::TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
+void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
+void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
+
+void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
+void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
+
+void ToProto(NBundleController::NProto::TBundleConfig* protoBundleConfig, const TBundleTargetConfigPtr bundleConfig);
+void FromProto(TBundleTargetConfigPtr bundleConfig, const NBundleController::NProto::TBundleConfig* protoBundleConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

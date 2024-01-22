@@ -38,6 +38,7 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
 public:
     TDqComputeStorageActor(TTxId txId)
         : TxId_(txId)
+        
     {}
 
     void Bootstrap() {
@@ -58,7 +59,8 @@ public:
 
         ui64 size = blob.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+        bool success = SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+        (void)success;
 
         auto res = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>()));
         WritingBlobsSize_ += size;
@@ -75,7 +77,7 @@ public:
 
         auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
         return res.first->second.GetFuture();
     }
@@ -87,7 +89,7 @@ public:
 
         auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
         BlobsToRemoveAfterRead_.emplace(blobId);
 
         return res.first->second.GetFuture();
@@ -109,14 +111,14 @@ public:
 
 protected:
     void PassAway() override {
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
     void FailOnError() {
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -144,7 +146,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -171,7 +173,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -218,8 +220,8 @@ private:
 
 } // anonymous namespace
 
-IDqComputeStorageActor::TPtr CreateDqComputeStorageActor(TTxId txId) {
-    return std::make_shared<TDqComputeStorageActor>(txId);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId) {
+    return new TDqComputeStorageActor(txId);
 }
 
 } // namespace NYql::NDq

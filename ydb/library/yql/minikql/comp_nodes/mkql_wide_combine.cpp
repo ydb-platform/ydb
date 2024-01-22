@@ -1,6 +1,7 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
+#include <ydb/library/yql/dq/actors/spilling/compute_storage.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -10,7 +11,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
 
-#include <ydb/library/yql/dq/actors/spilling/compute_storage_actor.h>
+#include <ydb/library/yql/dq/actors/spilling/compute_storage.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
 
 #include <util/string/cast.h>
@@ -388,14 +389,16 @@ private:
     EFetchResult AsyncWrite() {
         MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncWriteOperation->HasValue(), "Internal logic error");
+        sleep(3);
+        MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
         //AsyncWriteOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
     EFetchResult AsyncRead() {
         MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncReadOperation->HasValue(), "Internal logic error");
+        sleep(3);
+        MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
         //AsyncReadOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
@@ -618,7 +621,7 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                Spiller = NYql::NDq::CreateDqComputeStorageActor({});
+                Spiller = NYql::NDq::MakeSpiller();
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);
@@ -647,7 +650,7 @@ private:
 
     bool IsSwitchToSpillingModeCondition() const {
         //TODO implement me
-        return false;
+        return true;
     }
 
 private:
@@ -669,10 +672,10 @@ private:
     };
     static constexpr size_t SpilledBucketCount = 4;
     std::deque<TSpilledBucket> SpilledBuckets;
-    NYql::NDq::IDqComputeStorageActor::TPtr Spiller;
+    ISpiller::TPtr Spiller;
     EFetchResult InputDataFetchResult;
     size_t CurrentAsyncOperationBucketId;
-    std::optional<NThreading::TFuture<NYql::NDq::IDqComputeStorageActor::TKey>> AsyncWriteOperation;
+    std::optional<NThreading::TFuture<ISpiller::TKey>> AsyncWriteOperation;
     std::optional<NThreading::TFuture<TRope>> AsyncReadOperation;
     TUnboxedValueVector BufferForUsedInputItems;
     TUnboxedValueVector BufferForKeyAnsState;

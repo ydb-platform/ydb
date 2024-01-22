@@ -1,7 +1,6 @@
 #pragma once
-
+#include "mkql_spiller.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/dq/actors/spilling/compute_storage_actor.h>
 
 
 namespace NKikimr::NMiniKQL {
@@ -14,7 +13,7 @@ namespace NKikimr::NMiniKQL {
 ///When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(NYql::NDq::IDqComputeStorageActor::TPtr spiller, const TMultiType* type, size_t sizeLimit)
+    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit)
         : Spiller(spiller)
         , ItemType(type)
         , SizeLimit(sizeLimit)
@@ -28,7 +27,7 @@ public:
     ///  - TFeature, if the values are being stored asynchronously and a caller must wait until async operation ends
     ///    In this case a caller must wait operation completion and call StoreCompleted.
     ///    Design note: not using Subscribe on a Future here to avoid possible race condition
-    std::optional<NThreading::TFuture<NYql::NDq::IDqComputeStorageActor::TKey>> WriteWideItem(const TArrayRef<NUdf::TUnboxedValuePod>& wideItem) {
+    std::optional<NThreading::TFuture<ISpiller::TKey>> WriteWideItem(const TArrayRef<NUdf::TUnboxedValuePod>& wideItem) {
        Packer.AddWideItem(wideItem.data(), wideItem.size());
        if(Packer.PackedSizeEstimate() > SizeLimit) {
            return Spiller->Put(std::move(Packer.Finish()));
@@ -37,13 +36,13 @@ public:
        }
     }
 
-    std::optional<NThreading::TFuture<NYql::NDq::IDqComputeStorageActor::TKey>> FinishWriting() {
+    std::optional<NThreading::TFuture<ISpiller::TKey>> FinishWriting() {
         if (Packer.IsEmpty())
             return std::nullopt;
         return Spiller->Put(std::move(Packer.Finish()));
     }
 
-    void AsyncWriteCompleted(NYql::NDq::IDqComputeStorageActor::TKey key) {
+    void AsyncWriteCompleted(ISpiller::TKey key) {
         StoredChunks.push_back(key);
     }
 
@@ -78,11 +77,11 @@ public:
     }
 
 private:
-    NYql::NDq::IDqComputeStorageActor::TPtr Spiller;
+    ISpiller::TPtr Spiller;
     const TMultiType* const ItemType;
     const size_t SizeLimit;
     TValuePackerTransport<false> Packer;
-    std::deque<NYql::NDq::IDqComputeStorageActor::TKey> StoredChunks;
+    std::deque<ISpiller::TKey> StoredChunks;
     std::optional<TUnboxedValueBatch> CurrentBatch;
 };
 

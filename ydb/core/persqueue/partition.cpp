@@ -212,9 +212,6 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui
             UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(tx)));
         }
         TxInProgress = GetUserActionAndTransactionEventsFront<TTransaction>().Predicate.Defined();
-//        std::move(distrTxs.begin(), distrTxs.end(),
-//                  std::back_inserter(DistrTxs));
-//        TxInProgress = DistrTxs.front().Predicate.Defined();
     }
 }
 
@@ -1417,36 +1414,26 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
     UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event)));
-
-    //DistrTxs.emplace_back(std::move(event));
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
     UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event), true));
-
-    //DistrTxs.emplace_back(std::move(event), true);
 }
 
 void TPartition::PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event)
 {
     UserActionAndTransactionEvents.emplace_front(new TTransaction(std::move(event), false));
-
-    //DistrTxs.emplace_front(std::move(event), false);
 }
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> event)
 {
     UserActionAndTransactionEvents.emplace_back(new TTransaction(std::move(event)));
-
-    //DistrTxs.emplace_back(std::move(event));
 }
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
     UserActionAndTransactionEvents.emplace_back(std::move(tx));
-
-    //ImmediateTxs.push_back(std::move(tx));
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
@@ -1454,9 +1441,6 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
     TString clientId = act->ClientId;
     UserActionAndTransactionEvents.emplace_back(std::move(act));
     ++UserActCount[clientId];
-
-    //UserActs.push_back(std::move(act));
-    //++UserActCount[UserActs.back()->ClientId];
 }
 
 void TPartition::RemoveImmediateTx()
@@ -1465,10 +1449,6 @@ void TPartition::RemoveImmediateTx()
     Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TEvPersQueue::TEvProposeTransaction>());
 
     UserActionAndTransactionEvents.pop_front();
-
-//    Y_ABORT_UNLESS(!ImmediateTxs.empty());
-//
-//    ImmediateTxs.pop_front();
 }
 
 void TPartition::RemoveUserAct()
@@ -1486,18 +1466,6 @@ void TPartition::RemoveUserAct()
     }
 
     UserActionAndTransactionEvents.pop_front();
-
-//    Y_ABORT_UNLESS(!UserActs.empty());
-//
-//    auto p = UserActCount.find(UserActs.front()->ClientId);
-//    Y_ABORT_UNLESS(p != UserActCount.end());
-//
-//    Y_ABORT_UNLESS(p->second > 0);
-//    if (!--p->second) {
-//        UserActCount.erase(p);
-//    }
-//
-//    UserActs.pop_front();
 }
 
 size_t TPartition::GetUserActCount(const TString& consumer) const
@@ -1515,10 +1483,6 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         return;
     }
 
-//    if (UsersInfoWriteInProgress || (ImmediateTxs.empty() && UserActs.empty() && DistrTxs.empty()) || TxInProgress) {
-//        return;
-//    }
-
     Y_ABORT_UNLESS(PendingUsersInfo.empty());
     Y_ABORT_UNLESS(Replies.empty());
     Y_ABORT_UNLESS(AffectedUsers.empty());
@@ -1531,11 +1495,11 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
     Y_ABORT_UNLESS(!TxInProgress);
 
-    auto visitor = [this, &ctx](const auto& event) -> bool {
-        return this->ProcessUserActionOrTransaction(*event, ctx);
-    };
-
     if (!UserActionAndTransactionEvents.empty()) {
+        auto visitor = [this, &ctx](const auto& event) -> bool {
+            return this->ProcessUserActionOrTransaction(*event, ctx);
+        };
+
         size_t index = UserActionAndTransactionEvents.front().index();
         while (!UserActionAndTransactionEvents.empty()) {
             auto& front = UserActionAndTransactionEvents.front();
@@ -1558,17 +1522,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext& ctx)
         }
     }
 
-//    if (!DistrTxs.empty()) {
-//        ProcessDistrTxs(ctx);
-//
-//        if (TxInProgress) {
-//            return;
-//        }
-//    }
-//
-//    ProcessUserActs(ctx);
-//    ProcessImmediateTxs(ctx);
-
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(SET_OFFSET_COOKIE);
 
@@ -1590,21 +1543,7 @@ void TPartition::RemoveDistrTx()
 
     UserActionAndTransactionEvents.pop_front();
     PendingPartitionConfig = nullptr;
-
-//    Y_ABORT_UNLESS(!DistrTxs.empty());
-//
-//    DistrTxs.pop_front();
-//    PendingPartitionConfig = nullptr;
 }
-
-//void TPartition::ProcessDistrTxs(const TActorContext& ctx)
-//{
-//    Y_ABORT_UNLESS(!TxInProgress);
-//
-//    while (!TxInProgress && !DistrTxs.empty()) {
-//        ProcessDistrTx(ctx);
-//    }
-//}
 
 bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
                                                 const TActorContext& ctx)
@@ -1612,7 +1551,6 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
     Y_ABORT_UNLESS(!TxInProgress);
 
     if (t.Tx) {
-
         t.Predicate = BeginTransaction(*t.Tx, ctx);
 
         ctx.Send(Tablet,
@@ -1623,7 +1561,6 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
 
         TxInProgress = true;
     } else if (t.ProposeConfig) {
-
         t.Predicate = BeginTransaction(*t.ProposeConfig);
 
         PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config, Partition);
@@ -1636,7 +1573,6 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
 
         TxInProgress = true;
     } else {
-
         Y_ABORT_UNLESS(!ChangeConfig);
 
         ChangeConfig = t.ChangeConfig;
@@ -1653,7 +1589,6 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
 bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
                                   const TActorContext& ctx)
 {
-
     Y_UNUSED(ctx);
     bool predicate = true;
 
@@ -1713,13 +1648,11 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
         }
     }
 
-
     return predicate;
 }
 
 bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 {
-
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
@@ -1732,7 +1665,6 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
                                 const TActorContext& ctx)
 {
-
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
             ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());
@@ -1740,15 +1672,11 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
         }
     }
 
-
     Y_ABORT_UNLESS(TxInProgress);
 
     TTransaction& t = GetUserActionAndTransactionEventsFront<TTransaction>();
-//    Y_ABORT_UNLESS(!DistrTxs.empty());
-//    TTransaction& t = DistrTxs.front();
 
     if (t.Tx) {
-
         Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
         Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
 
@@ -1764,7 +1692,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
         ScheduleReplyCommitDone(t.Tx->Step, t.Tx->TxId);
     } else if (t.ProposeConfig) {
-
         Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.ProposeConfig));
         Y_ABORT_UNLESS(t.Predicate.Defined() && *t.Predicate);
 
@@ -1774,7 +1701,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 
         ScheduleReplyCommitDone(t.ProposeConfig->Step, t.ProposeConfig->TxId);
     } else {
-
         Y_ABORT_UNLESS(t.ChangeConfig);
     }
 
@@ -1784,7 +1710,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
 void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
                                 const TActorContext& ctx)
 {
-
     Y_UNUSED(ctx);
 
     if (PlanStep.Defined() && TxId.Defined()) {
@@ -1796,8 +1721,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
     Y_ABORT_UNLESS(TxInProgress);
 
     TTransaction& t = GetUserActionAndTransactionEventsFront<TTransaction>();
-//    Y_ABORT_UNLESS(!DistrTxs.empty());
-//    TTransaction& t = DistrTxs.front();
 
     if (t.Tx) {
         Y_ABORT_UNLESS(GetStepAndTxId(event) == GetStepAndTxId(*t.Tx));
@@ -1819,7 +1742,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
 void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                             const TActorContext& ctx)
 {
-
     TSet<TString> hasReadRule;
 
     for (auto& [consumer, info] : UsersInfoStorage->GetAll()) {
@@ -1862,7 +1784,6 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
 }
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorContext& ctx) {
-
     Y_ABORT_UNLESS(cookie == SET_OFFSET_COOKIE);
 
     if (ChangeConfig) {
@@ -1929,7 +1850,6 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
         PendingPartitionConfig = nullptr;
     }
 
-
     ProcessTxsAndUserActs(ctx);
 
     if (ChangeConfig && CurrentStateFunc() == &TThis::StateIdle) {
@@ -1994,63 +1914,9 @@ void TPartition::ResendPendingEvents(const TActorContext& ctx)
     }
 }
 
-//void TPartition::ProcessDistrTx(const TActorContext& ctx)
-//{
-//    Y_ABORT_UNLESS(!TxInProgress);
-//
-//    TTransaction& t = GetUserActionAndTransactionEventsFront<TTransaction>();
-////    Y_ABORT_UNLESS(!DistrTxs.empty());
-////    TTransaction& t = DistrTxs.front();
-//
-//    if (t.Tx) {
-//        t.Predicate = BeginTransaction(*t.Tx, ctx);
-//
-//        ctx.Send(Tablet,
-//                 MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(t.Tx->Step,
-//                                                             t.Tx->TxId,
-//                                                             Partition,
-//                                                             *t.Predicate).Release());
-//
-//        TxInProgress = true;
-//    } else if (t.ProposeConfig) {
-//        t.Predicate = BeginTransaction(*t.ProposeConfig);
-//
-//        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config, Partition);
-//        //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
-//
-//        ctx.Send(Tablet,
-//                 MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(t.ProposeConfig->Step,
-//                                                                    t.ProposeConfig->TxId,
-//                                                                    Partition).Release());
-//
-//        TxInProgress = true;
-//    } else {
-//        Y_ABORT_UNLESS(!ChangeConfig);
-//
-//        ChangeConfig = t.ChangeConfig;
-//        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config, Partition);
-//        SendChangeConfigReply = t.SendReply;
-//        BeginChangePartitionConfig(ChangeConfig->Config, ctx);
-//
-//        RemoveDistrTx();
-//    }
-//}
-
-//void TPartition::ProcessImmediateTxs(const TActorContext& ctx)
-//{
-//    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
-//
-//    while (!ImmediateTxs.empty() && (AffectedUsers.size() < MAX_USERS)) {
-//        ProcessImmediateTx(ImmediateTxs.front()->Record, ctx);
-//
-//        RemoveImmediateTx();
-//    }
-//}
-
 bool TPartition::ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event,
                                                 const TActorContext& ctx)
 {
-
     if (AffectedUsers.size() >= MAX_USERS) {
         return false;
     }
@@ -2110,21 +1976,9 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
                          NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
 }
 
-//void TPartition::ProcessUserActs(const TActorContext& ctx)
-//{
-//    Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
-//
-//    while (!UserActs.empty() && (AffectedUsers.size() < MAX_USERS)) {
-//        ProcessUserAct(*UserActs.front(), ctx);
-//
-//        RemoveUserAct();
-//    }
-//}
-
 bool TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
                                                 const TActorContext& ctx)
 {
-
     if (AffectedUsers.size() >= MAX_USERS) {
         return false;
     }
@@ -2138,7 +1992,6 @@ bool TPartition::ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& act,
 void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                                 const TActorContext& ctx)
 {
-
     Y_ABORT_UNLESS(!UsersInfoWriteInProgress);
 
     const TString& user = act.ClientId;

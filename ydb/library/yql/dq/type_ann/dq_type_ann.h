@@ -76,5 +76,6 @@ struct TDqStageSettings {
 
 
 TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
+bool CheckConnectionTypes(const TVector<TExprNode::TPtr>& connectionTypes, TExprContext& ctx);
 
 } // namespace NYql::NDq

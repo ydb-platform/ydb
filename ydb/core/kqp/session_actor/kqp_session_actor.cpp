@@ -627,7 +627,7 @@ public:
         }
 
         Counters->ReportTxCreated(Settings.DbCounters);
-        Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize()); // TODO: check 
+        Counters->ReportBeginTransaction(Settings.DbCounters, Transactions.EvictedTx, Transactions.Size(), Transactions.ToBeAbortedSize());
     }
 
     bool PrepareQueryTransaction() {

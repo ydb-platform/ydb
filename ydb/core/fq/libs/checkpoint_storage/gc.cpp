@@ -92,6 +92,11 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC received upperbound checkpoint " << checkpointUpperBound
         << " for graph '" << graphId << "'");
 
+    if (event->Type != NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT) {
+        LOG_STREAMS_STORAGE_SERVICE_DEBUG("GC skip increment checkpoint");
+        return;
+    }
+
     // we need to:
     // 1. Mark checkpoints as GC and continue only if succeeded
     // 2. Delete states of marked checkpoints and continue only if succeeded

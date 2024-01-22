@@ -261,6 +261,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
+                type = event->Type,
                 gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 context = TActivationContext::AsActorContext()]
@@ -272,7 +273,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
             } else {
                 LOG_STREAMS_STORAGE_SERVICE_AS_INFO(context, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'")
                 if (gcEnabled) {
-                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId);
+                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
                     LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(context, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
                     context.Send(actorGC, request.release(), 0);
                 }

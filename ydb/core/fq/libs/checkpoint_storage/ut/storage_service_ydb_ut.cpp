@@ -166,7 +166,12 @@ void CheckpointOperation(
     TActorId sender = runtime->AllocateEdgeActor();
 
     TCoordinatorId coordinatorId(graphId, generation);
-    auto request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
+    std::unique_ptr<TRequest> request;
+
+    if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>)
+        request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100, NYql::NDqProto::TCheckpoint::EType::TCheckpoint_EType_SNAPSHOT);
+    else
+        request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
     runtime->Send(new IEventHandle(
         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 

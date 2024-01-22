@@ -457,7 +457,6 @@ private:
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
 
     void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info, const TActorContext& ctx);
-    void InitTxWrites();
     void SaveTxWrites(NKikimrPQ::TTabletTxWrites& info);
 
     void HandleShadowPartition(const ui64 responseCookie,

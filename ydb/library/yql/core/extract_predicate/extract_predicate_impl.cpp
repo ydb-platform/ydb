@@ -1,5 +1,6 @@
 #include "extract_predicate_impl.h"
 
+#include <ydb/library/yql/core/type_ann/type_ann_pg.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_constraint.h>
@@ -430,8 +431,8 @@ TExprNode::TPtr ExpandTupleBinOp(const TExprNode& node, TExprContext& ctx) {
     if (node.IsCallable({"<=", ">="})) {
         return ctx.Builder(node.Pos())
             .Callable("Or")
-                .Add(0, ctx.RenameNode(node, "=="))
-                .Add(1, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(0, ctx.RenameNode(node, node.IsCallable("<=") ? "<" : ">"))
+                .Add(1, ctx.RenameNode(node, "=="))
             .Seal()
             .Build();
     }
@@ -781,6 +782,17 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, cons
         }
     }
 
+    if (node->IsCallable("StartsWith")) {
+        if (node->Head().IsCallable("FromPg")) {
+            YQL_CLOG(DEBUG, Core) << "Get rid of FromPg() in " << node->Content() << " first argument";
+            return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+        if (node->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            YQL_CLOG(DEBUG, Core) << "Convert second argument of " << node->Content() << " from PG type";
+            return ctx.ChangeChild(*node, 1, ctx.NewCallable(node->Tail().Pos(), "FromPg", {node->TailPtr()}));
+        }
+    }
+
     return node;
 }
 
@@ -911,13 +923,22 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
 
     if (opNode->IsCallable("StartsWith")) {
         YQL_ENSURE(keys.size() == 1);
-        return ctx.Builder(pos)
+        const bool keyIsPg = firstKeyType->GetKind() == ETypeAnnotationKind::Pg;
+        const TTypeAnnotationNode* rangeForType = firstKeyType;
+        if (keyIsPg) {
+            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx);
+            YQL_ENSURE(yqlType);
+            rangeForType = yqlType;
+            YQL_ENSURE(opNode->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg);
+        }
+        auto rangeForNode = ctx.Builder(pos)
             .Callable("RangeFor")
                 .Atom(0, hasNot ? "NotStartsWith" : "StartsWith", TNodeFlags::Default)
                 .Add(1, opNode->TailPtr())
-                .Add(2, ExpandType(pos, *firstKeyType, ctx))
+                .Add(2, ExpandType(pos, *rangeForType, ctx))
             .Seal()
             .Build();
+        return ctx.WrapByCallableIf(keyIsPg, "RangeToPg", std::move(rangeForNode));
     }
 
     if (opNode->IsCallable("SqlIn")) {
@@ -1542,15 +1563,15 @@ TMaybe<TRangeBoundHint> CompareBounds(
             return Nothing();
         }
         if (auto cmp = TryCompareColumns(hint1.Columns[i], hint2.Columns[i])) {
-            if ((cmp < 0) == min) {
+            if (cmp == 0) {
+                continue;
+            } else if ((cmp < 0) == min) {
                 hint = hint1;
             } else {
                 hint = hint2;
             }
 
-            if (cmp != 0) {
-                break;
-            }
+            break;
         } else {
             return Nothing();
         }
@@ -1599,7 +1620,7 @@ TMaybe<TRangeHint> RangeHintExtend(const TMaybe<TRangeHint>& hint1, size_t hint1
     }
 }
 
-bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acceptExclusivePoint = true) {
+bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right) {
     for (size_t i = 0; ; ++i) {
         if (i >= left.Columns.size() || i >= right.Columns.size()) {
             // ok, we have +-inf and sure that it's valid
@@ -1608,15 +1629,12 @@ bool IsValid(const TRangeBoundHint& left, const TRangeBoundHint& right, bool acc
         auto cmp = TryCompareColumns(left.Columns[i], right.Columns[i]);
         if (!cmp) {
             return false;
-        } else {
-            if (*cmp < 0) {
-                return true;
-            } else if (*cmp > 0) {
-                return false;
-            }
+        } else if (*cmp < 0) {
+            return true;
+        } else if (*cmp > 0) {
+            return false;
         }
     }
-    return acceptExclusivePoint || left.Inclusive || right.Inclusive;
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hint2) {
@@ -1630,11 +1648,33 @@ TMaybe<TRangeHint> RangeHintUnion(const TRangeHint& hint1, const TRangeHint& hin
     if (!left || !right || !intersection) {
         return Nothing();
     }
-    if (IsValid(intersection->Left, intersection->Right, false)) {
-        return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
-    } else {
-        return Nothing();
+
+    { // check if there is no gap between ranges
+        for (size_t i = 0; ; ++i) {
+            bool leftFinished = i >= intersection->Left.Columns.size();
+            bool rightFinished = i >= intersection->Right.Columns.size();
+            if (leftFinished || rightFinished) {
+                if (leftFinished && intersection->Left.Inclusive) {
+                    break;
+                }
+                if (rightFinished && intersection->Right.Inclusive) {
+                    break;
+                }
+                return {};
+            }
+
+            auto cmp = TryCompareColumns(intersection->Left.Columns[i], intersection->Right.Columns[i]);
+            if (!cmp) {
+                return {};
+            } else if (*cmp < 0) {
+                break;
+            } else if (*cmp > 0) {
+                return {};
+            }
+        }
     }
+
+    return TRangeHint{.Left = std::move(*left), .Right = std::move(*right)};
 }
 
 TMaybe<TRangeHint> RangeHintUnion(const TMaybe<TRangeHint>& hint1, const TMaybe<TRangeHint>& hint2) {

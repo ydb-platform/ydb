@@ -13,11 +13,12 @@
 #include <__concepts/arithmetic.h>
 #include <__concepts/same_as.h>
 #include <__config>
+#include <__format/concepts.h>
 #include <__format/format_error.h>
-#include <__format/formatter.h> // for __char_type TODO FMT Move the concept?
 #include <__format/formatter_output.h>
 #include <__format/parser_std_format_spec.h>
 #include <__utility/unreachable.h>
+#include <array>
 #include <charconv>
 #include <limits>
 #include <string>
@@ -112,7 +113,7 @@ _LIBCPP_HIDE_FROM_ABI inline string __determine_grouping(ptrdiff_t __size, const
 // Char
 //
 
-template <__formatter::__char_type _CharT>
+template <__fmt_char_type _CharT>
 _LIBCPP_HIDE_FROM_ABI auto __format_char(
     integral auto __value,
     output_iterator<const _CharT&> auto __out_it,
@@ -207,10 +208,6 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
     char* __end,
     const char* __prefix,
     int __base) -> decltype(__ctx.out()) {
-  _LIBCPP_ASSERT(
-      __specs.__alignment_ != __format_spec::__alignment::__default,
-      "the caller should adjust the default to the value required by the type");
-
   char* __first = __formatter::__insert_sign(__begin, __negative, __specs.__std_.__sign_);
   if (__specs.__std_.__alternate_form_ && __prefix)
     while (*__prefix)
@@ -247,7 +244,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
     // The zero padding is done like:
     // - Write [sign][prefix]
     // - Write data right aligned with '0' as fill character.
-    __out_it             = _VSTD::copy(__begin, __first, _VSTD::move(__out_it));
+    __out_it             = __formatter::__copy(__begin, __first, _VSTD::move(__out_it));
     __specs.__alignment_ = __format_spec::__alignment::__right;
     __specs.__fill_      = _CharT('0');
     int32_t __size       = __first - __begin;
@@ -280,6 +277,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
     return __formatter::__format_integer(
         __value, __ctx, __specs, __negative, __array.begin(), __array.end(), __value != 0 ? "0" : nullptr, 8);
   }
+  case __format_spec::__type::__default:
   case __format_spec::__type::__decimal: {
     array<char, __formatter::__buffer_size<decltype(__value), 10>()> __array;
     return __formatter::__format_integer(
@@ -346,7 +344,7 @@ __format_bool(bool __value, auto& __ctx, __format_spec::__parsed_specifications<
   if (__specs.__std_.__locale_specific_form_) {
     const auto& __np           = use_facet<numpunct<_CharT>>(__ctx.locale());
     basic_string<_CharT> __str = __value ? __np.truename() : __np.falsename();
-    return __formatter::__write_unicode_no_precision(basic_string_view<_CharT>{__str}, __ctx.out(), __specs);
+    return __formatter::__write_string_no_precision(basic_string_view<_CharT>{__str}, __ctx.out(), __specs);
   }
 #  endif
   basic_string_view<_CharT> __str =

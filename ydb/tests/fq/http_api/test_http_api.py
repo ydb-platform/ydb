@@ -122,7 +122,7 @@ class TestHttpApi(TestBase):
     def test_empty_query(self):
         client = self.create_client()
         try:
-            result = client.create_query()
+            client.create_query()
         except Exception as e:
             assert "\"message\":\"text\'s length is not in [1; 102400]" in e.args[0]
             return

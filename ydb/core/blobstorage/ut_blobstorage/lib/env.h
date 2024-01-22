@@ -37,6 +37,7 @@ struct TEnvironmentSetup {
         const std::function<TNodeLocation(ui32)> LocationGenerator;
         const bool SetupHive = false;
         const bool SuppressCompatibilityCheck = false;
+        const TFeatureFlags FeatureFlags;
     };
 
     const TSettings Settings;
@@ -314,6 +315,7 @@ struct TEnvironmentSetup {
                     };
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
+                config->FeatureFlags = Settings.FeatureFlags;
                 warden.reset(CreateBSNodeWarden(config));
             }
 

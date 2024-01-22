@@ -987,10 +987,10 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
     parent->AddChild(
         maybeDescriptor,
         typeBuilder.CreateField(
-             fieldIndex,
-             columnConfig,
-             maybeDescriptor,
-             true),
+            fieldIndex,
+            columnConfig,
+            maybeDescriptor,
+            true),
         fieldIndex,
         parentEmbeddingIndex);
     ++fieldIndex;

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.23.0)
+VERSION(2.26.1)
 
 LICENSE(Apache-2.0)
 
@@ -10,10 +10,10 @@ PEERDIR(
     contrib/python/cachetools
     contrib/python/cryptography
     contrib/python/grpcio
+    contrib/python/packaging
     contrib/python/pyasn1-modules
     contrib/python/requests
     contrib/python/rsa
-    contrib/python/urllib3
 )
 
 NO_LINT()
@@ -34,6 +34,7 @@ PY_SRCS(
     google/auth/_helpers.py
     google/auth/_jwt_async.py
     google/auth/_oauth2client.py
+    google/auth/_refresh_worker.py
     google/auth/_service_account_info.py
     google/auth/api_key.py
     google/auth/app_engine.py

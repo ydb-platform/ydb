@@ -14,6 +14,7 @@
 
 import json
 import os
+import pickle
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 import pytest  # type: ignore
@@ -23,8 +24,8 @@ from google.auth.crypt import _cryptography_rsa
 from google.auth.crypt import base
 
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 # To generate privatekey.pem, privatekey.pub, and public_cert.pem:
 #   $ openssl req -new -newkey rsa:1024 -x509 -nodes -out public_cert.pem \
@@ -157,6 +158,20 @@ class TestRSASigner(object):
         signer = _cryptography_rsa.RSASigner.from_service_account_file(
             SERVICE_ACCOUNT_JSON_FILE
         )
+
+        assert signer.key_id == SERVICE_ACCOUNT_INFO[base._JSON_FILE_PRIVATE_KEY_ID]
+        assert isinstance(signer._key, rsa.RSAPrivateKey)
+
+    def test_pickle(self):
+        signer = _cryptography_rsa.RSASigner.from_service_account_file(
+            SERVICE_ACCOUNT_JSON_FILE
+        )
+
+        assert signer.key_id == SERVICE_ACCOUNT_INFO[base._JSON_FILE_PRIVATE_KEY_ID]
+        assert isinstance(signer._key, rsa.RSAPrivateKey)
+
+        pickled_signer = pickle.dumps(signer)
+        signer = pickle.loads(pickled_signer)
 
         assert signer.key_id == SERVICE_ACCOUNT_INFO[base._JSON_FILE_PRIVATE_KEY_ID]
         assert isinstance(signer._key, rsa.RSAPrivateKey)

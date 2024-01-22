@@ -206,7 +206,6 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
-GENERATE_ENUM_SERIALIZATION(change_record.h)
 GENERATE_ENUM_SERIALIZATION(datashard.h)
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
 GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
@@ -235,6 +234,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
@@ -310,4 +310,5 @@ RECURSE_FOR_TESTS(
     ut_upload_rows
     ut_volatile
     ut_write
+    ut_trace
 )

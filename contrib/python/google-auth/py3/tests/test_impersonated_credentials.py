@@ -29,8 +29,8 @@ from google.auth.impersonated_credentials import Credentials
 from google.oauth2 import credentials
 from google.oauth2 import service_account
 
-import yatest.common
-DATA_DIR = os.path.join(yatest.common.test_source_path(), "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "data")
 
 with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
     PRIVATE_KEY_BYTES = fh.read()
@@ -243,7 +243,7 @@ class TestImpersonatedCredentials(object):
         request_kwargs = request.call_args[1]
         assert request_kwargs["url"] == self.IAM_ENDPOINT_OVERRIDE
 
-    @pytest.mark.parametrize("time_skew", [100, -100])
+    @pytest.mark.parametrize("time_skew", [150, -150])
     def test_refresh_source_credentials(self, time_skew):
         credentials = self.make_credentials(lifetime=None)
 

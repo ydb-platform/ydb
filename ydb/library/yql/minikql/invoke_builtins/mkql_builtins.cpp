@@ -101,9 +101,11 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamily
     RegisterRotRight(registry);
     RegisterPlus(registry);
     RegisterMinus(registry);
+    RegisterMinus(kernelFamilyMap);
     RegisterBitNot(registry);
     RegisterCountBits(registry);
     RegisterAbs(registry);
+    RegisterAbs(kernelFamilyMap);
     RegisterConvert(registry);
     RegisterConcat(registry);
     RegisterSubstring(registry);

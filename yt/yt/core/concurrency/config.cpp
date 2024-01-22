@@ -4,6 +4,46 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
+{
+    return {
+        .Period = period,
+        .Jitter = DefaultJitter
+    };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
+{
+    registrar.ExternalClassParameter("period", &TThat::Period)
+        .Default();
+    registrar.ExternalClassParameter("splay", &TThat::Splay)
+        .Default(TDuration::Zero());
+    registrar.ExternalClassParameter("jitter", &TThat::Jitter)
+        .Default(TThat::DefaultJitter);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRetryingPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
+{
+    registrar.ExternalClassParameter("periodic", &TThat::Periodic)
+        .Default();
+    registrar.ExternalClassParameter("backoff_strategy", &TThat::BackoffStrategy)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 TThroughputThrottlerConfigPtr TThroughputThrottlerConfig::Create(std::optional<double> limit)
 {
     auto result = New<TThroughputThrottlerConfig>();

@@ -2,10 +2,13 @@
 #include "yql_hash_builder.h"
 
 #include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NYql {
+
+using namespace NNodes;
 
 void TNodeHashCalculator::UpdateFileHash(THashBuilder& builder, TStringBuf alias) const {
     auto block = Types.UserDataStorage->FindUserDataBlock(alias);
@@ -78,9 +81,9 @@ TString TNodeHashCalculator::GetHashImpl(const TExprNode& node, TArgIndex& argIn
                     isHashable = false;
                 }
                 else {
-                    if (node.Content() == "Udf" && node.ChildrenSize() == 7 && !node.Child(6)->Content().empty()) {
+                    if (TCoUdf::Match(&node) && node.ChildrenSize() > TCoUdf::idx_FileAlias && !node.Child(TCoUdf::idx_FileAlias)->Content().empty()) {
                         // an udf from imported file, use hash of file
-                        auto alias = node.Child(6)->Content();
+                        auto alias = node.Child(TCoUdf::idx_FileAlias)->Content();
                         UpdateFileHash(builder, alias);
                     } else if (node.Content() == "FilePath" || node.Content() == "FileContent") {
                         auto alias = node.Child(0)->Content();

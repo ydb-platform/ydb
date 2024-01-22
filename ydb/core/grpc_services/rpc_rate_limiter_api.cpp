@@ -26,6 +26,33 @@ public:
         , TrustedZone(trusted)
     {}
 
+    static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        static const TSet<TString> supportedFields{
+            {"version"},
+            {"schema"},
+            {"cloud_id"},
+            {"folder_id"},
+            {"resource_id"},
+            {"source_id"},
+        };
+        auto& metricFields = srcMetric.metric_fields().fields();
+
+        for (auto& [key, field] : metricFields) {
+            if (supportedFields.count(key) == 0) {
+                status = StatusIds::BAD_REQUEST;
+                issues.AddIssue(TStringBuilder() << "Unsupported key for metric. Key: " << key << ".");
+                return false;
+            }
+            if (!field.has_string_value()) {
+                status = StatusIds::BAD_REQUEST;
+                issues.AddIssue(TStringBuilder() << "Unsupported type for metric. Key: " << key << ".");
+                return false;
+            }
+        }
+
+        return true;
+    };
+
     bool ValidateResource(const Ydb::RateLimiter::Resource& resource, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         if (!ValidateResourcePath(resource.resource_path(), status, issues)) {
             return false;
@@ -35,6 +62,39 @@ public:
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue("No resource properties.");
             return false;
+        }
+
+        if (resource.has_metering_config()) {
+            auto self = static_cast<TDerived*>(this);
+            const auto& userTokenStr = self->Request_->GetSerializedToken();
+            bool allowed = false;
+            if (userTokenStr) {
+                NACLib::TUserToken userToken(userTokenStr);
+                for (auto &sid : AppData()->AdministrationAllowedSIDs) {
+                    if (userToken.IsExist(sid)) {
+                        allowed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!allowed) {
+                status = StatusIds::UNAUTHORIZED;
+                issues.AddIssue("Setting metering is allowed only for administrators");
+                return false;
+            }
+
+            const auto& acc = resource.metering_config();
+
+            if (acc.has_provisioned() && !ValidateMetric(acc.provisioned(), status, issues)) {
+                return false;
+            }
+            if (acc.has_on_demand() && !ValidateMetric(acc.on_demand(), status, issues)) {
+                return false;
+            }
+            if (acc.has_overshoot() && !ValidateMetric(acc.overshoot(), status, issues)) {
+                return false;
+            }
         }
 
         return true;
@@ -211,6 +271,64 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
     props.SetMaxBurstSizeCoefficient(srcProps.max_burst_size_coefficient());
     props.SetPrefetchCoefficient(srcProps.prefetch_coefficient());
     props.SetPrefetchWatermark(srcProps.prefetch_watermark());
+    if (srcProps.has_immediately_fill_up_to()) {
+        props.SetImmediatelyFillUpTo(srcProps.immediately_fill_up_to());
+    }
+    if (src.has_metering_config()) {
+        const auto& srcAcc = src.metering_config();
+        auto& acc = *dst.MutableAccountingConfig();
+        acc.SetEnabled(srcAcc.enabled());
+        acc.SetReportPeriodMs(srcAcc.report_period_ms());
+        acc.SetAccountPeriodMs(srcAcc.meter_period_ms());
+        acc.SetCollectPeriodSec(srcAcc.collect_period_sec());
+        acc.SetProvisionedUnitsPerSecond(srcAcc.provisioned_units_per_second());
+        acc.SetProvisionedCoefficient(srcAcc.provisioned_coefficient());
+        acc.SetOvershootCoefficient(srcAcc.overshoot_coefficient());
+        auto copyMetric = [] (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, NKikimrKesus::TAccountingConfig::TMetric& metric) {
+            metric.SetEnabled(srcMetric.enabled());
+            metric.SetBillingPeriodSec(srcMetric.billing_period_sec());
+
+            /* overwrite if we have new fields */
+            /* TODO: support arbitrary fields in metering core */
+            if (srcMetric.has_metric_fields()) {
+                auto& metricFields = srcMetric.metric_fields().fields();
+                if (metricFields.contains("version") && metricFields.at("version").has_string_value()) {
+                    metric.SetVersion(metricFields.at("version").string_value());
+                }
+                if (metricFields.contains("schema") && metricFields.at("schema").has_string_value()) {
+                    metric.SetSchema(metricFields.at("schema").string_value());
+                }
+                if (metricFields.contains("cloud_id") && metricFields.at("cloud_id").has_string_value()) {
+                    metric.SetCloudId(metricFields.at("cloud_id").string_value());
+                }
+                if (metricFields.contains("folder_id") && metricFields.at("folder_id").has_string_value()) {
+                    metric.SetFolderId(metricFields.at("folder_id").string_value());
+                }
+                if (metricFields.contains("resource_id") && metricFields.at("resource_id").has_string_value()) {
+                    metric.SetResourceId(metricFields.at("resource_id").string_value());
+                }
+                if (metricFields.contains("source_id") && metricFields.at("source_id").has_string_value()) {
+                    metric.SetSourceId(metricFields.at("source_id").string_value());
+                }
+            }
+        };
+        if (srcAcc.has_provisioned()) {
+            copyMetric(srcAcc.provisioned(), *acc.MutableProvisioned());
+        }
+        if (srcAcc.has_on_demand()) {
+            copyMetric(srcAcc.on_demand(), *acc.MutableOnDemand());
+        }
+        if (srcAcc.has_overshoot()) {
+            copyMetric(srcAcc.overshoot(), *acc.MutableOvershoot());
+        }
+    }
+    if (srcProps.has_replicated_bucket()) {
+        const auto& srcRepl = srcProps.replicated_bucket();
+        auto& repl = *props.MutableReplicatedBucket();
+        if (srcRepl.has_report_interval_ms()) {
+            repl.SetReportIntervalMs(srcRepl.report_interval_ms());
+        }
+    }
 }
 
 static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::RateLimiter::Resource& dst) {
@@ -221,6 +339,49 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
     props.set_max_burst_size_coefficient(srcProps.GetMaxBurstSizeCoefficient());
     props.set_prefetch_coefficient(srcProps.GetPrefetchCoefficient());
     props.set_prefetch_watermark(srcProps.GetPrefetchWatermark());
+    if (srcProps.HasImmediatelyFillUpTo()) {
+        props.set_immediately_fill_up_to(srcProps.GetImmediatelyFillUpTo());
+    }
+    if (src.HasAccountingConfig()) {
+        const auto& srcAcc = src.GetAccountingConfig();
+        auto& acc = *dst.mutable_metering_config();
+        acc.set_enabled(srcAcc.GetEnabled());
+        acc.set_report_period_ms(srcAcc.GetReportPeriodMs());
+        acc.set_meter_period_ms(srcAcc.GetAccountPeriodMs());
+        acc.set_collect_period_sec(srcAcc.GetCollectPeriodSec());
+        acc.set_provisioned_units_per_second(srcAcc.GetProvisionedUnitsPerSecond());
+        acc.set_provisioned_coefficient(srcAcc.GetProvisionedCoefficient());
+        acc.set_overshoot_coefficient(srcAcc.GetOvershootCoefficient());
+        auto copyMetric = [] (const NKikimrKesus::TAccountingConfig::TMetric& srcMetric, Ydb::RateLimiter::MeteringConfig::Metric& metric) {
+            metric.set_enabled(srcMetric.GetEnabled());
+            metric.set_billing_period_sec(srcMetric.GetBillingPeriodSec());
+
+            /* TODO: support arbitrary fields in metering core */
+            auto& metricFields = *metric.mutable_metric_fields()->mutable_fields();
+            metricFields["version"].set_string_value(srcMetric.GetVersion());
+            metricFields["schema"].set_string_value(srcMetric.GetSchema());
+            metricFields["cloud_id"].set_string_value(srcMetric.GetCloudId());
+            metricFields["folder_id"].set_string_value(srcMetric.GetFolderId());
+            metricFields["resource_id"].set_string_value(srcMetric.GetResourceId());
+            metricFields["source_id"].set_string_value(srcMetric.GetSourceId());
+        };
+        if (srcAcc.HasProvisioned()) {
+            copyMetric(srcAcc.GetProvisioned(), *acc.mutable_provisioned());
+        }
+        if (srcAcc.HasOnDemand()) {
+            copyMetric(srcAcc.GetOnDemand(), *acc.mutable_on_demand());
+        }
+        if (srcAcc.HasOvershoot()) {
+            copyMetric(srcAcc.GetOvershoot(), *acc.mutable_overshoot());
+        }
+    }
+    if (srcProps.HasReplicatedBucket()) {
+        const auto& srcRepl = srcProps.GetReplicatedBucket();
+        auto& repl = *props.mutable_replicated_bucket();
+        if (srcRepl.HasReportIntervalMs()) {
+            repl.set_report_interval_ms(srcRepl.GetReportIntervalMs());
+        }
+    }
 }
 
 class TCreateRateLimiterResourceRPC : public TRateLimiterControlRequest<TEvCreateRateLimiterResource> {

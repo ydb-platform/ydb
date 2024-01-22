@@ -1,13 +1,12 @@
 Metadata-Version: 2.1
 Name: ruamel.yaml.clib
-Version: 0.2.7
+Version: 0.2.8
 Summary: C version of reader, parser and emitter for ruamel.yaml derived from libyaml
 Home-page: https://sourceforge.net/p/ruamel-yaml-clib/code/ci/default/tree
 Author: Anthon van der Neut
 Author-email: a.van.der.neut@ruamel.eu
 License: MIT
 Keywords: yaml 1.2 parser c-library config
-Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
@@ -51,5 +50,3 @@ directory) and the Python code for ruamel.yaml under /usr/lib/pythonX.Y.
    :target: https://opensource.org/licenses/MIT
  
 This release in loving memory of Johanna Clasina van der Neut-Bandel [1922-10-19 - 2015-11-21]
-
-

@@ -181,7 +181,11 @@ public:
         }
 
         Self->BuildCurrentConfig();
-        Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        if (Self->CurrentConfig.HasWarmUpEnabled()) {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
+        } else {
+            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+        }
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
@@ -710,7 +714,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
-        i64 tabletsTotal = 0;
+        ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
             for (const TTabletInfo& follower : it->second.Followers) {

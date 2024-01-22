@@ -33,6 +33,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -1304,8 +1305,8 @@ class TDataShard
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
-    void Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -1644,16 +1645,6 @@ public:
 
     ui64 GetTtlReadAheadHiOverride() const {
         return TtlReadAheadHi;
-    }
-
-    bool GetEnablePrioritizedMvccSnapshotReads() const {
-        ui64 value = EnablePrioritizedMvccSnapshotReads;
-        return value != 0;
-    }
-
-    bool GetEnableUnprotectedMvccSnapshotReads() const {
-        ui64 value = EnableUnprotectedMvccSnapshotReads;
-        return value != 0;
     }
 
     bool GetEnableLockedWrites() const {
@@ -2649,8 +2640,6 @@ private:
     TControlWrapper TtlReadAheadLo;
     TControlWrapper TtlReadAheadHi;
 
-    TControlWrapper EnablePrioritizedMvccSnapshotReads;
-    TControlWrapper EnableUnprotectedMvccSnapshotReads;
     TControlWrapper EnableLockedWrites;
     TControlWrapper MaxLockedWritesPerKey;
 
@@ -2741,7 +2730,7 @@ private:
         }
     };
 
-    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TRequestedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     // split/merge
     TChangeSenderActivator ChangeSenderActivator;
@@ -2984,8 +2973,8 @@ protected:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
-            HFunc(TEvChangeExchange::TEvRequestRecords, Handle);
-            HFunc(TEvChangeExchange::TEvRemoveRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             HFunc(TEvPrivate::TEvRequestChangeRecords, Handle);
             HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle);
             HFunc(TEvChangeExchange::TEvHandshake, Handle);
@@ -3153,10 +3142,10 @@ protected:
             ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
             ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());
 
-            ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get());
+            ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get());
-            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
+            ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get());
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());
             ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get()
                 + TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());

@@ -450,7 +450,7 @@ public:
             positions.emplace_back(*position);
         }
         TSaverContext saverContext(StoragesManager->GetOperator(IStoragesManager::DefaultStorageId), StoragesManager);
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(CompactionLimits, granule, portions, saverContext);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(CompactionLimits.GetSplitSettings(), granule, portions, saverContext);
         for (auto&& i : positions) {
             result->AddCheckPoint(i);
         }

@@ -243,7 +243,7 @@ namespace Tests {
     protected:
         void SetupStorage();
 
-        void SetupMessageBus(ui16 port, const TString &tracePath);
+        void SetupMessageBus(ui16 port);
         void SetupDomains(TAppPrepare&);
         void CreateBootstrapTablets();
         void SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData);
@@ -392,10 +392,6 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
         void InitRootScheme();
         void InitRootScheme(const TString& root);
-
-        void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
-        TString StartTrace(const TString &path);
-        void StopTrace();
 
         // Flat DB operations
         NMsgBusProxy::EResponseStatus WaitCreateTx(TTestActorRuntime* runtime, const TString& path, TDuration timeout);

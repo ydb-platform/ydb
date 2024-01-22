@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         ~TLocaleGuard() {
             std::locale::global(OriginalLocale_);
         }
-    
+
     private:
         const std::locale OriginalLocale_;
     };

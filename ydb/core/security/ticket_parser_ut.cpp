@@ -1158,7 +1158,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
     }
 
-    Y_UNIT_TEST(AuthorizationRetryError) {
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationRetryError() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1174,6 +1175,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetMinErrorRefreshTime("300ms");
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1185,7 +1187,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1220,7 +1222,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
     }
 
-    Y_UNIT_TEST(AuthorizationRetryErrorImmediately) {
+    Y_UNIT_TEST(AuthorizationRetryError) {
+        AuthorizationRetryError<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationRetryError) {
+        AuthorizationRetryError<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationRetryErrorImmediately() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1236,6 +1247,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetRefreshPeriod("5s");
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1247,7 +1259,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1278,6 +1290,14 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+    }
+
+    Y_UNIT_TEST(AuthorizationRetryErrorImmediately) {
+        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationRetryErrorImmediately) {
+        AuthorizationRetryErrorImmediately<TTicketParserAccessServiceMockV2, true>();
     }
 
     Y_UNIT_TEST(AuthenticationUnsupported) {
@@ -1371,7 +1391,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Unknown token");
     }
 
-    Y_UNIT_TEST(Authorization) {
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void Authorization() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1387,6 +1408,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1400,7 +1422,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1418,6 +1440,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+
+        accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                           userToken,
+                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
+                                           {"something.read", "something.connect", "something.list", "something.update"})), 0);
+        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(result->Error.empty());
+        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(result->Token->IsExist("something.connect-bbbb4554@as"));
+        UNIT_ASSERT(!result->Token->IsExist("something.list-bbbb4554@as"));
+        UNIT_ASSERT(!result->Token->IsExist("something.update-bbbb4554@as"));
 
         // Authorization ApiKey successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
@@ -1514,7 +1548,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Token->IsExist("monitoring.view-gizmo@as"));
     }
 
-    Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {
+    Y_UNIT_TEST(Authorization) {
+        Authorization<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorization) {
+        Authorization<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationWithRequiredPermissions() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1529,6 +1572,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1542,7 +1586,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1572,7 +1616,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "something.write for folder_id aaaa1234 - Access Denied");
     }
 
-    Y_UNIT_TEST(AuthorizationWithUserAccount) {
+    Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {
+        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationWithRequiredPermissions) {
+        AuthorizationWithRequiredPermissions<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationWithUserAccount() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1593,6 +1646,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetCacheAccessServiceAuthorization(false);
         //
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1606,7 +1660,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder1;
         builder1.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder1.BuildAndStart());
@@ -1670,7 +1724,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthorizationWithUserAccount2) {
+    Y_UNIT_TEST(AuthorizationWithUserAccount) {
+        AuthorizationWithUserAccount<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationWithUserAccount) {
+        AuthorizationWithUserAccount<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationWithUserAccount2() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1688,6 +1751,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseUserAccountServiceTLS(false);
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1701,7 +1765,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder1;
         builder1.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder1.BuildAndStart());
@@ -1735,7 +1799,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthorizationUnavailable) {
+    Y_UNIT_TEST(AuthorizationWithUserAccount2) {
+        AuthorizationWithUserAccount2<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationWithUserAccount2) {
+        AuthorizationWithUserAccount2<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationUnavailable() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1750,6 +1823,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1763,7 +1837,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1785,7 +1859,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
     }
 
-    Y_UNIT_TEST(AuthorizationModify) {
+    Y_UNIT_TEST(AuthorizationUnavailable) {
+        AuthorizationUnavailable<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationUnavailable) {
+        AuthorizationUnavailable<TTicketParserAccessServiceMockV2, true>();
+    }
+
+    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    void AuthorizationModify() {
         using namespace Tests;
 
         TPortManager tp;
@@ -1800,6 +1883,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1813,7 +1897,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMock accessServiceMock;
+        TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1844,6 +1928,14 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Error.empty());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
         UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
+    }
+
+    Y_UNIT_TEST(AuthorizationModify) {
+        AuthorizationModify<NKikimr::TAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(BulkAuthorizationModify) {
+        AuthorizationModify<TTicketParserAccessServiceMockV2, true>();
     }
 }
 }

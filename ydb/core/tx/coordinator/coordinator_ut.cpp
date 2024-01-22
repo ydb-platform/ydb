@@ -440,7 +440,8 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             Cerr << (TStringBuilder() << "Starting a database tenant" << Endl);
             tenants.Run("/Root/db1", 1);
 
-            runtime.SimulateSleep(TDuration::Seconds(1));
+            Cerr << (TStringBuilder() << "Sleeping for tenant to start" << Endl);
+            runtime.SimulateSleep(TDuration::Seconds(5));
             UNIT_ASSERT_C(hooks.PersistConfig_.size() > 0, "Expected coordinators to attempt to persist configs");
             std::vector<ui64> coordinators;
             for (auto& pr : hooks.PersistConfig_) {

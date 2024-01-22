@@ -53,7 +53,7 @@ message TActorSystemConfig {
 
     enum EActorSystemProfile {
         DEFAULT = 1;
-        LOW_CPU_CONSUMPTION = 2;   
+        LOW_CPU_CONSUMPTION = 2;
         LOW_LATENCY = 3;
     }
 
@@ -1112,13 +1112,14 @@ message TImmediateControlsConfig {
             MaxValue: 134217728,
             DefaultValue: 0 }];
 
+        // Note: these settings are deprecated (always enabled)
         optional uint64 PrioritizedMvccSnapshotReads = 8 [(ControlOptions) = {
-            Description: "Enables prioritized mvcc snapshot reads over immediate writes",
+            Description: "Enables prioritized mvcc snapshot reads over immediate writes (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
         optional uint64 UnprotectedMvccSnapshotReads = 9 [(ControlOptions) = {
-            Description: "Enables unprotected (fully readonly) mvcc snapshot reads",
+            Description: "Enables unprotected (fully readonly) mvcc snapshot reads (deprecated, always enabled)",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
@@ -1323,6 +1324,12 @@ message THiveConfig {
         HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
     }
 
+    enum EHiveChannelBalanceStrategy {
+        HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
     enum EHiveNodeSelectStrategy {
         HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
         HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
@@ -1400,6 +1407,11 @@ message THiveConfig {
     optional double MinCounterScatterToBalance = 65 [default = 0.02];
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
+    optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
+    optional double MinStorageScatterToBalance = 71 [default = 0.5];
+    optional double MinGroupUsageToBalance = 72 [default = 0.1];
 }
 
 message TColumnShardConfig {
@@ -1424,6 +1436,8 @@ message TColumnShardConfig {
     optional bool TTLEnabled = 6 [default = true];
     optional bool WritingEnabled = 7 [default = true];
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
+    optional bool UseChunkedMergeOnCompaction = 9 [default = true];
+    optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
 }
 
 message TSchemeShardConfig {
@@ -1517,10 +1531,33 @@ message TCompactionConfig {
 }
 
 message TTracingConfig {
+    message TAuthConfig {
+        message TTvm {
+            optional string Host = 1;
+            optional uint32 Port = 2;
+
+            required uint32 SelfTvmId = 3;
+            required uint32 TracingTvmId = 4;
+
+            optional string DiskCacheDir = 5;
+
+            oneof Secret {
+                string PlainTextSecret = 6;
+                string SecretFile = 7;
+                string SecretEnvironmentVariable = 8;
+            }
+        }
+
+        oneof Method {
+            TTvm Tvm = 1;
+        }
+    }
+
     optional string Host = 1;
     optional uint32 Port = 2;
     optional string RootCA = 3;
     optional string ServiceName = 4;
+    optional TAuthConfig AuthConfig = 5;
 }
 
 message TFailureInjectionConfig {

@@ -40,10 +40,16 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Name": "Limit",
                                                         "Limit": "1001"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "ReadRanges": [
                                                             "Name (-\u221e, +\u221e)"
                                                         ],
@@ -67,6 +73,11 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "ExternalPlanNodeId": 2
+                                            }
+                                        ],
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
@@ -125,10 +136,16 @@
                                 "PlanNodeId": 6,
                                 "Operators": [
                                     {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
                                         "Name": "Upsert",
                                         "Table": "base_write_multi_usage_key_script_script/Temp"
                                     },
                                     {
+                                        "Inputs": [],
                                         "Iterator": "precompute_0_0",
                                         "Name": "Iterator"
                                     }
@@ -156,10 +173,16 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
                                                         "Predicate": "item.Name == Concat",
                                                         "Name": "Filter"
                                                     },
                                                     {
+                                                        "Inputs": [],
                                                         "ReadRanges": [
                                                             "Group (-\u221e, +\u221e)",
                                                             "Name (-\u221e, +\u221e)"

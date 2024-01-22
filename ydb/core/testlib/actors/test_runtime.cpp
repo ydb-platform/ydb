@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/tablet/tablet_impl.h>
@@ -117,7 +118,7 @@ namespace NActors {
                 node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
                 node->MailboxTable.Reset(new TMailboxTable());
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
-                node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), nullptr, "TestExecutor"));
+                node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
             } else {
                 node->AppData0.reset(new NKikimr::TAppData(0, 1, 2, 3, { }, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
@@ -153,6 +154,12 @@ namespace NActors {
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
+            if (app0->ExternalSourceFactory) {
+                nodeAppData->ExternalSourceFactory = app0->ExternalSourceFactory;
+            } else {
+                nodeAppData->ExternalSourceFactory = NKikimr::NExternalSource::CreateExternalSourceFactory({});
+            }
+
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {
@@ -239,13 +246,13 @@ namespace NActors {
         GrabEdgeEventRethrow<TEvents::TEvWakeup>(SleepEdgeActor);
     }
 
-    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie) {
+    void TTestActorRuntime::SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex, const NKikimr::NTabletPipe::TClientConfig& pipeConfig, TActorId clientId, ui64 cookie, NWilson::TTraceId traceId) {
         bool newPipe = (clientId == TActorId());
         if (newPipe) {
             clientId = ConnectToPipe(tabletId, sender, nodeIndex, pipeConfig);
         }
 
-        SendToPipe(clientId, sender, payload, nodeIndex, cookie);
+        SendToPipe(clientId, sender, payload, nodeIndex, cookie, std::move(traceId));
 
         if (newPipe) {
             ClosePipe(clientId, sender, nodeIndex);
@@ -253,8 +260,8 @@ namespace NActors {
     }
 
     void TTestActorRuntime::SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
-                                       ui32 nodeIndex, ui64 cookie) {
-        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie);
+                                       ui32 nodeIndex, ui64 cookie, NWilson::TTraceId traceId) {
+        auto pipeEv = new IEventHandle(clientId, sender, payload, 0, cookie, nullptr, std::move(traceId));
         pipeEv->Rewrite(NKikimr::TEvTabletPipe::EvSend, clientId);
         Send(pipeEv, nodeIndex, true);
     }

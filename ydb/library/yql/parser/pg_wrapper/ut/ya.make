@@ -8,6 +8,7 @@ NO_COMPILER_WARNINGS()
 INCLUDE(../cflags.inc)
 
 SRCS(
+    arrow_ut.cpp
     codegen_ut.cpp
     error_ut.cpp
     parser_ut.cpp

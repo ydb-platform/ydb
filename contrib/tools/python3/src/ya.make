@@ -128,7 +128,6 @@ SRCS(
     Python/formatter_unicode.c
     Python/frame.c
     Python/frozen.c
-    Python/frozenmain.c
     Python/future.c
     Python/getargs.c
     Python/getcompiler.c
@@ -171,8 +170,6 @@ SRCS(
 IF (OS_WINDOWS)
     SRCS(
         PC/WinMain.c
-        PC/dl_nt.c
-        PC/frozen_dllmain.c
         PC/invalid_parameter_handler.c
         PC/msvcrtmodule.c
         PC/winreg.c

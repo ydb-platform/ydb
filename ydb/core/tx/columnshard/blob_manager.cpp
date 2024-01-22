@@ -346,12 +346,15 @@ void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     blobBatch.BatchInfo->GenStepRef.Reset();
 }
 
-void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
-    ++CountersUpdate.BlobsDeleted;
-
+void TBlobManager::DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     // Persist deletion intent
     db.AddBlobToDelete(blobId);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete", blobId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_on_execute", blobId);
+}
+
+void TBlobManager::DeleteBlobOnComplete(const TUnifiedBlobId& blobId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("to_delete_on_complete", blobId);
+    ++CountersUpdate.BlobsDeleted;
 
     // Check if the deletion needs to be delayed until the blob is no longer
     // used by in-flight requests

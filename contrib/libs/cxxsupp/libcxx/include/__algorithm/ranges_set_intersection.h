@@ -28,7 +28,7 @@
 #  pragma GCC system_header
 #endif
 
-#if _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#if _LIBCPP_STD_VER > 17
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
@@ -59,14 +59,14 @@ struct __fn {
       _Comp __comp   = {},
       _Proj1 __proj1 = {},
       _Proj2 __proj2 = {}) const {
-    auto __ret = std::__set_intersection<_RangesIterOps>(
+    auto __ret = std::__set_intersection<_RangeAlgPolicy>(
         std::move(__first1),
         std::move(__last1),
         std::move(__first2),
         std::move(__last2),
         std::move(__result),
         ranges::__make_projected_comp(__comp, __proj1, __proj2));
-    return {std::move(__ret.in1), std::move(__ret.in2), std::move(__ret.out)};
+    return {std::move(__ret.__in1_), std::move(__ret.__in2_), std::move(__ret.__out_)};
   }
 
   template <
@@ -93,14 +93,14 @@ struct __fn {
         _Comp __comp   = {},
         _Proj1 __proj1 = {},
         _Proj2 __proj2 = {}) const {
-    auto __ret = std::__set_intersection<_RangesIterOps>(
+    auto __ret = std::__set_intersection<_RangeAlgPolicy>(
         ranges::begin(__range1),
         ranges::end(__range1),
         ranges::begin(__range2),
         ranges::end(__range2),
         std::move(__result),
         ranges::__make_projected_comp(__comp, __proj1, __proj2));
-    return {std::move(__ret.in1), std::move(__ret.in2), std::move(__ret.out)};
+    return {std::move(__ret.__in1_), std::move(__ret.__in2_), std::move(__ret.__out_)};
   }
 };
 
@@ -113,5 +113,5 @@ inline namespace __cpo {
 
 _LIBCPP_END_NAMESPACE_STD
 
-#endif // _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#endif // _LIBCPP_STD_VER > 17
 #endif // _LIBCPP___ALGORITHM_RANGES_SET_INTERSECTION_H

@@ -13,6 +13,13 @@ $input = (
     select * from Input
 );
 
-SELECT key, ROW_NUMBER() OVER w AS row_num
+$output = SELECT key, ROW_NUMBER() OVER w AS row_num
 FROM $input
 WINDOW w AS ();
+
+select
+    min(key) as min_key,
+    count(distinct row_num) as dist_rn,
+    min(row_num) as min_rn,
+    max(row_num) as max_rn,
+from $output;

@@ -330,7 +330,7 @@ bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode) {
 void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats) {
     if (stats.HasStartTimeMs() && stats.HasFinishTimeMs()) {
         auto startTimeMs = stats.GetStartTimeMs().GetMin();
-        auto finishTimeMs = stats.GetFinishTimeMs().GetMin();
+        auto finishTimeMs = stats.GetFinishTimeMs().GetMax();
         if (startTimeMs && finishTimeMs > startTimeMs) {
             stats.SetStageDurationUs((finishTimeMs - startTimeMs) * 1'000);
         }

@@ -111,7 +111,6 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
@@ -565,8 +564,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        TServiceCfg hasLongTx = false;
-        names["long_tx"] = &hasLongTx;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
         TServiceCfg hasImport = services.empty();
@@ -724,11 +721,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasScripting.IsRlAllowed()));
-        }
-
-        if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasLongTx.IsRlAllowed()));
         }
 
         if (hasSchemeService) {
@@ -1003,6 +995,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
+
+    std::vector<TString> hostnamePatterns;
+    if (runConfig.AppConfig.HasQueryServiceConfig()) {
+        const auto& patterns = runConfig.AppConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        hostnamePatterns = {patterns.begin(), patterns.end()};
+    }
+    AppData->ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(hostnamePatterns);
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1375,16 +1374,13 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableBasicServices) {
-        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
+        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig, ModuleFactories));
     }
     if (serviceMask.EnableIcbService) {
         sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));
     }
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
-    }
-    if (serviceMask.EnableNodeIdentifier) {
-        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig));
     }
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
@@ -1615,6 +1611,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableDatabaseMetadataCache) {
         sil->AddServiceInitializer(new TDatabaseMetadataCacheInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGraphService) {
+        sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
     return sil;

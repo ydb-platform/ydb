@@ -9,5 +9,5 @@ $p4 = Pickle(ToDict(ListReverse($lst)));
 $p5 = StablePickle(ToDict(ListReverse($lst)));
 select $p1, Ensure($p2, $p1 != $p2), Ensure($p3, $p2 = $p3),
     Ensure($p4, $p4 != $p1), Ensure($p5, $p5 = $p2);
-select Unpickle(TypeOf(ToDict($lst)),$p1), Unpickle(TypeOf(ToDict($lst)),$p2);
+select ListSort(DictItems(Unpickle(TypeOf(ToDict($lst)),$p1))), ListSort(DictItems(Unpickle(TypeOf(ToDict($lst)),$p2)));
 

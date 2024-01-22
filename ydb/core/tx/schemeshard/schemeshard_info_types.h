@@ -302,9 +302,11 @@ private:
 struct TAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
+    THashMap<TPathId, TPartitionStats> TableStats;
     size_t PartitionStatsUpdated = 0;
 
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats);
 };
 
 struct TSubDomainInfo;
@@ -1001,10 +1003,14 @@ struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
         return Stats;
     }
 
-    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
         Stats.Aggregated.PartCount = ColumnShards.size();
         Stats.PartitionStats[shardIdx]; // insert if none
         Stats.UpdateShardStats(shardIdx, newStats);
+    }
+
+    void UpdateTableStats(const TPathId& pathId, const TPartitionStats& newStats) {
+        Stats.UpdateTableStats(pathId, newStats);
     }
 };
 
@@ -1576,6 +1582,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetStatisticsAggregator());
     }
 
+    TTabletId GetTenantGraphShardID() const {
+        if (!ProcessingParams.HasGraphShard()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetGraphShard());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -1952,6 +1965,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_VERIFY_S(statisticsAggregators.size() <= 1, "size was: " << statisticsAggregators.size());
         if (statisticsAggregators.size()) {
             ProcessingParams.SetStatisticsAggregator(ui64(statisticsAggregators.front()));
+        }
+
+        ProcessingParams.ClearGraphShard();
+        TVector<TTabletId> graphs = FilterPrivateTablets(ETabletType::GraphShard, allShards);
+        Y_VERIFY_S(graphs.size() <= 1, "size was: " << graphs.size());
+        if (graphs.size()) {
+            ProcessingParams.SetGraphShard(ui64(graphs.front()));
         }
     }
 

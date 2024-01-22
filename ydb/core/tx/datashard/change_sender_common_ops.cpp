@@ -82,7 +82,7 @@ void TBaseChangeSender::KillSenders() {
     }
 }
 
-void TBaseChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
+void TBaseChangeSender::EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
     for (auto& record : records) {
         Y_VERIFY_S(PathId == record.PathId, "Unexpected record's path id"
             << ": expected# " << PathId
@@ -117,28 +117,28 @@ bool TBaseChangeSender::RequestRecords() {
         return false;
     }
 
-    ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRequestRecords(std::move(records)));
+    ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRequestRecords(std::move(records)));
     return true;
 }
 
-void TBaseChangeSender::ProcessRecords(TVector<TChangeRecord>&& records) {
+void TBaseChangeSender::ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) {
     for (auto& record : records) {
-        auto it = PendingBody.find(record.GetOrder());
+        auto it = PendingBody.find(record->GetOrder());
         if (it == PendingBody.end()) {
             continue;
         }
 
-        if (it->BodySize != record.GetBody().size()) {
+        if (it->BodySize != record->GetBody().size()) {
             MemUsage -= it->BodySize;
-            MemUsage += record.GetBody().size();
+            MemUsage += record->GetBody().size();
         }
 
-        if (record.IsBroadcast()) {
+        if (record->IsBroadcast()) {
             // assume that broadcast records are too small to affect memory consumption
-            MemUsage -= record.GetBody().size();
+            MemUsage -= record->GetBody().size();
         }
 
-        PendingSent.emplace(record.GetOrder(), std::move(record));
+        PendingSent.emplace(record->GetOrder(), std::move(record));
         PendingBody.erase(it);
     }
 
@@ -160,7 +160,7 @@ void TBaseChangeSender::SendRecords() {
     bool needToResolve = false;
 
     while (it != PendingSent.end()) {
-        if (!it->second.IsBroadcast()) {
+        if (!it->second->IsBroadcast()) {
             const ui64 partitionId = Resolver->GetPartitionId(it->second);
             if (!Senders.contains(partitionId)) {
                 needToResolve = true;
@@ -281,16 +281,16 @@ void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
 
     sender.Pending.reserve(sender.Prepared.size());
     for (const auto& record : sender.Prepared) {
-        if (!record.IsBroadcast()) {
-            sender.Pending.emplace_back(record.GetOrder(), record.GetBody().size());
-            MemUsage -= record.GetBody().size();
+        if (!record->IsBroadcast()) {
+            sender.Pending.emplace_back(record->GetOrder(), record->GetBody().size());
+            MemUsage -= record->GetBody().size();
         } else {
-            sender.Broadcasting.push_back(record.GetOrder());
+            sender.Broadcasting.push_back(record->GetOrder());
         }
     }
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new NChangeExchange::TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
 }
 
 void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
@@ -299,17 +299,17 @@ void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
     }
 
     for (const auto& record : sender.Prepared) {
-        if (!record.IsBroadcast()) {
-            Enqueued.emplace(record.GetOrder(), record.GetBody().size());
-            MemUsage -= record.GetBody().size();
+        if (!record->IsBroadcast()) {
+            Enqueued.emplace(record->GetOrder(), record->GetBody().size());
+            MemUsage -= record->GetBody().size();
         }
     }
 }
 
-TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(const TChangeRecord& record) {
-    Y_ABORT_UNLESS(record.IsBroadcast());
+TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(NChangeExchange::IChangeRecord::TPtr record) {
+    Y_ABORT_UNLESS(record->IsBroadcast());
 
-    auto it = Broadcasting.find(record.GetOrder());
+    auto it = Broadcasting.find(record->GetOrder());
     if (it != Broadcasting.end()) {
         return it->second;
     }
@@ -322,8 +322,8 @@ TBaseChangeSender::TBroadcast& TBaseChangeSender::EnsureBroadcast(const TChangeR
         partitionIds.insert(partitionId);
     }
 
-    auto res = Broadcasting.emplace(record.GetOrder(), TBroadcast{
-        .Record = {record.GetOrder(), record.GetBody().size()},
+    auto res = Broadcasting.emplace(record->GetOrder(), TBroadcast{
+        .Record = {record->GetOrder(), record->GetBody().size()},
         .Partitions = partitionIds,
         .PendingPartitions = partitionIds,
     });
@@ -420,7 +420,7 @@ void TBaseChangeSender::RemoveRecords() {
             remove.insert(record.Order);
         }
         for (const auto& record : sender.Prepared) {
-            remove.insert(record.GetOrder());
+            remove.insert(record->GetOrder());
         }
     }
 
@@ -569,13 +569,8 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                             TABLEH() { html << "Group"; }
                             TABLEH() { html << "Step"; }
                             TABLEH() { html << "TxId"; }
-                            TABLEH() { html << "LockId"; }
-                            TABLEH() { html << "LockOffset"; }
-                            TABLEH() { html << "PathId"; }
                             TABLEH() { html << "Kind"; }
                             TABLEH() { html << "Source"; }
-                            TABLEH() { html << "TableId"; }
-                            TABLEH() { html << "SchemaVersion"; }
                         }
                     }
                     TABLEBODY() {
@@ -584,16 +579,11 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                             TABLER() {
                                 TABLED() { html << ++i; }
                                 TABLED() { html << order; }
-                                TABLED() { html << record.GetGroup(); }
-                                TABLED() { html << record.GetStep(); }
-                                TABLED() { html << record.GetTxId(); }
-                                TABLED() { html << record.GetLockId(); }
-                                TABLED() { html << record.GetLockOffset(); }
-                                TABLED() { PathLink(html, record.GetPathId()); }
-                                TABLED() { html << record.GetKind(); }
-                                TABLED() { html << record.GetSource(); }
-                                TABLED() { PathLink(html, record.GetTableId()); }
-                                TABLED() { html << record.GetSchemaVersion(); }
+                                TABLED() { html << record->GetGroup(); }
+                                TABLED() { html << record->GetStep(); }
+                                TABLED() { html << record->GetTxId(); }
+                                TABLED() { html << record->GetKind(); }
+                                TABLED() { html << record->GetSource(); }
                             }
                         }
                     }

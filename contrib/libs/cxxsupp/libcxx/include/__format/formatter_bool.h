@@ -14,8 +14,8 @@
 #include <__availability>
 #include <__config>
 #include <__debug>
+#include <__format/concepts.h>
 #include <__format/format_error.h>
-#include <__format/format_fwd.h>
 #include <__format/format_parse_context.h>
 #include <__format/formatter.h>
 #include <__format/formatter_integral.h>
@@ -35,7 +35,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 #if _LIBCPP_STD_VER > 17
 
-template <__formatter::__char_type _CharT>
+template <__fmt_char_type _CharT>
 struct _LIBCPP_TEMPLATE_VIS _LIBCPP_AVAILABILITY_FORMAT formatter<bool, _CharT> {
 public:
   _LIBCPP_HIDE_FROM_ABI constexpr auto
@@ -47,6 +47,7 @@ public:
 
   _LIBCPP_HIDE_FROM_ABI auto format(bool __value, auto& __ctx) const -> decltype(__ctx.out()) {
     switch (__parser_.__type_) {
+    case __format_spec::__type::__default:
     case __format_spec::__type::__string:
       return __formatter::__format_bool(__value, __ctx, __parser_.__get_parsed_std_specifications(__ctx));
 

@@ -69,6 +69,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].erase(tablet);
         TabletsOfObject[tablet->GetObjectId()].erase(tablet);
         Hive.UpdateCounterTabletsAlive(-1);
+        Hive.UpdateDomainTabletsAlive(tablet->GetLeader().ObjectDomain, -1, GetServicedDomain());
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, -1);
         }
@@ -84,6 +85,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].emplace(tablet);
         TabletsOfObject[tablet->GetObjectId()].emplace(tablet);
         Hive.UpdateCounterTabletsAlive(+1);
+        Hive.UpdateDomainTabletsAlive(tablet->GetLeader().ObjectDomain, +1, GetServicedDomain());
         if (tablet->HasCounter() && tablet->IsLeader()) {
             Hive.UpdateObjectCount(tablet->AsLeader(), *this, +1);
         }
@@ -467,6 +469,10 @@ TResourceRawValues TNodeInfo::GetResourceCurrentValues() const {
 void TNodeInfo::ActualizeNodeStatistics(TInstant now) {
     TInstant barierTime = now - Hive.GetNodeRestartWatchPeriod();
     Hive.ActualizeRestartStatistics(*Statistics.MutableRestartTimestamp(), barierTime.MilliSeconds());
+}
+
+ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
+    return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
 }
 
 TString TNodeInfo::GetLogPrefix() const {

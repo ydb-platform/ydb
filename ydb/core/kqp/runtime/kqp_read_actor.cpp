@@ -17,6 +17,7 @@
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
 
@@ -399,6 +400,7 @@ public:
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
+        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
@@ -569,6 +571,9 @@ public:
         ResolveShards[ResolveShardId] = state;
         ResolveShardId += 1;
 
+        ReadActorStateSpan = NWilson::TSpan(TWilsonKqp::ReadActorShardsResolve, ReadActorSpan.GetTraceId(),
+            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
     }
@@ -617,8 +622,12 @@ public:
                 }
             }
 
+            ReadActorStateSpan.EndError(error);
+
             return RuntimeError(error, statusCode);
         }
+
+        ReadActorStateSpan.EndOk();
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
@@ -896,10 +905,8 @@ public:
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
 
-        NWilson::TTraceId traceId; // TODO: get traceId from kqp.        
-
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
-            IEventHandle::FlagTrackDelivery, 0, std::move(traceId));
+            IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
             state->IsFirst = true;
@@ -1385,6 +1392,8 @@ public:
             }
         }
         TBase::PassAway();
+
+        ReadActorSpan.End();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -1395,6 +1404,11 @@ public:
 
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
+
+        if (ReadActorSpan) {
+            ReadActorSpan.EndError(issues.ToOneLineString());
+        }
+
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
@@ -1491,6 +1505,9 @@ private:
     size_t TotalRetries = 0;
 
     bool FirstShardStarted = false;
+
+    NWilson::TSpan ReadActorSpan;
+    NWilson::TSpan ReadActorStateSpan;
 };
 
 

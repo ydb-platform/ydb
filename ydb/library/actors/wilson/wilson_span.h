@@ -179,7 +179,7 @@ namespace NWilson {
             return *this;
         }
 
-        template<typename T, typename T1 = std::initializer_list<std::pair<TString, TAttributeValue>>>
+        template<typename T, typename T1 = std::initializer_list<std::pair<const char*, TAttributeValue>>>
         TSpan& Event(T&& name, T1&& attributes) {
             if (Y_UNLIKELY(*this)) {
                 auto *event = Data->Span.add_events();
@@ -260,6 +260,8 @@ namespace NWilson {
         TSpan CreateChild(ui8 verbosity, std::variant<std::optional<TString>, const char*> name, TFlags flags = EFlags::NONE) const {
             return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
+
+        static const TSpan Empty;
 
     private:
         void Send();

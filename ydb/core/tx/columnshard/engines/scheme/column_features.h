@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <ydb/core/formats/arrow/common/validation.h>
 
 namespace NKikimr::NOlap {
 
@@ -19,8 +20,7 @@ private:
 public:
     TSaverContext(const std::shared_ptr<IBlobsStorageOperator>& storageOperator, const std::shared_ptr<IStoragesManager>& storagesManager)
         : StorageOperator(storageOperator)
-        , StoragesManager(storagesManager)
-    {
+        , StoragesManager(storagesManager) {
 
     }
 
@@ -86,8 +86,7 @@ public:
         : Transformer(transformer)
         , Deserializer(deserializer)
         , ExpectedSchema(expectedSchema)
-        , ColumnId(columnId)
-    {
+        , ColumnId(columnId) {
         Y_ABORT_UNLESS(ExpectedSchema);
         auto fieldsCountStr = ::ToString(ExpectedSchema->num_fields());
         Y_ABORT_UNLESS(ExpectedSchema->num_fields() == 1, "%s", fieldsCountStr.data());
@@ -117,6 +116,16 @@ public:
         } else {
             return columnArray;
         }
+    }
+
+    std::shared_ptr<arrow::RecordBatch> ApplyVerified(const TString& data) const {
+        return NArrow::TStatusValidator::GetValid(Apply(data));
+    }
+
+    std::shared_ptr<arrow::Array> ApplyVerifiedColumn(const TString& data) const {
+        auto rb = ApplyVerified(data);
+        AFL_VERIFY(rb->num_columns() == 1)("schema", rb->schema()->ToString());
+        return rb->column(0);
     }
 };
 

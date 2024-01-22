@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 8
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,10 +32,24 @@
                                         "Node Type": "Limit-LeftJoin (MapJoin)",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
                                             },
                                             {
+                                                "Condition": "f1 = unique2",
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 6
+                                                    },
+                                                    {
+                                                        "ExternalPlanNodeId": 4
+                                                    }
+                                                ],
                                                 "Name": "LeftJoin (MapJoin)"
                                             }
                                         ],
@@ -54,6 +73,7 @@
                                                                         "Node Type": "TableFullScan",
                                                                         "Operators": [
                                                                             {
+                                                                                "Inputs": [],
                                                                                 "Name": "TableFullScan",
                                                                                 "ReadColumns": [
                                                                                     "even",
@@ -87,6 +107,11 @@
                                                         "Node Type": "TablePointLookup-ConstantExpr",
                                                         "Operators": [
                                                             {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    }
+                                                                ],
                                                                 "Name": "TablePointLookup",
                                                                 "ReadColumns": [
                                                                     "f1"
@@ -94,6 +119,7 @@
                                                                 "Table": "postgres_jointest/join0.test_plan/int4_tbl"
                                                             },
                                                             {
+                                                                "Inputs": [],
                                                                 "Iterator": "[{f1: 0}]",
                                                                 "Name": "Iterator"
                                                             }

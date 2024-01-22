@@ -455,7 +455,11 @@ multidict_getall(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "getall", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "getall",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[2];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames,
@@ -500,7 +504,11 @@ multidict_getone(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "getone", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "getone",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[2];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames,
@@ -535,7 +543,11 @@ multidict_get(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "get", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "get",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[2];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames,
@@ -777,7 +789,11 @@ multidict_add(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "add", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "add",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[2];
 
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames,
@@ -836,7 +852,11 @@ multidict_setdefault(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "setdefault", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "setdefault",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[3];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
 
@@ -872,7 +892,11 @@ multidict_popone(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "popone", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "popone",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[3];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
 
@@ -919,7 +943,11 @@ multidict_pop(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "pop", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "pop",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[3];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
 
@@ -967,7 +995,11 @@ multidict_popall(MultiDictObject *self, PyObject *const *args,
         return NULL;
     }
 #else
-    static _PyArg_Parser _parser = {NULL, _keywords, "popall", 0};
+    static _PyArg_Parser _parser = {
+        .keywords = _keywords,
+        .fname = "popall",
+        .kwtuple = NULL,
+    };
     PyObject *argsbuf[3];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
 

@@ -52,6 +52,7 @@ public:
 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
     NMiniKQL::IEngineFlat * GetEngine();
+    NMiniKQL::TEngineHost * GetEngineHost() { return EngineHost.Get(); }
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 

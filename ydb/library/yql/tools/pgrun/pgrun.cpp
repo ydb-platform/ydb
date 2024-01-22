@@ -9,6 +9,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
+#include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -971,6 +972,7 @@ int Main(int argc, char* argv[])
 
     static const TString DefaultCluster{"plato"};
     clusterMapping[DefaultCluster] = YtProviderName;
+    clusterMapping["pg_catalog"] = PgProviderName;
 
     opts.AddHelpOption();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);
@@ -1001,6 +1003,7 @@ int Main(int argc, char* argv[])
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+    dataProvidersInit.push_back(GetPgDataProviderInitializer());
 
     TExprContext ctx;
     TExprContext::TFreezeGuard freezeGuard(ctx);
@@ -1010,6 +1013,16 @@ int Main(int argc, char* argv[])
 
     const TString username = GetUsername();
     THashSet<TString> sqlFlags;
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.ClusterMapping = clusterMapping;
+    settings.DefaultCluster = DefaultCluster;
+    settings.Flags = sqlFlags;
+    settings.SyntaxVersion = 1;
+    settings.AnsiLexer = false;
+    settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
+    settings.AssumeYdbOnClusterWithSlash = false;
+    settings.PgParser = true;
 
     for (const auto& raw_stmt : TStatementIterator{Cin.ReadAll()}) {
         const auto stmt = GetFormattedStmt(raw_stmt);
@@ -1032,16 +1045,7 @@ int Main(int argc, char* argv[])
         }
 
         google::protobuf::Arena arena;
-        NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
-        settings.ClusterMapping = clusterMapping;
-        settings.DefaultCluster = DefaultCluster;
-        settings.Flags = sqlFlags;
-        settings.SyntaxVersion = 1;
-        settings.AnsiLexer = false;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
-        settings.AssumeYdbOnClusterWithSlash = false;
-        settings.PgParser = true;
 
         auto program = factory.Create("-stdin-", stmt);
 

@@ -45,6 +45,7 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
@@ -269,6 +270,7 @@ public:
     bool EnablePQConfigTransactionsAtSchemeShard = false;
     bool EnableStatistics = false;
     bool EnableTablePgTypes = false;
+    bool EnableServerlessExclusiveDynamicNodes = false;
 
     TShardDeleter ShardDeleter;
 
@@ -308,7 +310,7 @@ public:
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
@@ -329,6 +331,11 @@ public:
 
     bool IsServerlessDomain(const TPath& domain) const {
         return IsServerlessDomain(domain.DomainInfo());
+    }
+
+    bool IsServerlessDomainGlobal(TPathId domainPathId, TSubDomainInfo::TConstPtr domainInfo) const {
+        const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+        return IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != domainPathId;
     }
 
     TPathId MakeLocalId(const TLocalPathId& localPathId) const {
@@ -1263,22 +1270,18 @@ public:
     // } // NCdcStreamScan
 
     // statistics
-    TString PreSerializedStatisticsMapData;
-    std::unordered_map<ui32, size_t> StatNodes;
-    std::unordered_map<TActorId, ui32> StatNodePipes;
+    TTabletId StatisticsAggregatorId;
+    TActorId SAPipeClientId;
+    static constexpr ui64 SendStatsIntervalMinSeconds = 180;
+    static constexpr ui64 SendStatsIntervalMaxSeconds = 240;
 
-    static constexpr size_t STAT_OPTIMIZE_N_FIRST_NODES = 2;
-    size_t StatFastBroadcastCounter = STAT_OPTIMIZE_N_FIRST_NODES;
-    bool StatFastCheckInFlight = false;
-    std::unordered_set<ui32> StatFastBroadcastNodes;
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvProcessStatistics::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvStatFastBroadcastCheck::TPtr& ev, const TActorContext& ctx);
-    void Handle(NStat::TEvStatistics::TEvRegisterNode::TPtr& ev, const TActorContext& ctx);
-    void GenerateStatisticsMap();
-    void BroadcastStatistics();
-    void BroadcastStatisticsFast();
-    void SendStatisticsToNode(ui32 nodeId);
+    void InitializeStatistics(const TActorContext& ctx);
+    void ResolveSA();
+    void ConnectToSA();
+    void SendBaseStatsToSA();
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

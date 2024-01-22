@@ -129,10 +129,10 @@ IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottl
     NProfiling::TProfiler profiler = {});
 
 //! Returns a throttler that imposes no throughput limit.
-IThroughputThrottlerPtr GetUnlimitedThrottler();
+IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler();
 
 //! Returns a throttler that imposes no throughput limit and profiles throughput.
-IThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
+IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
     const TString& name,
     NProfiling::TProfiler profiler = {});
 

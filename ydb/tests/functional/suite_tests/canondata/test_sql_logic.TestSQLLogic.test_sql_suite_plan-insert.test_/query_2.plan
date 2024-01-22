@@ -12,9 +12,19 @@
                         "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "InternalOperatorId": 1
+                                    }
+                                ],
                                 "Name": "Aggregate"
                             },
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
                                 "Limit": "1",
                                 "Name": "Limit"
                             }
@@ -30,9 +40,15 @@
                                         "Node Type": "Aggregate-TableFullScan",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Name": "Aggregate"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Name": "TableFullScan",
                                                 "ReadColumns": null,
                                                 "ReadRanges": [

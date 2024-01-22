@@ -2,7 +2,8 @@
 
 #include <yt/yt/core/misc/common.h>
 #include <yt/yt/core/misc/error_code.h>
-#include <yt/yt/core/misc/ref_counted.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 namespace NYT::NQueueClient {
 

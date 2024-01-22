@@ -26,13 +26,6 @@ public:
         return 100;
     }
 
-    NKikimrTxDataShard::TError::EKind Code() const {
-        return ErrCode;
-    }
-    const TString GetError() const {
-        return ErrStr;
-    }
-
     const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
         return Ev;
     }
@@ -43,6 +36,7 @@ public:
 
     const NKikimrDataEvents::TEvWrite::TOperation& RecordOperation() const {
         Y_ABORT_UNLESS(GetRecord().operations().size() == 1, "Only one operation is supported now");
+        Y_ABORT_UNLESS(GetRecord().operations(0).GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, "Only UPSERT operation is supported now");
         return GetRecord().operations(0);
     }
 
@@ -91,6 +85,9 @@ public:
 
     NMiniKQL::IEngineFlat* GetEngine() {
         return EngineBay.GetEngine();
+    }
+    NMiniKQL::TEngineHost* GetEngineHost() {
+        return EngineBay.GetEngineHost();
     }
     void DestroyEngine() {
         EngineBay.DestroyEngine();
@@ -199,6 +196,8 @@ private:
 class TWriteOperation : public TOperation {
     friend class TWriteUnit;
 public:
+    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+    
     explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr ev, TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
 
     ~TWriteOperation();
@@ -315,6 +314,9 @@ public:
 
     const TValidatedWriteTx::TPtr& GetWriteTx() const { 
         return WriteTx; 
+    }
+    TValidatedWriteTx::TPtr& GetWriteTx() {
+        return WriteTx;
     }
     TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx);
 

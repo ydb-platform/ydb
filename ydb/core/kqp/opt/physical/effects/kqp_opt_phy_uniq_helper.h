@@ -27,9 +27,8 @@ public:
     virtual ~TUniqBuildHelper() = default;
 protected:
     // table - metadata of table
-    // skipPkCheck - false for insert mode, generate check on PK to issue an arror on PK conflict
-    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns, const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
-        NYql::TExprContext& ctx, bool skipPkCheck);
+    TUniqBuildHelper(const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
+        const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx, bool insertMode);
     size_t CalcComputeKeysStageOutputNum() const;
 
     struct TUniqCheckNodes {
@@ -63,7 +62,8 @@ private:
     static TUniqCheckNodes MakeUniqCheckNodes(const NYql::NNodes::TCoLambda& selector,
         const NYql::NNodes::TExprBase& rowsListArg, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
     static TVector<TUniqCheckNodes> Prepare(const NYql::NNodes::TCoArgument& rowsListArg,
-        const NYql::TKikimrTableDescription& table, const THashSet<TStringBuf>* inputColumns, const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
+        const NYql::TKikimrTableDescription& table, const TMaybe<THashSet<TStringBuf>>& inputColumns,
+        const THashSet<TString>* usedIndexes, NYql::TPositionHandle pos,
         NYql::TExprContext& ctx, bool skipPkCheck);
 
     virtual NYql::NNodes::TDqCnUnionAll CreateLookupStageWithConnection(const NYql::NNodes::TDqStage& computeKeysStage,
@@ -76,12 +76,13 @@ protected:
     const NYql::TExprNode::TPtr False;
 private:
     const TChecks Checks;
+    const NYql::TExprNode::TPtr RowsToPass;
 };
 
 TUniqBuildHelper::TPtr CreateInsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
-    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    const TMaybe<THashSet<TStringBuf>>& inputColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 TUniqBuildHelper::TPtr CreateUpsertUniqBuildHelper(const NYql::TKikimrTableDescription& table,
-    const THashSet<TStringBuf>* inputColumns,
+    const TMaybe<THashSet<TStringBuf>>& inputColumns,
     const THashSet<TString>& usedIndexes, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 }

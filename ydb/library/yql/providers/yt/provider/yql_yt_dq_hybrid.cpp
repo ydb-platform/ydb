@@ -76,7 +76,7 @@ private:
         if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U)
             return false;
 
-        return !HasSetting(*operation.Ref().Child(4U), EYtSettingType::NoDq);
+        return !HasSettingsExcept(*operation.Ref().Child(4U), DqOpSupportedSettings);
     }
 
     std::optional<std::array<ui64, 2U>> CanReadHybrid(const TYtSection& section) const {
@@ -289,7 +289,7 @@ private:
     }
 
     TMaybeNode<TExprBase> TryYtMergeByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto merge = node.Cast<TYtMerge>(); CanReplaceOnHybrid(merge) && !NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks)) {
+        if (const auto merge = node.Cast<TYtMerge>(); CanReplaceOnHybrid(merge)) {
             if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
                 const auto info = TYtTableBaseInfo::Parse(merge.Input().Item(0).Paths().Item(0).Table());
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);

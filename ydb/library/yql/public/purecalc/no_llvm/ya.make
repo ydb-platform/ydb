@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/public/purecalc/common
+    ydb/library/yql/public/purecalc/common/no_llvm
     ydb/library/yql/providers/yt/codec/codegen/no_llvm
     ydb/library/yql/minikql/codegen/no_llvm
     ydb/library/yql/minikql/computation/no_llvm

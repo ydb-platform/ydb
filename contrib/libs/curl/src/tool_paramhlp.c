@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -138,7 +138,7 @@ static ParameterError getnum(long *val, const char *str, int base)
     num = strtol(str, &endptr, base);
     if(errno == ERANGE)
       return PARAM_NUMBER_TOO_LARGE;
-    if((endptr != str) && (endptr == str + strlen(str))) {
+    if((endptr != str) && (*endptr == '\0')) {
       *val = num;
       return PARAM_OK;  /* Ok */
     }
@@ -240,8 +240,9 @@ static ParameterError str2double(double *val, const char *str, double max)
 }
 
 /*
- * Parse the string and write the double in the given address. Return PARAM_OK
- * on success, otherwise a parameter error enum. ONLY ACCEPTS POSITIVE NUMBERS!
+ * Parse the string as seconds with decimals, and write the number of
+ * milliseconds that corresponds in the given address. Return PARAM_OK on
+ * success, otherwise a parameter error enum. ONLY ACCEPTS POSITIVE NUMBERS!
  *
  * The 'max' argument is the maximum value allowed, as the numbers are often
  * multiplied when later used.
@@ -251,16 +252,16 @@ static ParameterError str2double(double *val, const char *str, double max)
  * data.
  */
 
-ParameterError str2udouble(double *valp, const char *str, double max)
+ParameterError secs2ms(long *valp, const char *str)
 {
   double value;
-  ParameterError result = str2double(&value, str, max);
+  ParameterError result = str2double(&value, str, (double)LONG_MAX/1000);
   if(result != PARAM_OK)
     return result;
   if(value < 0)
     return PARAM_NEGATIVE_NUMERIC;
 
-  *valp = value;
+  *valp = (long)(value*1000);
   return PARAM_OK;
 }
 
@@ -368,7 +369,7 @@ ParameterError proto2num(struct OperationConfig *config,
 
     /* Process token modifiers */
     while(!ISALNUM(*token)) { /* may be NULL if token is all modifiers */
-      switch (*token++) {
+      switch(*token++) {
       case '=':
         action = set;
         break;
@@ -417,7 +418,7 @@ ParameterError proto2num(struct OperationConfig *config,
            if no protocols are allowed */
         if(action == set)
           protoset[0] = NULL;
-        warnf(config->global, "unrecognized protocol '%s'\n", token);
+        warnf(config->global, "unrecognized protocol '%s'", token);
       }
     }
   }
@@ -432,6 +433,7 @@ ParameterError proto2num(struct OperationConfig *config,
     result = curlx_dyn_addf(&obuf, "%s,", protoset[proto]);
   free((char *) protoset);
   curlx_dyn_setlen(&obuf, curlx_dyn_len(&obuf) - 1);
+  free(*ostr);
   *ostr = curlx_dyn_ptr(&obuf);
 
   return *ostr ? PARAM_OK : PARAM_NO_MEM;
@@ -472,7 +474,7 @@ ParameterError str2offset(curl_off_t *val, const char *str)
 
 #if(SIZEOF_CURL_OFF_T > SIZEOF_LONG)
   {
-    CURLofft offt = curlx_strtoofft(str, &endptr, 0, val);
+    CURLofft offt = curlx_strtoofft(str, &endptr, 10, val);
     if(CURL_OFFT_FLOW == offt)
       return PARAM_NUMBER_TOO_LARGE;
     else if(CURL_OFFT_INVAL == offt)
@@ -564,7 +566,7 @@ int ftpfilemethod(struct OperationConfig *config, const char *str)
   if(curl_strequal("multicwd", str))
     return CURLFTPMETHOD_MULTICWD;
 
-  warnf(config->global, "unrecognized ftp file method '%s', using default\n",
+  warnf(config->global, "unrecognized ftp file method '%s', using default",
         str);
 
   return CURLFTPMETHOD_MULTICWD;
@@ -577,7 +579,7 @@ int ftpcccmethod(struct OperationConfig *config, const char *str)
   if(curl_strequal("active", str))
     return CURLFTPSSL_CCC_ACTIVE;
 
-  warnf(config->global, "unrecognized ftp CCC method '%s', using default\n",
+  warnf(config->global, "unrecognized ftp CCC method '%s', using default",
         str);
 
   return CURLFTPSSL_CCC_PASSIVE;
@@ -592,7 +594,7 @@ long delegation(struct OperationConfig *config, const char *str)
   if(curl_strequal("always", str))
     return CURLGSSAPI_DELEGATION_FLAG;
 
-  warnf(config->global, "unrecognized delegation method '%s', using none\n",
+  warnf(config->global, "unrecognized delegation method '%s', using none",
         str);
 
   return CURLGSSAPI_DELEGATION_NONE;
@@ -663,7 +665,7 @@ CURLcode get_args(struct OperationConfig *config, const size_t i)
   if(!config->useragent) {
     config->useragent = my_useragent();
     if(!config->useragent) {
-      errorf(config->global, "out of memory\n");
+      errorf(config->global, "out of memory");
       result = CURLE_OUT_OF_MEMORY;
     }
   }

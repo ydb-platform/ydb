@@ -2,9 +2,10 @@
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
-#include <yt/yt/core/misc/ref_counted.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/noncopyable.h>

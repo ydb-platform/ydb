@@ -42,7 +42,7 @@ namespace NTable {
             }
         }
 
-        TResult Do(const TCells key1, const TCells key2, const TRowId row1, const TRowId row2, 
+        TResult Do(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
@@ -110,7 +110,7 @@ namespace NTable {
             return { ready, overshot };
         }
 
-        TResult DoReverse(const TCells key1, const TCells key2, const TRowId row1, const TRowId row2, 
+        TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override
         {
             auto index = Index.TryLoadRaw();
@@ -252,7 +252,7 @@ namespace NTable {
                         }
                     }
                     if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
                         }
@@ -347,7 +347,7 @@ namespace NTable {
                     }
 
                     if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolprof taken rows, so here we may precharge some extra rows
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
                         if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
                             prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
                         }

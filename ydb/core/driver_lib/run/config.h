@@ -44,7 +44,7 @@ union TBasicKikimrServicesMask {
         bool EnableKqp:1;
         bool EnableMemoryLog:1;
         bool EnableGRpcService:1;
-        bool EnableNodeIdentifier:1;
+        bool UNUSED_EnableNodeIdentifier:1;
         bool EnableCms:1;
         bool EnableNodeTable:1;
         bool EnableGRpcProxyStatus:1;
@@ -83,6 +83,7 @@ union TBasicKikimrServicesMask {
         // next 64 flags
 
         bool EnableDatabaseMetadataCache:1;
+        bool EnableGraphService:1;
     };
 
     struct {

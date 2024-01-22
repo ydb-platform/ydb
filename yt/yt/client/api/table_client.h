@@ -1,25 +1,13 @@
 #pragma once
 
 #include "client_common.h"
+#include "dynamic_table_client.h"
 
-#include <yt/yt/client/hydra/public.h>
-
-#include <yt/yt/client/tablet_client/public.h>
-
-#include <yt/yt/client/table_client/row_base.h>
-#include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/chunk_stripe_statistics.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
+#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/client/chaos_client/replication_card.h>
-
-#include <yt/yt/client/query_client/query_statistics.h>
-
-#include <yt/yt/core/ypath/public.h>
-
-#include <yt/yt/core/ytree/yson_struct.h>
-
-#include <library/cpp/yt/memory/shared_range.h>
 
 namespace NYT::NApi {
 
@@ -38,70 +26,6 @@ struct TDetailedProfilingInfo final
 };
 
 DEFINE_REFCOUNTED_TYPE(TDetailedProfilingInfo)
-
-struct TLookupRequestOptions
-    : public TFallbackReplicaOptions
-{
-    NTableClient::TColumnFilter ColumnFilter;
-    bool KeepMissingRows = false;
-    bool EnablePartialResult = false;
-    std::optional<bool> UseLookupCache;
-    TDetailedProfilingInfoPtr DetailedProfilingInfo;
-};
-
-struct TLookupRowsOptionsBase
-    : public TTabletReadOptions
-    , public TLookupRequestOptions
-    , public TMultiplexingBandOptions
-{ };
-
-struct TLookupRowsOptions
-    : public TLookupRowsOptionsBase
-{ };
-
-struct TVersionedLookupRowsOptions
-    : public TLookupRowsOptionsBase
-{
-    NTableClient::TRetentionConfigPtr RetentionConfig;
-};
-
-struct TMultiLookupSubrequest
-{
-    NYPath::TYPath Path;
-    NTableClient::TNameTablePtr NameTable;
-    TSharedRange<NTableClient::TLegacyKey> Keys;
-
-    // NB: Other options from TLookupRowsOptions that are absent from TLookupRequestOptions are
-    // common and included in TMultiLookupOptions.
-    TLookupRequestOptions Options;
-};
-
-struct TMultiLookupOptions
-    : public TTimeoutOptions
-    , public TTabletReadOptionsBase
-    , public TMultiplexingBandOptions
-{ };
-
-struct TExplainQueryOptions
-    : public TSelectRowsOptionsBase
-{
-    bool VerboseOutput = false;
-};
-
-struct TSelectRowsResult
-{
-    IUnversionedRowsetPtr Rowset;
-    NQueryClient::TQueryStatistics Statistics;
-};
-
-template <class IRowset>
-struct TLookupRowsResult
-{
-    TIntrusivePtr<IRowset> Rowset;
-};
-
-using TUnversionedLookupRowsResult = TLookupRowsResult<IUnversionedRowset>;
-using TVersionedLookupRowsResult = TLookupRowsResult<IVersionedRowset>;
 
 struct TTableReaderOptions
     : public TTransactionalOptions
@@ -412,31 +336,8 @@ struct TLocateSkynetShareOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ITableClientBase
+    : public IDynamicTableClientBase
 {
-    virtual TFuture<TUnversionedLookupRowsResult> LookupRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        const TSharedRange<NTableClient::TLegacyKey>& keys,
-        const TLookupRowsOptions& options = {}) = 0;
-
-    virtual TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        const TSharedRange<NTableClient::TLegacyKey>& keys,
-        const TVersionedLookupRowsOptions& options = {}) = 0;
-
-    virtual TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
-        const std::vector<TMultiLookupSubrequest>& subrequests,
-        const TMultiLookupOptions& options = {}) = 0;
-
-    virtual TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
-        const TSelectRowsOptions& options = {}) = 0;
-
-    virtual TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
-        const TExplainQueryOptions& options = TExplainQueryOptions()) = 0;
-
     virtual TFuture<ITableReaderPtr> CreateTableReader(
         const NYPath::TRichYPath& path,
         const TTableReaderOptions& options = {}) = 0;
@@ -450,6 +351,8 @@ struct ITableClientBase
 
 struct ITableClient
 {
+    virtual ~ITableClient() = default;
+
     virtual TFuture<void> MountTable(
         const NYPath::TYPath& path,
         const TMountTableOptions& options = {}) = 0;

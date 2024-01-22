@@ -4,10 +4,11 @@
 
 #include <yt/yt/core/concurrency/async_stream.h>
 
-#include <yt/yt/core/misc/ref_counted.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/net/address.h>
+
+#include <library/cpp/yt/memory/ref_counted.h>
 
 namespace NYT::NNet {
 
@@ -110,7 +111,8 @@ IConnectionReaderPtr CreateInputConnectionFromPath(
 IConnectionWriterPtr CreateOutputConnectionFromPath(
     const TString& pipePath,
     const NConcurrency::IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder);
+    const TRefCountedPtr& pipeHolder,
+    std::optional<int> capacity = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

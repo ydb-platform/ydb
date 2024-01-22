@@ -14,6 +14,7 @@
 
 import datetime
 
+import mock
 import pytest  # type: ignore
 
 from google.auth import _helpers
@@ -23,6 +24,11 @@ from google.auth import credentials
 class CredentialsImpl(credentials.Credentials):
     def refresh(self, request):
         self.token = request
+        self.expiry = (
+            datetime.datetime.utcnow()
+            + _helpers.REFRESH_THRESHOLD
+            + datetime.timedelta(seconds=5)
+        )
 
     def with_quota_project(self, quota_project_id):
         raise NotImplementedError()
@@ -43,6 +49,13 @@ def test_credentials_constructor():
     assert not credentials.expired
     assert not credentials.valid
     assert credentials.universe_domain == "googleapis.com"
+    assert not credentials._use_non_blocking_refresh
+
+
+def test_with_non_blocking_refresh():
+    c = CredentialsImpl()
+    c.with_non_blocking_refresh()
+    assert c._use_non_blocking_refresh
 
 
 def test_expired_and_valid():
@@ -55,9 +68,7 @@ def test_expired_and_valid():
     # Set the expiration to one second more than now plus the clock skew
     # accomodation. These credentials should be valid.
     credentials.expiry = (
-        datetime.datetime.utcnow()
-        + _helpers.REFRESH_THRESHOLD
-        + datetime.timedelta(seconds=1)
+        _helpers.utcnow() + _helpers.REFRESH_THRESHOLD + datetime.timedelta(seconds=1)
     )
 
     assert credentials.valid
@@ -65,7 +76,7 @@ def test_expired_and_valid():
 
     # Set the credentials expiration to now. Because of the clock skew
     # accomodation, these credentials should report as expired.
-    credentials.expiry = datetime.datetime.utcnow()
+    credentials.expiry = _helpers.utcnow()
 
     assert not credentials.valid
     assert credentials.expired
@@ -81,7 +92,7 @@ def test_before_request():
     assert credentials.valid
     assert credentials.token == "token"
     assert headers["authorization"] == "Bearer token"
-    assert "x-identity-trust-boundary" not in headers
+    assert "x-allowed-locations" not in headers
 
     request = "token2"
     headers = {}
@@ -91,13 +102,13 @@ def test_before_request():
     assert credentials.valid
     assert credentials.token == "token"
     assert headers["authorization"] == "Bearer token"
-    assert "x-identity-trust-boundary" not in headers
+    assert "x-allowed-locations" not in headers
 
 
 def test_before_request_with_trust_boundary():
-    DUMMY_BOUNDARY = "00110101"
+    DUMMY_BOUNDARY = "0xA30"
     credentials = CredentialsImpl()
-    credentials._trust_boundary = DUMMY_BOUNDARY
+    credentials._trust_boundary = {"locations": [], "encoded_locations": DUMMY_BOUNDARY}
     request = "token"
     headers = {}
 
@@ -106,7 +117,7 @@ def test_before_request_with_trust_boundary():
     assert credentials.valid
     assert credentials.token == "token"
     assert headers["authorization"] == "Bearer token"
-    assert headers["x-identity-trust-boundary"] == DUMMY_BOUNDARY
+    assert headers["x-allowed-locations"] == DUMMY_BOUNDARY
 
     request = "token2"
     headers = {}
@@ -116,7 +127,7 @@ def test_before_request_with_trust_boundary():
     assert credentials.valid
     assert credentials.token == "token"
     assert headers["authorization"] == "Bearer token"
-    assert headers["x-identity-trust-boundary"] == DUMMY_BOUNDARY
+    assert headers["x-allowed-locations"] == DUMMY_BOUNDARY
 
 
 def test_before_request_metrics():
@@ -222,3 +233,108 @@ def test_create_scoped_if_required_not_scopes():
     )
 
     assert scoped_credentials is unscoped_credentials
+
+
+def test_nonblocking_refresh_fresh_credentials():
+    c = CredentialsImpl()
+
+    c._refresh_worker = mock.MagicMock()
+
+    request = "token"
+
+    c.refresh(request)
+    assert c.token_state == credentials.TokenState.FRESH
+
+    c.with_non_blocking_refresh()
+    c.before_request(request, "http://example.com", "GET", {})
+
+
+def test_nonblocking_refresh_invalid_credentials():
+    c = CredentialsImpl()
+    c.with_non_blocking_refresh()
+
+    request = "token"
+    headers = {}
+
+    assert c.token_state == credentials.TokenState.INVALID
+
+    c.before_request(request, "http://example.com", "GET", headers)
+    assert c.token_state == credentials.TokenState.FRESH
+    assert c.valid
+    assert c.token == "token"
+    assert headers["authorization"] == "Bearer token"
+    assert "x-identity-trust-boundary" not in headers
+
+
+def test_nonblocking_refresh_stale_credentials():
+    c = CredentialsImpl()
+    c.with_non_blocking_refresh()
+
+    request = "token"
+    headers = {}
+
+    # Invalid credentials MUST require a blocking refresh.
+    c.before_request(request, "http://example.com", "GET", headers)
+    assert c.token_state == credentials.TokenState.FRESH
+    assert not c._refresh_worker._worker
+
+    c.expiry = (
+        datetime.datetime.utcnow()
+        + _helpers.REFRESH_THRESHOLD
+        - datetime.timedelta(seconds=1)
+    )
+
+    # STALE credentials SHOULD spawn a non-blocking worker
+    assert c.token_state == credentials.TokenState.STALE
+    c.before_request(request, "http://example.com", "GET", headers)
+    assert c._refresh_worker._worker is not None
+
+    assert c.token_state == credentials.TokenState.FRESH
+    assert c.valid
+    assert c.token == "token"
+    assert headers["authorization"] == "Bearer token"
+    assert "x-identity-trust-boundary" not in headers
+
+
+def test_nonblocking_refresh_failed_credentials():
+    c = CredentialsImpl()
+    c.with_non_blocking_refresh()
+
+    request = "token"
+    headers = {}
+
+    # Invalid credentials MUST require a blocking refresh.
+    c.before_request(request, "http://example.com", "GET", headers)
+    assert c.token_state == credentials.TokenState.FRESH
+    assert not c._refresh_worker._worker
+
+    c.expiry = (
+        datetime.datetime.utcnow()
+        + _helpers.REFRESH_THRESHOLD
+        - datetime.timedelta(seconds=1)
+    )
+
+    # STALE credentials SHOULD spawn a non-blocking worker
+    assert c.token_state == credentials.TokenState.STALE
+    c._refresh_worker._worker = mock.MagicMock()
+    c._refresh_worker._worker._error_info = "Some Error"
+    c.before_request(request, "http://example.com", "GET", headers)
+    assert c._refresh_worker._worker is not None
+
+    assert c.token_state == credentials.TokenState.FRESH
+    assert c.valid
+    assert c.token == "token"
+    assert headers["authorization"] == "Bearer token"
+    assert "x-identity-trust-boundary" not in headers
+
+
+def test_token_state_no_expiry():
+    c = CredentialsImpl()
+
+    request = "token"
+    c.refresh(request)
+
+    c.expiry = None
+    assert c.token_state == credentials.TokenState.FRESH
+
+    c.before_request(request, "http://example.com", "GET", {})

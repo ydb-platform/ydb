@@ -89,8 +89,8 @@ public:
         return DoSaveBlobBatch(std::move(blobBatch), db);
     }
 
-    // Deletes the blob that was previously permanently saved
-    virtual void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
+    virtual void DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
+    virtual void DeleteBlobOnComplete(const TUnifiedBlobId& blobId) = 0;
 };
 
 // An interface for exporting and caching exported blobs out of ColumnShard index to external storages like S3.
@@ -218,7 +218,8 @@ public:
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;
-    void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
+    void DeleteBlobOnExecute(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
+    void DeleteBlobOnComplete(const TUnifiedBlobId& blobId) override;
 private:
     TGenStep FindNewGCBarrier();
 

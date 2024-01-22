@@ -162,7 +162,7 @@ git checkout main
 git pull
 ```
 
-### Create a development branch {#fork_sync}
+### Create a development branch {#create_devbranch}
 
 Create a development branch using Git (replace "feature42" with your branch name), and assign upstream for it:
 
@@ -237,6 +237,6 @@ If you have conflicts on the Pull Request, you may rebase your changes on top of
 ```
 # Assuming your active branch is your development branch
 gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git pull main
+git fetch origin main:main
 git rebase main
 ```

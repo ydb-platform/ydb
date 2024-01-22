@@ -36,6 +36,8 @@
 #include "json_healthcheck.h"
 #include "json_nodes.h"
 #include "json_acl.h"
+#include "json_graph.h"
+#include "json_render.h"
 
 namespace NKikimr::NViewer {
 
@@ -76,4 +78,6 @@ void TViewerJsonHandlers::Init() {
     JsonHandlers["/json/healthcheck"] = new TJsonHandler<TJsonHealthCheck>;
     JsonHandlers["/json/nodes"] = new TJsonHandler<TJsonNodes>;
     JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
+    JsonHandlers["/json/graph"] = new TJsonHandler<TJsonGraph>;
+    JsonHandlers["/json/render"] = new TJsonHandler<TJsonRender>;
 }}

@@ -55,17 +55,6 @@
 #include "src/core/lib/gprpp/strerror.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 
-#include <stdbool.h>
-extern "C" bool IsReusePortAvailable();
-
-#ifndef  SO_REUSEPORT
-#define  SO_REUSEPORT 15
-#endif
-
-#ifndef TCP_USER_TIMEOUT
-#define TCP_USER_TIMEOUT 18 /* How long for loss retry before timeout */
-#endif
-
 // set a socket to use zerocopy
 grpc_error_handle grpc_set_socket_zerocopy(int fd) {
 #ifdef GRPC_LINUX_ERRQUEUE
@@ -202,10 +191,9 @@ grpc_error_handle grpc_set_socket_reuse_addr(int fd, int reuse) {
 
 // set a socket to reuse old addresses
 grpc_error_handle grpc_set_socket_reuse_port(int fd, int reuse) {
-  if (!IsReusePortAvailable()) {
-    return GRPC_ERROR_CREATE(
-        "SO_REUSEPORT unavailable on host system");
-  }
+#ifndef SO_REUSEPORT
+  return GRPC_ERROR_CREATE("SO_REUSEPORT unavailable on compiling system");
+#else
   int val = (reuse != 0);
   int newval;
   socklen_t intlen = sizeof(newval);
@@ -220,6 +208,7 @@ grpc_error_handle grpc_set_socket_reuse_port(int fd, int reuse) {
   }
 
   return y_absl::OkStatus();
+#endif
 }
 
 static gpr_once g_probe_so_reuesport_once = GPR_ONCE_INIT;

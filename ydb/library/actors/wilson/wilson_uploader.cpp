@@ -6,7 +6,6 @@
 #include <opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
-#include <grpc++/grpc++.h>
 #include <chrono>
 
 namespace NWilson {
@@ -32,6 +31,7 @@ namespace NWilson {
             std::unique_ptr<NServiceProto::TraceService::Stub> Stub;
             grpc::CompletionQueue CQ;
 
+            std::unique_ptr<IGrpcSigner> GrpcSigner;
             std::unique_ptr<grpc::ClientContext> Context;
             std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
             NServiceProto::ExportTraceServiceResponse Response;
@@ -53,11 +53,12 @@ namespace NWilson {
             bool WakeupScheduled = false;
 
         public:
-            TWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName)
-                : Host(std::move(host))
-                , Port(std::move(port))
-                , RootCA(std::move(rootCA))
-                , ServiceName(std::move(serviceName))
+            TWilsonUploader(WilsonUploaderParams params)
+                : Host(std::move(params.Host))
+                , Port(std::move(params.Port))
+                , RootCA(std::move(params.RootCA))
+                , ServiceName(std::move(params.ServiceName))
+                , GrpcSigner(std::move(params.GrpcSigner))
             {}
 
             ~TWilsonUploader() {
@@ -142,6 +143,9 @@ namespace NWilson {
 
                 ScheduleWakeup(NextSendTimestamp);
                 Context = std::make_unique<grpc::ClientContext>();
+                if (GrpcSigner) {
+                    GrpcSigner->SignClientContext(*Context);
+                }
                 Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
             }
@@ -192,8 +196,12 @@ namespace NWilson {
 
     } // anonymous
 
-    IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName) {
-        return new TWilsonUploader(std::move(host), port, std::move(rootCA), std::move(serviceName));
+    IActor* CreateWilsonUploader(WilsonUploaderParams params) {
+        return new TWilsonUploader(std::move(params));
+    }
+
+    IActor* WilsonUploaderParams::CreateUploader() && {
+        return CreateWilsonUploader(std::move(*this));
     }
 
 } // NWilson

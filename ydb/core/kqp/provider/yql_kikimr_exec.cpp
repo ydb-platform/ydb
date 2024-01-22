@@ -135,13 +135,7 @@ namespace {
     TDropUserSettings ParseDropUserSettings(TKiDropUser dropUser) {
         TDropUserSettings dropUserSettings;
         dropUserSettings.UserName = TString(dropUser.UserName());
-
-        for (auto setting : dropUser.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "force") {
-                dropUserSettings.Force = true;
-            }
-        }
+        dropUserSettings.MissingOk = (dropUser.MissingOk().Value() == "1");
         return dropUserSettings;
     }
 
@@ -182,13 +176,7 @@ namespace {
     TDropGroupSettings ParseDropGroupSettings(TKiDropGroup dropGroup) {
         TDropGroupSettings dropGroupSettings;
         dropGroupSettings.GroupName = TString(dropGroup.GroupName());
-
-        for (auto setting : dropGroup.Settings()) {
-            auto name = setting.Name().Value();
-            if (name == "force") {
-                dropGroupSettings.Force = true;
-            }
-        }
+        dropGroupSettings.MissingOk = (dropGroup.MissingOk().Value() == "1");
         return dropGroupSettings;
     }
 
@@ -949,7 +937,7 @@ public:
             switch (tableTypeItem) {
                 case ETableType::ExternalTable: {
                     future = Gateway->CreateExternalTable(cluster,
-                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), false);
+                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk);
                     break;
                 }
                 case ETableType::TableStore: {
@@ -1031,7 +1019,7 @@ public:
                     future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
                     break;
                 case ETableType::ExternalTable:
-                    future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()));
+                    future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()), missingOk);
                     break;
                 case ETableType::Unknown:
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableTypeString));
@@ -1107,7 +1095,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     auto columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
-                                    columnBuild->SetColumnName(TString(constraint.Name().Value()));
+                                    columnBuild->SetColumnName(TString(columnName));
                                     FillLiteralProto(constraint.Value().Cast<TCoDataCtor>(), *columnBuild->mutable_default_from_literal());
                                 }
                             }

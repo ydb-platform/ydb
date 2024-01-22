@@ -2026,8 +2026,7 @@ public:
                                     snapshotUnavailable = true;
                                 }
                             } else {
-                                auto prioritizedMvccSnapshotReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
+                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
                                 if (state.ReadVersion >= unreadableEdge) {
                                     LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
                                     Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(Ev), ctx);
@@ -2107,7 +2106,6 @@ public:
 
                 const ui64 tieBreaker = Self->NextTieBreakerIndex++;
                 Op = new TReadOperation(Self, ctx.Now(), tieBreaker, Ev);
-                Op->OperationSpan = NWilson::TSpan(TWilsonTablet::Tablet, readSpan.GetTraceId(), "ReadIterator.ReadOperation", NWilson::EFlags::AUTO_END);
 
                 Op->BuildExecutionPlan(false);
                 Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
@@ -2537,7 +2535,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     auto* request = ev->Get();
     
     if (!request->ReadSpan) {
-        request->ReadSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "DataShard.Read");
+        request->ReadSpan = NWilson::TSpan(TWilsonTablet::Tablet, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
+        request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
     }
 
     const auto& record = request->Record;

@@ -958,7 +958,7 @@ public:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
             auto& dropUser = *schemeTx.MutableAlterLogin()->MutableRemoveUser();
             dropUser.SetUser(settings.UserName);
-            dropUser.SetMissingOk(settings.Force);
+            dropUser.SetMissingOk(settings.MissingOk);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
@@ -1022,6 +1022,9 @@ public:
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
             context.SetActorSystem(ActorSystem);
+            if (SessionCtx->GetUserToken()) {
+                context.SetUserToken(*SessionCtx->GetUserToken());
+            }
 
             auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -1195,7 +1198,7 @@ public:
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterLogin);
             auto& dropGroup = *schemeTx.MutableAlterLogin()->MutableRemoveGroup();
             dropGroup.SetGroup(settings.GroupName);
-            dropGroup.SetMissingOk(settings.Force);
+            dropGroup.SetMissingOk(settings.MissingOk);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();
@@ -1240,7 +1243,7 @@ public:
     }
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings,
-        bool createDir) override
+        bool createDir, bool existingOk) override
     {
         CHECK_PREPARED_DDL(CreateExternalTable);
 
@@ -1264,6 +1267,7 @@ public:
             auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableCreateExternalTable();
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
             NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
@@ -1272,7 +1276,7 @@ public:
             phyTxRemover.Forget();
             return MakeFuture(result);
         } else {
-            return Gateway->CreateExternalTable(cluster, settings, createDir);
+            return Gateway->CreateExternalTable(cluster, settings, createDir, existingOk);
         }
     }
 
@@ -1283,7 +1287,8 @@ public:
     }
 
     TFuture<TGenericResult> DropExternalTable(const TString& cluster,
-        const TDropExternalTableSettings& settings) override
+        const TDropExternalTableSettings& settings,
+        bool missingOk) override
     {
         CHECK_PREPARED_DDL(DropExternalTable);
 
@@ -1307,6 +1312,7 @@ public:
             auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableDropExternalTable();
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalTable);
+            schemeTx.SetSuccessOnNotExist(missingOk);
 
             NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
             drop.SetName(pathPair.second);
@@ -1316,7 +1322,7 @@ public:
             phyTxRemover.Forget();
             return MakeFuture(result);
         } else {
-            return Gateway->DropExternalTable(cluster, settings);
+            return Gateway->DropExternalTable(cluster, settings, missingOk);
         }
     }
 

@@ -759,14 +759,14 @@ void SetUid(int uid)
 #ifdef _linux_
     const auto* passwd = getpwuid(uid);
     int gid = (passwd && errno == 0)
-      ? passwd->pw_gid
-      : uid; // fallback value.
+        ? passwd->pw_gid
+        : uid; // fallback value.
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-                << TErrorAttribute("uid", uid)
-                << TErrorAttribute("gid", gid)
-                << TError::FromSystem();
+            << TErrorAttribute("uid", uid)
+            << TErrorAttribute("gid", gid)
+            << TError::FromSystem();
     }
 
     if (setresuid(uid, uid, uid) != 0) {
@@ -910,6 +910,27 @@ void SafeMakeNonblocking(int fd)
 {
     if (!TryMakeNonblocking(fd)) {
         THROW_ERROR_EXCEPTION("Failed to set nonblocking mode for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
+bool TrySetPipeCapacity(int fd, int capacity)
+{
+#ifdef _linux_
+    int res = fcntl(fd, F_SETPIPE_SZ, capacity);
+
+    return  res != -1;
+#else
+    Y_UNUSED(fd);
+    Y_UNUSED(capacity);
+    return true;
+#endif
+}
+
+void SafeSetPipeCapacity(int fd, int capacity)
+{
+    if (!TrySetPipeCapacity(fd, capacity)) {
+        THROW_ERROR_EXCEPTION("Failed to set capacity for descriptor %v", fd)
             << TError::FromSystem();
     }
 }

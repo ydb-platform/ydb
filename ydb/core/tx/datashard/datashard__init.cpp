@@ -589,13 +589,11 @@ public:
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 
-            if (AppData(ctx)->FeatureFlags.GetEnableMvcc()) {
-                auto state = *AppData(ctx)->FeatureFlags.GetEnableMvcc() ? EMvccState::MvccEnabled : EMvccState::MvccDisabled;
-                Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
+            auto state = EMvccState::MvccEnabled;
+            Self->PersistSys(db, Schema::SysMvcc_State, (ui32)state);
 
-                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
-                    << " MVCC state switched to" << (*AppData(ctx)->FeatureFlags.GetEnableMvcc() ? " enabled" : " disabled") << " state");
-            }
+            LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, TStringBuilder() << "TxInitSchema.Execute"
+                << " MVCC state switched to  enabled state");
 
             Self->MvccSwitchState = TSwitchState::DONE;
         }

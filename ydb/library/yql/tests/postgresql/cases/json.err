@@ -318,8 +318,9 @@ SELECT repeat('[', 10000)::json;
     -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT repeat('[', 10000)::json;
 	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  stack depth limit exceeded
-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1: ...[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
 
         	SELECT repeat('[', 10000)::json;
 	^

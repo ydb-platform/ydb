@@ -363,6 +363,20 @@ TYtConfiguration::TYtConfiguration()
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         });
+    REGISTER_SETTING(*this, Description)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
+    REGISTER_SETTING(*this, StartedBy)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
     REGISTER_SETTING(*this, MaxSpeculativeJobCountPerTask);
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
@@ -454,6 +468,7 @@ TYtConfiguration::TYtConfiguration()
             return res;
         });
     REGISTER_SETTING(*this, ViewIsolation);
+    REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

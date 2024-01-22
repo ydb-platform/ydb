@@ -1,6 +1,7 @@
 #include <cmath>
 #include <library/cpp/svnversion/svnversion.h>
 #include <util/system/info.h>
+#include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon_alloc/stats.h>
 #include <ydb/library/actors/core/actor.h>
@@ -9,7 +10,6 @@
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
-#include "tablet_counters.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/tuples.h>
 
@@ -45,18 +45,13 @@ public:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
+        SystemStateInfo.SetHost(FQDNHostName());
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
             auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
-        }
-
-        // TODO(t1mursadykov): Add role for static nodes with sys tablets only
-        if (AppData(ctx)->DynamicNameserviceConfig) {
-            if (SelfId().NodeId() <= AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId)
-                ctx.Send(ctx.SelfID, new TEvWhiteboard::TEvSystemStateAddRole("Storage"));
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
@@ -385,6 +380,16 @@ protected:
         return modified;
     }
 
+    void SetRole(TStringBuf roleName) {
+        for (const auto& role : SystemStateInfo.GetRoles()) {
+            if (role == roleName) {
+                return;
+            }
+        }
+        SystemStateInfo.AddRoles(TString(roleName));
+        SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
@@ -458,6 +463,7 @@ protected:
         if (CheckedMerge(pDiskStateInfo, ev->Get()->Record) >= 100) {
             pDiskStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
+        SetRole("Storage");
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -560,6 +566,7 @@ protected:
             SystemStateInfo.ClearTenants();
             SystemStateInfo.AddTenants(ev->Get()->Tenant);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SetRole("Tenant");
         }
     }
 

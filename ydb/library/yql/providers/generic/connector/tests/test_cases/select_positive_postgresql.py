@@ -1,13 +1,11 @@
 import datetime
 import itertools
-from dataclasses import replace
 from typing import Sequence
 
 from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.public.api.protos.ydb_value_pb2 import Type
 
 import ydb.library.yql.providers.generic.connector.tests.utils.postgresql as postgresql
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
 from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     Schema,
     Column,
@@ -160,7 +158,7 @@ class Factory:
         )
 
         tc = TestCase(
-            name='primitive_types_postgresql',
+            name_='primitive_types',
             schema=schema,
             select_what=SelectWhat.asterisk(schema.columns),
             select_where=None,
@@ -248,7 +246,7 @@ class Factory:
             ],
             data_out_=None,
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
             check_output_schema=True,
         )
@@ -271,8 +269,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'upper_case_column'
+
         tc = TestCase(
-            name='upper_case_column_postgresql',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COL1')),
             select_where=None,
@@ -287,7 +287,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -308,8 +308,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'constant'
+
         tc = TestCase(
-            name='constant_postgresql',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='42', kind='expr')),
             select_where=None,
@@ -336,7 +338,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -357,8 +359,10 @@ class Factory:
             )
         )
 
+        test_case_name = 'count'
+
         tc = TestCase(
-            name='count_postgresql',
+            name_=test_case_name,
             schema=schema,
             select_what=SelectWhat(SelectWhat.Item(name='COUNT(*)', kind='expr')),
             select_where=None,
@@ -379,7 +383,7 @@ class Factory:
                 ],
             ],
             data_source_kind=EDataSourceKind.POSTGRESQL,
-            database=Database.make_for_data_source_kind(EDataSourceKind.POSTGRESQL),
+            protocol=EProtocol.NATIVE,
             pragmas=dict(),
         )
 
@@ -427,35 +431,35 @@ class Factory:
 
         data_source_kind = EDataSourceKind.POSTGRESQL
 
+        test_case_name = 'pushdown'
+
         return [
             TestCase(
-                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
+                name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_1,
+                protocol=EProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = 1'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
             ),
             TestCase(
-                name=f'pushdown_{EDataSourceKind.Name(data_source_kind)}',
+                name_=test_case_name,
                 data_in=data_in,
                 data_out_=data_out_2,
+                protocol=EProtocol.NATIVE,
                 pragmas=dict({'generic.UsePredicatePushdown': 'true'}),
                 select_what=SelectWhat(SelectWhat.Item(name='col_string')),
                 select_where=SelectWhere('col_int32 = col_int64'),
                 data_source_kind=data_source_kind,
                 schema=schema,
-                database=Database.make_for_data_source_kind(data_source_kind),
             ),
         ]
 
     def make_test_cases(self) -> Sequence[TestCase]:
-        protocols = [EProtocol.NATIVE]
-
-        base_test_cases = list(
+        return list(
             itertools.chain(
                 self._primitive_types(),
                 self._upper_case_column(),
@@ -464,12 +468,3 @@ class Factory:
                 self._pushdown(),
             )
         )
-
-        test_cases = []
-        for base_tc in base_test_cases:
-            for protocol in protocols:
-                tc = replace(base_tc)
-                tc.name += f'_{EProtocol.Name(protocol)}'
-                tc.protocol = protocol
-                test_cases.append(tc)
-        return test_cases

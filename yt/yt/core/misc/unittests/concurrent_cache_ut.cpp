@@ -139,9 +139,9 @@ INSTANTIATE_TEST_SUITE_P(
     Simple,
     TConcurrentCacheTest,
     ::testing::Values(
-        std::make_tuple(2, 1, 1000, false),
-        std::make_tuple(2, 5, 1000, false),
-        std::make_tuple(2, 5, 1000, true)
+        std::tuple(2, 1, 1000, false),
+        std::tuple(2, 5, 1000, false),
+        std::tuple(2, 5, 1000, true)
         ));
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1358,12 +1358,7 @@ SELECT xml_is_well_formed('abc');
 -- error messages, we suppress the DETAIL in this test.
 \set VERBOSITY terse
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:11:1: Error: ERROR:  syntax error at or near "\"
-
-    	\set VERBOSITY terse
-	^
+Metacommand \set VERBOSITY terse is not supported
 <sql-statement>
 SELECT xpath('/*', '<invalidns xmlns=''&lt;''/>');
 </sql-statement>

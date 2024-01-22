@@ -340,7 +340,8 @@ enum class EKikimrTableKind : ui32 {
     Datashard = 1,
     SysView = 2,
     Olap = 3,
-    External = 4
+    External = 4,
+    View = 5,
 };
 
 enum class ETableType : ui32 {
@@ -389,6 +390,10 @@ enum EMetaSerializationType : ui64 {
     Json = 2
 };
 
+struct TViewPersistedData {
+    TString QueryText;
+};
+
 struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
     TString Cluster;
@@ -423,6 +428,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TTableSettings TableSettings;
 
     TExternalSource ExternalSource;
+    TViewPersistedData ViewPersistedData;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
@@ -582,7 +588,7 @@ struct TAlterUserSettings {
 
 struct TDropUserSettings {
     TString UserName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TCreateGroupSettings {
@@ -608,7 +614,7 @@ struct TRenameGroupSettings {
 
 struct TDropGroupSettings {
     TString GroupName;
-    bool Force = false;
+    bool MissingOk = false;
 };
 
 struct TAlterColumnTableSettings {
@@ -837,11 +843,11 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterExternalTable(const TString& cluster, const TAlterExternalTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropExternalTable(const TString& cluster, const TDropExternalTableSettings& settings, bool missingOk) = 0;
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 

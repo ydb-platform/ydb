@@ -25,7 +25,7 @@ private:
     void AddDiagnosticsResult(NEvents::TDataEvents::TEvWriteResult& res);
     void UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx);
 
-    static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
+
 };
 
 TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard &dataShard,
@@ -36,13 +36,6 @@ TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard &dataShard,
 
 TFinishProposeWriteUnit::~TFinishProposeWriteUnit()
 {
-}
-
-TWriteOperation* TFinishProposeWriteUnit::CastWriteOperation(TOperation::TPtr op)
-{
-    TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-    Y_ABORT_UNLESS(writeOp);
-    return writeOp;
 }
 
 bool TFinishProposeWriteUnit::IsReadyToExecute(TOperation::TPtr) const
@@ -75,7 +68,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     if (writeOp->GetWriteResult())
         UpdateCounters(writeOp, ctx);
 
@@ -132,10 +125,10 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
 
 void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     if (!op->HasResultSentFlag()) {
-        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
+        DataShard.IncCounter(COUNTER_WRITE_COMPLETE);
 
         if (writeOp->GetWriteResult())
             CompleteRequest(op, ctx);
@@ -155,7 +148,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
 
 void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorContext &ctx)
 {
-    TWriteOperation* writeOp = CastWriteOperation(op);
+    TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto res = writeOp->ReleaseWriteResult();
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
@@ -174,7 +167,7 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
     }
 
     if (res->IsPrepared()) {
-        DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
+        DataShard.IncCounter(COUNTER_WRITE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
         DataShard.CheckMvccStateChangeCanStart(ctx);
@@ -210,20 +203,17 @@ void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, con
 {
     const auto& res = writeOp->GetWriteResult();
     auto execLatency = TAppData::TimeProvider->Now() - writeOp->GetReceivedAt();
-    DataShard.IncCounter(COUNTER_PREPARE_EXEC_LATENCY, execLatency);
+    DataShard.IncCounter(COUNTER_WRITE_EXEC_LATENCY, execLatency);
     if (res->IsPrepared()) {
-        DataShard.IncCounter(COUNTER_PREPARE_SUCCESS);
+        DataShard.IncCounter(COUNTER_WRITE_SUCCESS);
     } else {
-        if (writeOp->IsDirty())
-            DataShard.IncCounter(COUNTER_PREPARE_DIRTY);
-
         if (res->IsError()) {
-            DataShard.IncCounter(COUNTER_PREPARE_ERROR);
+            DataShard.IncCounter(COUNTER_WRITE_ERROR);
             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
                         "Prepare transaction failed. txid " << writeOp->GetTxId() 
                         << " at tablet " << DataShard.TabletID() << " errors: " << res->GetError());
         } else {
-            DataShard.IncCounter(COUNTER_PREPARE_IMMEDIATE);
+            DataShard.IncCounter(COUNTER_WRITE_IMMEDIATE);
         }
     }
 }

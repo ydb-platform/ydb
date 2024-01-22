@@ -22,4 +22,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    test_util
 )

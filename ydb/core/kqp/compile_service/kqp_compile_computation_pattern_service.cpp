@@ -84,7 +84,7 @@ private:
             return;
         }
 
-        THashMap<NMiniKQL::TSerializedProgram, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
+        THashMap<TString, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
         patternCache->GetPatternsToCompile(patternsToCompile);
 
         TVector<std::pair<TPatternToCompile, size_t>> patternsToCompileWithAccessTimes;
@@ -115,7 +115,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
 
     struct TPatternToCompile {
-        NMiniKQL::TSerializedProgram SerializedProgram;
+        TString SerializedProgram;
         std::shared_ptr<NMiniKQL::TPatternCacheEntry> Entry;
     };
 

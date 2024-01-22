@@ -141,6 +141,7 @@ public:
         SystemTabletState,
         OverloadState,
         SyncState,
+        Uptime,
     };
 
     struct TTenantInfo {
@@ -230,6 +231,7 @@ public:
         TVector<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
+        THashMap<TNodeId, ui32> NodeRestartsPerPeriod;
         ui64 StorageQuota;
         ui64 StorageUsage;
     };
@@ -1056,6 +1058,7 @@ public:
                             TString path(itFilterDomainKey->second);
                             TDatabaseState& state(DatabaseState[path]);
                             state.ComputeNodeIds.emplace_back(hiveStat.GetNodeId());
+                            state.NodeRestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
                         }
                     }
                 }
@@ -1246,8 +1249,17 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState,TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
+
+        TSelfCheckContext rrContext(&context, "NODE_UPTIME");
+        if (databaseState.NodeRestartsPerPeriod[nodeId] >= 30) {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is restarting too often", ETags::Uptime);
+        } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= 10) {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "The number of node restarts has increased", ETags::Uptime);
+        } else {
+            rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+        }
 
         auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
         if (itNodeSystemState != MergedNodeSystemState.end()) {
@@ -1306,8 +1318,9 @@ public:
             }
             for (TNodeId nodeId : *computeNodeIds) {
                 auto& computeNode = *computeStatus.add_nodes();
-                FillComputeNodeStatus(nodeId, computeNode, {&context, "COMPUTE_NODE"});
+                FillComputeNodeStatus(databaseState, nodeId, computeNode, {&context, "COMPUTE_NODE"});
             }
+            context.ReportWithMaxChildStatus("Some nodes are restarting too often", ETags::ComputeState, {ETags::Uptime});
             context.ReportWithMaxChildStatus("Compute is overloaded", ETags::ComputeState, {ETags::OverloadState});
             Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
             computeNodeIds->push_back(0); // for tablets without node
@@ -2071,15 +2084,15 @@ public:
         }
 
         TSelfCheckResult syncContext;
-        syncContext.Type = "NODES_SYNC";
+        syncContext.Type = "NODES_TIME_DIFFERENCE";
         FillNodeInfo(maxClockSkewNodeId, syncContext.Location.mutable_node());
         FillNodeInfo(maxClockSkewPeerId, syncContext.Location.mutable_peer());
 
         TDuration maxClockSkewTime = TDuration::MicroSeconds(maxClockSkewUs);
         if (maxClockSkewTime > MAX_CLOCKSKEW_RED_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else if (maxClockSkewTime > MAX_CLOCKSKEW_YELLOW_ISSUE_TIME) {
-            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time discrepancy of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
+            syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "The nodes have a time difference of " << maxClockSkewTime.MilliSeconds() << " ms", ETags::SyncState);
         } else {
             syncContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }

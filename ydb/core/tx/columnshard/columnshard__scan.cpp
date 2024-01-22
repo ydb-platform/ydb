@@ -1,29 +1,33 @@
-#include "engines/reader/read_context.h"
+#include "blobs_reader/actor.h"
 #include "blobs_reader/events.h"
 #include "blobs_reader/read_coordinator.h"
-#include "blobs_reader/actor.h"
+#include "engines/reader/read_context.h"
 #include "resource_subscriber/actor.h"
 
-#include <ydb/core/tx/columnshard/columnshard__scan.h>
-#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
-#include <ydb/core/tx/columnshard/columnshard__read_base.h>
+#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tablet_flat/flat_row_celled.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/columnshard__index_scan.h>
+#include <ydb/core/tx/columnshard/columnshard__read_base.h>
+#include <ydb/core/tx/columnshard/columnshard__scan.h>
+#include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
+
+#include <util/generic/noncopyable.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
-#include <util/generic/noncopyable.h>
+
+#include <tuple>
 
 namespace NKikimr::NColumnShard {
 
@@ -114,7 +118,7 @@ public:
         ResourceSubscribeActorId = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
         ReadCoordinatorActorId = ctx.Register(new NOlap::NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
-        std::shared_ptr<NOlap::TReadContext> context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false,
+        std::shared_ptr<NOlap::TReadContext> context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool,
             ReadMetadataRanges[ReadMetadataIndex], SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
@@ -252,7 +256,7 @@ private:
         if (CurrentLastReadKey) {
             NOlap::NIndexedReader::TSortableBatchPosition pNew(result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, false);
             NOlap::NIndexedReader::TSortableBatchPosition pOld(CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, false);
-            AFL_VERIFY(pOld < pNew);
+            AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
         }
         CurrentLastReadKey = result.GetLastReadKey();
         
@@ -363,7 +367,7 @@ private:
             return Finish();
         }
 
-        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, false, ReadMetadataRanges[ReadMetadataIndex], SelfId(),
+        auto context = std::make_shared<NOlap::TReadContext>(StoragesManager, ScanCountersPool, ReadMetadataRanges[ReadMetadataIndex], SelfId(),
             ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
     }
@@ -644,30 +648,46 @@ PrepareStatsReadMetadata(ui64 tabletId, const NOlap::TReadDescription& read, con
 
     auto out = std::make_shared<NOlap::TReadStatsMetadata>(tabletId,
                 isReverse ? NOlap::TReadStatsMetadata::ESorting::DESC : NOlap::TReadStatsMetadata::ESorting::ASC,
-                read.GetProgram());
+                read.GetProgram(), index ? index->GetVersionedIndex().GetSchema(read.GetSnapshot()) : nullptr, read.GetSnapshot());
 
     out->SetPKRangesFilter(read.PKRangesFilter);
     out->ReadColumnIds.assign(readColumnIds.begin(), readColumnIds.end());
     out->ResultColumnIds = read.ColumnIds;
 
-    if (!index) {
+    const NOlap::TColumnEngineForLogs* logsIndex = dynamic_cast<const NOlap::TColumnEngineForLogs*>(index.get());
+    if (!index || !logsIndex) {
         return out;
     }
-
+    THashMap<ui64, THashSet<ui64>> portionsInUse;
+    const auto predStatSchema = [](const std::shared_ptr<NOlap::TPortionInfo>& l, const std::shared_ptr<NOlap::TPortionInfo>& r) {
+        return std::tuple(l->GetPathId(), l->GetPortionId()) < std::tuple(r->GetPathId(), r->GetPortionId());
+    };
     for (auto&& filter : read.PKRangesFilter) {
         const ui64 fromPathId = *filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1);
         const ui64 toPathId = *filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>());
-        const auto& stats = index->GetStats();
         if (read.TableName.EndsWith(NOlap::TIndexInfo::TABLE_INDEX_STATS_TABLE)) {
-            if (fromPathId <= read.PathId && toPathId >= read.PathId && stats.contains(read.PathId)) {
-                out->IndexStats[read.PathId] = std::make_shared<NOlap::TColumnEngineStats>(*stats.at(read.PathId));
+            if (fromPathId <= read.PathId && toPathId >= read.PathId) {
+                auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
+                if (!pathInfo) {
+                    continue;
+                }
+                for (auto&& p : pathInfo->GetPortions()) {
+                    if (portionsInUse[read.PathId].emplace(p.first).second) {
+                        out->IndexPortions.emplace_back(p.second);
+                    }
+                }
             }
+            std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
         } else if (read.TableName.EndsWith(NOlap::TIndexInfo::STORE_INDEX_STATS_TABLE)) {
-            auto it = stats.lower_bound(fromPathId);
-            auto itEnd = stats.upper_bound(toPathId);
-            for (; it != itEnd; ++it) {
-                out->IndexStats[it->first] = std::make_shared<NOlap::TColumnEngineStats>(*it->second);
+            auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
+            for (auto&& pathInfo: pathInfos) {
+                for (auto&& p: pathInfo->GetPortions()) {
+                    if (portionsInUse[p.second->GetPathId()].emplace(p.first).second) {
+                        out->IndexPortions.emplace_back(p.second);
+                    }
+                }
             }
+            std::sort(out->IndexPortions.begin(), out->IndexPortions.end(), predStatSchema);
         }
     }
 
@@ -858,8 +878,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
     const auto& scanId = record.GetScanId();
     const auto& snapshot = record.GetSnapshot();
 
-    TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId());
-    TRowVersion maxReadVersion = GetMaxReadVersion();
+    NOlap::TSnapshot readVersion(snapshot.GetStep(), snapshot.GetTxId());
+    NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
 
     LOG_S_DEBUG("EvScan txId: " << txId
         << " scanId: " << scanId
@@ -869,7 +889,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext
 
     if (maxReadVersion < readVersion) {
         WaitingScans.emplace(readVersion, std::move(ev));
-        WaitPlanStep(readVersion.Step);
+        WaitPlanStep(readVersion.GetPlanStep());
         return;
     }
 
@@ -901,29 +921,17 @@ public:
         Results.emplace_back(std::move(res));
     }
 
-    void FillResult(std::vector<TPartialReadResult>& result, const bool mergePartsToMax) const {
+    void FillResult(std::vector<TPartialReadResult>& result) const {
         if (Results.empty()) {
             return;
         }
-        if (mergePartsToMax) {
-            std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-            std::vector<std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>> guards;
-            for (auto&& i : Results) {
-                batches.emplace_back(i.GetResultBatchPtrVerified());
-                guards.insert(guards.end(), i.GetResourcesGuards().begin(), i.GetResourcesGuards().end());
-            }
-            auto res = NArrow::CombineBatches(batches);
-            AFL_VERIFY(res);
-            result.emplace_back(TPartialReadResult(guards, NArrow::TShardedRecordBatch(res), Results.back().GetLastReadKey()));
-        } else {
-            for (auto&& i : Results) {
-                result.emplace_back(std::move(i));
-            }
+        for (auto&& i : Results) {
+            result.emplace_back(std::move(i));
         }
     }
 };
 
-std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult, const bool mergePartsToMax) {
+std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults(std::vector<TPartialReadResult>&& resultsExt, const ui32 maxRecordsInResult) {
     std::vector<TCurrentBatch> resultBatches;
     TCurrentBatch currentBatch;
     for (auto&& i : resultsExt) {
@@ -940,7 +948,7 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPartialReadResult::SplitResults
 
     std::vector<TPartialReadResult> result;
     for (auto&& i : resultBatches) {
-        i.FillResult(result, mergePartsToMax);
+        i.FillResult(result);
     }
     return result;
 }

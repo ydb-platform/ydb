@@ -162,10 +162,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             WHERE Key = $key;
         )"), params);
 
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
+        // Cerr << stats.query_plan() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
@@ -174,11 +171,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
 
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 1);
@@ -206,16 +205,12 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         // Cerr << stats.query_plan() << Endl;
 
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
-
         AssertTableStats(stats, "/Root/Join1", {
             .ExpectedReads = 3,
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2); // Precompute limit Min(1001,$limit),
+        // For data query, additional precompute for LIMIT: Min(1001,$limit)
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), QueryService ? 1 : 2);
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 1);
         }
@@ -224,13 +219,16 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 3);
+        // TODO: Should be 2/3 stages?
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), QueryService ? 3 : 4);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
-        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, QueryService ? 2 : 3);
     }
 
     Y_UNIT_TEST_TWIN(RangeRead, QueryService) {
@@ -253,11 +251,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         // Cerr << stats.query_plan() << Endl;
 
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
-
         AssertTableStats(stats, "/Root/Join1", {
             .ExpectedReads = 5,
         });
@@ -269,17 +262,23 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         NJson::ReadJsonTree(stats.query_plan(), &plan, true);
 
         auto stages = FindPlanStages(plan);
-        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stages.size(), 3);
 
         i64 totalTasks = 0;
         for (const auto& stage : stages) {
-            totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            if (stage.GetMapSafe().contains("Stats")) {
+                totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
+            }
         }
-        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
+
+        // Not implicit limit (1000 rows) for QueryService means no sequential reads.
+        // TODO: Consider enabling sequential reads even without rows limit.
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, QueryService ? 3 : 2);
     }
 
     Y_UNIT_TEST_QUAD(IndexLookupJoin, EnableStreamLookup, QueryService) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig);
@@ -308,11 +307,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             [[9];[101u];["Three"]];
             [[9];[101u];["Two"]]
         ])", FormatResultSetYson(results[0]));
-
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
 
         AssertTableStats(stats, "/Root/Join1", {
             .ExpectedReads = 9,
@@ -467,11 +461,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             WHERE Key = $key;
         )"), params);
 
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
-
         AssertTableStats(stats, "/Root/EightShard", {
             .ExpectedReads = 1,
             .ExpectedUpdates = 1,
@@ -499,11 +488,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             DELETE FROM EightShard
             WHERE Key = $key AND Text = $text;
         )"), params);
-
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
 
         AssertTableStats(stats, "/Root/EightShard", {
             .ExpectedReads = 1,
@@ -649,11 +633,6 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             INNER JOIN KeyValue2 AS t3 ON t2.Name = t3.Key
             WHERE t1.Key = $key;
         )"), params);
-
-        if (QueryService) {
-            // TODO: Fix QS.
-            return;
-        }
 
         if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);

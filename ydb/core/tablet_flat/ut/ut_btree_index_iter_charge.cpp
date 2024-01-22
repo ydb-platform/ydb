@@ -62,29 +62,48 @@ namespace {
 
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
-            if (allowFirstLastPageDifference) {
+            if (allowFirstLastPageDifference && groupId.IsMain()) {
                 for (auto additionalPageId : {IndexTools::GetFirstPageId(part), IndexTools::GetLastPageId(part)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
+                UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
+                    TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
             }
         }
     }
 
-    TPartEggs MakePart(bool slices, ui32 levels) {
+    struct MakePartParams {
+        const ui32 Levels = Max<ui32>();
+        const bool Groups = false;
+        const bool History = false;
+        const bool Slices = false;
+        const ui32 Rows = 40;
+    };
+
+    TPartEggs MakePart(MakePartParams params) {
         NPage::TConf conf;
-        switch (levels) {
+        switch (params.Levels) {
         case 0:
+            if (params.Groups) {
+                conf.Group(3);
+            }
             break;
         case 1:
-            conf.Group(0).PageRows = 2;
-            break;
         case 3:
             conf.Group(0).PageRows = 2;
-            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            if (params.Groups) {
+                conf.Group(1).PageRows = 1;
+                conf.Group(2).PageRows = 2;
+                conf.Group(3).PageRows = 3;
+            }
+            if (params.Levels == 3) {
+                for (auto i : xrange(params.Groups ? 4 : 1)) {
+                    conf.Group(i).BTreeIndexNodeKeysMin = conf.Group(i).BTreeIndexNodeKeysMax = 2;
+                }
+            }
             break;
         default:
             Y_Fail("Unknown levels");
@@ -95,6 +114,9 @@ namespace {
         lay
             .Col(0, 0,  NScheme::NTypeIds::Uint32)
             .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 1 : 0, 2,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 2 : 0, 3,  NScheme::NTypeIds::Uint64)
+            .Col(params.Groups ? 3 : 0, 4,  NScheme::NTypeIds::String)
             .Key({0, 1});
 
         conf.WriteBTreeIndex = true;
@@ -104,14 +126,14 @@ namespace {
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
         for (ui32 i : xrange(0u, 40u)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7]));
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
         }
 
         TPartEggs eggs = cook.Finish();
 
         const auto part = *eggs.Lone();
 
-        if (slices) {
+        if (params.Slices) {
             TSlices slices;
             auto partSlices = (TSlices*)part.Slices.Get();
 
@@ -148,20 +170,21 @@ namespace {
             }
         }
 
-        if (slices) {
+        if (params.Slices) {
             UNIT_ASSERT_GT(part.Slices->size(), 1);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
         }
-        Cerr << "Slices" << Endl;
-        for (const auto &slice : *part.Slices) {
-            Cerr << " | ";
-            slice.Describe(Cerr);
-            Cerr << Endl;
-        }
+
+        Cerr << "Slices";
+        part.Slices->Describe(Cerr);
+        Cerr << Endl;
         Cerr << DumpPart(part, 3) << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
+        // group [3] has only 2 levels
+        for (auto i : xrange(params.Groups ? 3 : 1)) {
+            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexPages.BTreeGroups[i].LevelCount, params.Levels, "Group " + std::to_string(i));
+        }
 
         return eggs;
     }
@@ -338,8 +361,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    void CheckPart(ui32 levels) {
-        TPartEggs eggs = MakePart(false, levels);
+    void CheckPart(MakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         CheckSeekRowId(part);
@@ -349,15 +372,15 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     Y_UNIT_TEST(NoNodes) {
-        CheckPart(0);
+        CheckPart({.Levels = 0});
     }
 
     Y_UNIT_TEST(OneNode) {
-        CheckPart(1);
+        CheckPart({.Levels = 1});
     }
 
     Y_UNIT_TEST(FewNodes) {
-        CheckPart(3);
+        CheckPart({.Levels = 3});
     }
 }
 
@@ -440,8 +463,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckPart(ui32 levels) {
-        TPartEggs eggs = MakePart(false, levels);
+    void CheckPart(MakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         auto tags = TVector<TTag>();
@@ -456,15 +479,27 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     Y_UNIT_TEST(NoNodes) {
-        CheckPart(0);
+        CheckPart({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups) {
+        CheckPart({.Levels = 0, .Groups = true});
     }
 
     Y_UNIT_TEST(OneNode) {
-        CheckPart(1);
+        CheckPart({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups) {
+        CheckPart({.Levels = 1, .Groups = true});
     }
 
     Y_UNIT_TEST(FewNodes) {
-        CheckPart(3);
+        CheckPart({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups) {
+        CheckPart({.Levels = 3, .Groups = true});
     }
 }
 
@@ -610,32 +645,52 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
     }
 
-    void CheckPart(bool slices, ui32 levels) {
-        TPartEggs eggs = MakePart(slices, levels);
+    void CheckPart(MakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         CheckIterate(eggs);
         CheckCharge(eggs);
     }
 
-    Y_UNIT_TEST(NoNodes_SingleSlice) {
-        CheckPart(false, 0);
+    Y_UNIT_TEST(NoNodes) {
+        CheckPart({.Levels = 0});
     }
 
-    Y_UNIT_TEST(OneNode_SingleSlice) {
-        CheckPart(false, 1);
+    Y_UNIT_TEST(NoNodes_Groups) {
+        CheckPart({.Levels = 0, .Groups = true});
     }
 
-    Y_UNIT_TEST(OneNode_ManySlices) {
-        CheckPart(true, 1);
+    Y_UNIT_TEST(OneNode) {
+        CheckPart({.Levels = 1});
     }
 
-    Y_UNIT_TEST(FewNodes_SingleSlice) {
-        CheckPart(false, 3);
+    Y_UNIT_TEST(OneNode_Groups) {
+        CheckPart({.Levels = 1, .Groups = true});
     }
 
-    Y_UNIT_TEST(FewNodes_ManySlices) {
-        CheckPart(true, 3);
+    Y_UNIT_TEST(OneNode_Slices) {
+        CheckPart({.Levels = 1, .Slices = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_Slices) {
+        CheckPart({.Levels = 1, .Groups = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes) {
+        CheckPart({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups) {
+        CheckPart({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Slices) {
+        CheckPart({.Levels = 3, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_Slices) {
+        CheckPart({.Levels = 3, .Groups = true, .Slices = true});
     }
 }
 

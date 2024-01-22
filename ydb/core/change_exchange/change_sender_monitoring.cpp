@@ -5,7 +5,7 @@
 #include <util/string/printf.h>
 #include <util/string/split.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NChangeExchange {
 
 void Panel(IOutputStream& str, std::function<void(IOutputStream&)> title, std::function<void(IOutputStream&)> body) {
     HTML(str) {

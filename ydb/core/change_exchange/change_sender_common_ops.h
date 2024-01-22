@@ -1,10 +1,7 @@
 #pragma once
 
 #include "change_exchange.h"
-#include "change_exchange_helpers.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
@@ -14,8 +11,7 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NChangeExchange {
 
 struct TEvChangeExchangePrivate {
     enum EEv {
@@ -61,8 +57,8 @@ public:
     virtual IActor* CreateSender(ui64 partitionId) = 0;
     virtual void RemoveRecords() = 0;
 
-    virtual void EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
-    virtual void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) = 0;
+    virtual void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) = 0;
+    virtual void ProcessRecords(TVector<IChangeRecord::TPtr>&& records) = 0;
     virtual void ForgetRecords(TVector<ui64>&& records) = 0;
     virtual void OnReady(ui64 partitionId) = 0;
     virtual void OnGone(ui64 partitionId) = 0;
@@ -75,18 +71,18 @@ public:
     virtual void Resolve() = 0;
     virtual bool IsResolving() const = 0;
     virtual bool IsResolved() const = 0;
-    virtual ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const = 0;
+    virtual ui64 GetPartitionId(IChangeRecord::TPtr record) const = 0;
 };
 
 class TBaseChangeSender: public IChangeSender {
-    using TEnqueuedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
-    using TRequestedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TEnqueuedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     struct TSender {
         TActorId ActorId;
         bool Ready = false;
         TVector<TEnqueuedRecord> Pending;
-        TVector<NChangeExchange::IChangeRecord::TPtr> Prepared;
+        TVector<IChangeRecord::TPtr> Prepared;
         TVector<ui64> Broadcasting;
     };
 
@@ -108,7 +104,7 @@ class TBaseChangeSender: public IChangeSender {
     void SendPreparedRecords(ui64 partitionId);
     void ReEnqueueRecords(const TSender& sender);
 
-    TBroadcast& EnsureBroadcast(NChangeExchange::IChangeRecord::TPtr record);
+    TBroadcast& EnsureBroadcast(IChangeRecord::TPtr record);
     bool AddBroadcastPartition(ui64 order, ui64 partitionId);
     bool RemoveBroadcastPartition(ui64 order, ui64 partitionId);
     bool CompleteBroadcastPartition(ui64 order, ui64 partitionId);
@@ -124,35 +120,35 @@ protected:
             remove.push_back(record.Order);
         }
 
-        ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+        ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
     }
 
     template <>
     void RemoveRecords(TVector<ui64>&& records) {
-        ActorOps->Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(records)));
+        ActorOps->Send(ChangeServer, new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
     }
 
     void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) override;
     void KillSenders() override;
     void RemoveRecords() override;
 
-    void EnqueueRecords(TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
-    void ProcessRecords(TVector<NChangeExchange::IChangeRecord::TPtr>&& records) override;
+    void EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) override;
+    void ProcessRecords(TVector<IChangeRecord::TPtr>&& records) override;
     void ForgetRecords(TVector<ui64>&& records) override;
     void OnReady(ui64 partitionId) override;
     void OnGone(ui64 partitionId) override;
 
     explicit TBaseChangeSender(IActorOps* actorOps, IChangeSenderResolver* resolver,
-        const TDataShardId& dataShard, const TPathId& pathId);
+        const TActorId& changeServer, const TPathId& pathId);
 
-    void RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    void RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
 private:
     IActorOps* const ActorOps;
     IChangeSenderResolver* const Resolver;
 
 protected:
-    const TDataShardId DataShard;
+    const TActorId ChangeServer;
     const TPathId PathId;
 
 private:
@@ -162,12 +158,11 @@ private:
     THashMap<ui64, TSender> Senders; // ui64 is partition id
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TRequestedRecord> PendingBody;
-    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingSent; // ui64 is order
+    TMap<ui64, IChangeRecord::TPtr> PendingSent; // ui64 is order
     THashMap<ui64, TBroadcast> Broadcasting; // ui64 is order
 
     TVector<ui64> GonePartitions;
 
 }; // TBaseChangeSender
 
-} // NDataShard
-} // NKikimr
+}

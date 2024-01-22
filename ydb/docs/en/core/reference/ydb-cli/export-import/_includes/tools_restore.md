@@ -1,6 +1,6 @@
 # Importing data from the file system
 
-The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file_structure.md) article:
+The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
 
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p PATH -i PATH [options]

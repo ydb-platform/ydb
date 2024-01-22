@@ -1278,13 +1278,10 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     SendCommitTx(step, txId_1);
 
     //
-    // consumer 'client-2' was deleted
+    // update config
     //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
-    SendRollbackTx(step, txId_2);
-
     WaitCmdWrite({.Count=8,
-                 .PlanStep=step, .TxId=txId_2,
+                 .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
                  {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
                  {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
@@ -1295,6 +1292,12 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitPartitionConfigChanged({.Partition=partition});
+
+    //
+    // consumer 'client-2' was deleted
+    //
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    SendRollbackTx(step, txId_2);
 }
 
 Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)

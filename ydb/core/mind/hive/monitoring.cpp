@@ -828,6 +828,12 @@ public:
         UpdateConfig(db, "MaxWarmUpPeriod");
         UpdateConfig(db, "WarmUpEnabled");
         UpdateConfig(db, "ObjectImbalanceToBalance");
+        UpdateConfig(db, "ChannelBalanceStrategy");
+        UpdateConfig(db, "MaxChannelHistorySize");
+        UpdateConfig(db, "StorageInfoRefreshFrequency");
+        UpdateConfig(db, "MinStorageScatterToBalance");
+        UpdateConfig(db, "MinGroupUsageToBalance");
+        UpdateConfig(db, "StorageBalancerInflight");
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
@@ -1111,6 +1117,12 @@ public:
         ShowConfig(out, "MaxWarmUpPeriod");
         ShowConfig(out, "WarmUpEnabled");
         ShowConfig(out, "ObjectImbalanceToBalance");
+        ShowConfig(out, "ChannelBalanceStrategy");
+        ShowConfig(out, "MaxChannelHistorySize");
+        ShowConfig(out, "StorageInfoRefreshFrequency");
+        ShowConfig(out, "MinStorageScatterToBalance");
+        ShowConfig(out, "MinGroupUsageToBalance");
+        ShowConfig(out, "StorageBalancerInflight");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";
@@ -1412,6 +1424,7 @@ public:
         out << "<tr><td>Network</td><td id='resourceScatterNetwork'></td></tr>";
         out << "<tr><td>MaxUsage</td><td id='maxUsage'></td></tr>";
         out << "<tr><td>Imbalance</td><td id='objectImbalance'></td></tr>";
+        out << "<tr><td>Storage</td><td id='storageScatter'></td></tr>";
         out << "</table></div>";
         out << "<div style='min-width:220px'><table class='simple-table3'>";
         out << "<tr><th>Balancer</th><th style='min-width:50px'>Runs</th><th style='min-width:50px'>Moves</th>";
@@ -1903,6 +1916,7 @@ function fillDataShort(result) {
             $('#waitQueue').html(result.WaitQueueSize);
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
+            $('#storageScatter').html(result.StorageScatter);
 
             $('#resourceTotalCounter').html(result.ResourceTotal.Counter);
             $('#resourceTotalCPU').html(result.ResourceTotal.CPU);
@@ -2212,6 +2226,7 @@ public:
         jsonData["ScatterHtml"]["Memory"] = std::get<NMetrics::EResource::Memory>(scatterHtml);
         jsonData["ScatterHtml"]["Network"] = std::get<NMetrics::EResource::Network>(scatterHtml);
         jsonData["ObjectImbalance"] = GetValueWithColoredGlyph(Self->ObjectDistributions.GetMaxImbalance(), Self->GetObjectImbalanceToBalance());
+        jsonData["StorageScatter"] = GetValueWithColoredGlyph(Self->StorageScatter, Self->GetMinStorageScatterToBalance());
         jsonData["WarmUp"] = Self->WarmUp;
 
         if (Cgi.Get("nodes") == "1") {

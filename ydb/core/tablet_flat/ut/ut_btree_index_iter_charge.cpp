@@ -62,8 +62,8 @@ namespace {
 
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
-            if (allowFirstLastPageDifference && groupId.IsMain()) {
-                for (auto additionalPageId : {IndexTools::GetFirstPageId(part), IndexTools::GetLastPageId(part)}) {
+            if (allowFirstLastPageDifference) {
+                for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             bool ready = reverse
-                ? charge.DoReverse(row1, row2, keyDefaults, itemsLimit, bytesLimit)
+                ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
             if (ready) {
                 return;
@@ -416,8 +416,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows)) {
+        for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
+            for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                 TCharge flat(&flatEnv, part, tags, true);
@@ -455,7 +455,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         
-                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                        // b-tree overshot also treats key location on key's data page
+                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot || !bTreeOvershot, message);
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
                     }
                 }

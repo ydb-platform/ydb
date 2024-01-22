@@ -94,8 +94,8 @@ public:
                     key2PageId = level[i].GetShortChild(pos).PageId;
                     // move row2 to the first key > key2
                     row2 = Min(row2, level[i].GetShortChild(pos).RowCount);
-                    // always charge row2, no matter what keys are
-                    row2 = Max(row2, row1);
+                    // // always charge row2, no matter what keys are
+                    // row2 = Max(row2, row1);
                 }
                 
                 if (level[i].EndRowId <= row1 || level[i].BeginRowId > row2) {
@@ -119,8 +119,41 @@ public:
             return TryLoadNode(current, pos, nextLevel);
         };
 
-        const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return HasDataPage(current.GetShortChild(pos).PageId, { });
+        const auto handleDataPage = [&](TPageId pageId, TRowId beginRowId, TRowId endRowId) -> bool {
+            if (pageId == key1PageId || pageId == key2PageId) {
+                const auto page = TryGetDataPage(pageId, { });
+                if (page) {
+                    auto data = NPage::TDataPage(page);
+                    if (pageId == key1PageId) {
+                        auto iter = data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
+                        row1 = Max(row1, data.BaseRow() + iter.Off());
+                    }
+                    if (pageId == key2PageId) {
+                        auto iter = data.LookupKey(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
+                        row2 = Min(row2, data.BaseRow() + iter.Off());
+                    }
+                    return true;
+                } else {
+                    if (pageId == key1PageId) {
+                        row1 = endRowId;
+                    }
+                    if (pageId == key2PageId) {
+                        if (beginRowId) {
+                            row2 = beginRowId - 1;
+                        } else {
+                            // means no groups precharge
+                            row1 = Max<TRowId>();
+                        }
+                    }
+                    return false;
+                }
+            } else {
+                return HasDataPage(pageId, { });
+            }
+        };
+
+        const auto tryLoadData = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return handleDataPage(current.GetShortChild(pos).PageId, current.BeginRowId, current.EndRowId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
@@ -138,21 +171,21 @@ public:
 
             // precharge groups using the latest row bounds
             for (auto groupId : Groups) {
-                DoPrechargeGroup(groupId, row1, row2);
+                ready &= DoPrechargeGroup(groupId, row1, row2);
             }
 
             return {ready, false};
         }
 
         if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, { });
+            ready &= handleDataPage(meta.PageId, 0, meta.RowCount);
         } else {
-            iterateLevel(hasDataPage);
+            iterateLevel(tryLoadData);
         }
 
         // precharge groups using the latest row bounds
         for (auto groupId : Groups) {
-            DoPrechargeGroup(groupId, row1, row2);
+            ready &= DoPrechargeGroup(groupId, row1, row2);
         }
 
         return {ready, row2 == sliceRow2};
@@ -197,8 +230,8 @@ public:
                     // move row2 to the first key > key2
                     if (pos) {
                         row2 = Max(row2, level[i].GetShortChild(pos - 1).RowCount - 1);
-                        // always charge row1, no matter what keys are
-                        row2 = Min(row2, row1);
+                        // // always charge row1, no matter what keys are
+                        // row2 = Min(row2, row1);
                     }
                 }
                 
@@ -264,9 +297,11 @@ public:
 
 private:
     bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
-        bool ready = true;
+        if (row1 > row2) {
+            return true;
+        }
 
-        Y_ABORT_UNLESS(row1 <= row2);
+        bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
@@ -274,7 +309,7 @@ private:
         
         TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
 
-        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
+        const auto iterateLevel = [&](const auto& tryLoadNext) {
             for (ui32 i : xrange<ui32>(level.size())) {
                 TRecIdx from = 0, to = level[i].GetKeysCount();
                 if (level[i].BeginRowId < row1) {
@@ -322,8 +357,12 @@ private:
     }
 
 private:
-    bool HasDataPage(TPageId pageId, TGroupId groupId) const noexcept {
+    const TSharedData* TryGetDataPage(TPageId pageId, TGroupId groupId) const noexcept {
         return Env->TryGetPage(Part, pageId, groupId);
+    };
+
+    bool HasDataPage(TPageId pageId, TGroupId groupId) const noexcept {
+        return bool(Env->TryGetPage(Part, pageId, groupId));
     }
 
     bool TryLoadRoot(const TBtreeIndexMeta& meta, TVector<TNodeState>& level) const noexcept {

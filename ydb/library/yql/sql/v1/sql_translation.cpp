@@ -1780,15 +1780,22 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
     switch (tableType) {
     case ETableType::ExternalTable:
-        return StoreExternalTableSettingsEntry(id, value, settings);
+        return StoreExternalTableSettingsEntry(id, value, settings, alter, reset);
     case ETableType::Table:
     case ETableType::TableStore:
         return StoreTableSettingsEntry(id, value, settings, alter, reset);
     }
 }
 
-bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings) {
+bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
+        TTableSettings& settings, bool alter, bool reset) {
+    YQL_ENSURE(value || reset);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "data_source") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
         TDeferredAtom dataSource;
         if (!StoreString(*value, dataSource, Ctx, to_upper(id.Name))) {
             return false;
@@ -1799,16 +1806,27 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
         root->Add("String", Ctx.GetPrefixedPath(service, cluster, dataSource));
         settings.DataSourcePath = root;
     } else if (to_lower(id.Name) == "location") {
-        if (!StoreString(*value, settings.Location, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        if (reset) {
+            settings.Location.Reset();
+        } else {
+            TNodePtr location;
+            if (!StoreString(*value, location, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            settings.Location.Set(location);
         }
     } else {
-        settings.ExternalSourceParameters.emplace_back(id, nullptr);
-        auto& parameter = settings.ExternalSourceParameters.back();
-        if (!StoreString(*value, parameter.second, Ctx)) {
-            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
-            return false;
+        auto& setting = settings.ExternalSourceParameters.emplace_back();
+        if (reset) {
+            setting.Reset(id);
+        } else {
+            TNodePtr node;
+            if (!StoreString(*value, node, Ctx)) {
+                Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+                return false;
+            }
+            setting.Set(std::pair<TIdentifier, TNodePtr>{id, std::move(node)});
         }
     }
     return true;
@@ -1817,7 +1835,7 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
-    YQL_ENSURE(!reset || reset & alter);
+    YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "compaction_policy") {
         if (reset) {
             Ctx.Error() << to_upper(id.Name) << " reset is not supported";
@@ -4307,6 +4325,11 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
     return true;
 }
 
+bool TSqlTranslation::StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreDataSourceSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
 bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreDataSourceSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
@@ -4327,6 +4350,42 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         return false;
     }
     return true;
+}
+
+bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterAction) {
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
+            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
+                return false;
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();
+            if (!StoreDataSourceSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                return false;
+            }
+            for (const auto& entry : action.GetBlock4()) {
+                if (!StoreDataSourceSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction3: {
+            const auto& action = alterAction.GetAlt_alter_external_data_source_action3().GetRule_alter_table_reset_table_setting1();
+            const TString key = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+            toReset.insert(key);
+            for (const auto& keys : action.GetBlock4()) {
+                const TString key = to_lower(IdEx(keys.GetRule_an_id2(), *this).Name);
+                toReset.insert(key);
+            }
+            return true;
+        }
+        case TRule_alter_external_data_source_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
 }
 
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {

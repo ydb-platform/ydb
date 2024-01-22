@@ -12,13 +12,34 @@ namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(kmokrov): Drop after YTORM-843
+// TODO(kmokrov): Drop Utf8Check after YTORM-843
+class TProtobufInteropConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    // Default enum storage type for protobuf to yson conversion.
+    EEnumYsonStorageType DefaultEnumYsonStorageType;
+    // Check if string field contains actual UTF-8 string.
+    EUtf8Check Utf8Check;
+
+    TProtobufInteropConfigPtr ApplyDynamic(const TProtobufInteropDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TProtobufInteropConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TProtobufInteropConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(kmokrov): Drop Utf8Check after YTORM-843
 class TProtobufInteropDynamicConfig
     : public NYTree::TYsonStruct
 {
 public:
-    // Check if string field contain actual UTF-8 string.
-    EUtf8Check Utf8Check;
+    // Check if string field contains actual UTF-8 string.
+    std::optional<EUtf8Check> Utf8Check;
 
     REGISTER_YSON_STRUCT(TProtobufInteropDynamicConfig);
 

@@ -107,6 +107,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
         .DefaultNew();
+    registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
+        .DefaultNew();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ResourceTrackerVCpuFactor && !config->EnableResourceTracker) {

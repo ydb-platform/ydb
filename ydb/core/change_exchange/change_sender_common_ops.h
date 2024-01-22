@@ -115,7 +115,7 @@ class TBaseChangeSender: public IChangeSender {
 protected:
     template <typename T>
     void RemoveRecords(TVector<T>&& records) {
-        TVector<ui64> remove(Reserve(records.size()));
+        TVector<ui64> remove(::Reserve(records.size()));
         for (const auto& record : records) {
             remove.push_back(record.Order);
         }

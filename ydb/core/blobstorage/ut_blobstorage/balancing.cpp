@@ -53,7 +53,7 @@ struct TTestEnv {
     }
 
     static TString PrepareData(const ui32 dataLen, const ui32 start) {
-        TString data(Reserve(dataLen));
+        TString data(::Reserve(dataLen));
         for (ui32 i = 0; i < dataLen; ++i) {
             data.push_back('a' + (start + i) % 26);
         }
@@ -262,7 +262,7 @@ struct TRandomTest {
     ui32 NumIters;
 
     void RunTest() {
-        TVector<TString> data(Reserve(NumIters));
+        TVector<TString> data(::Reserve(NumIters));
 
         for (ui32 step = 0; step < NumIters; ++step) {
             Cerr << step << Endl;

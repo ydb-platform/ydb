@@ -192,7 +192,7 @@ public:
 
     TVector<TPartView> GetAllParts() const
     {
-        TVector<TPartView> parts(Reserve(Flatten.size()));
+        TVector<TPartView> parts(::Reserve(Flatten.size()));
 
         for (auto& x : Flatten) {
             parts.emplace_back(x.second);
@@ -203,7 +203,7 @@ public:
 
     TVector<TIntrusiveConstPtr<TColdPart>> GetColdParts() const
     {
-        TVector<TIntrusiveConstPtr<TColdPart>> parts(Reserve(ColdParts.size()));
+        TVector<TIntrusiveConstPtr<TColdPart>> parts(::Reserve(ColdParts.size()));
 
         for (auto& x : ColdParts) {
             parts.emplace_back(x.second);

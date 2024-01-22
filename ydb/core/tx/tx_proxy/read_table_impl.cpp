@@ -569,7 +569,7 @@ private:
         if (!colNameToPos.empty()) {
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
 
-            TVector<TString> missingColumns(Reserve(colNameToPos.size()));
+            TVector<TString> missingColumns(::Reserve(colNameToPos.size()));
             for (auto& kv : colNameToPos) {
                 missingColumns.emplace_back(kv.first);
             }

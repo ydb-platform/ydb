@@ -1880,7 +1880,7 @@ bool TPipeline::RemoveWaitingSchemeOp(const TOperation::TPtr& op) {
 }
 
 void TPipeline::ActivateWaitingSchemeOps(const TActorContext& ctx) const {
-    TVector<TOperation::TPtr> activated(Reserve(WaitingSchemeOpsOrder.size()));
+    TVector<TOperation::TPtr> activated(::Reserve(WaitingSchemeOpsOrder.size()));
     for (const auto& op : WaitingSchemeOpsOrder) {
         if (op->IsInProgress()) {
             // Skip ops that are currently active

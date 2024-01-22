@@ -189,7 +189,7 @@ public:
                 .WithRemovedRowVersions(DB.GetRemovedRowVersions(params->Table))
                 .Do(*subset, logo);
 
-        TVector<TPartView> parts(Reserve(eggs.Parts.size()));
+        TVector<TPartView> parts(::Reserve(eggs.Parts.size()));
         for (auto& part : eggs.Parts) {
             parts.push_back({ part, nullptr, part->Slices });
             Y_ABORT_UNLESS(parts.back());

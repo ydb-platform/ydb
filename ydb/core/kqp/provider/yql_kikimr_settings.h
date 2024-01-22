@@ -103,7 +103,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void Init(const TProtoConfig& config)
     {
         TMaybe<TString> defaultCluster;
-        TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
+        TVector<TString> clusters(::Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
             if (cluster.HasDefault() && cluster.GetDefault()) {

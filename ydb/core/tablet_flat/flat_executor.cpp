@@ -1102,7 +1102,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPar
     if (tableScheme.ColdBorrow && !partSwitch.FollowerUpdateStep) {
         const auto label = pc.PageCollectionComponents.at(0).LargeGlobId.Lead;
         if (label.TabletID() != TabletId()) {
-            TVector<NPageCollection::TLargeGlobId> largeGlobIds(Reserve(pc.PageCollectionComponents.size()));
+            TVector<NPageCollection::TLargeGlobId> largeGlobIds(::Reserve(pc.PageCollectionComponents.size()));
             for (const auto& c : pc.PageCollectionComponents) {
                 largeGlobIds.push_back(c.LargeGlobId);
             }
@@ -1368,7 +1368,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
     }
 
     if (partSwitch.Deltas) {
-        TVector<TLogoBlobID> labels(Reserve(partSwitch.Deltas.size()));
+        TVector<TLogoBlobID> labels(::Reserve(partSwitch.Deltas.size()));
         for (auto &delta : partSwitch.Deltas) {
             labels.emplace_back(delta.Label);
         }
@@ -1440,7 +1440,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         for (auto& [sourceTable, state] : perTable) {
             // Rebase source parts to their respective new epochs
             auto srcSubset = Database->Subset(sourceTable, state.Bundles, NTable::TEpoch::Zero());
-            TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
+            TVector<NTable::TPartView> rebased(::Reserve(srcSubset->Flatten.size()));
             for (const auto& partView : srcSubset->Flatten) {
                 Y_ABORT_UNLESS(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                 NTable::TEpoch epoch = state.BundleToEpoch.Value(partView->Label, partView->Epoch);
@@ -2170,7 +2170,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
                     // Rebase source parts to new epochs (from newest to oldest)
                     TVector<TLogoBlobID> labels;
-                    TVector<NTable::TPartView> rebased(Reserve(srcSubset->Flatten.size()));
+                    TVector<NTable::TPartView> rebased(::Reserve(srcSubset->Flatten.size()));
                     for (const NTable::TPartView& partView : srcSubset->Flatten) {
                         Y_ABORT_UNLESS(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                         if (srcEpoch != partView->Epoch) {
@@ -3313,7 +3313,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     THashMap<TLogoBlobID, NKikimrExecutorFlat::TBundleChange*> bundleChanges;
 
     { /*_ Replace original subset with compacted results */
-        TVector<NTable::TPartView> newParts(Reserve(results.size()));
+        TVector<NTable::TPartView> newParts(::Reserve(results.size()));
         for (const auto& result : results) {
             newParts.emplace_back(result.Part);
         }
@@ -3321,7 +3321,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         Database->Replace(tableId, newParts, *ops->Subset);
         Database->ReplaceTxStatus(tableId, newTxStatus, *ops->Subset);
 
-        TVector<TLogoBlobID> bundles(Reserve(ops->Subset->Flatten.size() + ops->Subset->ColdParts.size()));
+        TVector<TLogoBlobID> bundles(::Reserve(ops->Subset->Flatten.size() + ops->Subset->ColdParts.size()));
         for (auto &part: ops->Subset->Flatten) {
             bundles.push_back(part->Label);
         }
@@ -4637,7 +4637,7 @@ void TExecutor::ApplyCompactionChanges(
             }
         }
 
-        TVector<TLogoBlobID> labels(Reserve(changes.SliceChanges.size()));
+        TVector<TLogoBlobID> labels(::Reserve(changes.SliceChanges.size()));
         for (auto &sliceChange : changes.SliceChanges) {
             labels.push_back(sliceChange.Label);
         }

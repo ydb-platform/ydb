@@ -168,7 +168,7 @@ class TDataShard::TTxCdcStreamScanProgress
     bool Reschedule = false;
 
     static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
-        TVector<TRawTypeValue> key(Reserve(cells.size()));
+        TVector<TRawTypeValue> key(::Reserve(cells.size()));
 
         Y_ABORT_UNLESS(cells.size() == table->KeyColumnTypes.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {
@@ -179,7 +179,7 @@ class TDataShard::TTxCdcStreamScanProgress
     }
 
     static TVector<TUpdateOp> MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
-        TVector<TUpdateOp> updates(Reserve(cells.size()));
+        TVector<TUpdateOp> updates(::Reserve(cells.size()));
 
         Y_ABORT_UNLESS(cells.size() == tags.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {

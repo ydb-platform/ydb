@@ -175,7 +175,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // Use epoch from metadata unless it has been provided to loader externally
     TEpoch epoch = Epoch != TEpoch::Max() ? Epoch : TEpoch(Root.GetEpoch());
 
-    TVector<TPageId> groupIndexesIds(Reserve(GroupIndexesIds.size() + 1));
+    TVector<TPageId> groupIndexesIds(::Reserve(GroupIndexesIds.size() + 1));
     groupIndexesIds.push_back(IndexId);
     for (auto pageId : GroupIndexesIds) {
         groupIndexesIds.push_back(pageId);

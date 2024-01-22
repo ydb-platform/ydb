@@ -1377,7 +1377,7 @@ private:
             for (auto& grp: reqPerServer) {
                 auto entry = grp.second.ExecContext->GetOrCreateEntry();
                 auto batch = entry->Tx->CreateBatchRequest();
-                TVector<TFuture<void>> batchRes(Reserve(grp.second.TableIndicies.size()));
+                TVector<TFuture<void>> batchRes(::Reserve(grp.second.TableIndicies.size()));
 
                 for (auto idx: grp.second.TableIndicies) {
                     const TCanonizeReq& canonReq = paths[idx];
@@ -2363,7 +2363,7 @@ private:
         TVector<NYT::TNode> attributes(tables.size());
         {
             auto batchGet = tx->CreateBatchRequest();
-            TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
+            TVector<TFuture<void>> batchRes(::Reserve(idxs.size()));
             for (auto& idx: idxs) {
                 batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
                     attributes[idx.first] = res.GetValue();
@@ -4384,7 +4384,7 @@ private:
             auto tx = entry->Tx;
             const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
             const NYT::EOptimizeForAttr tmpOptimizeFor = execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR);
-            TVector<NYT::TRichYPath> ytPaths(Reserve(execCtx->Options_.Paths().size()));
+            TVector<NYT::TRichYPath> ytPaths(::Reserve(execCtx->Options_.Paths().size()));
             TVector<size_t> pathMap;
 
             auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
@@ -4547,7 +4547,7 @@ private:
         }
 
         auto batchGet = entry->Tx->CreateBatchRequest();
-        TVector<TFuture<TYtTableStatInfo::TPtr>> batchRes(Reserve(outTables.size()));
+        TVector<TFuture<TYtTableStatInfo::TPtr>> batchRes(::Reserve(outTables.size()));
         for (auto& out: outTables) {
             batchRes.push_back(
                 batchGet->Get(out.Path + "/@", TGetOptions()

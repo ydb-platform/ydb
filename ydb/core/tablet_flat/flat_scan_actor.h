@@ -637,7 +637,7 @@ namespace NOps {
             }
 
             // TODO: would want to postpone pinning until usage
-            TVector<NPageCollection::TLoadedPage> pinned(Reserve(msg.Loaded.size()));
+            TVector<NPageCollection::TLoadedPage> pinned(::Reserve(msg.Loaded.size()));
             for (auto& loaded : msg.Loaded) {
                 pinned.emplace_back(loaded.PageId, TPinnedPageRef(loaded.Page).GetData());
             }

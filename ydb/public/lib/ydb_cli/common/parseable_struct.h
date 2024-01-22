@@ -80,7 +80,7 @@ public:
             return {};
         }
 
-        TVector<T> result(Reserve(parseResult->Count()));
+        TVector<T> result(::Reserve(parseResult->Count()));
 
         for (const char* value : parseResult->Values()) {
             result.push_back(FromString(value));

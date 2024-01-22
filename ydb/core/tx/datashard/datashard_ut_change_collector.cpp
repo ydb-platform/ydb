@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(PageFaults) {
         constexpr ui32 count = 1000;
-        TVector<TStructRecord> expectedRecords(Reserve(count + 2));
+        TVector<TStructRecord> expectedRecords(::Reserve(count + 2));
         auto bigUpsert = TStringBuilder() << "UPSERT INTO `/Root/path` (key, value) VALUES ";
 
         for (ui32 i = 1; i <= count; ++i) {

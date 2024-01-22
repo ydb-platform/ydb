@@ -1319,7 +1319,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         TVector<TVariantContextPtr> ProcessInFlight(const TResponseProps& response) const {
-            TVector<TVariantContextPtr> processed(Reserve(InFlight.size()));
+            TVector<TVariantContextPtr> processed(::Reserve(InFlight.size()));
 
             EraseNodesIf(InFlight, [this, &processed, response](auto& kv) {
                 processed.push_back(kv.first);

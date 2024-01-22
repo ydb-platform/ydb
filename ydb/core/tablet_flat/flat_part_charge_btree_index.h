@@ -42,7 +42,7 @@ public:
             row2 = row1; // will not go further than row1
         }
 
-        TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
+        TVector<TBtreeIndexNode> level, nextLevel(::Reserve(2));
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
                 ready &= TryLoadNode(meta.PageId, nextLevel);
@@ -111,7 +111,7 @@ public:
         }
 
         // level contains nodes in reverse order
-        TVector<TBtreeIndexNode> level, nextLevel(Reserve(2));
+        TVector<TBtreeIndexNode> level, nextLevel(::Reserve(2));
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
                 ready &= TryLoadNode(meta.PageId, nextLevel);

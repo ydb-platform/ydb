@@ -72,7 +72,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
             ? config.GetMaxListingResultSizePerPartition()
             : 1'000;
 
-    TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
+    TVector<TString> clusters(::Reserve(config.ClusterMappingSize()));
     for (auto& cluster: config.GetClusterMapping()) {
         clusters.push_back(cluster.GetName());
     }

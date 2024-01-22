@@ -372,7 +372,7 @@ public:
         }
 
         const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
-        TVector<const TTypeAnnotationNode*> subTypeAnn(Reserve(structType->GetItems().size()));
+        TVector<const TTypeAnnotationNode*> subTypeAnn(::Reserve(structType->GetItems().size()));
         for (const auto& type: structType->GetItems()) {
             subTypeAnn.emplace_back(type->GetItemType());
         }

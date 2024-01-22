@@ -939,7 +939,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
         << ", records: " << JoinSeq(", ", records));
 
     const auto now = AppData()->TimeProvider->Now();
-    TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
+    TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(::Reserve(records.size()));
     for (const auto& record : records) {
         forward.emplace_back(record.Order, record.PathId, record.BodySize);
 

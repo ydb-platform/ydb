@@ -282,7 +282,7 @@ struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher
 
     template <class TProtoConfig, typename TFilter>
     void Init(const TProtoConfig& config, const TFilter& filter, TTypeAnnotationContext& typeCtx) {
-        TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
+        TVector<TString> clusters(::Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
             Tokens[cluster.GetName()] = typeCtx.Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_yt", cluster.GetYTToken());

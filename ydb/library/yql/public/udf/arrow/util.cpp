@@ -57,7 +57,7 @@ public:
                 capacity_ = newCapacity;
             }
         } else {
-            RETURN_NOT_OK(Reserve(newSize));
+            RETURN_NOT_OK(::Reserve(newSize));
         }
         size_ = newSize;
 

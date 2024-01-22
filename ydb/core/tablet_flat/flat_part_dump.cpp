@@ -103,7 +103,7 @@ namespace {
             return;
         }
 
-        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
+        TVector<TCell> key(::Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.Groups[0];
         auto indexPage = Env->TryGetPage(&part, indexPageId);
@@ -180,7 +180,7 @@ namespace {
 
     void TDump::DataPage(const TPart &part, ui32 page) noexcept
     {
-        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
+        TVector<TCell> key(::Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         // TODO: need to join with other column groups
         auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
@@ -290,7 +290,7 @@ namespace {
 
     void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level) noexcept
     {
-        TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
+        TVector<TCell> key(::Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         TString intend;
         for (size_t i = 0; i < level; i++) {

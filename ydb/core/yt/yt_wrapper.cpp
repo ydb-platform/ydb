@@ -155,7 +155,7 @@ private:
 
 class TYtTableWriter: public TBaseWrapperActor<TYtTableWriter> {
     TVector<NTableClient::TUnversionedRow> RowsRef() const {
-        TVector<NTableClient::TUnversionedRow> result(Reserve(Rows.size()));
+        TVector<NTableClient::TUnversionedRow> result(::Reserve(Rows.size()));
 
         for (const auto& row : Rows) {
             result.push_back(row);

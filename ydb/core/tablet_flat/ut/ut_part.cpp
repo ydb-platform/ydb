@@ -580,8 +580,8 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto conf = PageConf(/* groups = */ 3);
         auto cook = TPartCook(lay, conf);
 
-        TVector<TRow> foos(Reserve(1001));
-        TVector<TRowVersion> foov(Reserve(1001));
+        TVector<TRow> foos(::Reserve(1001));
+        TVector<TRowVersion> foov(::Reserve(1001));
         for (int i = 0; i <= 1000; ++i) {
             TString s = TStringBuilder() << "foo_xxxxxxxxxxxxxxxx" << i;
             foov.emplace_back(1, 1000-i);
@@ -589,8 +589,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             cook.Ver(foov.back()).Add(foos.back());
         }
 
-        TVector<TRow> bars(Reserve(1001));
-        TVector<TRowVersion> barv(Reserve(1001));
+        TVector<TRow> bars(::Reserve(1001));
+        TVector<TRowVersion> barv(::Reserve(1001));
         for (int i = 0; i <= 1000; ++i) {
             TString s = TStringBuilder() << "bar_xxxxxxxxxxxxxxxx" << i;
             barv.emplace_back(2, 1000-i);

@@ -159,7 +159,7 @@ namespace NFwd {
 
             Pending -= pages.size();
 
-            TVector<NPageCollection::TLoadedPage> queuePages(Reserve(pages.size()));
+            TVector<NPageCollection::TLoadedPage> queuePages(::Reserve(pages.size()));
             for (auto& page : pages) {
                 const auto &meta = pageCollection->Page(page.PageId);
                 if (IsIndexPage(NTable::EPage(meta.Type))) {

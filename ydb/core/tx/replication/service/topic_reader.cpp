@@ -40,7 +40,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
         auto& result = ev->Get()->Result;
-        TVector<TEvWorker::TEvData::TRecord> records(Reserve(result.Messages.size()));
+        TVector<TEvWorker::TEvData::TRecord> records(::Reserve(result.Messages.size()));
 
         for (auto& msg : result.Messages) {
             Y_ABORT_UNLESS(msg.GetCodec() == NYdb::NTopic::ECodec::RAW);

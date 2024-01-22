@@ -1260,7 +1260,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         {
             Y_UNUSED(checkKey);
 
-            TVector<std::pair<TString, TMessageMeta>> recordsWithMetadata(Reserve(records.size()));
+            TVector<std::pair<TString, TMessageMeta>> recordsWithMetadata(::Reserve(records.size()));
             for (const auto& record : records) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
             }

@@ -386,7 +386,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Merge(
         return b;
     }
 
-    TVector r(Reserve(a->size() + b->size()));
+    TVector r(::Reserve(a->size() + b->size()));
 
     auto mergeLast = [&r](const TSlice& slice) {
         if (r.empty() || TSlice::LessByRowId(r.back(), slice)) {
@@ -496,7 +496,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TC
     Y_ABORT_UNLESS(run && !run->empty());
     Y_ABORT_UNLESS(slices);
 
-    TVector<TSlice> result(Reserve(run->size() - 1 + slices.size()));
+    TVector<TSlice> result(::Reserve(run->size() - 1 + slices.size()));
 
     Y_ABORT_UNLESS(ValidateSlices(*run), "TSlices::Replace got invalid source slices");
     Y_ABORT_UNLESS(ValidateSlices(slices), "TSlices::Replace got invalid new slices");

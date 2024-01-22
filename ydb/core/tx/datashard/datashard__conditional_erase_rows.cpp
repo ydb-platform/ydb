@@ -454,7 +454,7 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
     }
 
     for (const auto& index : record.GetIndexes()) {
-        TKeyMap keyMap(Reserve(index.KeyMapSize()));
+        TKeyMap keyMap(::Reserve(index.KeyMapSize()));
         for (const auto& kv : index.GetKeyMap()) {
             keyMap.emplace_back(kv.GetIndexColumnId(), kv.GetMainColumnId());
         }

@@ -568,28 +568,28 @@
         }
     ],
     "test.test[ansi_idents-escaping-default.txt-Results]": [],
-    "test.test[bigdate-const_datetime64-default.txt-Analyze]": [
+    "test.test[bigdate-input-default.txt-Analyze]": [
         {
             "checksum": "b3ea53bbce5fdb1641500c3310d88f50",
             "size": 6300,
-            "uri": "https://{canondata_backend}/1942415/1e09e4342cd71819f75a6b9adf843137f6d9a325/resource.tar.gz#test.test_bigdate-const_datetime64-default.txt-Analyze_/plan.txt"
+            "uri": "https://{canondata_backend}/1925842/831fd0acfdaee1aa9247abd85ec6ca6cf4fc712e/resource.tar.gz#test.test_bigdate-input-default.txt-Analyze_/plan.txt"
         }
     ],
-    "test.test[bigdate-const_datetime64-default.txt-Debug]": [
+    "test.test[bigdate-input-default.txt-Debug]": [
         {
-            "checksum": "27e9dfb03d2ffcd36b6085d6022bbe58",
-            "size": 2621,
-            "uri": "https://{canondata_backend}/1942415/1e09e4342cd71819f75a6b9adf843137f6d9a325/resource.tar.gz#test.test_bigdate-const_datetime64-default.txt-Debug_/opt.yql_patched"
+            "checksum": "38d01ea2beb26dfb5ec3025038b80124",
+            "size": 2849,
+            "uri": "https://{canondata_backend}/1925842/831fd0acfdaee1aa9247abd85ec6ca6cf4fc712e/resource.tar.gz#test.test_bigdate-input-default.txt-Debug_/opt.yql_patched"
         }
     ],
-    "test.test[bigdate-const_datetime64-default.txt-Plan]": [
+    "test.test[bigdate-input-default.txt-Plan]": [
         {
             "checksum": "b3ea53bbce5fdb1641500c3310d88f50",
             "size": 6300,
-            "uri": "https://{canondata_backend}/1942415/1e09e4342cd71819f75a6b9adf843137f6d9a325/resource.tar.gz#test.test_bigdate-const_datetime64-default.txt-Plan_/plan.txt"
+            "uri": "https://{canondata_backend}/1925842/831fd0acfdaee1aa9247abd85ec6ca6cf4fc712e/resource.tar.gz#test.test_bigdate-input-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[bigdate-const_datetime64-default.txt-Results]": [],
+    "test.test[bigdate-input-default.txt-Results]": [],
     "test.test[binding-table_filter_strict_binding-default.txt-Analyze]": [
         {
             "checksum": "fa150d4dd7e53dd2290f60d0132f97c0",

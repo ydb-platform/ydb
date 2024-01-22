@@ -380,25 +380,25 @@
             "uri": "https://{canondata_backend}/1937027/642fd2ff53bdb0fed32ca89598d70c9c5848ac20/resource.tar.gz#test.test_aggregate-having_distinct_expr--Results_/results.txt"
         }
     ],
-    "test.test[bigdate-const_interval64-default.txt-Debug]": [
+    "test.test[bigdate-output-default.txt-Debug]": [
         {
-            "checksum": "72888a7ccc53df9810804646674ec068",
-            "size": 4020,
-            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Debug_/opt.yql"
+            "checksum": "06be4d0a29468fa65dcf82024dcf4153",
+            "size": 990,
+            "uri": "https://{canondata_backend}/1777230/871c959833141840e38ead3e21b05f8aef9d2e17/resource.tar.gz#test.test_bigdate-output-default.txt-Debug_/opt.yql"
         }
     ],
-    "test.test[bigdate-const_interval64-default.txt-Plan]": [
+    "test.test[bigdate-output-default.txt-Plan]": [
         {
-            "checksum": "66a326f654956d864726e28039beacec",
-            "size": 11695,
-            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Plan_/plan.txt"
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1777230/871c959833141840e38ead3e21b05f8aef9d2e17/resource.tar.gz#test.test_bigdate-output-default.txt-Plan_/plan.txt"
         }
     ],
-    "test.test[bigdate-const_interval64-default.txt-Results]": [
+    "test.test[bigdate-output-default.txt-Results]": [
         {
-            "checksum": "93d1c5b24d5462b74ea0d5a6dc219702",
-            "size": 27372,
-            "uri": "https://{canondata_backend}/1937367/964cd20e08010a5ddb82cda78f52ccdcffedf989/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Results_/results.txt"
+            "checksum": "afc38b6fd6fc53390ae4fbaba4d61a66",
+            "size": 5193,
+            "uri": "https://{canondata_backend}/1777230/871c959833141840e38ead3e21b05f8aef9d2e17/resource.tar.gz#test.test_bigdate-output-default.txt-Results_/results.txt"
         }
     ],
     "test.test[blocks-combine_all_some_filter--Debug]": [

@@ -836,12 +836,6 @@ void TPersQueue::InitPlanStep(const NKikimrPQ::TTabletTxInfo& info)
     LastTxId = info.GetLastTxId();
 }
 
-void TPersQueue::InitPlanStep()
-{
-    LastStep = 0;
-    LastTxId = 0;
-}
-
 void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                               const TActorContext& ctx)
 {
@@ -867,7 +861,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
     case NKikimrProto::NODATA: {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " doesn't have tx writes info");
 
-        InitTxWrites();
+        InitTxWrites({}, ctx);
 
         break;
     }
@@ -918,11 +912,6 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxWrites& info,
 
         NextShadowPartitionId = Max(NextShadowPartitionId, shadowPartitionId + 1);
     }
-}
-
-void TPersQueue::InitTxWrites()
-{
-    TxWrites.clear();
 }
 
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,

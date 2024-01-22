@@ -453,8 +453,7 @@ private:
 
     TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
 
-    void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info);
-    void InitPlanStep();
+    void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
 
     void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info, const TActorContext& ctx);

@@ -68,12 +68,6 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
     }
 }
 
-TIntrusivePtr<IDqTaskRunner> CreateKqpTaskRunner(const TDqTaskRunnerContext& execCtx,
-    const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
-{
-    return MakeDqTaskRunner(execCtx, settings, logFunc);
-}
-
 
 TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TDqTask>&& tasks,
     const TDqTaskRunnerContext& execCtx, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
@@ -92,7 +86,7 @@ TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TD
     try {
         for (auto&& task : tasks) {
             ui64 taskId = task.GetId();
-            auto runner = CreateKqpTaskRunner(execCtx, settings, logFunc);
+            auto runner = MakeDqTaskRunner(execCtx, settings, logFunc);
             if (auto* stats = runner->GetStats()) {
                 Stats.emplace(taskId, stats);
             }

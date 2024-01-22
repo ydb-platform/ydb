@@ -162,6 +162,8 @@ struct TYtSettings {
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
+    NCommon::TConfSetting<NYT::TNode, true> StartedBy;
+    NCommon::TConfSetting<NYT::TNode, true> Description;
     NCommon::TConfSetting<bool, true> UseSkiff;
     NCommon::TConfSetting<ui32, true> TableContentCompressLevel;
     NCommon::TConfSetting<bool, true> DisableJobSplitting;
@@ -263,6 +265,7 @@ struct TYtSettings {
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
+    NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

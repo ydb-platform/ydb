@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
+import datetime
 import os
 import re
 import json
@@ -12,6 +13,7 @@ from operator import attrgetter
 from typing import List, Optional, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
+from gh_status import update_pr_comment_text
 
 
 class TestStatus(Enum):
@@ -155,7 +157,7 @@ class TestSummary:
         github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
         repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
 
-        footnote_url = f"{github_srv}/{repo}/tree/main/.github/config"
+        footnote_url = f"{github_srv}/{repo}/tree/main/.github/config/muted_ya.txt"
 
         footnote = "[^1]" if add_footnote else f'<sup>[?]({footnote_url} "All mute rules are defined here")</sup>'
 
@@ -287,18 +289,20 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths):
     return summary
 
 
-def get_comment_text(pr: PullRequest, summary: TestSummary, build_preset: str, test_history_url: str):
+def get_comment_text(pr: PullRequest, summary: TestSummary, test_history_url: str):
     if summary.is_empty:
         return [
-            f":red_circle: **{build_preset}**: Test run completed, no test results found for commit {pr.head.sha}. "
+            f"Test run completed, no test results found for commit {pr.head.sha}. "
             f"Please check build logs."
         ]
     elif summary.is_failed:
-        result = f":red_circle: **{build_preset}**: some tests FAILED"
+        result = f"Some tests failed, follow the links below."
     else:
-        result = f":green_circle: **{build_preset}**: all tests PASSED"
+        result = f"Tests successful."
 
-    body = [f"{result} for commit {pr.head.sha}."]
+    body = [
+        result
+    ]
 
     if test_history_url:
         body.append("")
@@ -307,36 +311,6 @@ def get_comment_text(pr: PullRequest, summary: TestSummary, build_preset: str, t
     body.extend(summary.render())
 
     return body
-
-
-def update_pr_comment(run_number: int, pr: PullRequest, summary: TestSummary, build_preset: str, test_history_url: str):
-    header = f"<!-- status pr={pr.number}, run={{}} -->"
-    header_re = re.compile(header.format(r"(\d+)"))
-
-    comment = body = None
-
-    for c in pr.get_issue_comments():
-        if matches := header_re.match(c.body):
-            comment = c
-            if int(matches[1]) == run_number:
-                body = [c.body, "", "---", ""]
-
-    if body is None:
-        body = [
-            header.format(run_number),
-            "> [!NOTE]",
-            "> This is an automated comment that will be appended during run.",
-            "",
-        ]
-
-    body.extend(get_comment_text(pr, summary, build_preset, test_history_url))
-
-    body = "\n".join(body)
-
-    if comment is None:
-        pr.create_issue_comment(body)
-    else:
-        comment.edit(body)
 
 
 def main():
@@ -364,9 +338,16 @@ def main():
         with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
             event = json.load(fp)
 
-        run_number = int(os.environ.get("GITHUB_RUN_NUMBER"))
         pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-        update_pr_comment(run_number, pr, summary, args.build_preset, args.test_history_url)
+
+        text = get_comment_text(pr, summary, args.test_history_url)
+
+        if summary.is_empty | summary.is_failed:
+            color = 'red'
+        else:
+            color = 'green'
+
+        update_pr_comment_text(pr, args.build_preset, color, text='\n'.join(text), rewrite=False)
 
 
 if __name__ == "__main__":

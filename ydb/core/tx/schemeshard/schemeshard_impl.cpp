@@ -4271,6 +4271,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
+    ExternalSourceFactory = appData->ExternalSourceFactory;
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6719,11 +6720,6 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         LoadTableProfiles(nullptr, ctx);
     }
 
-    if (appConfig.HasQueryServiceConfig()) {
-        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
-    }
-
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
     }
@@ -7052,7 +7048,18 @@ void TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(aggregated.DataSize);
         ++count;
     }
-    // TODO: add column tables
+    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
+    for (const auto& pathId : columnTablesPathIds) {
+        const auto& tableInfo = ColumnTables.GetVerified(pathId);
+        const auto& aggregated = tableInfo->Stats.Aggregated;
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
+    }
 
     TString stats;
     stats.clear();

@@ -559,7 +559,7 @@ bool TBitwiseVersionedRowEqual::operator()(TVersionedRow lhs, TVersionedRow rhs)
     }
 
     for (int index = 0; index < lhs.GetKeyCount(); ++index) {
-        if (!TBitwiseUnversionedValueEqual()(lhs.Keys()[index], lhs.Keys()[index])) {
+        if (!TBitwiseUnversionedValueEqual()(lhs.Keys()[index], rhs.Keys()[index])) {
             return false;
         }
     }

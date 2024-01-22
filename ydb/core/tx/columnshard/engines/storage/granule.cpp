@@ -56,12 +56,12 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
     if (it == Portions.end()) {
         Y_ABORT_UNLESS(portion.Records.empty());
         auto portionNew = std::make_shared<TPortionInfo>(portion);
-        portionNew->AddRecord(indexInfo, rec, portionMeta);
         it = Portions.emplace(portion.GetPortion(), portionNew).first;
     } else {
         AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
-        it->second->AddRecord(indexInfo, rec, portionMeta);
     }
+    it->second->AddRecord(indexInfo, rec, portionMeta);
+
     if (portionMeta) {
         it->second->InitOperator(Owner->GetStoragesManager()->InitializePortionOperator(*it->second), false);
     }

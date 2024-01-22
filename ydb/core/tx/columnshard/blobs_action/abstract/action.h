@@ -55,21 +55,21 @@ public:
         return !!Writing;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, success);
+            Removing->OnExecuteTxAfterRemoving(self, dbBlobs, blobsWroteSuccessfully);
         }
         if (Writing) {
-            Writing->OnExecuteTxAfterWrite(self, dbBlobs, success);
+            Writing->OnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         if (Removing) {
-            Removing->OnCompleteTxAfterRemoving(self);
+            Removing->OnCompleteTxAfterRemoving(self, blobsWroteSuccessfully);
         }
         if (Writing) {
-            Writing->OnCompleteTxAfterWrite(self);
+            Writing->OnCompleteTxAfterWrite(self, blobsWroteSuccessfully);
         }
     }
 };
@@ -144,15 +144,15 @@ public:
         return false;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
+    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
-            i.second.OnExecuteTxAfterAction(self, dbBlobs, success);
+            i.second.OnExecuteTxAfterAction(self, dbBlobs, blobsWroteSuccessfully);
         }
     }
 
-    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self) {
+    void OnCompleteTxAfterAction(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
         for (auto&& i : StorageActions) {
-            i.second.OnCompleteTxAfterAction(self);
+            i.second.OnCompleteTxAfterAction(self, blobsWroteSuccessfully);
         }
     }
 

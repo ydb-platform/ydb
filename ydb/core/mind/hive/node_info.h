@@ -235,6 +235,7 @@ public:
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
     void ActualizeNodeStatistics(TInstant now);
+    ui64 GetRestartsPerPeriod(TInstant barrier) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

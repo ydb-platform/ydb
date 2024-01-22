@@ -340,7 +340,8 @@ enum class EKikimrTableKind : ui32 {
     Datashard = 1,
     SysView = 2,
     Olap = 3,
-    External = 4
+    External = 4,
+    View = 5,
 };
 
 enum class ETableType : ui32 {
@@ -389,6 +390,10 @@ enum EMetaSerializationType : ui64 {
     Json = 2
 };
 
+struct TViewPersistedData {
+    TString QueryText;
+};
+
 struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
     TString Cluster;
@@ -423,6 +428,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TTableSettings TableSettings;
 
     TExternalSource ExternalSource;
+    TViewPersistedData ViewPersistedData;
 
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)

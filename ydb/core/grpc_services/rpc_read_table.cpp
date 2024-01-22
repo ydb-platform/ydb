@@ -7,6 +7,8 @@
 #include "local_rate_limiter.h"
 #include "service_table.h"
 
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>
@@ -245,6 +247,15 @@ private:
                 auto tmp = issueMessage.Add();
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
+            }
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardOverloaded: {
+                const auto req = TEvReadTableRequest::GetProtoRequest(Request_.get());
+
+                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, TStringBuilder()
+                    << "Table " << req->path() << " is overloaded");
+                auto tmp = issueMessage.Add();
+                NYql::IssueToMessage(issue, tmp);
+                return ReplyFinishStream(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
             }
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:

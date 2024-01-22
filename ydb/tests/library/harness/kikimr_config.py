@@ -143,7 +143,6 @@ class KikimrConfigGenerator(object):
             public_http_config=None,
             enable_datastreams=False,
             auth_config_path=None,
-            disable_mvcc=False,
             enable_public_api_external_blobs=False,
             node_kind=None,
             bs_cache_file_path=None,
@@ -158,6 +157,7 @@ class KikimrConfigGenerator(object):
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
             hive_config=None,
+            datashard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None
     ):
@@ -260,7 +260,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
-        self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
         if enable_alter_database_create_hive_first:
@@ -343,6 +342,9 @@ class KikimrConfigGenerator(object):
 
         if hive_config:
             self.yaml_config["hive_config"] = hive_config
+
+        if datashard_config:
+            self.yaml_config["data_shard_config"] = datashard_config
 
         self.__build()
 

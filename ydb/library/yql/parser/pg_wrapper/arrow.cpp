@@ -276,6 +276,10 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
             return [](const std::shared_ptr<arrow::Array>& value) {
                 return PgConvertFixed<ui16>(value, [](auto value){ return MakePgDateFromUint16(value); });
             };
+        } else if (originalType->Equals(arrow::date32())) {
+            return [](const std::shared_ptr<arrow::Array>& value) {
+                return PgConvertFixed<i32>(value, [](auto value){ return MakePgDateFromUint16(value); });
+            };
         } else {
             return {};
         }

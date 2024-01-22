@@ -298,8 +298,23 @@ inline TTraceContextFinishGuard::TTraceContextFinishGuard(TTraceContextPtr trace
 
 inline TTraceContextFinishGuard::~TTraceContextFinishGuard()
 {
+    Release();
+}
+
+inline TTraceContextFinishGuard& TTraceContextFinishGuard::operator=(TTraceContextFinishGuard&& other)
+{
+    if (this != &other) {
+        Release();
+        TraceContext_ = std::move(other.TraceContext_);
+    }
+    return *this;
+}
+
+inline void TTraceContextFinishGuard::Release()
+{
     if (TraceContext_) {
         TraceContext_->Finish();
+        TraceContext_ = {};
     }
 }
 

@@ -66,4 +66,6 @@ constexpr bool DEFAULT_TABLE_CONTENT_LOCAL_EXEC = false;
 
 constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 
+constexpr bool DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP = false;
+
 } // NYql

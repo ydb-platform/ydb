@@ -157,6 +157,7 @@ void TTable::ResetIterator() {
     CurrIterIndex = 0;
     CurrIterBucket = 0;
     CurrJoinIdsIterIndex = 0;
+    Table2Initialized_ = false;
     if (IsTableJoined) {
         JoinTable1->ResetIterator();
         JoinTable2->ResetIterator();
@@ -1031,6 +1032,12 @@ bool TTable::NextJoinedData( TupleData & td1, TupleData & td2) {
             return true;
         }
         td1.AllNulls = true;
+
+        if (!Table2Initialized_) {
+            CurrIterBucket = 0;
+            CurrJoinIdsIterIndex = 0;
+            Table2Initialized_ = true;
+        }
 
         while (HasMoreTuples(JoinTable2->TableBuckets, JoinTable2->CurrIterBucket, JoinTable2->CurrIterIndex)) {
 

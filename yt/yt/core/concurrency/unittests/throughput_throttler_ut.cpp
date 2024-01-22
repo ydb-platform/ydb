@@ -410,7 +410,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
     requests[0].Set(TError(NYT::EErrorCode::Generic, "Test error"));
     EXPECT_FALSE(failedRequest.Get().IsOK());
 
-    Throttler_->Throttle(1);
+    YT_UNUSED_FUTURE(Throttler_->Throttle(1));
 }
 
 TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)

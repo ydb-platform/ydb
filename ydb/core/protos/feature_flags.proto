@@ -54,8 +54,8 @@ message TFeatureFlags {
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = true];
     optional bool EnableVPatch = 45 [default = true];
-    optional bool EnableMvccSnapshotReads = 46 [default = true];
-    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
+    optional bool EnableMvccSnapshotReads = 46 [default = true]; // deprecated: always true
+    optional Tribool EnableMvcc = 47 [default = VALUE_TRUE]; // deprecated: always true
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
@@ -97,7 +97,7 @@ message TFeatureFlags {
     optional bool EnableAlterDatabaseCreateHiveFirst = 82 [default = false];
     reserved 83; // EnableKqpDataQuerySourceRead
     optional bool EnableSmallDiskOptimization = 84 [default = true];
-    optional bool EnableDataShardVolatileTransactions = 85 [default = false];
+    optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = false];
     optional bool EnableLLVMCache = 87 [default = false];
     optional bool EnableExternalDataSources = 88 [default = false];
@@ -126,4 +126,5 @@ message TFeatureFlags {
     optional bool UseVDisksBalancing = 111 [default = false];
     optional bool EnableViews = 112 [default = false];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
+    optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
 }

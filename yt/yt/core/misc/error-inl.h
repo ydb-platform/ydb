@@ -19,7 +19,7 @@ inline constexpr TErrorCode::TErrorCode(int value)
 { }
 
 template <class E>
-requires std::is_enum_v<E>
+    requires std::is_enum_v<E>
 constexpr TErrorCode::TErrorCode(E value)
     : Value_(static_cast<int>(value))
 { }
@@ -30,22 +30,22 @@ inline constexpr TErrorCode::operator int() const
 }
 
 template <class E>
-requires std::is_enum_v<E>
+    requires std::is_enum_v<E>
 constexpr TErrorCode::operator E() const
 {
     return static_cast<E>(Value_);
 }
 
 template <class E>
-requires std::is_enum_v<E>
-constexpr bool operator == (TErrorCode lhs, E rhs)
+    requires std::is_enum_v<E>
+constexpr bool TErrorCode::operator == (E rhs) const
 {
-    return static_cast<int>(lhs) == static_cast<int>(rhs);
+    return Value_ == static_cast<int>(rhs);
 }
 
-constexpr inline bool operator == (TErrorCode lhs, TErrorCode rhs)
+constexpr bool TErrorCode::operator == (TErrorCode rhs) const
 {
-    return static_cast<int>(lhs) == static_cast<int>(rhs);
+    return Value_ == static_cast<int>(rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -325,11 +325,11 @@ TArg&& TErrorAdaptor::operator << (TArg&& rhs) const
     return std::forward<TArg>(rhs);
 }
 
-template <class TLikeError, class... TArgs>
+template <class TErrorLike, class... TArgs>
     requires
-        std::is_base_of_v<TError, std::remove_cvref_t<TLikeError>> &&
+        std::derived_from<std::remove_cvref_t<TErrorLike>, TError> &&
         std::constructible_from<TError, TArgs...>
-void ThrowErrorExceptionIfFailed(TLikeError&& error, TArgs&&... args)
+void ThrowErrorExceptionIfFailed(TErrorLike&& error, TArgs&&... args)
 {
     if (!error.IsOK()) {
         THROW_ERROR std::move(error).Wrap(std::forward<TArgs>(args)...);

@@ -3445,16 +3445,21 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus FromFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
+    IGraphTransformer::TStatus FromFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureFlowType(input->Head(), ctx.Expr)) {
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false, false>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
         }
+        const auto kind = input->Head().GetTypeAnn()->GetKind();
+        if (ETypeAnnotationKind::Stream == kind) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
-        const auto itemType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(itemType));
         return IGraphTransformer::TStatus::Ok;
     }

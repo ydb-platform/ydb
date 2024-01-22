@@ -14,6 +14,8 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
+TString NoPermissionStr = "You have no permission to resolve database id into database endpoint. ";
+
 struct TTestBootstrap : public TTestActorRuntime {
     NConfig::TCheckpointCoordinatorConfig Settings;
     NActors::TActorId DatabaseResolver;
@@ -295,7 +297,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(ClickHouse_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                "You have no permission to resolve database id into database endpoint. Please check that your service account has role `managed-clickhouse.viewer`."
+                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-clickhouse.viewer`."
             )
         };
 
@@ -363,7 +365,7 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
     Y_UNIT_TEST(PostgreSQL_PermissionDenied) {
         NYql::TIssues issues{
             NYql::TIssue(
-                "You have no permission to resolve database id into database endpoint. Please check that your service account has role `managed-postgresql.viewer`."
+                TStringBuilder{} << NoPermissionStr << "Please check that your service account has role `managed-postgresql.viewer`."
             )
         };
 
@@ -384,6 +386,27 @@ Y_UNIT_TEST_SUITE(TDatabaseResolverTests) {
                     ]
                 }
             )",
+            NYql::TDatabaseResolverResponse::TDatabaseDescription{
+                },
+                issues
+            );
+    }
+
+    Y_UNIT_TEST(DataStreams_PermissionDenied) {
+        NYql::TIssues issues{
+            NYql::TIssue(
+                NoPermissionStr
+            )
+        };
+        Test(
+            NYql::EDatabaseType::DataStreams,
+            NYql::NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED,
+            "https://ydbc.ydb.cloud.yandex.net:8789/ydbc/cloud-prod/database?databaseId=etn021us5r9rhld1vgbh",
+            "403",
+            R"(
+                {
+                    "message": "Permission denied"
+                })",
             NYql::TDatabaseResolverResponse::TDatabaseDescription{
                 },
                 issues

@@ -30,8 +30,8 @@ protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) = 0;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
 public:
@@ -75,12 +75,12 @@ public:
         return DoOnCompleteTxBeforeWrite(self);
     }
 
-    void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) {
-        return DoOnExecuteTxAfterWrite(self, dbBlobs, success);
+    void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        return DoOnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
     }
 
-    void OnCompleteTxAfterWrite(NColumnShard::TColumnShard& self) {
-        return DoOnCompleteTxAfterWrite(self);
+    void OnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
+        return DoOnCompleteTxAfterWrite(self, blobsWroteSuccessfully);
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);

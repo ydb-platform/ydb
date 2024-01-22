@@ -9,7 +9,6 @@ package unix
 import (
 	"syscall"
 	_ "unsafe" // for linkname
-
 )
 
 func Unlinkat(dirfd int, path string, flags int) error {

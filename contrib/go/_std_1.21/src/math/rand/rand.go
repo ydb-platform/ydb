@@ -22,7 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 	_ "unsafe" // for go:linkname
-
 )
 
 // A Source represents a source of uniformly-distributed

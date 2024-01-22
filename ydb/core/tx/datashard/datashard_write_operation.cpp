@@ -67,7 +67,7 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
     if (!tableInfoPtr) {
         ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
-        ErrStr = TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist";
+        ErrStr = TStringBuilder() << "Table '" << tableIdRecord.GetTableId() << "' doesn't exist.";
         return false;
     }
     TableInfo = tableInfoPtr->Get();
@@ -159,7 +159,7 @@ bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
         }
     }    
 
-    TableId = TTableId(tableIdRecord.ownerid(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
+    TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
     return true;
 }
 
@@ -245,6 +245,7 @@ void TValidatedWriteTx::ComputeTxSize() {
 
 TWriteOperation* TWriteOperation::CastWriteOperation(TOperation::TPtr op)
 {
+    Y_ABORT_UNLESS(op->IsWriteTx());
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_ABORT_UNLESS(writeOp);
     return writeOp;
@@ -453,7 +454,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(
 
 void TWriteOperation::FinalizeWriteTxPlan()
 {
-    Y_ABORT_UNLESS(IsDataTx());
+    Y_ABORT_UNLESS(IsWriteTx());
     Y_ABORT_UNLESS(!IsImmediate());
     Y_ABORT_UNLESS(!IsKqpScanTransaction());
 
@@ -494,8 +495,7 @@ public:
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
 
-        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_VERIFY_S(writeOp, "cannot cast operation of kind " << op->GetKind());
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
         writeOp->FinalizeWriteTxPlan();
 

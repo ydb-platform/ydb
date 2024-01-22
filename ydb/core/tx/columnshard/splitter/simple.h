@@ -110,7 +110,7 @@ public:
 class TSimpleSplitter {
 private:
     TColumnSaver ColumnSaver;
-    YDB_ACCESSOR_DEF(std::optional<TColumnSerializationStat>, Stats);
+    YDB_ACCESSOR_DEF(std::optional<TBatchSerializationStat>, Stats);
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
 public:
     explicit TSimpleSplitter(const TColumnSaver& columnSaver, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
@@ -140,7 +140,7 @@ public:
         return TLinearSplitInfo(countPacksMax, stepPackMin, objectsCount);
     }
 
-    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const;
+    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const;
     std::vector<TSaverSplittedChunk> SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
@@ -152,18 +152,18 @@ private:
     TSaverSplittedChunk Data;
     ISchemaDetailInfo::TPtr SchemaInfo;
 protected:
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
         return Data.GetSerializedChunk();
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return Data.GetRecordsCount();
     }
 
     virtual TString DoDebugString() const override;
 
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
-        return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(ColumnId), SchemaInfo->IsSortedColumn(ColumnId));
+        return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(GetColumnId()), SchemaInfo->IsSortedColumn(GetColumnId()));
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {

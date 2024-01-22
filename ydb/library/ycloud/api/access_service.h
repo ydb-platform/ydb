@@ -2,6 +2,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/access_service.grpc.pb.h>
 #include "events.h"
 
 namespace NCloud {
@@ -12,10 +13,12 @@ namespace NCloud {
             // requests
             EvAuthenticateRequest = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE),
             EvAuthorizeRequest,
+            EvBulkAuthorizeRequest,
 
             // replies
             EvAuthenticateResponse = EventSpaceBegin(TKikimrEvents::ES_ACCESS_SERVICE) + 512,
             EvAuthorizeResponse,
+            EvBulkAuthorizeResponse,
 
             EvEnd
         };
@@ -29,5 +32,8 @@ namespace NCloud {
 
         struct TEvAuthorizeRequest : TEvGrpcProtoRequest<TEvAuthorizeRequest, EvAuthorizeRequest, yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest> {};
         struct TEvAuthorizeResponse : TEvGrpcProtoResponse<TEvAuthorizeResponse, EvAuthorizeResponse, yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse> {};
+
+        struct TEvBulkAuthorizeRequest : TEvGrpcProtoRequest<TEvBulkAuthorizeRequest, EvBulkAuthorizeRequest, yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest> {};
+        struct TEvBulkAuthorizeResponse : TEvGrpcProtoResponse<TEvBulkAuthorizeResponse, EvBulkAuthorizeResponse, yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse> {};
    };
 }

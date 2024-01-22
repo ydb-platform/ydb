@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(R"(
-                CREATE TABLE test (id int8,PRIMARY KEY (id)))"
+                CREATE TABLE test (id int16,PRIMARY KEY (id)))"
             ).GetValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1354,6 +1354,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             SELECT * FROM KeyValue;
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(Tcl) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT 1;
+            COMMIT;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+
+        result = db.ExecuteQuery(R"(
+            SELECT 1;
+            ROLLBACK;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
     }
 
     Y_UNIT_TEST(MaterializeTxResults) {

@@ -51,6 +51,6 @@ struct fmt::formatter<ReadableSize>
     template <typename FormatContext>
     auto format(const ReadableSize & size, FormatContext & ctx)
     {
-        return format_to(ctx.out(), "{}", NDB::formatReadableSizeWithBinarySuffix(size.value));
+        return fmt::format_to(ctx.out(), "{}", NDB::formatReadableSizeWithBinarySuffix(size.value));
     }
 };

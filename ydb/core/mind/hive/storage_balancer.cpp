@@ -66,11 +66,20 @@ protected:
         Stats.LastRunMovements = Reassigns;
         Stats.IsRunningNow = false;
         Hive->RemoveSubActor(this);
+        Send(Hive->SelfId(), new TEvPrivate::TEvStorageBalancerOut());
         return IActor::PassAway();
     }
 
     void Cleanup() override {
         return PassAway();
+    }
+
+    TString GetDescription() const override {
+        return TStringBuilder() << "StorageBalancer(" << Settings.StoragePool << ")";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void ReassignNextTablet() {
@@ -154,10 +163,13 @@ public:
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM>(channels, metricToBalance);
+            break;
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_HEAVIEST>(channels, metricToBalance);
+            break;
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM:
             BalanceChannels<NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM>(channels, metricToBalance);
+            break;
         }
         for (size_t i = 0; i < channels.size() && Operations.size() < Settings.NumReassigns; ++i) {
             const auto& channel = channels[i];

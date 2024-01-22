@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -41,9 +41,9 @@
 
 static char *parse_filename(const char *ptr, size_t len);
 
-#ifdef WIN32
-#define BOLD
-#define BOLDOFF
+#ifdef _WIN32
+#define BOLD "\x1b[1m"
+#define BOLDOFF "\x1b[22m"
 #else
 #define BOLD "\x1b[1m"
 /* Switch off bold by setting "all attributes off" since the explicit
@@ -77,23 +77,20 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
   const char *end = (char *)ptr + cb;
   const char *scheme = NULL;
 
-  /*
-   * Once that libcurl has called back tool_header_cb() the returned value
-   * is checked against the amount that was intended to be written, if
-   * it does not match then it fails with CURLE_WRITE_ERROR. So at this
-   * point returning a value different from sz*nmemb indicates failure.
-   */
-  size_t failure = (size && nmemb) ? 0 : 1;
-
   if(!per->config)
-    return failure;
+    return CURL_WRITEFUNC_ERROR;
 
 #ifdef DEBUGBUILD
   if(size * nmemb > (size_t)CURL_MAX_HTTP_HEADER) {
-    warnf(per->config->global, "Header data exceeds single call write "
-          "limit!\n");
-    return failure;
+    warnf(per->config->global, "Header data exceeds single call write limit");
+    return CURL_WRITEFUNC_ERROR;
   }
+#endif
+
+#ifdef _WIN32
+  /* Discard incomplete UTF-8 sequence buffered from body */
+  if(outs->utf8seq[0])
+    memset(outs->utf8seq, 0, sizeof(outs->utf8seq));
 #endif
 
   /*
@@ -153,16 +150,19 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
       char *filename;
       size_t len;
 
-      while(*p && (p < end) && !ISALPHA(*p))
+      while((p < end) && *p && !ISALPHA(*p))
         p++;
       if(p > end - 9)
         break;
 
       if(memcmp(p, "filename=", 9)) {
         /* no match, find next parameter */
-        while((p < end) && (*p != ';'))
+        while((p < end) && *p && (*p != ';'))
           p++;
-        continue;
+        if((p < end) && *p)
+          continue;
+        else
+          break;
       }
       p += 9;
 
@@ -175,7 +175,7 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
         if(outs->stream) {
           /* indication of problem, get out! */
           free(filename);
-          return failure;
+          return CURL_WRITEFUNC_ERROR;
         }
 
         outs->is_cd_filename = TRUE;
@@ -185,12 +185,12 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
         outs->alloc_filename = TRUE;
         hdrcbdata->honor_cd_filename = FALSE; /* done now! */
         if(!tool_create_output_file(outs, per->config))
-          return failure;
+          return CURL_WRITEFUNC_ERROR;
       }
       break;
     }
     if(!outs->stream && !tool_create_output_file(outs, per->config))
-      return failure;
+      return CURL_WRITEFUNC_ERROR;
   }
   if(hdrcbdata->config->writeout) {
     char *value = memchr(ptr, ':', cb);
@@ -210,13 +210,17 @@ size_t tool_header_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
     char *value = NULL;
 
     if(!outs->stream && !tool_create_output_file(outs, per->config))
-      return failure;
+      return CURL_WRITEFUNC_ERROR;
 
-    if(hdrcbdata->global->isatty && hdrcbdata->global->styled_output)
+    if(hdrcbdata->global->isatty &&
+#ifdef _WIN32
+       tool_term_has_bold &&
+#endif
+       hdrcbdata->global->styled_output)
       value = memchr(ptr, ':', cb);
     if(value) {
       size_t namelen = value - ptr;
-      fprintf(outs->stream, BOLD "%.*s" BOLDOFF ":", namelen, ptr);
+      fprintf(outs->stream, BOLD "%.*s" BOLDOFF ":", (int)namelen, ptr);
 #ifndef LINK
       fwrite(&value[1], cb - namelen - 1, 1, outs->stream);
 #else
@@ -300,7 +304,7 @@ static char *parse_filename(const char *ptr, size_t len)
   if(copy != p)
     memmove(copy, p, strlen(p) + 1);
 
-#if defined(MSDOS) || defined(WIN32)
+#if defined(_WIN32) || defined(MSDOS)
   {
     char *sanitized;
     SANITIZEcode sc = sanitize_file_name(&sanitized, copy, 0);
@@ -309,7 +313,7 @@ static char *parse_filename(const char *ptr, size_t len)
       return NULL;
     copy = sanitized;
   }
-#endif /* MSDOS || WIN32 */
+#endif /* _WIN32 || MSDOS */
 
   /* in case we built debug enabled, we allow an environment variable
    * named CURL_TESTDIR to prefix the given file name to put it into a
@@ -352,11 +356,22 @@ void write_linked_location(CURL *curl, const char *location, size_t loclen,
   char *copyloc = NULL, *locurl = NULL, *scheme = NULL, *finalurl = NULL;
   const char *loc = location;
   size_t llen = loclen;
+  int space_skipped = 0;
+  char *vver = getenv("VTE_VERSION");
+
+  if(vver) {
+    long vvn = strtol(vver, NULL, 10);
+    /* Skip formatting for old versions of VTE <= 0.48.1 (Mar 2017) since some
+       of those versions have formatting bugs. (#10428) */
+    if(0 < vvn && vvn <= 4801)
+      goto locout;
+  }
 
   /* Strip leading whitespace of the redirect URL */
-  while(llen && *loc == ' ') {
+  while(llen && (*loc == ' ' || *loc == '\t')) {
     ++loc;
     --llen;
+    ++space_skipped;
   }
 
   /* Strip the trailing end-of-line characters, normally "\r\n" */
@@ -395,8 +410,10 @@ void write_linked_location(CURL *curl, const char *location, size_t loclen,
      !strcmp("https", scheme) ||
      !strcmp("ftp", scheme) ||
      !strcmp("ftps", scheme)) {
-    fprintf(stream, LINK "%s" LINKST "%.*s" LINKOFF,
-            finalurl, loclen, location);
+    fprintf(stream, "%.*s" LINK "%s" LINKST "%.*s" LINKOFF,
+            space_skipped, location,
+            finalurl,
+            (int)loclen - space_skipped, loc);
     goto locdone;
   }
 

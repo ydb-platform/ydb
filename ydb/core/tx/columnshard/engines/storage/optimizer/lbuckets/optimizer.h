@@ -360,13 +360,12 @@ public:
         std::sort(sorted.begin(), sorted.end(), pred);
 
         std::vector<std::shared_ptr<TPortionInfo>> result;
-        ui64 currentSize = 0;
+        std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         for (auto&& i : sorted) {
-            if (currentSize > sizeLimit && result.size() > 1) {
+            result.emplace_back(i);
+            if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
                 break;
             }
-            result.emplace_back(i);
-            currentSize += i->GetBlobBytes();
         }
         if (result.size() < sorted.size()) {
             separatePoint = sorted[result.size()]->IndexKeyStart();
@@ -713,7 +712,8 @@ public:
         }
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(512 * 1024 * 1024, stopPoint);
+        const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
+        std::vector<std::shared_ptr<TPortionInfo>> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
         if (nextBorder) {
             if (MainPortion) {
                 portions.emplace_back(MainPortion);

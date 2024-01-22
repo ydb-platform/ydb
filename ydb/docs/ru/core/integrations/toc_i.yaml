@@ -1,3 +1,5 @@
 items:
 - name: Сбор логов в кластере Kubernetes с помощью FluentBit и YDB
   href: fluent-bit.md
+- name: goose
+  href: goose.md

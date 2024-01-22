@@ -318,8 +318,9 @@ SELECT repeat('[', 10000)::jsonb;
     -stdin-:<main>:1:1: Fatal: Execution of node: Result
     	SELECT repeat('[', 10000)::jsonb;
 	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  stack depth limit exceeded
-HINT:  Increase the configuration parameter "max_stack_depth" (currently 100kB), after ensuring the platform's stack depth limit is adequate.
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type json
+DETAIL:  The input string ended unexpectedly.
+CONTEXT:  JSON data, line 1: ...[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
 
         	SELECT repeat('[', 10000)::jsonb;
 	^
@@ -5938,12 +5939,6 @@ select jsonb_set('{"a": {"b": [1, 2, 3]}}', '{a, b, NULL}', '"new_value"');
 -- jsonb_set_lax
 \pset null NULL
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "\"
-
-    	\pset null NULL
-	^
 <sql-statement>
 -- pass though non nulls to jsonb_set
 select jsonb_set_lax('{"a":1,"b":2}','{b}','5') ;
@@ -6063,7 +6058,6 @@ select jsonb_set_lax('{"a":1,"b":2}', '{b}', null, null_value_treatment => 'use_
 <sql-statement>
 \pset null ''
 </sql-statement>
-Metacommand \pset null '' is not supported
 <sql-statement>
 -- jsonb_insert
 select jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"');

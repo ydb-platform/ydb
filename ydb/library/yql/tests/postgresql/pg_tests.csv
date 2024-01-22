@@ -33,7 +33,7 @@ limit,84,5,5.95
 name,40,22,55.0
 numeric,915,715,78.14
 numerology,24,8,33.33
-oid,27,21,77.78
+oid,27,27,100.0
 select,88,9,10.23
 select_distinct,46,1,2.17
 select_distinct_on,4,0,0.0

@@ -126,6 +126,7 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetExpiredInsertions(const
             newMin = Min(newMin, dataInsertTs);
         }
     }
+    MinInsertedTs = (toAbort.size() == Inserted.size()) ? TInstant::Zero() : newMin;
     return toAbort;
 }
 

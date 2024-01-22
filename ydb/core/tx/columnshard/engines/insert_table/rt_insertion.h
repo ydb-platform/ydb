@@ -21,7 +21,7 @@ private:
 
     THashMap<TWriteId, TInsertedData> Inserted;
     THashMap<TWriteId, TInsertedData> Aborted;
-    TInstant MinInsertedTs = TInstant::Zero();
+    mutable TInstant MinInsertedTs = TInstant::Zero();
 
     std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;

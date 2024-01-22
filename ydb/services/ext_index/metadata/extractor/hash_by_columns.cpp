@@ -104,6 +104,7 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                             break;
                         case NYql::NJsonPath::EValueType::Null:
                             values.emplace_back("");
+                            break;
                         case NYql::NJsonPath::EValueType::Object:
                         case NYql::NJsonPath::EValueType::Array:
                             ALS_ERROR(NKikimrServices::EXT_INDEX) << "Cannot use object and array as hash param for index construction";

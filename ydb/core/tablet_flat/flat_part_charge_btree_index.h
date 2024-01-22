@@ -28,13 +28,30 @@ class TChargeBTreeIndex : public ICharge {
     };
 
 public:
-    TChargeBTreeIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
+    TChargeBTreeIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
         : Part(&part)
         , Scheme(*Part->Scheme)
-        , Env(env) {
-        Y_UNUSED(part);
-        Y_UNUSED(tags);
+        , Env(env) 
+    {    
         Y_UNUSED(includeHistory);
+        // if (includeHistory && Part->HistoricGroupsCount) {
+        //     HistoryIndex.emplace(Part, Env, TGroupId(0, true));
+        // }
+
+        TDynBitMap seen;
+        for (TTag tag : tags) {
+            if (const auto* col = Scheme.FindColumnByTag(tag)) {
+                if (col->Group != 0 && !seen.Get(col->Group)) {
+                    NPage::TGroupId groupId(col->Group);
+                    Groups.push_back(groupId);
+                    // if (HistoryIndex) {
+                    //     NPage::TGroupId historyGroupId(col->Group, true);
+                    //     HistoryGroups.emplace_back(TPartIndexIt(Part, Env, historyGroupId), historyGroupId);
+                    // }
+                    seen.Set(col->Group);
+                }
+            }
+        }
     }
 
 public:
@@ -47,13 +64,8 @@ public:
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
 
-        if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, { });
-            return { ready, true };
-        }
-
         if (Y_UNLIKELY(row1 >= meta.RowCount)) {
-            return { true, true }; // already out of bounds, nothing to precharge
+            return {ready, true}; // already out of bounds, nothing to precharge
         }
         if (Y_UNLIKELY(row1 > row2)) {
             row2 = row1; // will not go further than row1
@@ -111,20 +123,37 @@ public:
             return HasDataPage(current.GetShortChild(pos).PageId, { });
         };
 
-        ready &= TryLoadRoot(meta, level);
-
-        for (ui32 height = 1; height < meta.LevelCount && ready; height++) {
-            iterateLevel(tryLoadNode);
-            level.swap(nextLevel);
-            nextLevel.clear();
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
+                ready &= TryLoadRoot(meta, level);
+            } else {
+                iterateLevel(tryLoadNode);
+                level.swap(nextLevel);
+                nextLevel.clear();
+            }
         }
 
         if (!ready) {
             // some index pages are missing, do not continue
-            return {false, false};
+
+            // precharge groups using the latest row bounds
+            for (auto groupId : Groups) {
+                DoPrechargeGroup(groupId, row1, row2);
+            }
+
+            return {ready, false};
         }
 
-        iterateLevel(hasDataPage);
+        if (meta.LevelCount == 0) {
+            ready &= HasDataPage(meta.PageId, { });
+        } else {
+            iterateLevel(hasDataPage);
+        }
+
+        // precharge groups using the latest row bounds
+        for (auto groupId : Groups) {
+            DoPrechargeGroup(groupId, row1, row2);
+        }
 
         return {ready, row2 == sliceRow2};
     }
@@ -137,11 +166,6 @@ public:
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
-
-        if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, { });
-            return { ready, true };
-        }
 
         if (Y_UNLIKELY(row1 >= meta.RowCount)) {
             row1 = meta.RowCount - 1; // start from the last row
@@ -203,22 +227,98 @@ public:
             return HasDataPage(current.GetShortChild(pos).PageId, { });
         };
 
-        ready &= TryLoadRoot(meta, level);
-
-        for (ui32 height = 1; height < meta.LevelCount && ready; height++) {
-            iterateLevel(tryLoadNode);
-            level.swap(nextLevel);
-            nextLevel.clear();
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
+                ready &= TryLoadRoot(meta, level);
+            } else {
+                iterateLevel(tryLoadNode);
+                level.swap(nextLevel);
+                nextLevel.clear();
+            }
         }
 
         if (!ready) {
             // some index pages are missing, do not continue
-            return {false, false};
+
+            // precharge groups using the latest row bounds
+            for (auto groupId : Groups) {
+                DoPrechargeGroup(groupId, row2, row1);
+            }
+
+            return {ready, false};
         }
 
-        iterateLevel(hasDataPage);
+        if (meta.LevelCount == 0) {
+            ready &= HasDataPage(meta.PageId, { });
+        } else {
+            iterateLevel(hasDataPage);
+        }
+
+        // precharge groups using the latest row bounds
+        for (auto groupId : Groups) {
+            DoPrechargeGroup(groupId, row2, row1);
+        }
 
         return {ready, row2 == sliceRow2};
+    }
+
+private:
+    bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
+        bool ready = true;
+
+        Y_ABORT_UNLESS(row1 <= row2);
+
+        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+
+        Y_ABORT_UNLESS(row2 < meta.RowCount);
+        
+        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+
+        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
+            for (ui32 i : xrange<ui32>(level.size())) {
+                TRecIdx from = 0, to = level[i].GetKeysCount();
+                if (level[i].BeginRowId < row1) {
+                    from = level[i].Seek(row1);
+                }
+                if (level[i].EndRowId > row2 + 1) {
+                    to = level[i].Seek(row2);
+                }
+                for (TRecIdx j : xrange(from, to + 1)) {
+                    ready &= tryLoadNext(level[i], j);
+                }
+            }
+        };
+
+        const auto tryLoadNode = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return TryLoadNode(current, pos, nextLevel);
+        };
+
+        const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
+            return HasDataPage(current.GetShortChild(pos).PageId, groupId);
+        };
+
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
+                ready &= TryLoadRoot(meta, level);
+            } else {
+                iterateLevel(tryLoadNode);
+                level.swap(nextLevel);
+                nextLevel.clear();
+            }
+        }
+
+        if (!ready) {
+            // some index pages are missing, do not continue
+            return ready;
+        }
+
+        if (meta.LevelCount == 0) {
+            ready &= HasDataPage(meta.PageId, groupId);
+        } else {
+            iterateLevel(hasDataPage);
+        }
+
+        return ready;
     }
 
 private:
@@ -274,6 +374,7 @@ private:
     const TPart* const Part;
     const TPartScheme &Scheme;
     IPages* const Env;
+    TSmallVec<TGroupId> Groups;
 };
 
 }

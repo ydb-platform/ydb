@@ -5967,7 +5967,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT
                     id, resource_id, level
                 FROM `/Root/tableWithNulls`
-                WHERE level != 5
+                WHERE level != 5 OR level IS NULL
                 ORDER BY id, resource_id, level;
             )")
             .AddExpectedPlanOptions("KqpBlockReadOlapTableRanges")

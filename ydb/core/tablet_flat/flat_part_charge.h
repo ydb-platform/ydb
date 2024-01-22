@@ -16,7 +16,7 @@ namespace NTable {
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
 
-        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
+        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
             : Env(env)
             , Part(&part)
             , Scheme(*Part->Scheme)

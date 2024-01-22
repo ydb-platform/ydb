@@ -737,28 +737,45 @@ protected:
         }
     }
 
+    void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& extSink = sink.GetExternalSink();
+        auto sinkName = extSink.GetSinkName();
+        if (sinkName) {
+            auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            task.Meta.SecureParams.emplace(sinkName, structuredToken);
+            if (GetUserRequestContext()->TraceId) {
+                task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
+                // "fq.restart_count"
+            }
+        }
+
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = extSink.GetType();
+        output.SinkSettings = extSink.GetSettings();
+    }
+
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& intSink = sink.GetInternalSink();
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = intSink.GetType();
+        output.SinkSettings = intSink.GetSettings();
+    }
+
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
-            YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
-            const auto& extSink = sink.GetExternalSink();
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
-            auto sinkName = extSink.GetSinkName();
-            if (sinkName) {
-                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-                task.Meta.SecureParams.emplace(sinkName, structuredToken);
-                if (GetUserRequestContext()->TraceId) {
-                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
-                    // "fq.restart_count"
-                }
+            if (sink.HasInternalSink()) {
+                BuildInternalSinks(sink, task);
+            } else if (sink.HasExternalSink()) {
+                BuildExternalSinks(sink, task);
+            } else {
+                YQL_ENSURE(false, "unknown sink type");
             }
-
-            auto& output = task.Outputs[sink.GetOutputIndex()];
-            output.Type = TTaskOutputType::Sink;
-            output.SinkType = extSink.GetType();
-            output.SinkSettings = extSink.GetSettings();
         }
     }
 
@@ -1353,6 +1370,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
+                        BuildSinks(stage, task);
                     }
                 }
 
@@ -1380,6 +1398,7 @@ protected:
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
+                        BuildSinks(stage, task);
                     }
                 }
             }

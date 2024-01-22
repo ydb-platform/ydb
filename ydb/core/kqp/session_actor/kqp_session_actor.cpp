@@ -901,7 +901,6 @@ public:
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
 
         for (const auto& effect : txCtx.DeferredEffects) {
-            YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
             request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
 
             LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
@@ -1008,7 +1007,6 @@ public:
             QueryState->Commited = true;
 
             for (const auto& effect : txCtx.DeferredEffects) {
-                YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
                 request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
 
                 LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"

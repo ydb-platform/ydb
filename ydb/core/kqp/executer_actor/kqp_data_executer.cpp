@@ -1665,8 +1665,9 @@ private:
             }
         }
 
-        for (const auto& tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+        for (const auto &tableOp : stage.GetTableOps()) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
+                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
                 return true;
             }
         }

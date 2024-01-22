@@ -67,7 +67,7 @@ public:
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
-        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
+        const auto iterateLevel = [&](const auto& tryLoadNext) {
             for (ui32 i : xrange<ui32>(level.size())) {
                 if (level[i].PageId == key1PageId) {
                     TRecIdx pos = level[i].Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -159,7 +159,7 @@ public:
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
-        const auto iterateLevel = [&](std::function<bool(TNodeState& current, TRecIdx pos)> tryLoadNext) {
+        const auto iterateLevel = [&](const auto& tryLoadNext) {
             for (ui32 i : xrange<ui32>(level.size())) {
                 if (level[i].PageId == key1PageId) {
                     TRecIdx pos = level[i].SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);

@@ -5,8 +5,9 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_identificators.h"
-#include "schemeshard_olap_types.h"
 #include "schemeshard_schema.h"
+#include "olap/schema/schema.h"
+#include "olap/schema/update.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>

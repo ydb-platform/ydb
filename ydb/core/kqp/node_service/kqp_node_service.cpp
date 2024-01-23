@@ -410,6 +410,7 @@ private:
         runtimeSettingsBase.FailOnUndelivery = msgRtSettings.GetExecType() != NYql::NDqProto::TComputeRuntimeSettings::SCAN;
 
         runtimeSettingsBase.StatsMode = msgRtSettings.GetStatsMode();
+        runtimeSettingsBase.UseSpilling = msgRtSettings.GetUseSpilling();
 
         if (msgRtSettings.HasRlPath()) {
             runtimeSettingsBase.RlPath = msgRtSettings.GetRlPath();

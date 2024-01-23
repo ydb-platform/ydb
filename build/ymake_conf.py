@@ -2396,7 +2396,7 @@ class Cuda(object):
         host, target = self.build.host_target
         if not target.is_linux_x86_64:
             # do not impose any restrictions, when build not for "linux 64-bit"
-            return []
+            return ''
 
         # do not include 'lto' type,
         # because we already perform static linking
@@ -2422,7 +2422,7 @@ class Cuda(object):
                               for typ in supported_types
                               for ver in supported_vers]
 
-        return ','.join(cuda_architectures)
+        return ':'.join(cuda_architectures)
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user

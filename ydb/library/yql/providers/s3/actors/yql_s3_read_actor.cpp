@@ -376,6 +376,7 @@ public:
         , BatchObjectCountLimit(batchObjectCountLimit)
         , ObjectsTotalSize(0)
         , RoundRobinStageFinished(false)
+        , IsRoundRobinFinishScheduled(false)
         , HasPendingRequests(false)
         , Gateway(std::move(gateway))
         , Url(std::move(url))
@@ -416,7 +417,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -525,7 +526,7 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -553,7 +554,7 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
-                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleStartStageTimeout);
+                cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -575,7 +576,7 @@ public:
         ReadActorToEvents[ev->Sender].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
     }
 
-    void HandleStartStageTimeout() {
+    void HandleRoundRobinStageTimeout() {
         LOG_T("TS3FileQueueActor","Handle start stage timeout");
         if (!RoundRobinStageFinished) {
             RoundRobinStageFinished = true;
@@ -645,7 +646,6 @@ private:
             SendObjects(consumer);
         } else {
             ScheduleRequest(consumer);
-            HasPendingRequests = true;
         }
     }
     void SendObjects(const TActorId& consumer) {
@@ -671,11 +671,9 @@ private:
                 Schedule(RoundRobinStageTimeout, new TEvPrivatePrivate::TEvRoundRobinStageTimeout());
             }
             StartedConsumers.insert(consumer);
-            if (StartedConsumers.size() == ConsumersCount || HasNoMoreItems()) {
-                RoundRobinStageFinished = true;
-                ForEachRequest([&](const auto& consumer) { 
-                    SendObjects(consumer); 
-                });
+            if ((StartedConsumers.size() == ConsumersCount || HasNoMoreItems()) && !IsRoundRobinFinishScheduled) {
+                IsRoundRobinFinishScheduled = true;
+                Send(SelfId(), new TEvPrivatePrivate::TEvRoundRobinStageTimeout());
             }
         }
     }
@@ -768,6 +766,7 @@ private:
         } else {
             PendingRequests[consumer] = 1;
         }
+        HasPendingRequests = true;
     }
 
     void ForEachRequest(std::function<void(const TActorId&)> func, bool earlyStop = false) {
@@ -777,11 +776,14 @@ private:
             handledRequest = false;
             for (auto& [consumer, requestCount] : PendingRequests) {
                 if (!CanSendToConsumer(consumer) || (earlyStop && !HasEnoughToSend())) {
+                    if (requestCount > 0) {
+                        isEmpty = false;
+                    }
                     continue;
                 }
                 if (requestCount > 0) {
-                    func(consumer);
                     --requestCount;
+                    func(consumer);
                     handledRequest = true;
                 }
                 if (requestCount > 0) {
@@ -816,6 +818,7 @@ private:
     THashMap<TActorId, TRetryEventsQueue> ReadActorToEvents;
     THashSet<TActorId> FinishedConsumers;
     bool RoundRobinStageFinished;
+    bool IsRoundRobinFinishScheduled;
     bool HasPendingRequests;
     THashSet<TActorId> StartedConsumers;
 
@@ -2674,14 +2677,13 @@ public:
         return object;
     }
     void TrySendPathBatchRequest() {
-        if (PathBatchQueue.size() < 2 && !IsFileQueueEmpty && !IsWaitingObjectQueueResponse) {
+        if (PathBatchQueue.size() < 2 && !IsFileQueueEmpty && !IsWaitingFileQueueResponse) {
             SendPathBatchRequest();
         }
     }
     void SendPathBatchRequest() {
-        Y_ENSURE(!IsWaitingObjectQueueResponse);
         FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
-        IsWaitingObjectQueueResponse = true;
+        IsWaitingFileQueueResponse = true;
     }
 
     static constexpr char ActorName[] = "S3_STREAM_READ_ACTOR";
@@ -2838,8 +2840,8 @@ private:
     )
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
-        Y_ENSURE(IsWaitingObjectQueueResponse);
-        IsWaitingObjectQueueResponse = false;
+        Y_ENSURE(IsWaitingFileQueueResponse);
+        IsWaitingFileQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
@@ -3012,7 +3014,7 @@ private:
     TDeque<TVector<TObjectPath>> PathBatchQueue;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
-    bool IsWaitingObjectQueueResponse = false;
+    bool IsWaitingFileQueueResponse = false;
     const bool AddPathIndex;
     size_t ListedFiles = 0;
     size_t CompletedFiles = 0;

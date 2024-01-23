@@ -76,6 +76,7 @@ public:
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         std::vector<std::vector<TPath>> parts;
         std::optional<ui64> mbLimitHint;
+        bool hasDirectories = false;
         if (const TMaybeNode<TDqSource> source = &node) {
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             mbLimitHint = TryExtractLimitHint(settings);
@@ -89,6 +90,9 @@ public:
                     paths);
                 parts.reserve(parts.size() + paths.size());
                 for (const auto& path : paths) {
+                    if (path.IsDirectory) {
+                        hasDirectories = true;
+                    }
                     parts.emplace_back(1U, path);
                 }
             }
@@ -102,7 +106,7 @@ public:
 
         auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
         if (useRuntimeListing) {
-            size_t partitionCount = maxPartitions;
+            size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
             partitions.reserve(partitionCount);
             ui64 startIdx = 0;
             for (size_t i = 0; i < partitionCount; ++i) {
@@ -415,7 +419,7 @@ public:
             auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(readActorConfig.MaxInflight);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
             
-            auto maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+            size_t maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
 
             auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get().GetOrElse(maxTasksPerStage * srcDesc.GetParallelDownloadCount() * 2);
             srcDesc.MutableSettings()->insert({"fileQueuePrefetchSize", ToString(fileQueuePrefetchSize)});
@@ -468,13 +472,15 @@ public:
                     }
                 }
 
+                auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
+
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
                     0ul,
                     paths,
                     fileQueuePrefetchSize,
                     fileSizeLimit,
                     useRuntimeListing,
-                    maxTasksPerStage,
+                    consumersCount,
                     fileQueueBatchSizeLimit,
                     fileQueueBatchObjectCountLimit,
                     State_->Gateway,

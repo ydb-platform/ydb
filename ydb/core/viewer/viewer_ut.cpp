@@ -600,4 +600,436 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
     }
+
+    Y_UNIT_TEST(ServerlessNodesPage)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId = 0;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("tenant", "/Root/serverless");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        bool firstNavigateResponse = true;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    TSchemeCacheNavigate::TEntry& entry((*x)->Get()->Request->ResultSet.front());
+                    if (firstNavigateResponse) {
+                        firstNavigateResponse = false;
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Path = {"Root", "serverless"};
+                        entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        entry.DomainInfo->DomainKey = {7000000000, 2};
+                        entry.DomainInfo->ResourcesDomainKey = {7000000000, 1};
+                    } else {
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Path = {"Root", "shared"};
+                        entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        entry.DomainInfo->DomainKey = {7000000000, 1};
+                        entry.DomainInfo->ResourcesDomainKey = {7000000000, 1};
+                        entry.DomainInfo->Params.SetHive(NKikimr::Tests::Hive);
+                    }
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+    
+                    auto *nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(1);
+                    auto *stateStats = nodeStats->MutableStateStats()->Add();
+                    stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::DataShard);
+                    stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+                    stateStats->SetCount(1);
+                    break;
+                }
+                case TEvWhiteboard::EvTabletStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvTabletStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+ 
+                    auto tablet = record.AddTabletStateInfo();
+                    tablet->SetTabletId(100);
+                    tablet->SetType(NKikimrTabletBase::TTabletTypes::DataShard);
+                    tablet->SetNodeId(1);
+                    tablet->SetGeneration(2);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto &nodes = (*x)->Get()->Nodes;
+                    nodes.clear();
+                    TEvInterconnect::TNodeInfo node;
+                    node.NodeId = 1;
+                    nodes.push_back(node);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+                    auto *systemStateInfo = record.AddSystemStateInfo();
+                    systemStateInfo->SetHost("host.yandex.net");
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    auto *record = (*x)->Get();
+                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                    const_cast<EStatus&>(record->Status) = EStatus::NotAvailable;
+                    record->InfoEntries.clear();
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "0");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "0");
+    }
+
+    Y_UNIT_TEST(ServerlessWithExclusiveNodes)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId = 0;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("tenant", "/Root/serverless");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        bool firstNavigateResponse = true;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    TSchemeCacheNavigate::TEntry& entry((*x)->Get()->Request->ResultSet.front());
+                    if (firstNavigateResponse) {
+                        firstNavigateResponse = false;
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Path = {"Root", "serverless"};
+                        entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        entry.DomainInfo->DomainKey = {7000000000, 2};
+                        entry.DomainInfo->ResourcesDomainKey = {7000000000, 1};
+                    } else {
+                        entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                        entry.Path = {"Root", "shared"};
+                        entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                        entry.DomainInfo->DomainKey = {7000000000, 1};
+                        entry.DomainInfo->ResourcesDomainKey = {7000000000, 1};
+                        entry.DomainInfo->Params.SetHive(NKikimr::Tests::Hive);
+                    }
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+    
+                    auto *nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(1);
+                    auto *stateStats = nodeStats->MutableStateStats()->Add();
+                    stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::DataShard);
+                    stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+                    stateStats->SetCount(1);
+
+                    nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(2);
+                    stateStats = nodeStats->MutableStateStats()->Add();
+                    stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::Coordinator);
+                    stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+                    stateStats->SetCount(1);
+                    break;
+                }
+                case TEvWhiteboard::EvTabletStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvTabletStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+
+                    if ((*x)->Cookie == 1) {
+                        auto tablet = record.AddTabletStateInfo();
+                        tablet->SetType(NKikimrTabletBase::TTabletTypes::DataShard);
+                        tablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+                        tablet->SetCount(1);
+                        tablet->SetNodeId(1);
+                    } else if ((*x)->Cookie == 2) {
+                        auto tablet = record.AddTabletStateInfo();
+                        tablet->SetType(NKikimrTabletBase::TTabletTypes::Coordinator);
+                        tablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+                        tablet->SetCount(1);
+                        tablet->SetNodeId(2);
+                    }
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto &nodes = (*x)->Get()->Nodes;
+                    nodes.clear();
+                    TEvInterconnect::TNodeInfo node;
+                    node.NodeId = 1;
+                    nodes.push_back(node);
+                    TEvInterconnect::TNodeInfo exclusiveNode;
+                    exclusiveNode.NodeId = 2;
+                    nodes.push_back(exclusiveNode);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+                    if ((*x)->Cookie == 1) {
+                        auto *systemStateInfo = record.AddSystemStateInfo();
+                        systemStateInfo->SetHost("host.yandex.net");
+                    } else if ((*x)->Cookie == 2) {
+                        auto *systemStateInfo = record.AddSystemStateInfo();
+                        systemStateInfo->SetHost("exclusive.host.yandex.net");
+                    }                    
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    auto *record = (*x)->Get();
+                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
+                    record->InfoEntries[TActorId(2, 0, 0, 0)] = {};
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
+        auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(node.at("SystemState").GetMap().at("Host"), "exclusive.host.yandex.net");
+        UNIT_ASSERT_VALUES_EQUAL(node.at("Tablets").GetArray().size(), 1);
+        auto tablet = node.at("Tablets").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "Coordinator");
+    }
+
+    Y_UNIT_TEST(SharedDoesntShowExclusiveNodes)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId = 0;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("tenant", "Root/shared");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("enums", "true");
+        httpReq.CgiParameters.emplace("sort", "");
+        httpReq.CgiParameters.emplace("type", "any");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    TSchemeCacheNavigate::TEntry& entry((*x)->Get()->Request->ResultSet.front());
+                    entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Path = {"Root", "shared"};
+                    entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                    entry.DomainInfo->DomainKey = {7000000000, 1};
+                    entry.DomainInfo->ResourcesDomainKey = {7000000000, 1};
+                    entry.DomainInfo->Params.SetHive(NKikimr::Tests::Hive);
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+    
+                    auto *nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(1);
+                    auto *stateStats = nodeStats->MutableStateStats()->Add();
+                    stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::DataShard);
+                    stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+                    stateStats->SetCount(1);
+
+                    nodeStats = record.MutableNodeStats()->Add();
+                    nodeStats->SetNodeId(2);
+                    stateStats = nodeStats->MutableStateStats()->Add();
+                    stateStats->SetTabletType(NKikimrTabletBase::TTabletTypes::Coordinator);
+                    stateStats->SetVolatileState(NKikimrHive::TABLET_VOLATILE_STATE_RUNNING);
+                    stateStats->SetCount(1);
+                    break;
+                }
+                case TEvWhiteboard::EvTabletStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvTabletStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+
+                    if ((*x)->Cookie == 1) {
+                        auto tablet = record.AddTabletStateInfo();
+                        tablet->SetType(NKikimrTabletBase::TTabletTypes::DataShard);
+                        tablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+                        tablet->SetCount(1);
+                        tablet->SetNodeId(1);
+                    } else if ((*x)->Cookie == 2) {
+                        auto tablet = record.AddTabletStateInfo();
+                        tablet->SetType(NKikimrTabletBase::TTabletTypes::Coordinator);
+                        tablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+                        tablet->SetCount(1);
+                        tablet->SetNodeId(2);
+                    }
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                    auto &nodes = (*x)->Get()->Nodes;
+                    nodes.clear();
+                    TEvInterconnect::TNodeInfo node;
+                    node.NodeId = 1;
+                    nodes.push_back(node);
+                    TEvInterconnect::TNodeInfo exclusiveNode;
+                    exclusiveNode.NodeId = 2;
+                    nodes.push_back(exclusiveNode);
+                    break;
+                }
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    record.Clear();
+                    if ((*x)->Cookie == 1) {
+                        auto *systemStateInfo = record.AddSystemStateInfo();
+                        systemStateInfo->SetHost("host.yandex.net");
+                    } else if ((*x)->Cookie == 2) {
+                        auto *systemStateInfo = record.AddSystemStateInfo();
+                        systemStateInfo->SetHost("exclusive.host.yandex.net");
+                    }                    
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    auto *x = reinterpret_cast<TEvStateStorage::TEvBoardInfo::TPtr*>(&ev);
+                    auto *record = (*x)->Get();
+                    using EStatus = TEvStateStorage::TEvBoardInfo::EStatus;
+                    const_cast<EStatus&>(record->Status) = EStatus::Ok;
+                    record->InfoEntries[TActorId(1, 0, 0, 0)] = {};
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
+        Ctest << "json result: " << jsonResult << Endl;
+        NJson::TJsonValue json;
+        try {
+            NJson::ReadJsonTree(jsonResult, &json, true);
+        }
+        catch (yexception ex) {
+            Ctest << ex.what() << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Nodes").GetArray().size(), 1);
+        auto node = json.GetMap().at("Nodes").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(node.at("NodeId"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(node.at("SystemState").GetMap().at("Host"), "host.yandex.net");
+        UNIT_ASSERT_VALUES_EQUAL(node.at("Tablets").GetArray().size(), 1);
+        auto tablet = node.at("Tablets").GetArray()[0].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Count"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("State"), "Green");
+        UNIT_ASSERT_VALUES_EQUAL(tablet.at("Type"), "DataShard");
+    }
 }

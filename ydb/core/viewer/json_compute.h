@@ -285,8 +285,8 @@ public:
             auto nodeId = nodeStat.GetNodeId();
             if (IsRequiredNode(nodeId)) {
                 const auto& nodeDomain = nodeStat.GetNodeDomain();
-                TPathId subDomainKey(nodeDomain.GetSchemeShard(), nodeDomain.GetPathId());
-                if (FilterSubDomain && FilterSubDomain != subDomainKey) {
+                const TPathId subDomain(nodeDomain.GetSchemeShard(), nodeDomain.GetPathId());
+                if (FilterSubDomain && FilterSubDomain != subDomain) {
                     continue;
                 }
                 NodeIds.emplace_back(nodeId); // order is important

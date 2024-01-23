@@ -4,5 +4,4 @@ ydb/tests/functional/tenants/test_storage_config.py::TestStorageConfig::*
 ydb/tests/functional/tenants/test_tenants.py::*
 ydb/tests/functional/audit/*
 ydb/tests/functional/clickbench::test.py.test_plans*
-ydb/tests/fq/s3*
 ydb/tests/fq/yds/test_metrics_cleanup.py::TestCleanup*test_cleanup[v1]

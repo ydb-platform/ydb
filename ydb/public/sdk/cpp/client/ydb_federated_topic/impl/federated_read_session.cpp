@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <library/cpp/threading/future/future.h>
 #include <util/generic/guid.h>
 
@@ -11,24 +15,24 @@ namespace NYdb::NFederatedTopic {
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
 template <typename TEvent, typename TFederatedEvent>
-typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db) {
+typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db, std::shared_ptr<TEventFederator> federator) {
     if (outerHandler) {
-        return [outerHandler, db = std::move(db)](TEvent& ev) {
-            auto fev = Federate(std::move(ev), db);
+        return [outerHandler, db = std::move(db), &federator](TEvent& ev) {
+            auto fev = federator->LocateFederate(ev, std::move(db));
             return outerHandler(fev);
         };
     }
     return {};
 }
 
-NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db) {
+NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db, std::shared_ptr<TEventFederator> federator) {
     NTopic::TReadSessionSettings SubsessionSettings = settings;
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
 
 #define MAYBE_CONVERT_HANDLER(type, name) \
     SubsessionSettings.EventHandlers_.name( \
-        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db) \
+        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator) \
     );
 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
@@ -46,7 +50,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
         SubsessionSettings.EventHandlers_.SimpleDataHandlers(
             WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
-                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db),
+                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator),
             settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
@@ -56,17 +60,22 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 
 TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
                                                      std::shared_ptr<TGRpcConnectionsImpl> connections,
-                                                     const TFederatedTopicClientSettings& clientSetttings,
+                                                     const TFederatedTopicClientSettings& clientSettings,
                                                      std::shared_ptr<TFederatedDbObserver> observer)
     : Settings(settings)
     , Connections(std::move(connections))
-    , SubClientSetttings(FromFederated(clientSetttings))
+    , SubClientSetttings(FromFederated(clientSettings))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
+    , EventFederator(std::make_shared<TEventFederator>())
     , Log(Connections->GetLog())
     , SessionId(CreateGuidAsString())
 {
+}
+
+TStringBuilder TFederatedReadSessionImpl::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(SubClientSetttings.Database_.GetOrElse("")) << "[" << SessionId << "] ";
 }
 
 void TFederatedReadSessionImpl::Start() {
@@ -91,7 +100,7 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
-        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db));
+        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator));
         SubSessions.emplace_back(subsession, db);
     }
     SubsessionIndex = 0;
@@ -99,23 +108,27 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
 
 void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed.");
         CloseImpl();
         return;
     }
+
+    EventFederator->SetFederationState(FederationState);
+
     if (Settings.IsReadMirroredEnabled()) {
         Y_ABORT_UNLESS(Settings.GetDatabasesToReadFrom().size() == 1);
         auto dbToReadFrom = *Settings.GetDatabasesToReadFrom().begin();
 
-        std::vector<TString> dcNames = GetAllFederationLocations();
+        std::vector<TString> dbNames = GetAllFederationDatabaseNames();
         auto topics = Settings.Topics_;
         for (const auto& topic : topics) {
-            for (const auto& dc : dcNames) {
-                if (AsciiEqualsIgnoreCase(dc, dbToReadFrom)) {
+            for (const auto& dbName : dbNames) {
+                if (AsciiEqualsIgnoreCase(dbName, dbToReadFrom)) {
                     continue;
                 }
                 auto mirroredTopic = topic;
                 mirroredTopic.PartitionIds_.clear();
-                mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + dc);
+                mirroredTopic.Path(topic.Path_ + "-mirrored-from-" + dbName);
                 Settings.AppendTopics(mirroredTopic);
             }
         }
@@ -130,6 +143,7 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     }
 
     if (databases.empty()) {
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
         CloseImpl();
         return;
     }
@@ -137,10 +151,10 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     OpenSubSessionsImpl(databases);
 }
 
-std::vector<TString> TFederatedReadSessionImpl::GetAllFederationLocations() {
+std::vector<TString> TFederatedReadSessionImpl::GetAllFederationDatabaseNames() {
     std::vector<TString> result;
     for (const auto& db : FederationState->DbInfos) {
-        result.push_back(db->location());
+        result.push_back(db->name());
     }
     return result;
 }
@@ -210,7 +224,7 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool blo
         do {
             auto sub = SubSessions[SubsessionIndex];
             for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
-                result.push_back(Federate(std::move(ev), sub.DbInfo));
+                result.push_back(EventFederator->LocateFederate(std::move(ev), sub.DbInfo));
             }
             SubsessionIndex = (SubsessionIndex + 1) % SubSessions.size();
         }

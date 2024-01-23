@@ -651,6 +651,10 @@ class TCdcChangeSenderMain
         return StateBase(ev);
     }
 
+    TActorId GetChangeServer() const override {
+        return DataShard.ActorId;
+    }
+
     void Resolve() override {
         ResolveCdcStream();
     }
@@ -760,7 +764,7 @@ public:
 
     explicit TCdcChangeSenderMain(const TDataShardId& dataShard, const TPathId& streamPathId)
         : TActorBootstrapped()
-        , TBaseChangeSender(this, this, dataShard.ActorId, streamPathId)
+        , TBaseChangeSender(this, this, streamPathId)
         , DataShard(dataShard)
         , TopicVersion(0)
     {

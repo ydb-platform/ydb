@@ -1,11 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "change_sender_common_ops.h"
-
-#include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -13,6 +9,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -2926,7 +2926,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         bool ready = false;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 ready = true;
             }
 
@@ -2948,7 +2948,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THolder<IEventHandle> delayed;
         prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

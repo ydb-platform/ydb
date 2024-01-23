@@ -834,6 +834,32 @@ TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
                     return result;
                 }
                 case EByteaOutput::escape: {
+                    ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
+                        [] (ui64 acc, char c) {
+                            return acc + ((c == '\\')
+                                          ? 2
+                                          : ((ui8)c < 0x20 || 0x7e < (ui8)c)
+                                            ? 4
+                                            : 1);
+                        });
+                    result.resize(expectedSize);
+                    auto p = result.begin();
+                    for (const auto c : rawValue) {
+                        if (c == '\\') {
+                            *p++ = '\\';
+                            *p++ = '\\';
+                        } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
+                            auto val = (ui8)c;
+
+                            *p++ = '\\';
+                            *p++ = ((val >> 6) & 03) + '0';
+                            *p++ = ((val >> 3) & 07) + '0';
+                            *p++ =  (val & 07) + '0';
+                        } else {
+                            *p++ = c;
+                        }
+                    }
+
                     return result;
                 }
                 default:

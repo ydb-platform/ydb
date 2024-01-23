@@ -89,21 +89,25 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { owner, repo } = context.repo;
+            let labelsToRemove = ['ok-to-test', 'rebase-and-check'];
             const prNumber = context.payload.pull_request.number;
-            const labelToRemove = 'ok-to-test';
-            try {
-              const result = await github.rest.issues.removeLabel({
-                owner,
-                repo,
-                issue_number: prNumber,
-                name: labelToRemove
-              });
-            } catch(e) {
-              // ignore the 404 error that arises
-              // when the label did not exist for the
-              // organization member
-              console.log(e);
+            const prLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
+            for await (const label of labelsToRemove.filter(l => prLabels.has(l))) {
+              core.info(`remove label=${label} for pr=${prNumber}`);
+              try {
+                const result = await github.rest.issues.removeLabel({
+                  ...context.repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              } catch(error) {
+                // ignore the 404 error that arises
+                // when the label did not exist for the
+                // organization member
+                if (error.status && error.status != 404) {
+                  throw error;
+                }
+              }
             }
       - name: check is mergeable
         id: check-is-mergeable

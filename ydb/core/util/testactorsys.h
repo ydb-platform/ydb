@@ -92,6 +92,7 @@ class TTestActorSystem {
     };
 
     struct TPerNodeInfo {
+        std::unique_ptr<TAppData> AppData;
         std::unique_ptr<TActorSystem> ActorSystem;
         std::unique_ptr<TMailboxTable> MailboxTable;
         std::unique_ptr<TExecutorThread> ExecutorThread;
@@ -110,7 +111,7 @@ class TTestActorSystem {
     ui64 ActorLocalId = 1;
     std::unordered_map<TMailboxId, TMailboxInfo, THash<std::tuple<ui32, ui32, ui32>>> Mailboxes;
     TProgramShouldContinue ProgramShouldContinue;
-    TAppData AppData;
+    std::unique_ptr<TAppData> AppData;
     TIntrusivePtr<NLog::TSettings> LoggerSettings_;
     NActors::NLog::EPrio OwnLogPriority = NActors::NLog::EPrio::Error;
     TActorId CurrentRecipient;
@@ -177,12 +178,9 @@ public:
 public:
     TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR)
         : MaxNodeId(numNodes)
-        , AppData(0, 0, 0, 0, {{"IC", 0}}, nullptr, nullptr, nullptr, &ProgramShouldContinue)
         , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NActorsServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
     {
-        AppData.Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-        AppData.DomainsInfo = MakeIntrusive<TDomainsInfo>();
         LoggerSettings_->Append(
             NActorsServices::EServiceCommon_MIN,
             NActorsServices::EServiceCommon_MAX,
@@ -199,14 +197,7 @@ public:
 
         Y_ABORT_UNLESS(!CurrentTestActorSystem);
         CurrentTestActorSystem = this;
-
-        AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
-
-        AppData.HiveConfig.SetWarmUpBootWaitingPeriod(10);
-        AppData.HiveConfig.SetMaxNodeUsageToKick(100);
-        AppData.HiveConfig.SetMinCounterScatterToBalance(100);
-        AppData.HiveConfig.SetMinScatterToBalance(100);
-        AppData.HiveConfig.SetObjectImbalanceToBalance(100);
+        AppData = MakeMasterAppData();
     }
 
     ~TTestActorSystem() {
@@ -217,8 +208,31 @@ public:
     static TIntrusivePtr<ITimeProvider> CreateTimeProvider();
     static TIntrusivePtr<IMonotonicTimeProvider> CreateMonotonicTimeProvider();
 
+    std::unique_ptr<TAppData> MakeMasterAppData() {
+        auto appData = std::make_unique<TAppData>(0, 0, 0, 0, TMap<TString, ui32>{{"IC", 0}}, nullptr, nullptr, nullptr, &ProgramShouldContinue);
+        appData->Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+
+        appData->DomainsInfo = MakeIntrusive<TDomainsInfo>();
+        appData->MonotonicTimeProvider = CreateMonotonicTimeProvider();
+
+        appData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
+        appData->HiveConfig.SetMaxNodeUsageToKick(100);
+        appData->HiveConfig.SetMinCounterScatterToBalance(100);
+        appData->HiveConfig.SetMinScatterToBalance(100);
+        appData->HiveConfig.SetObjectImbalanceToBalance(100);
+
+        return appData;
+    }
+
+    std::unique_ptr<TAppData> MakeAppData() {
+        auto appData = MakeMasterAppData();
+        appData->DomainsInfo = GetAppData()->DomainsInfo;
+        appData->MonotonicTimeProvider = GetAppData()->MonotonicTimeProvider;
+        return appData;
+    }
+
     TAppData *GetAppData() {
-        return &AppData;
+        return AppData.get();
     }
 
     template<typename T>
@@ -261,7 +275,8 @@ public:
             }
         }
 
-        info.ActorSystem = std::make_unique<TActorSystem>(setup, &AppData, LoggerSettings_);
+        info.AppData = std::move(MakeAppData());
+        info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, 0, info.ActorSystem.get(), pool,
             info.MailboxTable.get(), "TestExecutor");

@@ -2604,7 +2604,9 @@ void RetryFilter::CallData::OnRetryTimerLocked(void* arg,
                                                grpc_error_handle /*error*/) {
   auto* calld = static_cast<CallData*>(arg);
   calld->retry_timer_handle_.reset();
-  calld->CreateCallAttempt(/*is_transparent_retry=*/false);
+  if (calld->cancelled_from_surface_.ok()) {
+    calld->CreateCallAttempt(/*is_transparent_retry=*/false);
+  }
   GRPC_CALL_STACK_UNREF(calld->owning_call_, "OnRetryTimer");
 }
 

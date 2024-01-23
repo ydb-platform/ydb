@@ -37,14 +37,10 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     using TBase = TActorBootstrapped<TDqComputeStorageActor>;
 public:
     TDqComputeStorageActor(TTxId txId)
-        : TxId_(txId)
-        
+        : TxId_(txId)  
     {}
 
     void Bootstrap() {
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ComputeId: " << 1998,
-            SelfId(), true);
-        SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);
     }
 
@@ -56,11 +52,11 @@ public:
 
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
         FailOnError();
+        CreateSpiller();
 
         ui64 size = blob.size();
 
-        bool success = SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
-        (void)success;
+        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
         auto res = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>()));
         WritingBlobsSize_ += size;
@@ -72,6 +68,7 @@ public:
 
     std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
         FailOnError();
+        CreateSpiller();
 
         if (!SavedBlobs_.contains(blobId)) return std::nullopt;
 
@@ -84,6 +81,7 @@ public:
 
     std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
         FailOnError();
+        CreateSpiller();
 
         if (!SavedBlobs_.contains(blobId)) return std::nullopt;
 
@@ -97,6 +95,7 @@ public:
 
     NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
         FailOnError();
+        CreateSpiller();
 
         auto promise = NThreading::NewPromise<void>();
 
@@ -198,6 +197,15 @@ private:
         Error_.ConstructInPlace(msg.Message);
     }
 
+    void CreateSpiller() {
+        if (IsCreated) return;
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ComputeId: " << 1998,
+            SelfId(), true);
+        SpillingActorId_ = Register(spillingActor);
+
+        IsCreated = true;
+    }
+
     protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
@@ -215,6 +223,8 @@ private:
     TMaybe<TString> Error_;
 
     IDqComputeStorageActor::TKey NextBlobId = 0;
+
+    bool IsCreated = false;
 
 };
 

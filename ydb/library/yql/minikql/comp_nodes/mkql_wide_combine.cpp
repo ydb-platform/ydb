@@ -389,7 +389,6 @@ private:
     EFetchResult AsyncWrite() {
         MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        sleep(3);
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
         //AsyncWriteOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
@@ -397,7 +396,6 @@ private:
     EFetchResult AsyncRead() {
         MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
-        sleep(3);
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
         //AsyncReadOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;

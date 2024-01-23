@@ -25,7 +25,7 @@ public:
     TDqComputeStorage(TTxId txId) {
 
         SelfActor_ = CreateDqComputeStorageActor(txId);
-        SelfActorId_ = TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_->GetActor());
+        SelfActorId_ = TlsActivationContext->AsActorContext().Register(SelfActor_->GetActor());
         SelfId_ = TlsActivationContext->AsActorContext().SelfID;
     }
 

@@ -748,6 +748,28 @@ public:
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options), (override));
 
+    MOCK_METHOD(TFuture<TGetPipelineSpecResult>, GetPipelineSpec, (
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineSpecOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TSetPipelineSpecResult>, SetPipelineSpec, (
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineSpecOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TGetPipelineDynamicSpecResult>, GetPipelineDynamicSpec, (
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineDynamicSpecOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TSetPipelineDynamicSpecResult>, SetPipelineDynamicSpec, (
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineDynamicSpecOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, StartPipeline, (
         const NYPath::TYPath& pipelinePath,
         const TStartPipelineOptions& options),

@@ -146,7 +146,7 @@ public:
                            const ::NMonitoring::TDynamicCounterPtr& counters) : Path(path)
                                                                               , BoardPath(MakeDatabaseMetadataCacheBoardPath(Path))
     {
-        Counters = GetServiceCounters(counters, "utils")->GetSubgroup("database", path);
+        Counters = GetServiceCounters(counters, "utils");
     }
 
     static ui32 PickActiveNode(const TBoardInfoEntries& infoEntries) {

@@ -68,10 +68,9 @@ namespace {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
-                    TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
             }
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
+                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
         }
     }
 

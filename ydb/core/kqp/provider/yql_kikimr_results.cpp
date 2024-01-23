@@ -1,3 +1,4 @@
+#include "yql_kikimr_results.h"
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>

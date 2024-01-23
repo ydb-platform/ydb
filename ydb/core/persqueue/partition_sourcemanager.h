@@ -12,7 +12,7 @@ class TPartition;
 
 class TPartitionSourceManager {
 private:
-    using TPartitionNode = TPartitionGraph::Node;
+    using TPartitionNode = std::optional<const TPartitionGraph::Node *>;
 
 public:
     using TPartitionId = ui32;
@@ -96,7 +96,7 @@ public:
     private:
         TPartitionSourceManager& Manager;
 
-        const TPartitionNode* Node;
+        TPartitionNode Node;
         TSourceIdWriter SourceIdWriter;
         THeartbeatEmitter HeartbeatEmitter;
     };
@@ -125,7 +125,7 @@ private:
     void FinishBatch(const TActorContext& ctx);
     bool RequireEnqueue(const TString& sourceId);
 
-    const TPartitionNode* GetPartitionNode() const;
+    TPartitionNode GetPartitionNode() const;
     TSourceIdStorage& GetSourceIdStorage() const;
     bool HasParents() const;
 

@@ -1796,7 +1796,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
 {
     Config = config;
     PartitionConfig = GetPartitionConfig(Config, Partition);
-    PartitionGraph = MakePartitionGraph(Config);
+    PartitionGraph.Rebuild(Config);
     TopicConverter = topicConverter;
     NewPartition = false;
 
@@ -2612,25 +2612,6 @@ void TPartition::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext
             s->SetState(NKikimrPQ::TEvSourceIdResponse::EState::TEvSourceIdResponse_EState_Unknown);
         }
     }
-
-    Send(ev->Sender, response.Release());
-}
-
-void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-
-    if (Partition != record.GetPartition()) {
-        LOG_INFO_S(
-            ctx, NKikimrServices::PERSQUEUE,
-            "TEvCheckPartitionStatusRequest for wrong partition " << record.GetPartition() << "." <<
-            " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition << "."
-        );
-        return;
-    }
-
-    auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
-    response->Record.SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
 
     Send(ev->Sender, response.Release());
 }

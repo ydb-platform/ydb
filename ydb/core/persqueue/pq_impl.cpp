@@ -1230,7 +1230,6 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     }
 
     ProcessSourceIdRequests(partitionId);
-    ProcessCheckPartitionStatusRequests(partitionId);
     if (allInitialized) {
         SourceIdRequests.clear();
     }
@@ -2049,8 +2048,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
-    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
-            req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
+    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender, req.GetCmdGetOwnership().GetForce());
     ctx.Send(partActor, event.Release());
 }
 
@@ -3914,37 +3912,6 @@ void TPersQueue::ProcessSourceIdRequests(ui32 partitionId) {
             Forward(r, it->second.Actor);
         }
         SourceIdRequests.erase(partitionId);
-    }
-}
-
-void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-    auto it = Partitions.find(record.GetPartition());
-    if (it == Partitions.end()) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
-
-        auto response = THolder<TEvPQ::TEvCheckPartitionStatusResponse>();
-        response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
-        Send(ev->Sender, response.Release());
-
-        return;
-    }
-
-    if (it->second.InitDone) {
-        Forward(ev, it->second.Actor);
-    } else {
-        CheckPartitionStatusRequests[record.GetPartition()].push_back(ev);
-    }
-}
-
-void TPersQueue::ProcessCheckPartitionStatusRequests(ui32 partitionId) {
-    auto sit = CheckPartitionStatusRequests.find(partitionId);
-    if (sit != CheckPartitionStatusRequests.end()) {
-        auto it = Partitions.find(partitionId);
-        for (auto& r : sit->second) {
-            Forward(r, it->second.Actor);
-        }
-        CheckPartitionStatusRequests.erase(partitionId);
     }
 }
 

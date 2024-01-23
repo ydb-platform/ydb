@@ -24,17 +24,13 @@ struct TEvPartitionChooser {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER)");
 
     struct TEvChooseResult: public TEventLocal<TEvChooseResult, EvChooseResult> {
-        TEvChooseResult(ui32 partitionId, ui64 tabletId, const TString& ownerCookie, std::optional<ui64> seqNo)
+        TEvChooseResult(ui32 partitionId, ui64 tabletId)
             : PartitionId(partitionId)
-            , TabletId(tabletId)
-            , OwnerCookie(ownerCookie)
-            , SeqNo(seqNo) {
+            , TabletId(tabletId) {
         }
 
         ui32 PartitionId;
         ui64 TabletId;
-        TString OwnerCookie;
-        std::optional<ui64> SeqNo;
     };
 
     struct TEvChooseError: public TEventLocal<TEvChooseError, EvChooseError>  {
@@ -67,7 +63,6 @@ public:
 
     virtual const TPartitionInfo* GetPartition(const TString& sourceId) const = 0;
     virtual const TPartitionInfo* GetPartition(ui32 partitionId) const = 0;
-    virtual const TPartitionInfo* GetRandomPartition() const = 0;
 };
 
 std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash = false);

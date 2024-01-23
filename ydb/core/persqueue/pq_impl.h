@@ -168,9 +168,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
     void ProcessSourceIdRequests(ui32 partitionId);
 
-    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
-    void ProcessCheckPartitionStatusRequests(ui32 partitionId);
-
     TString LogPrefix() const;
 
     static constexpr const char * KeyConfig() { return "_config"; }
@@ -408,7 +405,6 @@ private:
     bool UseMediatorTimeCast = true;
 
     THashMap<ui32, TVector<TEvPQ::TEvSourceIdRequest::TPtr>> SourceIdRequests;
-    THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
 };
 

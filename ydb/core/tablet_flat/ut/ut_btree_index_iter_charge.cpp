@@ -25,10 +25,7 @@ namespace {
             return nullptr;
         }
 
-        void LoadTouched(bool clearLoaded) {
-            if (clearLoaded) {
-                Loaded.clear();
-            }
+        void LoadTouched() {
             for (const auto &g : Touched) {
                 Loaded[g.first].insert(g.second.begin(), g.second.end());
             }
@@ -212,7 +209,7 @@ namespace {
             if (auto ready = action(); ready != EReady::Page) {
                 return ready;
             }
-            env.LoadTouched(false);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -398,7 +395,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (ready) {
                 return;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -413,7 +410,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (result.Ready) {
                 return result.Overshot;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -459,8 +456,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         
-                        // b-tree overshot also treats key location on key's data page
-                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot || !bTreeOvershot, message);
+                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
                     }
                 }
@@ -536,7 +532,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             if (result) {
                 return;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();

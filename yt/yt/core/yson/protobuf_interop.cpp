@@ -1026,11 +1026,11 @@ protected:
                     data);
                 return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v)",
+                THROW_ERROR_EXCEPTION("Non UTF-8 value in string field %v",
                     YPathStack_.GetHumanReadablePath())
+                    << TErrorAttribute("non_utf8_string", data)
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
-                    << TErrorAttribute("proto_field", fieldFullName)
-                    << TErrorAttribute("non_utf8_string", data);
+                    << TErrorAttribute("proto_field", fieldFullName);
         }
     }
 };
@@ -2511,7 +2511,7 @@ private:
 
                     case FieldDescriptor::TYPE_ENUM: {
                         ParseScalar([&] {
-                            switch(field->GetEnumYsonStorageType()) {
+                            switch (field->GetEnumYsonStorageType()) {
                                 case EEnumYsonStorageType::String:
                                     storeEnumAsString(unsignedValue);
                                     break;
@@ -2753,7 +2753,7 @@ private:
 
                     case FieldDescriptor::TYPE_ENUM: {
                         ParseVarintPacked<ui32>(length, field, [&] (auto value) {
-                            switch(field->GetEnumYsonStorageType()) {
+                            switch (field->GetEnumYsonStorageType()) {
                                 case EEnumYsonStorageType::String:
                                     storeEnumAsString(value);
                                     break;

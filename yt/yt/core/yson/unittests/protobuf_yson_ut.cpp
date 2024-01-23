@@ -1033,7 +1033,7 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
                 .EndMap();
         };
         if (option == EUtf8Check::ThrowOnFail) {
-            EXPECT_THROW_WITH_SUBSTRING(check(), "String field got non UTF-8 value");
+            EXPECT_THROW_WITH_SUBSTRING(check(), "Non UTF-8 value in string field");
         } else {
             EXPECT_NO_THROW(check());
         }
@@ -1045,7 +1045,7 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
         TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
         if (option == EUtf8Check::ThrowOnFail) {
             EXPECT_THROW_WITH_SUBSTRING(
-                WriteProtobufMessage(&ysonWriter, message), "String field got non UTF-8 value");
+                WriteProtobufMessage(&ysonWriter, message), "Non UTF-8 value in string field");
         } else {
             EXPECT_NO_THROW(WriteProtobufMessage(&ysonWriter, message));
         }

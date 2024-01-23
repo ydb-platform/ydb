@@ -55,8 +55,6 @@ std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_vie
         {"timestamp", "Timestamp"},
         {"interval",  "Interval"},
 
-        {"date32",    "Date32"},
-
         {"tzdate",      "TzDate"},
         {"tzdatetime",  "TzDatetime"},
         {"tztimestamp", "TzTimestamp"},

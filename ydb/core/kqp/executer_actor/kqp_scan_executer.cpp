@@ -332,7 +332,7 @@ private:
     void ExecuteScanTx() {
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
-            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
+            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(ResourcesSnapshot), ExecuterRetriesConfig, /* useDataQueryPool */ false, /* localComputeTasks */ false,
             Request.MkqlMemoryLimit, nullptr, false, GetUserRequestContext());
 

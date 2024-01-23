@@ -464,9 +464,11 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_
     CreatePQTabletMock(server, 0, ETopicPartitionStatus::Inactive);
     CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
 
+    WriteToTable(server, "A_Source_3", 0, 13);
     auto r = ChoosePartition(server, config, "A_Source_3");
 
     UNIT_ASSERT(r->Error);
+    AssertTable(server, "A_Source_3", 0, 13);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_1_Test) {

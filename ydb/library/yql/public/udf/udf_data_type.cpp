@@ -29,10 +29,10 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
     // Bool, Int8 ----integrals---- Uint64   Floats, Strings, YJsons, Uuid, DateTimes, Interval, TzDateTimes, Decimal, DyNumber, JsonDocument
     {{ OK,  OK, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Bool
 
-    {{ LD,  OK, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, MF }}, // Int8
-    {{ LD,  MF, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  OK,  OK, OK, OK,  UN, NO, NO, MF }}, // Uint8
-    {{ LD,  MF, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, MF }}, // Int16
-    {{ LD,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, OK, OK,  OK,  MF, OK, OK,  UN, NO, NO, MF }}, // Uint16
+    {{ LD,  OK, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, OK }}, // Int8
+    {{ LD,  MF, OK, OK, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  OK,  OK, OK, OK,  UN, NO, NO, OK }}, // Uint8
+    {{ LD,  MF, MF, OK, MF, OK, MF, OK, MF,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, OK }}, // Int16
+    {{ LD,  MF, MF, MF, OK, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  MF, OK, OK,  OK,  MF, OK, OK,  UN, NO, NO, OK }}, // Uint16
     {{ LD,  MF, MF, MF, MF, OK, MF, OK, MF,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  OK,  MF, MF, MF,  UN, NO, NO, MF }}, // Int32
     {{ LD,  MF, MF, MF, MF, MF, OK, OK, OK,  OK, LD,  OK, OK,  NO, NO,  NO,  MF, MF, OK,  OK,  MF, MF, OK,  UN, NO, NO, MF }}, // Uint32
     {{ LD,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  MF, MF, MF,  MF,  MF, MF, MF,  UN, NO, NO, MF }}, // Int64
@@ -65,7 +65,7 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
 
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // JsonDocument
 
-    {{ NO,  MF, MF, MF, MF, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO, OK }}, // Date32
+    {{ NO,  MF, MF, MF, MF, OK, MF, OK, OK,  LD, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, OK }}, // Date32
 }};
 
 }

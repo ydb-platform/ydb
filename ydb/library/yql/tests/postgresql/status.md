@@ -11,10 +11,10 @@
 || 7 | int4 | 70 | 70 | 100.0 | 29.09.2023 | ||
 || 8 | int8 | 142 | 113 (+65) | 79.58 | 22.01.2024 | YQL-17614 ||
 || 9 | oid | 27 | 27 (+6) | 100.0 | 22.01.2024 | YQL-17623 ||
-|| 10 | float4 | 96 | 48 | 50.0 | 29.09.2023 | CREATE TYPE, CREATE FUNCTION, WITH, форматирование NaN и Infinity, float4send ||
-|| 11 | float8 | 168 | 96 | 57.14 | 25.10.2023 | CREATE CAST, форматирование NaN и Infinity, extra_float_digits, implicit casts, float8send ||
+|| 10 | float4 | 96 | 66 (+18) | 68.75 | 23.01.2024 | YQL-17586 ||
+|| 11 | float8 | 168 | 132 (+36) | 78.57 | 23.01.2024 | YQL-17628 ||
 || 12 | bit | 115 | 84 | 73.04 | 12.12.2023 | substring, COPY  FROM stdin, битовые константы ||
-|| 13 | numeric | 915 | 715 | 78.14 | 12.12.2023 | CREATE UNIQUE INDEX, VACUUM ANALYZE, implicit casts, ошибочно проходит cast в int2 и int8, форматирование NaN и Infinity, COPY FROM stdin, SET lc_numeric, умножение больших целых чисел не дает в результате число с плавающей точкой, sum(), округление, nullif, форматирование чисел ||
+|| 13 | numeric | 915 | 721 (+6) | 78.8 | 23.01.2024 | YQL-17629 ||
 || 14 | uuid | 36 | 0 | 0.0 | 02.05.2023 | ||·
 || 15 | strings | 390 | 31 | 7.95 | 25.08.2023 | SET, RESET, standard_conforming_strings, bytea_output, неинициализированная поддержка регулярок, pg_class  ||
 || 16 | numerology | 24 | 8 | 33.33 | 26.07.2023 |  ||
@@ -41,7 +41,7 @@
 || 37 | union | 186 | 0 | 0.0 | 25.05.2023 | ||
 || 38 | case | 63 | 29 | 46.03 | 12.12.2023 | implicit casts, create function volatile ||
 || 39 | join | 591 | 106 | 17.94 | 12.12.2023 | ||
-|| 40 | aggregates | 416 | 51 | 12.26 | 12.12.2023 | ||
+|| 40 | aggregates | 416 | 66 (+15) | 15.87 | 23.01.2024 | ||
 || 41 | arrays | 410 | 119 | 29.02 | 12.12.2023 | ||
 || 42 | update | 288 | 22 | 7.64 | 12.12.2023 | :-переменные ||
 || 43 | delete | 10 | 0 | 0.0 | 25.05.2023 | ||

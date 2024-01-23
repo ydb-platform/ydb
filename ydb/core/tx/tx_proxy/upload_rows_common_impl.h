@@ -371,21 +371,6 @@ private:
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        for (const auto& index : entry.Indexes) {
-            switch (index.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
-                    continue;
-                } else {
-                    errorMessage = "Bulk upsert is not supported for tables with indexes";
-                    return false;
-                }
-            default:
-                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
-                return false;
-            }
-        }
-
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
@@ -517,6 +502,53 @@ private:
             }
         }
 
+        std::unordered_set<std::string_view> UpdatingValueColumns;
+        if (UpsertIfExists) {
+            for(const auto& name: ValueColumnNames) {
+                Cerr << "name " << name << Endl;
+                UpdatingValueColumns.emplace(name);
+            }
+        }
+
+        for (const auto& index : entry.Indexes) {
+            switch (index.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
+                    continue;
+                } else {
+                    errorMessage = "Bulk upsert is not supported for tables with indexes";
+                    return false;
+                }
+            default:
+
+                bool allowUpdate = UpsertIfExists;
+                Cerr << allowUpdate << Endl;
+                for(auto& column : index.GetKeyColumnNames()) {
+                    Cerr << "index " << column << Endl;
+                    allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                    if (!allowUpdate) {
+                        break;
+                    }
+                }
+
+                for(auto& column : index.GetDataColumnNames()) {
+                    Cerr << "index " << column << Endl;
+                    allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                    if (!allowUpdate) {
+                        break;
+                    }
+                }
+
+                Cerr << "allowUpdate " << allowUpdate << Endl;
+
+                if (!allowUpdate) {
+                    errorMessage = "Only async-indexed tables are supported by BulkUpsert";
+                    return false;
+                }
+            }
+        }
+        Cerr << "ok " << Endl;
+
         if (makeYqbSchema) {
             Id2Position.clear();
             YdbSchema.resize(KeyColumnTypes.size() + ValueColumnTypes.size());
@@ -543,6 +575,11 @@ private:
         if (!keyColumnsLeft.empty()) {
             errorMessage = Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str());
             return false;
+        }
+
+        if (!notNullColumnsLeft.empty() && UpsertIfExists) {
+            // columns are not specified but upsert is executed in update mode and we will not change them.
+            notNullColumnsLeft.clear();
         }
 
         if (!notNullColumnsLeft.empty()) {

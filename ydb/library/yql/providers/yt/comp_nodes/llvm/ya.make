@@ -9,7 +9,7 @@ NO_COMPILER_WARNINGS()
 
 PEERDIR(
     ydb/library/yql/minikql/codegen/llvm
-    ydb/library/yql/minikql/invoke_builtins/llvm
+    ydb/library/yql/minikql/invoke_builtins/llvm14
     contrib/libs/llvm12/lib/IR
     contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
     contrib/libs/llvm12/lib/Linker

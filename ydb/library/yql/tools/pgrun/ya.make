@@ -17,7 +17,7 @@ PEERDIR(
     ydb/library/yql/core/file_storage/proto
     ydb/library/yql/core/file_storage/http_download
     ydb/library/yql/core/services/mounts
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/protos
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/utils/backtrace
@@ -30,7 +30,7 @@ PEERDIR(
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/yt/gateway/file
-    ydb/library/yql/providers/yt/comp_nodes/llvm
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/pg/provider
     ydb/library/yql/core/url_preprocessing

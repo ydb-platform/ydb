@@ -319,7 +319,8 @@ private:
                 generatedColumnsConfig = &it->second;
             }
 
-            const bool assumeDirectories = generatedColumnsConfig && generatedColumnsConfig->Generator;
+            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+            const bool assumeDirectories = !useRuntimeListing && generatedColumnsConfig && generatedColumnsConfig->Generator;
             bool needsListingOnActors = false;
             for (auto& req : requests) {
                 auto it = pendingRequests.find(req);

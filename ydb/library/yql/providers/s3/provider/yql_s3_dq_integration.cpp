@@ -414,16 +414,9 @@ public:
             auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1'000'000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
 
-            NDq::TS3ReadActorFactoryConfig readActorConfig;
-            
-            auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(readActorConfig.MaxInflight);
+            auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
             
-            size_t maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-
-            auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get().GetOrElse(maxTasksPerStage * srcDesc.GetParallelDownloadCount() * 2);
-            srcDesc.MutableSettings()->insert({"fileQueuePrefetchSize", ToString(fileQueuePrefetchSize)});
-
             if (useRuntimeListing) {
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
@@ -436,6 +429,7 @@ public:
                     paths.insert(paths.end(), pathsChunk.begin(), pathsChunk.end());
                 }
 
+                NDq::TS3ReadActorFactoryConfig readActorConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -472,11 +466,16 @@ public:
                     }
                 }
 
+                size_t maxTasksPerStage = State_->KikimrConfig->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+
                 auto consumersCount = hasDirectories ? maxTasksPerStage : Min(paths.size(), maxTasksPerStage);
+
+                auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
+                    .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);
 
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(NDq::CreateS3FileQueueActor(
                     0ul,
-                    paths,
+                    std::move(paths),
                     fileQueuePrefetchSize,
                     fileSizeLimit,
                     useRuntimeListing,

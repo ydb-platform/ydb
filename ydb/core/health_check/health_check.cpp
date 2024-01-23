@@ -234,6 +234,7 @@ public:
         THashMap<TNodeId, ui32> NodeRestartsPerPeriod;
         ui64 StorageQuota;
         ui64 StorageUsage;
+        TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
     };
 
     struct TSelfCheckResult {
@@ -514,7 +515,7 @@ public:
     TDuration Timeout = TDuration::MilliSeconds(20000);
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
-    bool IsSpecificDatabaseFilter() {
+    bool IsSpecificDatabaseFilter() const {
         return FilterDatabase && FilterDatabase != DomainPath;
     }
 
@@ -888,12 +889,17 @@ public:
         if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             auto domainInfo = ev->Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
-
-            if (domainInfo->DomainKey != domainInfo->ResourcesDomainKey) {
-                if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
-                    RequestSchemeCacheNavigate(domainInfo->ResourcesDomainKey);
+            if (domainInfo->IsServerless()) {
+                if (NeedIgnoreServerless(domainInfo)) {
+                    DatabaseState.erase(path);
+                    DatabaseStatusByPath.erase(path);
+                } else {
+                    if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
+                        RequestSchemeCacheNavigate(domainInfo->ResourcesDomainKey);
+                    }
+                    DatabaseState[path].ResourcePathId = domainInfo->ResourcesDomainKey;
+                    DatabaseState[path].ServerlessComputeResourcesMode = domainInfo->ServerlessComputeResourcesMode;
                 }
-                DatabaseState[path].ResourcePathId = domainInfo->ResourcesDomainKey;
             }
             TTabletId hiveId = domainInfo->Params.GetHive();
             if (hiveId) {
@@ -916,6 +922,11 @@ public:
             RequestDescribe(schemeShardId, path);
         }
         RequestDone("TEvNavigateKeySetResult");
+    }
+
+    bool NeedIgnoreServerless(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) const {
+        return !IsSpecificDatabaseFilter() // we don't ignore sl database if it was exactly specified
+            && domainInfo->ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive;
     }
 
     void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
@@ -951,15 +962,9 @@ public:
             Ydb::Cms::GetDatabaseStatusResult getTenantStatusResult;
             operation.result().UnpackTo(&getTenantStatusResult);
             TString path = getTenantStatusResult.path();
-
-            bool ignoreServerlessDatabases = !IsSpecificDatabaseFilter(); // we don't ignore sl database if it was exactly specified
-            if (getTenantStatusResult.has_serverless_resources() && ignoreServerlessDatabases) {
-                DatabaseState.erase(path);
-            } else {
-                DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
-                DatabaseState[path];
-                RequestSchemeCacheNavigate(path);
-            }
+            DatabaseStatusByPath[path] = std::move(getTenantStatusResult);
+            DatabaseState[path];
+            RequestSchemeCacheNavigate(path);
         }
         RequestDone("TEvGetTenantStatusResponse");
     }
@@ -1298,7 +1303,9 @@ public:
 
     void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
-        if (databaseState.ResourcePathId) {
+        if (databaseState.ResourcePathId 
+            && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive) 
+        {
             auto itDatabase = FilterDomainKey.find(TSubDomainKey(databaseState.ResourcePathId.OwnerId, databaseState.ResourcePathId.LocalPathId));
             if (itDatabase != FilterDomainKey.end()) {
                 const TString& sharedDatabaseName = itDatabase->second;

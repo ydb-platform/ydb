@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
-      
+      commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
     steps:
       - name: Check if running tests is allowed
         id: check-ownership-membership
@@ -114,6 +114,7 @@ jobs:
         if: steps.check-ownership-membership.outputs.result == 'true'
         uses: actions/github-script@v6
         with:
+          result-encoding: string
           script: |
             let pr = context.payload.pull_request;
             const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -175,11 +176,13 @@ jobs:
                     comment_id: commentToUpdate.id,
                 });
             }
+            core.info(`commit_sha=${pr.commit_sha}`);
+            core.setOutput('commit_sha', pr.merge_commit_sha);
             return true;
   build_and_test:
     needs:
       - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true'
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
     strategy:
       fail-fast: false
       matrix:
@@ -194,4 +197,5 @@ jobs:
       test_threads: 52
       runner_label: auto-provisioned
       put_build_results_to_cache: true
+      commit_sha: ${{ needs.check-running-allowed.outputs.commit_sha }}
     secrets: inherit

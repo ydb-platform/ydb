@@ -49,6 +49,9 @@ on:
       put_build_results_to_cache:
         type: boolean
         default: true
+      commit_sha:
+        type: string
+        default: ""
 defaults:
   run:
     shell: bash
@@ -57,40 +60,11 @@ jobs:
     name: Build and test ${{ inputs.build_preset }}
     runs-on: [ self-hosted, "${{ inputs.runner_label }}", "${{ inputs.runner_additional_label || inputs.runner_label }}"]
     steps:
-    - name: get merged PR sha
-      uses: actions/github-script@v6
-      id: get-merged-sha
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-      with:
-        result-encoding: string
-        script: |
-          const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-          for (let i = 0; i < 60; i++) {
-            let result = await github.rest.pulls.get({
-                ...context.repo,
-                pull_number:  context.payload.pull_request.number
-            })
-            
-            switch (result.data.mergeable) {
-              case true:
-                const sha = result.data.merge_commit_sha;
-                core.info(`merge_commit_sha=${sha}`);
-                return sha;
-              case false:
-                core.setFailed("Merge conflict");
-                return
-              case null:
-                await delay(5000);
-            }
-          }
-          core.setFailed("Unable to get merge commit SHA");
-    
-    - name: Checkout PR merge commit
+    - name: Checkout specific commit
       uses: actions/checkout@v3
-      if: steps.get-merged-sha.outputs.result != ''
+      if: inputs.commit_sha
       with:
-        ref: ${{ steps.get-merged-sha.outputs.result }}
+        ref: ${{ inputs.commit_sha }}
 
     - name: Checkout
       uses: actions/checkout@v3

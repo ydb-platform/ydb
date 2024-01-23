@@ -176,7 +176,7 @@ namespace NTest {
             return index.GetLastRecord();
         }
 
-        inline const TPartIndexIt::TRecord * GetRecord(const TPartStore& part, TPageId pageIndex) {
+        inline const TPartIndexIt::TRecord * GetRecord(const TPartStore& part, ui32 pageIndex) {
             TTestEnv env;
             TPartIndexIt index(&part, &env, { });
 
@@ -186,6 +186,20 @@ namespace NTest {
             }
 
             return index.GetRecord();
+        }
+
+        inline TPageId GetFirstPageId(const TPartStore& part) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+            index.Seek(0);
+            return index.GetPageId();
+        }
+
+        inline TPageId GetLastPageId(const TPartStore& part) {
+            TTestEnv env;
+            TPartIndexIt index(&part, &env, { });
+            index.Seek(index.GetEndRowId() - 1);
+            return index.GetPageId();
         }
     }
 

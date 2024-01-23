@@ -70,7 +70,6 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
     {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, LD, LD, OK, NO }}, // Timestamp64
     {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, NO, NO, NO, OK }}, // Interval64
 }};
-// TODO check all array elements (size DataSlotCount) are explicitly initialized
 
 }
 

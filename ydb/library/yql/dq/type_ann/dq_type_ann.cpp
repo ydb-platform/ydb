@@ -537,8 +537,7 @@ bool CheckConnectionTypes(const TVector<TExprNode::TPtr>& connectionTypes, TExpr
         if (TDqPhyPrecompute::Match(input.Get())
             || TDqCnHashShuffle::Match(input.Get())
             || TDqCnBroadcast::Match(input.Get())
-            || input->Content().StartsWith("Kqp"sv)
-            || )
+            || input->Content().StartsWith("Kqp"sv))
         {
             continue;
         }

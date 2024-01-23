@@ -30,6 +30,7 @@
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_builder.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
@@ -39,7 +40,13 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
+enum class EByteaOutput{
+    hex,
+    escape,
+};
+
 TString nullRepr("");
+EByteaOutput byteaOutput = EByteaOutput::hex;
 
 bool IsEscapedChar(const TString& s, size_t pos) {
     bool escaped = false;
@@ -787,6 +794,7 @@ static const THashSet<TColumnType> RightAlignedTypes {
 
 struct TColumn {
     TString Name;
+    TString Type;
     size_t Width;
     CellFormatter Formatter;
     bool RightAligned;
@@ -804,6 +812,38 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
     return fmt::format("{0}{1:<{2}}", delim, data, column.Width);
 }
 
+// from postgres/src/include/utils/builtins.h
+extern "C" ui64 hex_encode(const char *src, size_t len, char *dst);
+
+TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
+    if (column.Type == "bytea") {
+        if (cell.IsList()) {
+            TString result;
+
+            const auto rawValue = Base64Decode(cell.AsList()[0].AsString());
+            switch (byteaOutput) {
+                case EByteaOutput::hex: {
+                    const auto expectedSize = rawValue.size() * 2 + 2;
+                    result.resize(expectedSize);
+                    result[0] = '\\';
+                    result[1] = 'x';
+                    const auto cnt = hex_encode(rawValue.data(), rawValue.size(), result.begin() + 2);
+
+                    Y_ASSERT(cnt + 2 == expectedSize);
+
+                    return result;
+                }
+                case EByteaOutput::escape: {
+                    return result;
+                }
+                default:
+                    throw yexception() << "Unhandled EByteaOutput value";
+            }
+        }
+    }
+    return cell.AsString();
+}
+
 void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols, const NYT::TNode::TListType& rows)
 {
     TVector<TColumn> columns;
@@ -816,6 +856,7 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
         auto& c = columns.emplace_back();
 
         c.Name = colName;
+        c.Type = colType;
         c.Width = colName.length();
         c.Formatter = ColumnFormatters.Value(colType, FormatTransparent);
         c.RightAligned = RightAlignedTypes.contains(colType);
@@ -825,9 +866,10 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
         auto& rowData = formattedData.emplace_back();
 
         { int i = 0;
-        for (const auto& col : row.AsList()) {
-            const auto& cellData = col.HasValue() ? col.AsString() : nullRepr;
+        for (const auto& cell : row.AsList()) {
             auto& c = columns[i];
+
+            const auto cellData = cell.HasValue() ? GetCellData(cell, c) : nullRepr;
 
             rowData.emplace_back(c.Formatter(cellData));
             c.Width = std::max(c.Width, rowData.back().length());

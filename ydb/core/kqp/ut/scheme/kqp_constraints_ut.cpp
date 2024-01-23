@@ -291,6 +291,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -588,6 +589,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
         appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
 
+        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -661,7 +664,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["New"];[1]]
+                [[1u];["Old"];1];[[2u];["New"];1]
             ]
         )");
 
@@ -672,7 +675,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["New"];[2]]
+                [[1u];["Old"];1];[[2u];["New"];2]
             ]
         )");
 
@@ -686,7 +689,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["OldNew"];[2]];[[3u];["BrandNew"];[1]]
+                [[1u];["Old"];1];[[2u];["OldNew"];2];[[3u];["BrandNew"];1]
             ]
         )");
 

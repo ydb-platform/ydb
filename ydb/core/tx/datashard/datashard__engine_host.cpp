@@ -585,16 +585,7 @@ public:
     ui64 GetTableSchemaVersion(const TTableId& tableId) const override {
         if (TSysTables::IsSystemTable(tableId))
             return 0;
-        const auto& userTables = Self->GetUserTables();
-        auto it = userTables.find(tableId.PathId.LocalPathId);
-        if (it == userTables.end()) {
-            Y_FAIL_S("DatshardEngineHost (tablet id: " << Self->TabletID()
-                     << " state: " << Self->GetState()
-                     << ") unables to find given table with id: " << tableId);
-            return 0;
-        } else {
-            return it->second->GetTableSchemaVersion();
-        }
+        return GetKeyValidator().GetTableSchemaVersion(tableId);
     }
 
     ui64 GetWriteTxId(const TTableId& tableId) const override {
@@ -997,6 +988,13 @@ private:
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
     }
 
+    TKeyValidator& GetKeyValidator() {
+        return EngineBay.GetKeyValidator();
+    }
+    const TKeyValidator& GetKeyValidator() const {
+        return EngineBay.GetKeyValidator();
+    }
+
     TDataShard* Self;
     TEngineBay& EngineBay;
     NTable::TDatabase& DB;
@@ -1023,6 +1021,7 @@ private:
 TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
                        std::pair<ui64, ui64> stepTxId)
     : StepTxId(stepTxId)
+    , KeyValidator(*self, txc.DB)
     , LockTxId(0)
     , LockNodeId(0)
 {

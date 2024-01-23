@@ -20,20 +20,31 @@ struct TKeyInfo {
     bool IsOptional;
     NUdf::ICompare::TPtr Compare;
     TType* PresortType = nullptr;
-    std::optional<TGenericPresortEncoder> LeftPacker;
-    std::optional<TGenericPresortEncoder> RightPacker;
+};
+
+struct TRuntimeKeyInfo {
+    TRuntimeKeyInfo(const TKeyInfo& keyInfo)
+        : Slot(keyInfo.Slot)
+        , IsOptional(keyInfo.IsOptional)
+        , Compare(keyInfo.Compare.Get())
+    {
+        if (keyInfo.PresortType) {
+            LeftPacker = keyInfo.PresortType;
+            RightPacker = keyInfo.PresortType;
+        }
+    }
+
+    const NUdf::EDataSlot Slot;
+    const bool IsOptional;
+    const NUdf::ICompare* const Compare;
+    mutable std::optional<TGenericPresortEncoder> LeftPacker;
+    mutable std::optional<TGenericPresortEncoder> RightPacker;
 };
 
 struct TMyValueCompare {
     TMyValueCompare(const std::vector<TKeyInfo>& keys)
-        : Keys(keys)
+        : Keys(keys.cbegin(), keys.cend())
     {
-        for (auto& key : Keys) {
-            if (key.PresortType) {
-                key.LeftPacker.emplace(key.PresortType);
-                key.RightPacker.emplace(key.PresortType);
-            }
-        }
     }
 
     int operator()(const bool* directions, const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
@@ -64,7 +75,7 @@ struct TMyValueCompare {
         return 0;
     }
 
-    mutable std::vector<TKeyInfo> Keys;
+    const std::vector<TRuntimeKeyInfo> Keys;
 };
 
 using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);

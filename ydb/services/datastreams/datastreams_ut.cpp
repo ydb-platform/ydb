@@ -376,6 +376,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
         }
 
+        sleep(1);
+
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
                           [](const NJson::TJsonValue::TMapType& map) {
@@ -462,6 +464,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 sleep(1);
             }
         }
+
+        sleep(1);
 
         auto storageSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
@@ -645,6 +649,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT(res.GetValue().IsSuccess());
         }
 
+        sleep(1);
+
         auto storageSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
                             [](const NJson::TJsonValue::TMapType& map) {
@@ -771,6 +777,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
+        sleep(1);
 
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), streamPath, "yds.events.puts.v1",
@@ -1233,6 +1241,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 sleep(1);
             }
         }
+
+        sleep(1);
 
         CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
                           "yds.throughput.reserved.v1",

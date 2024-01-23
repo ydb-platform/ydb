@@ -30,5 +30,19 @@ SELECT
       Ip::FromString("213.180.193.3")
     )
   ); -- "213.180.193.0"
+
+SELECT
+  Ip::SubnetMatch(
+    Ip::SubnetFromString("192.168.0.1/16"),
+    Ip::FromString("192.168.1.14"),
+  ); -- true
+
+SELECT
+  Ip::ToString(
+    Ip::GetSubnetByMask(
+      Ip::FromString("192.168.0.1"),
+      Ip::FromString("255.255.0.0")
+    )
+  ); -- "192.168.0.0"
 ```
 

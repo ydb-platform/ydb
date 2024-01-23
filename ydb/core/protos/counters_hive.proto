@@ -45,7 +45,7 @@ enum ECumulativeCounters {
     COUNTER_SUGGESTED_SCALE_UP = 10 [(CounterOpts) = {Name: "SuggestedScaleUp"}];
     COUNTER_SUGGESTED_SCALE_DOWN = 11 [(CounterOpts) = {Name: "SuggestedScaleDown"}];
     COUNTER_STORAGE_BALANCER_EXECUTED = 12 [(CounterOpts) = {Name: "StorageBalancerExecuted"}];
-    COUNTER_TABLETS_REASSIGNED = 13 [(CounterOpts) = {Name: "TabletsReassigned"}];
+    COUNTER_TABLETS_STORAGE_REASSIGNED = 13 [(CounterOpts) = {Name: "TabletsStorageReassigned"}];
 }
 
 enum EPercentileCounters {

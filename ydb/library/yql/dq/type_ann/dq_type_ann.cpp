@@ -521,13 +521,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
 bool CheckConnectionTypes(const TVector<TExprNode::TPtr>& connectionTypes, TExprContext& ctx)
 {
-    if (connectionTypes.size() == 0) {
-        ctx.AddError(TIssue("Internal Error: Empty Connections List"));
-        return false;
-    }
-
-    // any connection allowed
-    if (connectionTypes.size() == 1) {
+    if (connectionTypes.size() <= 1) {
         return true;
     }
 

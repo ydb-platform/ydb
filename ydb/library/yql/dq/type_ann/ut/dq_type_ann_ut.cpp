@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(DqTypeAnnTests) {
 
 Y_UNIT_TEST(TestEmpty) {
     TExprContext ctx;
-    UNIT_ASSERT(CheckConnectionTypes({}, ctx) == false);
+    UNIT_ASSERT(CheckConnectionTypes({}, ctx) == true);
 }
 
 Y_UNIT_TEST(TestSingleInput) {

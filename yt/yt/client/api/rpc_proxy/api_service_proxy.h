@@ -174,6 +174,10 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferAccountResources);
 
     // Flow
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SetPipelineSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineDynamicSpec);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SetPipelineDynamicSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartPipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StopPipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);

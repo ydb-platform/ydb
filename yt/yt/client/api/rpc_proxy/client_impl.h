@@ -496,6 +496,24 @@ public:
 
     // Flow
 
+    TFuture<TGetPipelineSpecResult> GetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineSpecResult> SetPipelineSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineSpecOptions& options = {}) override;
+
+    TFuture<TGetPipelineDynamicSpecResult> GetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineDynamicSpecOptions& options = {}) override;
+
+    TFuture<TSetPipelineDynamicSpecResult> SetPipelineDynamicSpec(
+        const NYPath::TYPath& pipelinePath,
+        const NYson::TYsonString& spec,
+        const TSetPipelineDynamicSpecOptions& options = {}) override;
+
     TFuture<void> StartPipeline(
         const NYPath::TYPath& pipelinePath,
         const TStartPipelineOptions& options = {}) override;

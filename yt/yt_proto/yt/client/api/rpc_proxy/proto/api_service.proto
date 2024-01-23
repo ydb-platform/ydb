@@ -2677,6 +2677,62 @@ message TRspCheckClusterLiveness
 // FLOW
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqGetPipelineSpec
+{
+    required string pipeline_path = 1;
+}
+
+message TRspGetPipelineSpec
+{
+    required int64 version = 1;
+    required bytes spec = 2; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqSetPipelineSpec
+{
+    required string pipeline_path = 1;
+    optional int64 expected_version = 2;
+    required bytes spec = 3; // YSON
+    // Update spec even if pipeline is not stopped, just paused.
+    optional bool force = 4;
+}
+
+message TRspSetPipelineSpec
+{
+    required int64 version = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetPipelineDynamicSpec
+{
+    required string pipeline_path = 1;
+}
+
+message TRspGetPipelineDynamicSpec
+{
+    required int64 version = 1;
+    required bytes spec = 2; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqSetPipelineDynamicSpec
+{
+    required string pipeline_path = 1;
+    optional int64 expected_version = 2;
+    required bytes spec = 3; // YSON
+}
+
+message TRspSetPipelineDynamicSpec
+{
+    required int64 version = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqStartPipeline
 {
     required string pipeline_path = 1;

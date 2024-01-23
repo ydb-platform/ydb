@@ -27,6 +27,8 @@ DEFINE_ENUM(EPipelineState,
     ((Completed)      (6))
 );
 
+YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 inline const TString PipelineFormatVersionAttribute("flow_pipeline_format_version");

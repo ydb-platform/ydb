@@ -14,15 +14,28 @@ class TChargeBTreeIndex : public ICharge {
     using TChild = TBtreeIndexNode::TChild;
 
     // TODO: store PageId only instead of TChild?
-    struct TNodeState : TBtreeIndexNode, TChild {
+    struct TChildState : TChild {
         TRowId BeginRowId;
         TRowId EndRowId;
 
-        TNodeState(TSharedData data, TChild meta, TRowId beginRowId, TRowId endRowId)
-            : TBtreeIndexNode(data) 
-            , TChild(meta)
+        TChildState(TChild meta, TRowId beginRowId, TRowId endRowId)
+            : TChild(meta)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
+        {
+        }
+    };
+
+    struct TNodeState : TChildState, TBtreeIndexNode {
+        TNodeState(TSharedData data, TChild meta, TRowId beginRowId, TRowId endRowId)
+            : TChildState(meta, beginRowId, endRowId)
+            , TBtreeIndexNode(data)
+        {
+        }
+
+        TNodeState(TSharedData data, TChildState child)
+            : TChildState(child)
+            , TBtreeIndexNode(data)
         {
         }
     };
@@ -59,6 +72,9 @@ public:
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
         bool ready = true;
 
+        // false value means that row1, row2 are invalid and shouldn't be used
+        bool chargeGroups = true;
+
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
@@ -69,124 +85,136 @@ public:
         }
         if (Y_UNLIKELY(row1 > row2)) {
             row2 = row1; // will not go further than row1
+            chargeGroups = false;
         }
         TRowId sliceRow2 = row2;
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
+            chargeGroups = false;
         }
 
         TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
-        const auto iterateLevel = [&](const auto& tryLoadNext) {
-            for (ui32 i : xrange<ui32>(level.size())) {
-                if (level[i].PageId == key1PageId) {
-                    TRecIdx pos = level[i].Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                    key1PageId = level[i].GetShortChild(pos).PageId;
-                    if (pos) {
-                        // move row1 to the first key >= key1
-                        row1 = Max(row1, level[i].GetShortChild(pos - 1).RowCount);
-                    }
-                }
-                if (level[i].PageId == key2PageId) {
-                    TRecIdx pos = level[i].Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                    key2PageId = level[i].GetShortChild(pos).PageId;
-                    // move row2 to the first key > key2
-                    row2 = Min(row2, level[i].GetShortChild(pos).RowCount);
-                    // // always charge row2, no matter what keys are
-                    // row2 = Max(row2, row1);
-                }
-                
-                if (level[i].EndRowId <= row1 || level[i].BeginRowId > row2) {
+        const auto iterateLevel = [&](const auto& tryHandle) {
+            TRowId levelRow1 = row1, levelRow2 = row2; // tryHandle may update them, copy for simplicity
+            for (const auto &node : level) {
+                if (node.EndRowId <= levelRow1 || node.BeginRowId > levelRow2) {
                     continue;
                 }
 
-                TRecIdx from = 0, to = level[i].GetKeysCount();
-                if (level[i].BeginRowId < row1) {
-                    from = level[i].Seek(row1);
+                TRecIdx from = 0, to = node.GetKeysCount();
+                if (node.BeginRowId < levelRow1) {
+                    from = node.Seek(levelRow1);
                 }
-                if (level[i].EndRowId > row2 + 1) {
-                    to = level[i].Seek(row2);
+                if (node.EndRowId > levelRow2 + 1) {
+                    to = node.Seek(levelRow2);
                 }
-                for (TRecIdx j : xrange(from, to + 1)) {
-                    ready &= tryLoadNext(level[i], j);
+                for (TRecIdx pos : xrange(from, to + 1)) {
+                    auto child = node.GetChild(pos);
+                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    TRowId endRowId = child.RowCount;
+                    ready &= tryHandle(TChildState(child, beginRowId, endRowId));
                 }
             }
         };
 
-        const auto tryLoadNode = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return TryLoadNode(current, pos, nextLevel);
-        };
-
-        const auto handleDataPage = [&](TPageId pageId, TRowId beginRowId, TRowId endRowId) -> bool {
-            if (pageId == key1PageId || pageId == key2PageId) {
-                const auto page = TryGetDataPage(pageId, { });
-                if (page) {
-                    auto data = NPage::TDataPage(page);
-                    if (pageId == key1PageId) {
-                        auto iter = data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
-                        row1 = Max(row1, data.BaseRow() + iter.Off());
+        const auto tryHandleNode = [&](TChildState child) -> bool {
+            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+                if (TryLoadNode(child, nextLevel)) {
+                    const auto& node = nextLevel.back();
+                    if (node.PageId == key1PageId) {
+                        TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                        key1PageId = node.GetShortChild(pos).PageId;
+                        if (pos) {
+                            // move row1 to the first key >= key1
+                            row1 = Max(row1, node.GetShortChild(pos - 1).RowCount);
+                        }
                     }
-                    if (pageId == key2PageId) {
-                        auto iter = data.LookupKey(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
-                        row2 = Min(row2, data.BaseRow() + iter.Off());
+                    if (node.PageId == key2PageId) {
+                        TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
+                        key2PageId = node.GetShortChild(pos).PageId;
+                        // move row2 to the first key > key2
+                        row2 = Min(row2, node.GetShortChild(pos).RowCount);
+                        // always charge row1, no matter what keys are
+                        row2 = Max(row2, row1);
                     }
                     return true;
                 } else {
-                    if (pageId == key1PageId) {
-                        row1 = endRowId;
+                    //TODO
+                    return false;
+                }
+            } else {
+                return TryLoadNode(child, nextLevel);
+            }
+        };
+
+        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+                const auto page = TryGetDataPage(child.PageId, { });
+                if (page) { // update row1, row2
+                    auto data = NPage::TDataPage(page);
+                    if (child.PageId == key1PageId) {
+                        TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults).Off();
+                        Cerr << "key1RowId " << key1RowId << Endl;
+                        row1 = Max(row1, key1RowId);
                     }
-                    if (pageId == key2PageId) {
-                        if (beginRowId) {
-                            row2 = beginRowId - 1;
+                    if (child.PageId == key2PageId) {
+                        TRowId key2RowId = data.BaseRow() + data.LookupKey(key2, Scheme.Groups[0], ESeek::Upper, &keyDefaults).Off();
+                        Cerr << "key2RowId " << key2RowId << Endl;
+                        if (key2RowId > 0) {
+                            row2 = Min(row2, key2RowId - 1);
                         } else {
-                            // means no groups precharge
-                            row1 = Max<TRowId>();
+                            chargeGroups = false;
+                        }
+                    }
+                    return true;
+                } else { // skip unloaded page rows
+                    if (child.PageId == key1PageId) {
+                        row1 = child.EndRowId;
+                    }
+                    if (child.PageId == key2PageId) {
+                        if (child.BeginRowId) {
+                            row2 = child.BeginRowId - 1;
+                        } else {
+                            chargeGroups = false;
                         }
                     }
                     return false;
                 }
             } else {
-                return HasDataPage(pageId, { });
+                return HasDataPage(child.PageId, { });
             }
-        };
-
-        const auto tryLoadData = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return handleDataPage(current.GetShortChild(pos).PageId, current.BeginRowId, current.EndRowId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= TryLoadRoot(meta, level);
+                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
             } else {
-                iterateLevel(tryLoadNode);
-                level.swap(nextLevel);
-                nextLevel.clear();
+                iterateLevel(tryHandleNode);
             }
+            level.swap(nextLevel);
+            nextLevel.clear();
         }
 
         if (!ready) {
             // some index pages are missing, do not continue
 
             // precharge groups using the latest row bounds
-            for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, row1, row2);
-            }
+            ready &= DoPrechargeGroups(chargeGroups, row1, row2);
 
             return {ready, false};
         }
 
         if (meta.LevelCount == 0) {
-            ready &= handleDataPage(meta.PageId, 0, meta.RowCount);
+            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
         } else {
-            iterateLevel(tryLoadData);
+            iterateLevel(tryHandleDataPage);
         }
 
         // precharge groups using the latest row bounds
-        for (auto groupId : Groups) {
-            ready &= DoPrechargeGroup(groupId, row1, row2);
-        }
+        ready &= DoPrechargeGroups(chargeGroups, row1, row2);
 
         return {ready, row2 == sliceRow2};
     }
@@ -296,11 +324,20 @@ public:
     }
 
 private:
-    bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
-        if (row1 > row2) {
-            return true;
+    bool DoPrechargeGroups(bool chargeGroups, TRowId row1, TRowId row2) const noexcept {
+        Cerr << "Groups " << chargeGroups << " " << row1 << " " << row2 << Endl;
+        bool ready = true;
+        
+        if (chargeGroups && row1 <= row2) {
+            for (auto groupId : Groups) {
+                ready &= DoPrechargeGroup(groupId, row1, row2);
+            }
         }
 
+        return ready;
+    }
+
+    bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
@@ -372,6 +409,16 @@ private:
         }
 
         level.emplace_back(*page, meta, 0, meta.RowCount);
+        return true;
+    }
+
+    bool TryLoadNode(TChildState& child, TVector<TNodeState>& level) const noexcept {
+        auto page = Env->TryGetPage(Part, child.PageId);
+        if (!page) {
+            return false;
+        }
+
+        level.emplace_back(*page, child);
         return true;
     }
 

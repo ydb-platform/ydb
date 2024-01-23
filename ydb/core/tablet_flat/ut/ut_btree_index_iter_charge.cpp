@@ -87,20 +87,22 @@ namespace {
         switch (params.Levels) {
         case 0:
             if (params.Groups) {
-                conf.Group(3);
+                conf.Group(3).PageRows = 1;
             }
             break;
         case 1:
         case 3:
             conf.Group(0).PageRows = 2;
             if (params.Groups) {
-                conf.Group(1).PageRows = 1;
-                conf.Group(2).PageRows = 2;
-                conf.Group(3).PageRows = 3;
+                for (auto i : xrange(1, 4)) {
+                    conf.Group(i).PageRows = 1;
+                }
             }
             if (params.Levels == 3) {
-                for (auto i : xrange(params.Groups ? 4 : 1)) {
-                    conf.Group(i).BTreeIndexNodeKeysMin = conf.Group(i).BTreeIndexNodeKeysMax = 2;
+                conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+                if (params.Groups) {
+                    conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 2;
+                    conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
                 }
             }
             break;
@@ -180,9 +182,12 @@ namespace {
         Cerr << Endl;
         Cerr << DumpPart(part, 3) << Endl;
 
-        // group [3] has only 2 levels
-        for (auto i : xrange(params.Groups ? 3 : 1)) {
-            UNIT_ASSERT_VALUES_EQUAL_C(part.IndexPages.BTreeGroups[i].LevelCount, params.Levels, "Group " + std::to_string(i));
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
+        if (params.Groups) {
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount, 1);
         }
 
         return eggs;

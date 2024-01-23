@@ -42,7 +42,7 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
     {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Float
 
     {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, MF,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF }}, // String
-    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF }}, // Utf8
+    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF }}, // Utf8
 
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, NO,  OK, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Yson
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // Json
@@ -66,12 +66,7 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // JsonDocument
 
     {{ NO,  MF, MF, MF, MF, OK, OK, OK, OK,  OK, OK,  OK, OK,  NO, NO,  NO,  OK, OK, OK,  NO,  OK, OK, OK,  NO, NO, NO, OK }}, // Date32
-/*     XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType, i32, 0) \
-    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType, i64, 0) \
-    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType, i64, 0) \
-    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType, i64, 0) \ */
 }};
-// TODO check all array elements (size DataSlotCount) are explicitly initialized
 
 }
 

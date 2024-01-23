@@ -11,6 +11,7 @@ IF (OS_LINUX AND ARCH_X86_64)
     )
     PEERDIR(
         contrib/libs/libunwind
+        library/cpp/dwarf_backtrace
     )
 ELSE()
     SRCS(
@@ -20,7 +21,6 @@ ENDIF()
 
 PEERDIR(
     library/cpp/deprecated/atomic
-    library/cpp/dwarf_backtrace
 )
 
 END()

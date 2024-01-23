@@ -41,8 +41,8 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
     {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Double
     {{ FL,  FL, FL, FL, FL, FL, FL, FL, FL,  OK, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Float
 
-    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, MF,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF }}, // String
-    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF }}, // Utf8
+    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, MF,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF, MF, MF, MF }}, // String
+    {{ MF,  MF, MF, MF, MF, MF, MF, MF, MF,  FL, FL,  OK, OK,  MF, MF,  MF,  MF, MF, MF,  MF,  MF, MF, MF,  FL, FL, MF, MF, MF, MF, MF }}, // Utf8
 
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, NO,  OK, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO }}, // Yson
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // Json
@@ -65,7 +65,10 @@ static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCo
 
     {{ NO,  NO, NO, NO, NO, NO, NO, NO, NO,  NO, NO,  OK, OK,  NO, OK,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, OK }}, // JsonDocument
 
-    {{ NO,  MF, MF, MF, MF, OK, MF, OK, OK,  LD, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, OK }}, // Date32
+    {{ NO,  MF, MF, MF, MF, OK, MF, OK, OK,  LD, OK,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, OK, OK, OK, NO }}, // Date32
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, LD, OK, OK, NO }}, // Datetime64
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, LD, LD, OK, NO }}, // Timestamp64
+    {{ NO,  MF, MF, MF, MF, MF, MF, OK, MF,  LD, LD,  OK, OK,  NO, NO,  NO,  NO, NO, NO,  NO,  NO, NO, NO,  NO, NO, NO, NO, NO, NO, OK }}, // Interval64
 }};
 
 }

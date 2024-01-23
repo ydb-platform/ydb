@@ -126,22 +126,27 @@ struct TEnvironmentSetup {
             Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
     }
 
+    std::unique_ptr<TTestActorSystem> MakeRuntime() {
+        TFeatureFlags featureFlags;
+        featureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+
+        auto domainsInfo = MakeIntrusive<TDomainsInfo>();
+        auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
+        domainsInfo->AddDomain(domain.Get());
+        if (Settings.SetupHive) {
+            domainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
+        }
+
+        return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+    }
+
     void Initialize() {
-        Runtime = std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR);
+        Runtime = MakeRuntime();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
         }
         SetupLogging();
         Runtime->Start();
-        auto *appData = Runtime->GetAppData();
-
-        appData->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
-
-        auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
-        appData->DomainsInfo->AddDomain(domain.Get());
-        if (Settings.SetupHive) {
-            appData->DomainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
-        }
 
         if (Settings.LocationGenerator) {
             Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId);
@@ -335,9 +340,8 @@ struct TEnvironmentSetup {
             {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-        auto *appData = Runtime->GetAppData();
 
-        for (const auto& [uid, tabletId] : appData->DomainsInfo->HivesByHiveUid) {
+        for (const auto& [uid, tabletId] : Runtime->GetDomainsInfo()->HivesByHiveUid) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -353,8 +357,8 @@ struct TEnvironmentSetup {
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
         localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-            &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->SystemPoolId, TMailboxType::ReadAsFilled,
-            appData->SystemPoolId));
+            &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID, TMailboxType::ReadAsFilled,
+            Runtime->SYSTEM_POOL_ID));
 
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);

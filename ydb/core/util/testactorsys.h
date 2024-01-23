@@ -105,13 +105,19 @@ class TTestActorSystem {
         TMailboxHeader Header{TMailboxType::Simple};
     };
 
+    struct TAppDataInfo {
+        TIntrusivePtr<TDomainsInfo> DomainsInfo;
+        TFeatureFlags FeatureFlags;
+        TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
+    };
+
     const ui32 MaxNodeId;
     std::map<TInstant, std::deque<TScheduleItem>> ScheduleQ;
     TInstant Clock = TInstant::Zero();
     ui64 ActorLocalId = 1;
     std::unordered_map<TMailboxId, TMailboxInfo, THash<std::tuple<ui32, ui32, ui32>>> Mailboxes;
     TProgramShouldContinue ProgramShouldContinue;
-    std::unique_ptr<TAppData> AppData;
+    TAppDataInfo AppDataInfo;
     TIntrusivePtr<NLog::TSettings> LoggerSettings_;
     NActors::NLog::EPrio OwnLogPriority = NActors::NLog::EPrio::Error;
     TActorId CurrentRecipient;
@@ -176,8 +182,9 @@ public:
     IOutputStream *LogStream = &Cerr;
 
 public:
-    TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR)
+    TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR, TIntrusivePtr<TDomainsInfo> domainsInfo = nullptr, TFeatureFlags featureFlags = {})
         : MaxNodeId(numNodes)
+        , AppDataInfo({.DomainsInfo=domainsInfo, .FeatureFlags=featureFlags, .MonotonicTimeProvider=CreateMonotonicTimeProvider()})
         , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NActorsServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
     {
@@ -197,7 +204,6 @@ public:
 
         Y_ABORT_UNLESS(!CurrentTestActorSystem);
         CurrentTestActorSystem = this;
-        AppData = MakeMasterAppData();
     }
 
     ~TTestActorSystem() {
@@ -208,12 +214,19 @@ public:
     static TIntrusivePtr<ITimeProvider> CreateTimeProvider();
     static TIntrusivePtr<IMonotonicTimeProvider> CreateMonotonicTimeProvider();
 
-    std::unique_ptr<TAppData> MakeMasterAppData() {
-        auto appData = std::make_unique<TAppData>(0, 0, 0, 0, TMap<TString, ui32>{{"IC", 0}}, nullptr, nullptr, nullptr, &ProgramShouldContinue);
+    const static ui32 SYSTEM_POOL_ID;
+
+    const TIntrusivePtr<TDomainsInfo> GetDomainsInfo() const {
+        return AppDataInfo.DomainsInfo;
+    }
+
+    std::unique_ptr<TAppData> MakeAppData() {
+        auto appData = std::make_unique<TAppData>(SYSTEM_POOL_ID, 0, 0, 0, TMap<TString, ui32>{{"IC", 0}}, nullptr, nullptr, nullptr, &ProgramShouldContinue);
         appData->Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
-        appData->DomainsInfo = MakeIntrusive<TDomainsInfo>();
-        appData->MonotonicTimeProvider = CreateMonotonicTimeProvider();
+        appData->DomainsInfo = AppDataInfo.DomainsInfo;
+        appData->MonotonicTimeProvider = AppDataInfo.MonotonicTimeProvider;
+        appData->FeatureFlags = AppDataInfo.FeatureFlags;
 
         appData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
         appData->HiveConfig.SetMaxNodeUsageToKick(100);
@@ -222,17 +235,6 @@ public:
         appData->HiveConfig.SetObjectImbalanceToBalance(100);
 
         return appData;
-    }
-
-    std::unique_ptr<TAppData> MakeAppData() {
-        auto appData = MakeMasterAppData();
-        appData->DomainsInfo = GetAppData()->DomainsInfo;
-        appData->MonotonicTimeProvider = GetAppData()->MonotonicTimeProvider;
-        return appData;
-    }
-
-    TAppData *GetAppData() {
-        return AppData.get();
     }
 
     template<typename T>

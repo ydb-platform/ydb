@@ -1140,6 +1140,7 @@ protected:
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     UnknownAffectedShardCount = true;
+		    [[fallthrough]];
                 case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
                     break;

@@ -148,6 +148,7 @@ public:
         , Parts(MakeCompressorQueue(compression))
         , DirtyWrite(dirtyWrite)
         , Token(token)
+        , AuthInfo(Credentials.GetAuthInfo())
     {
         YQL_ENSURE(Parts, "Compression '" << compression << "' is not supported.");
     }
@@ -155,9 +156,6 @@ public:
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
-        if (!UpdateAuthInfo()) {
-            return;
-        }
         if (DirtyWrite && Parts->IsSealed() && Parts->Size() <= 1) {
             Become(&TS3FileWriteActor::SinglepartWorkingStateFunc);
             const size_t size = Max<size_t>(Parts->Volume(), 1);

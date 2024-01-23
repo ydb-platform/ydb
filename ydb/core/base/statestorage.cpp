@@ -136,7 +136,6 @@ ui32 TStateStorageInfo::ContentHash() const {
 void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, ui64 targetCookie, bool resetOld) {
     ui32 unknown = 0;
     ui32 ok = 0;
-    ui32 noinfo = 0;
     ui32 outdated = 0;
 
     const ui32 majority = Sz / 2 + 1;
@@ -160,7 +159,6 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
             ++ok;
             break;
         case StatusNoInfo:
-            ++noinfo;
             break;
         case StatusOutdated:
             ++outdated;

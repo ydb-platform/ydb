@@ -737,6 +737,45 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(yson, expected);
         }
 
+        {
+            // Insert - do nothing
+            const TString query2 = Q1_(R"(
+                INSERT INTO `/Root/TestTable` (k1, k2, fk1) VALUES
+                ("p1str5", "p2str3", "fk1_str");
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                                 query2,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query2 = Q1_(R"(
+                UPDATE `/Root/TestTable` ON (k1, k2, fk1) VALUES
+                ("p1str5", "p2str3", "fk1_str");
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                                 query2,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query2 = Q1_(R"(
+                UPDATE `/Root/TestTable` SET fk1 = "fk1_str"
+                WHERE k1 = "p1str5" AND k2 = "p2str3";
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                                 query2,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(UpsertMultipleUniqIndexes) {

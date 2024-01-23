@@ -1,6 +1,6 @@
 ## Installation {#install}
 
-Upload the current public version of the Docker image:
+Download the current public version of the Docker image:
 
 ```bash
 docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}

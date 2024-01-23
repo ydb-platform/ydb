@@ -318,7 +318,7 @@ protected:
                 MemoryQuota->TryShrinkMemory(alloc);
             }
 
-            ReportStats(TInstant::Now());
+            ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
         if (Terminated) {
             TaskRunner.Reset();
@@ -1238,10 +1238,7 @@ protected:
                 const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
                 this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
 
-                auto now = NActors::TActivationContext::Now();
-                if (now - LastSendStatsTime >= maxInterval) {
-                    ReportStats(now);
-                }
+                ReportStats(NActors::TActivationContext::Now(), ESendStats::IfRequired);
                 break;
             }
             default:
@@ -2178,15 +2175,26 @@ public:
     }
 
 protected:
-    void ReportStats(TInstant now) {
+    enum class ESendStats {
+        IfPossible,
+        IfRequired
+    };
+    void ReportStats(TInstant now, ESendStats condition) {
         if (!RuntimeSettings.ReportStatsSettings) {
             return;
         }
-
-        if (now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
-            return;
+        auto dT = now - LastSendStatsTime;
+        switch(condition) {
+            case ESendStats::IfPossible:
+                if (dT < RuntimeSettings.ReportStatsSettings->MinInterval) {
+                    return;
+                }
+                break;
+            case ESendStats::IfRequired:
+                if (dT < RuntimeSettings.ReportStatsSettings->MaxInterval) {
+                    return;
+                }
         }
-
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetTaskId(Task.GetId());

@@ -978,30 +978,83 @@ private:
         }
     }
 
+    void FillKqpSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink) {
+        if (auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
+            NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
+            internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
+            NKikimrKqp::TKqpTableSinkSettings settingsProto;
+            FillTableId(settings.Table().Cast(), *settingsProto.MutableTable());
+
+            const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+
+            for (const auto& columnName : tableMeta->KeyColumnNames) {
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+                auto keyColumnProto = settingsProto.AddKeyColumns();
+                keyColumnProto->SetId(columnMeta->Id);
+                keyColumnProto->SetName(columnName);
+                keyColumnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+
+                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    auto& typeInfo = *keyColumnProto->MutableTypeInfo();
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeMod(columnMeta->TypeMod);
+                }
+            }
+
+            for (const auto& column : settings.Columns().Cast()) {
+                const auto columnName = column.StringValue();
+                const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + columnName + "\"");
+
+                auto columnProto = settingsProto.AddColumns();
+                columnProto->SetId(columnMeta->Id);
+                columnProto->SetName(columnName);
+                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+
+                if (columnMeta->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+                    auto& typeInfo = *columnProto->MutableTypeInfo();
+                    typeInfo.SetPgTypeId(NPg::PgTypeIdFromTypeDesc(columnMeta->TypeInfo.GetTypeDesc()));
+                    typeInfo.SetPgTypeMod(columnMeta->TypeMod);
+                }
+            }
+
+            internalSinkProto.MutableSettings()->PackFrom(settingsProto);
+        } else {
+            YQL_ENSURE(false, "Unsupported sink type");
+        }
+    }
+
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        // Delegate sink filling to dq integration of specific provider
-        const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);
-        YQL_ENSURE(provider != TypesCtx.DataSinkMap.end(), "Unsupported data sink category: \"" << dataSinkCategory << "\"");
-        NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
-        YQL_ENSURE(dqIntegration, "Unsupported dq sink for provider: \"" << dataSinkCategory << "\"");
-        auto& externalSink = *protoSink->MutableExternalSink();
-        google::protobuf::Any& settings = *externalSink.MutableSettings();
-        TString& sinkType = *externalSink.MutableType();
-        dqIntegration->FillSinkSettings(sink.Ref(), settings, sinkType);
-        YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
-        YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
+        if (dataSinkCategory == NYql::KikimrProviderName
+                || dataSinkCategory == NYql::YdbProviderName
+                || dataSinkCategory == NYql::KqpTableSinkName) {
+            FillKqpSink(sink, protoSink);
+        } else {
+            // Delegate sink filling to dq integration of specific provider
+            const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);
+            YQL_ENSURE(provider != TypesCtx.DataSinkMap.end(), "Unsupported data sink category: \"" << dataSinkCategory << "\"");
+            NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+            YQL_ENSURE(dqIntegration, "Unsupported dq sink for provider: \"" << dataSinkCategory << "\"");
+            auto& externalSink = *protoSink->MutableExternalSink();
+            google::protobuf::Any& settings = *externalSink.MutableSettings();
+            TString& sinkType = *externalSink.MutableType();
+            dqIntegration->FillSinkSettings(sink.Ref(), settings, sinkType);
+            YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
+            YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
 
-        THashMap<TString, TString> secureParams;
-        NYql::NCommon::FillSecureParams(sink.Ptr(), TypesCtx, secureParams);
-        if (!secureParams.empty()) {
-            YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per sink allowed");
-            auto it = secureParams.begin();
-            externalSink.SetSinkName(it->first);
-            auto token = it->second;
-            externalSink.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
-            CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            THashMap<TString, TString> secureParams;
+            NYql::NCommon::FillSecureParams(sink.Ptr(), TypesCtx, secureParams);
+            if (!secureParams.empty()) {
+                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per sink allowed");
+                auto it = secureParams.begin();
+                externalSink.SetSinkName(it->first);
+                auto token = it->second;
+                externalSink.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
+                CreateStructuredTokenParser(token).ListReferences(SecretNames);
+            }
         }
     }
 

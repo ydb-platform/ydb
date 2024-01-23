@@ -751,6 +751,7 @@ static const THashSet<TColumnType> RightAlignedTypes {
     "float4",
     "float8",
     "numeric",
+    "oid",
 };
 
 struct TColumn {
@@ -1100,6 +1101,7 @@ int Main(int argc, char* argv[])
         }
 
         if (program->HasResults()) {
+            // PrintExprTo(program, Cout);
             // Cout << program->ResultsAsString() << Endl;
 
             const auto root = ParseYson(program->ResultsAsString());

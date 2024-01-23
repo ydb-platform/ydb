@@ -426,6 +426,9 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
                     Execute(CreateUpdateTabletGroups(tabletId));
                 }
             }
+            if (tablets.empty()) {
+                ProcessStorageBalancer();
+            }
         } else {
             BLOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: obsolete BSC response");
         }
@@ -2051,12 +2054,12 @@ void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
             auto& pbGroup = *pbPool.AddGroups();
             pbGroup.SetGroupID(id);
             pbGroup.SetAcquiredUnits(group.Units.size());
-            pbGroup.SetAcquiredIOPS(group.AcquiredIOPS);
-            pbGroup.SetAcquiredThroughput(group.AcquiredThroughput);
-            pbGroup.SetAcquiredSize(group.AcquiredSize);
-            pbGroup.SetMaximumIOPS(group.MaximumIOPS);
-            pbGroup.SetMaximumThroughput(group.MaximumThroughput);
-            pbGroup.SetMaximumSize(group.MaximumSize);
+            pbGroup.SetAcquiredIOPS(group.AcquiredResources.IOPS);
+            pbGroup.SetAcquiredThroughput(group.AcquiredResources.Throughput);
+            pbGroup.SetAcquiredSize(group.AcquiredResources.Size);
+            pbGroup.SetMaximumIOPS(group.MaximumResources.IOPS);
+            pbGroup.SetMaximumThroughput(group.MaximumResources.Throughput);
+            pbGroup.SetMaximumSize(group.MaximumResources.Size);
             pbGroup.SetAllocatedSize(group.GroupParameters.GetAllocatedSize());
             pbGroup.SetAvailableSize(group.GroupParameters.GetAvailableSize());
         }
@@ -2171,8 +2174,15 @@ TResourceRawValues THive::GetDefaultResourceInitialMaximumValues() {
 
 void THive::ProcessTabletBalancer() {
     if (!ProcessTabletBalancerScheduled && !ProcessTabletBalancerPostponed && BootQueue.BootQueue.empty()) {
-        Schedule(GetBalancerCooldown(), new TEvPrivate::TEvProcessTabletBalancer());
+        Schedule(GetBalancerCooldown(LastBalancerTrigger), new TEvPrivate::TEvProcessTabletBalancer());
         ProcessTabletBalancerScheduled = true;
+    }
+}
+
+void THive::ProcessStorageBalancer() {
+    if (!ProcessStorageBalancerScheduled && BootQueue.BootQueue.empty()) {
+        Schedule(GetBalancerCooldown(EBalancerType::Storage), new TEvPrivate::TEvProcessStorageBalancer());
+        ProcessStorageBalancerScheduled = true;
     }
 }
 
@@ -2202,7 +2212,6 @@ THive::THiveStats THive::GetStats() const {
         minValues = piecewise_min(minValues, stats.Values[i].ResourceNormValues);
         maxValues = piecewise_max(maxValues, stats.Values[i].ResourceNormValues);
     }
-
 
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
@@ -2357,6 +2366,38 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     }
 
     Send(SelfId(), new TEvPrivate::TEvBalancerOut());
+}
+
+void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
+    ProcessStorageBalancerScheduled = false;
+    if (StoragePools.empty()) {
+        return;
+    }
+    using TPoolStat = std::pair<TStoragePoolInfo::TStats, const TStoragePoolInfo&>;
+    std::vector<TPoolStat> poolStats;
+    poolStats.reserve(StoragePools.size());
+    for (const auto& [name, pool] : StoragePools) {
+        poolStats.emplace_back(pool.GetStats(), pool);
+    }
+    auto& [stats, pool] = *std::max_element(poolStats.begin(), poolStats.end(), [](const TPoolStat& lhs, const TPoolStat& rhs) {
+        return lhs.first.Scatter < rhs.first.Scatter;
+    });
+    if (stats.Scatter > GetMinStorageScatterToBalance()) {
+        BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
+        ui64 numReassigns = 1;
+        auto it = pool.Groups.find(stats.MaxUsageGroupId);
+        if (it != pool.Groups.end()) {
+            // We want a ballpark estimate of how many reassigns it would take to balance the pool
+            // Using the number of units in the most loaded group ensures we won't reassign the whole pool on a whim,
+            // while also giving the balancer some room to work.
+            // Note that the balancer is not actually required to do that many reassigns, but will never do more
+            numReassigns = it->second.Units.size();
+        }
+        StartHiveStorageBalancer({
+            .NumReassigns = numReassigns,
+            .StoragePool = pool.Name
+        });
+    }
 }
 
 void THive::UpdateTotalResourceValues(
@@ -2660,8 +2701,8 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
     }
 }
 
-TDuration THive::GetBalancerCooldown() const {
-    switch(LastBalancerTrigger) {
+TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
+    switch(balancerType) {
         case EBalancerType::Scatter:
         case EBalancerType::ScatterCounter:
         case EBalancerType::ScatterCPU:
@@ -2787,7 +2828,7 @@ void THive::RequestPoolsInformation() {
         }
         SendToBSControllerPipe(ev.Release());
     }
-    Schedule(TDuration::Minutes(10), new TEvPrivate::TEvRefreshStorageInfo());
+    Schedule(GetStorageInfoRefreshFrequency(), new TEvPrivate::TEvRefreshStorageInfo());
 }
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
@@ -2880,6 +2921,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
         hFunc(TEvPrivate::TEvLogTabletMoves, Handle);
         hFunc(TEvPrivate::TEvStartStorageBalancer, Handle);
+        hFunc(TEvPrivate::TEvProcessStorageBalancer, Handle);
         hFunc(TEvHive::TEvUpdateDomain, Handle);
     }
 }
@@ -2980,6 +3022,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvLogTabletMoves::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvStartStorageBalancer::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateDomain::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessStorageBalancer::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {

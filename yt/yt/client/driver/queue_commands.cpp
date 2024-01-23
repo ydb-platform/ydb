@@ -235,7 +235,7 @@ void TAdvanceConsumerCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = GetTransaction(context);
 
-    if (!ClientSide || *ClientSide) {
+    if (ClientSide.value_or(false)) {
         transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset);
     } else {
         WaitFor(transaction->AdvanceConsumer(ConsumerPath, QueuePath, PartitionIndex, OldOffset, NewOffset, /*options*/ {}))

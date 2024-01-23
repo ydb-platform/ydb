@@ -14,6 +14,7 @@ SRCS(
     atomic_ptr_ut.cpp
     async_expiring_cache_ut.cpp
     async_slru_cache_ut.cpp
+    backoff_strategy_ut.cpp
     bit_packed_integer_vector_ut.cpp
     boolean_formula_ut.cpp
     callback_ut.cpp

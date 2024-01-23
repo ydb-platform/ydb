@@ -483,9 +483,34 @@ public:
         const TString& passwordSha256,
         const TListUserTokensOptions& options) override;
 
-    TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
+    // Bundle Controller
+
+    TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
         const TString& bundleName,
-        const TGetBundleConfigOptions& options = {}) override;
+        const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
+
+    TFuture<void> SetBundleConfig(
+        const TString& bundleName,
+        const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
+        const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
+
+    // Flow
+
+    TFuture<void> StartPipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TStartPipelineOptions& options = {}) override;
+
+    TFuture<void> StopPipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TStopPipelineOptions& options = {}) override;
+
+    TFuture<void> PausePipeline(
+        const NYPath::TYPath& pipelinePath,
+        const TPausePipelineOptions& options = {}) override;
+
+    TFuture<TPipelineStatus> GetPipelineStatus(
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineStatusOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;

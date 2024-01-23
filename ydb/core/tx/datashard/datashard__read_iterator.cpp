@@ -1498,7 +1498,7 @@ public:
             PrepareValidationInfo(ctx, state);
         } else {
             // There should be no keys when reading sysm tables
-            ValidationInfo.Loaded = true;
+            ValidationInfo.SetLoaded();
         }
     }
 
@@ -1797,7 +1797,7 @@ private:
             }
         }
 
-        ValidationInfo.Loaded = true;
+        ValidationInfo.SetLoaded();
     }
 
     void AcquireLock(TReadIteratorState& state, const TActorContext& ctx) {
@@ -2026,8 +2026,7 @@ public:
                                     snapshotUnavailable = true;
                                 }
                             } else {
-                                auto prioritizedMvccSnapshotReads = Self->GetEnablePrioritizedMvccSnapshotReads();
-                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
+                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
                                 if (state.ReadVersion >= unreadableEdge) {
                                     LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
                                     Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(Ev), ctx);

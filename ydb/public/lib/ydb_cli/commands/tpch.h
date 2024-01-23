@@ -17,6 +17,8 @@ private:
 
     TString TablesPath;
     TString StoreType;
+    TString Scale;
+    TString Bucket;
 };
 
 class TTpchCommandClean : public NYdb::NConsoleClient::TYdbCommand {
@@ -28,6 +30,7 @@ public:
 private:
     std::vector<TString> Tables = {"customer", "lineitem", "nation", "orders",
         "region", "part", "partsupp", "supplier"};
+    bool IsExternal = false;
 };
 
 class TTpchCommandRun : public NYdb::NConsoleClient::TYdbCommand {

@@ -1,0 +1,259 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.accessservice.v2;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_private/accessservice/resource.proto";
+import "ydb/public/api/client/yc_private/accessservice/sensitive.proto";
+
+option go_package = "accessservice_v2";
+option java_outer_classname = "PAS";
+
+service AccessService {
+  // Verify the identity of a subject.
+  //
+  // gRPC error codes
+  //
+  // Ok:              the provided credentials are valid
+  // Unauthenticated: the provided credentials are invalid or may have expired
+  // InvalidArgument: the client specified an invalid argument (please note that this applies to the request in itself,
+  //                  not to the content of the request, i.e. you will get the InvalidArgument error if the message
+  //                  size exceeds the server limit but Unauthenticated if the token format is not recognized)
+  // Unavailable:     the service is currently unavailable, the client should retry again
+  // Internal:        the service is broken
+  //
+  // Please note that these do not include client-side errors (e.g. Cancelled, DeadlineExceeded, etc.)
+  rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
+
+  // Check if a subject is allowed to perform an action. This also authenticates the subject if any credentials are
+  // passed as an identity.
+  //
+  // gRPC error codes
+  //
+  // Ok:               the provided credentials (if any) are valid and the subject has permissions to access the
+  //                   specified resource
+  // Unauthenticated:  the provided credentials are invalid or may have expired
+  // PermissionDenied: the subject does not have permissions to access the specified resource
+  // InvalidArgument:  the client specified an invalid argument (please note that this applies to the request in itself,
+  //                   not to the content of the request, i.e. you will get the InvalidArgument error if the message
+  //                   size exceeds the server limit or the specified permission does not exist but Unauthenticated if
+  //                   the token format is not recognized)
+  // Unavailable:      the service is currently unavailable, the client should retry again
+  // Internal:         the service is broken
+  //
+  // Please note that these do not include client-side errors (e.g. Cancelled, DeadlineExceeded, etc.)
+  rpc Authorize (AuthorizeRequest) returns (AuthorizeResponse);
+
+  // Similar to Authorize, but requests multiple actions for one subject.
+  //
+  // gRPC error codes will be the same, except for these cases:
+  // - An Unauthenticated error of BulkAuthorizeRequest.identity is returned in
+  //   BulkAuthorizeResponse.unauthenticated_error.
+  // - All PermissionDenied of BulkAuthorizeRequest.authorizations are returned in
+  //   BulkAuthorizeResponse.results.
+  //
+  // You can control the information returned in BulkAuthorizeResponse.results with:
+  // - result_filter : return all errors (ALL_FAILED) or only the first one (FIRST_FAILED), if any.
+  // - result_mask : You can choose the fields returned (all by default),
+  //     from the fields in BulkAuthorizeResponse.Result.
+  //
+  rpc BulkAuthorize (BulkAuthorizeRequest) returns (BulkAuthorizeResponse);
+}
+
+message AuthenticateRequest {
+  oneof credentials {
+    // option (exactly_one) = true;
+
+    // IAM-token obtained from the IAM Token Service.
+    // The server response for an empty IAM token is UNAUTHENTICATED
+    string iam_token = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+
+    // AWS-compatible signature.
+    AccessKeySignature signature = 2;
+
+    // API key.
+    // The server response for an empty API key is UNAUTHENTICATED
+    string api_key = 3 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+
+    // IAM-cookie.
+    // The server response for an empty IAM cookie is UNAUTHENTICATED
+    string iam_cookie = 4 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_COOKIE];
+
+    // RefreshToken.
+    // The server response for an empty RefreshToken is UNAUTHENTICATED
+    string refresh_token = 5 [(sensitive) = true, (sensitive_type) = SENSITIVE_REFRESH_TOKEN];
+  }
+}
+
+message AuthenticateResponse {
+  Subject subject = 1;
+}
+
+message AuthorizeRequest {
+  oneof identity {
+    // option (exactly_one) = true;
+
+    Subject subject = 1;
+
+    // IAM-token obtained from the IAM Token Service.
+    // The server response for an empty IAM token is UNAUTHENTICATED
+    string iam_token = 2 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+
+    // AWS-compatible signature.
+    AccessKeySignature signature = 3;
+
+    // API key.
+    // The server response for an empty API key is UNAUTHENTICATED
+    string api_key = 6 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+  }
+
+  string permission = 4; // [(required) = true, (length) = "<=128"];
+
+  // A resource to authorize access to. This may also include a service-specific hierarchy of the resource, usually
+  // ends with resource-manager.folder.
+  //
+  // Examples:
+  //     (resource-manager.folder, b1gn3enigctah04o0fkb)
+  //     (billing.account, b1gqql62454n46tboesn)
+  //     (compute.instance, b1gqqhvc4fg65mkrefs8), (resource-manager.folder, b1gn3enigctah04o0fkb)
+  //     (resource-manager.cloud, aje56o8prppkrpaiuoc6)
+  //     (my-service.instance, b1gqqepv0upu57issrog), (resource-manager.cloud, aje56o8prppkrpaiuoc6)
+  repeated Resource resource_path = 5; // [(size) = ">0"];
+}
+
+message AuthorizeResponse {
+  Subject subject = 1;
+
+  // Full path to the resource.
+  repeated Resource resource_path = 2;
+}
+
+message BulkAuthorizeRequest {
+  oneof identity {
+    // option (exactly_one) = true;
+
+    Subject subject = 1;
+
+    string iam_token = 2 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN]; // [(length) = "<=1024"];
+
+    AccessKeySignature signature = 3;
+
+    string api_key = 4 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+  }
+
+  oneof authorizations {
+    // option (exactly_one) = true;
+
+    Actions actions = 5;
+
+    ActionMatrix action_matrix = 6;
+  }
+
+  ResultFilter result_filter = 7;
+
+  google.protobuf.FieldMask result_mask = 8;
+
+  message Action {
+    repeated Resource resource_path = 1; // [(size) = "1-128"];
+
+    string permission = 2; // [(required) = true, (length) = "<=128"];
+  }
+
+  message Actions {
+    repeated Action items = 1; // [(size) = "1-1000"];
+  }
+
+  // Cross product of paths and permissions (represents N*M actions, N*M <= 1000).
+  message ActionMatrix {
+    repeated ResourcePath resource_paths = 2; // [(size) = "1-1000"];
+
+    repeated string permissions = 1; // [(size) = "1-1000", (length) = "<=128"];
+  }
+
+  enum ResultFilter {
+    RESULT_FILTER_UNSPECIFIED = 0;
+    FIRST_FAILED = 1;
+    ALL_FAILED = 2;
+  }
+}
+
+message BulkAuthorizeResponse {
+  Subject subject = 1;
+
+  Error unauthenticated_error = 2;
+
+  Results results = 3;
+
+  message Results {
+    repeated Result items = 1;
+  }
+
+  message Result {
+    string permission = 1;
+
+    repeated Resource resource_path = 2;
+
+    Error permission_denied_error = 3;
+  }
+
+  message Error {
+    string message = 1;
+
+    repeated google.protobuf.Any details = 2;
+  }
+}
+
+message AccessKeySignature {
+  string access_key_id = 1; // [(required) = true, (length) = "<=50"];
+  string string_to_sign = 2; // [(required) = true, (length) = "<=8192"];
+  string signature = 3 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC]; // [(required) = true, (length) = "<=128"];
+
+  oneof parameters {
+    // option (exactly_one) = true;
+
+    Version2Parameters v2_parameters = 4;
+    Version4Parameters v4_parameters = 5;
+  }
+
+  message Version2Parameters {
+    SignatureMethod signature_method = 1;
+
+    enum SignatureMethod {
+      SIGNATURE_METHOD_UNSPECIFIED = 0;
+      HMAC_SHA1 = 1;
+      HMAC_SHA256 = 2;
+    }
+  }
+
+  message Version4Parameters {
+    google.protobuf.Timestamp signed_at = 1; // [(required) = true];
+    string service = 2; // [(required) = true, (length) = "<=64"];
+    string region = 3; // [(required) = true, (length) = "<=32"];
+  }
+}
+
+message Subject {
+  oneof type {
+    // option (exactly_one) = true;
+
+    UserAccount user_account = 1;
+    ServiceAccount service_account = 2;
+    AnonymousAccount anonymous_account = 3;
+  }
+
+  message UserAccount {
+    string id = 1; // [(required) = true, (length) = "<=50"];
+    string federation_id = 2; // [(length) = "<=50"];
+  }
+
+  message ServiceAccount {
+    string id = 1; // [(required) = true, (length) = "<=50"];
+    string folder_id = 2; // [(length) = "<=50"];
+  }
+
+  // Use this if you want to check if an unauthenticated subject is allowed to access a resource.
+  message AnonymousAccount {
+  }
+}

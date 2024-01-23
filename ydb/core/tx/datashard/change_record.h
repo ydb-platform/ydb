@@ -4,12 +4,19 @@
 
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+
+#include <util/generic/maybe.h>
+
+namespace NKikimrChangeExchange {
+    class TChangeRecord;
+}
 
 namespace NKikimr::NDataShard {
 
 class TChangeRecordBuilder;
 
-class TChangeRecord: public NChangeExchange::TChangeRecord {
+class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
@@ -23,10 +30,13 @@ public:
 
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
+    TConstArrayRef<TCell> GetKey() const;
     TString GetPartitionKey() const;
-    bool IsBroadcast() const;
+    i64 GetSeqNo() const;
+    TInstant GetApproximateCreationDateTime() const;
+    bool IsBroadcast() const override;
 
-    void Out(IOutputStream& out) const;
+    void Out(IOutputStream& out) const override;
 
 private:
     ui64 LockId = 0;
@@ -37,6 +47,9 @@ private:
     TPathId TableId;
     TUserTable::TCPtr Schema;
 
+    mutable TMaybe<TOwnedCellVec> Key;
+    mutable TMaybe<TString> PartitionKey;
+
 }; // TChangeRecord
 
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
@@ -44,32 +57,32 @@ public:
     using NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder>::TChangeRecordBuilder;
 
     TSelf& WithLockId(ui64 lockId) {
-        Record.LockId = lockId;
+        GetRecord()->LockId = lockId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithLockOffset(ui64 lockOffset) {
-        Record.LockOffset = lockOffset;
+        GetRecord()->LockOffset = lockOffset;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithPathId(const TPathId& pathId) {
-        Record.PathId = pathId;
+        GetRecord()->PathId = pathId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithTableId(const TPathId& tableId) {
-        Record.TableId = tableId;
+        GetRecord()->TableId = tableId;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithSchemaVersion(ui64 version) {
-        Record.SchemaVersion = version;
+        GetRecord()->SchemaVersion = version;
         return static_cast<TSelf&>(*this);
     }
 
     TSelf& WithSchema(TUserTable::TCPtr schema) {
-        Record.Schema = schema;
+        GetRecord()->Schema = schema;
         return static_cast<TSelf&>(*this);
     }
 

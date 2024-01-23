@@ -169,7 +169,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
     TSnapshot lastSnapshot(0, 0);
     const TIndexInfo* currentIndexInfo = nullptr;
-    auto result = db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+    if (!db.LoadColumns([&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
@@ -178,11 +178,14 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         // Locate granule and append the record.
         TColumnRecord rec(loadContext, *currentIndexInfo);
         GetGranulePtrVerified(portion.GetPathId())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
-    });
+    })) {
+        return false;
+    }
+
     for (auto&& i : Tables) {
         i.second->OnAfterPortionsLoad();
     }
-    return result;
+    return true;
 }
 
 bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {

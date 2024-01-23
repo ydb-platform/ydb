@@ -2,13 +2,41 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.8.0 {#2-8-0}
+
+Дата выхода 12 января 2024. Для обновления до версии **2.8.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* Добавлены команды управления конфигурациями кластера [ydb admin config](reference/ydb-cli/configs.md) и [ydb admin volatile-config](reference/ydb-cli/configs.md).
+
+* Добавлена поддержка загрузки PostgreSQL-совместимых типов командой [ydb import file csv|tsv|json](reference/ydb-cli/export_import/import-file.md). Только для строковых таблиц.
+
+* Добавлена поддержка загрузки директории из S3-совместимого хранилища в команде [ydb import s3](reference/ydb-cli/export_import/s3_import.md). Пока доступна только под Linux и Mac OS.
+
+* Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
+
+* В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
+
+* Добавлена колонка медианного времени выполнения бенчмарка в таблице статистики в команде [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
+
+* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
+
+* **_(Experimental)_** В команде `ydb table query explain` добавлена опция `--collect-diagnostics` для сбора диагностики запроса и сохранения её в файл. Команда использует экспериментальное API, совместимость не гарантируется.
+
+**Исправления ошибок:**
+
+* Исправлена ошибка вывода таблиц в `pretty` формате с [Unicode](https://ru.wikipedia.org/wiki/Юникод) символами.
+
+* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert).
+
 ## Версия 2.7.0 {#2-7-0}
 
 Дата выхода 23 октября 2023. Для обновления до версии **2.7.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
 
 **Функциональность:**
 
-* Добавлена команда `ydb tools pg-convert`, выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+* Добавлена команда [ydb tools pg-convert](postgresql/pg-dump.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
 
 * Добавлена команда нагрузочного тестирования `ydb workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
 

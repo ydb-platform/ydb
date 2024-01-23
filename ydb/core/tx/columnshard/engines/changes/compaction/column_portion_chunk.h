@@ -19,11 +19,11 @@ private:
     std::shared_ptr<arrow::Scalar> First;
     std::shared_ptr<arrow::Scalar> Last;
 protected:
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
         return Data;
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return Record.GetMeta().GetNumRowsVerified();
     }
     virtual TString DoDebugString() const override {
@@ -70,14 +70,15 @@ private:
     const ui32 RecordsCount;
     TString Data;
 protected:
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& /*saver*/, std::shared_ptr<NColumnShard::TSplitterCounters> /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
+                                                                                const std::vector<ui64>& /*splitSizes*/) const override {
         AFL_VERIFY(false);
         return {};
     }
     virtual const TString& DoGetData() const override {
         return Data;
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return RecordsCount;
     }
     virtual TString DoDebugString() const override {
@@ -107,7 +108,7 @@ public:
 
 class TColumnPortionResult {
 protected:
-    std::vector<std::shared_ptr<IPortionColumnChunk>> Chunks;
+    std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     ui64 CurrentPortionRecords = 0;
     const ui32 ColumnId;
     ui64 PackedSize = 0;
@@ -121,7 +122,7 @@ public:
 
     }
 
-    const std::vector<std::shared_ptr<IPortionColumnChunk>>& GetChunks() const {
+    const std::vector<std::shared_ptr<IPortionDataChunk>>& GetChunks() const {
         return Chunks;
     }
 

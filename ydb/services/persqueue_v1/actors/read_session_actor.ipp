@@ -1627,7 +1627,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
         }
     } else {
         if (ev->Get()->Retryable) {
-            Request->ReplyUnavaliable();
+            TServerMessage serverMessage;
+            serverMessage.set_status(Ydb::StatusIds::UNAVAILABLE);
+            Request->GetStreamCtx()->WriteAndFinish(std::move(serverMessage), grpc::Status::OK);
         } else {
             Request->ReplyUnauthenticated("refreshed token is invalid");
         }

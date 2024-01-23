@@ -1,12 +1,12 @@
-from pathlib import Path
 from typing import Sequence
 
 import ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 as data_source_pb2
 
+import utils.artifacts as artifacts
 from utils.clickhouse import Client
 from utils.comparator import data_outs_equal
 from utils.database import Database
-from utils.log import make_logger
+from utils.log import make_logger, debug_with_limit
 from utils.schema import Schema
 from utils.settings import Settings
 from utils.runner import Runner
@@ -20,6 +20,7 @@ LOGGER = make_logger(__name__)
 
 
 def prepare_table(
+    test_name: str,
     client: Client,
     database: Database,
     table_name: str,
@@ -38,7 +39,6 @@ def prepare_table(
     LOGGER.debug(check_table_stmt)
     res = client.command(check_table_stmt)
     assert res in (0, 1), res
-
     if res == 1:
         # no need to create table
         return
@@ -51,20 +51,22 @@ def prepare_table(
     # write data
     values = format_values_for_bulk_sql_insert(data_in)
     insert_stmt = f"INSERT INTO {dbTable} (*) VALUES {values}"
-    # TODO: these logs may be too big when working with big tables,
-    # dump insert statement via yatest into file.
-    LOGGER.debug(insert_stmt)
+    # NOTE: these statement may be too big when working with big tables,
+    # so with truncate logs and put full statement into directory with artifacts
+    debug_with_limit(LOGGER, insert_stmt)
+    artifacts.dump_str(insert_stmt, test_name, 'insert.sql')
     client.command(insert_stmt)
 
 
 def select_positive(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_positive_common.TestCase,
 ):
     prepare_table(
+        test_name=test_name,
         client=client,
         database=test_case.database,
         table_name=test_case.sql_table_name,
@@ -72,15 +74,20 @@ def select_positive(
         data_in=test_case.data_in,
     )
 
-    # NOTE: to assert equivalence we have to add explicit ORDER BY,
-    # because Clickhouse's output will be randomly ordered otherwise.
     where_statement = ""
     if test_case.select_where is not None:
-        where_statement = f"WHERE {test_case.select_where.filter_expression}"
+        where_statement = "WHERE " + test_case.select_where.render(
+            cluster_name=settings.clickhouse.cluster_name,
+            table_name=test_case.qualified_table_name,
+        )
+
+    # NOTE: to assert equivalence we have to add explicit ORDER BY,
+    # because Clickhouse's output will be randomly ordered otherwise.
     order_by_expression = ""
     order_by_column_name = test_case.select_what.order_by_column_name
     if order_by_column_name:
         order_by_expression = f"ORDER BY {order_by_column_name}"
+
     yql_script = f"""
         {test_case.pragmas_sql_string}
         SELECT {test_case.select_what.yql_select_names}
@@ -89,7 +96,7 @@ def select_positive(
         {order_by_expression}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -105,10 +112,10 @@ def select_positive(
 
 
 def select_missing_database(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_database.TestCase,
     settings: Settings,
     runner: Runner,
-    test_case: test_cases.select_missing_database.TestCase,
 ):
     # select table from the database that does not exist
     yql_script = f"""
@@ -116,7 +123,7 @@ def select_missing_database(
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )
@@ -125,11 +132,11 @@ def select_missing_database(
 
 
 def select_missing_table(
-    tmp_path: Path,
+    test_name: str,
+    test_case: test_cases.select_missing_table.TestCase,
     settings: Settings,
     runner: Runner,
     client: Client,
-    test_case: test_cases.select_missing_table.TestCase,
 ):
     # create database, but don't create table
     create_database_stmt = test_case.database.create()
@@ -141,7 +148,7 @@ def select_missing_table(
         FROM {settings.clickhouse.cluster_name}.{test_case.qualified_table_name}
     """
     result = runner.run(
-        test_dir=tmp_path,
+        test_name=test_name,
         script=yql_script,
         generic_settings=test_case.generic_settings,
     )

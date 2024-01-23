@@ -425,7 +425,7 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
+    if (!EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) || TKqlStreamLookupTable::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -467,10 +467,57 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     }
 
     YQL_ENSURE(lookupType);
-    if (!EnsureStructType(node->Pos(), *lookupType, ctx)) {
-        return TStatus::Error;
+
+    const TStructExprType* structType = nullptr;
+    bool isStreamLookup = TKqlStreamLookupTable::Match(node.Get());
+    if (isStreamLookup) {
+        auto lookupStrategy = node->Child(TKqlStreamLookupTable::idx_LookupStrategy);
+        if (!EnsureAtom(*lookupStrategy, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (lookupStrategy->Content() == TKqpStreamLookupJoinStrategyName) {
+            if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureTupleTypeSize(node->Pos(), lookupType, 2, ctx)) {
+                return TStatus::Error;
+            }
+
+            auto tupleType = lookupType->Cast<TTupleExprType>();
+            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
+                return TStatus::Error;
+            }
+
+            structType = tupleType->GetItems()[0]->Cast<TStructExprType>();
+            auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
+
+            TVector<const TTypeAnnotationNode*> outputTypes;
+            outputTypes.push_back(leftRowType);
+            outputTypes.push_back(ctx.MakeType<TOptionalExprType>(rowType));
+
+            rowType = ctx.MakeType<TTupleExprType>(outputTypes);
+        } else {
+            if (!EnsureStructType(node->Pos(), *lookupType, ctx)) {
+                return TStatus::Error;
+            }
+
+            structType = lookupType->Cast<TStructExprType>();
+        }
+    } else {
+        if (!EnsureStructType(node->Pos(), *lookupType, ctx)) {
+            return TStatus::Error;
+        }
+
+        structType = lookupType->Cast<TStructExprType>();
     }
-    auto structType = lookupType->Cast<TStructExprType>();
+
+    YQL_ENSURE(structType);
 
     ui32 keyColumnsCount = 0;
     if (TKqlLookupIndexBase::Match(node.Get())) {
@@ -1338,105 +1385,6 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
-TStatus AnnotateStreamIdxLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
-    const TKikimrTablesData& tablesData, bool withSystemColumns)
-{
-    if (!EnsureArgsCount(*node, 6, ctx)) {
-        return TStatus::Error;
-    }
-
-    auto leftInputType = node->Child(TKqlStreamIdxLookupJoin::idx_LeftInput)->GetTypeAnn();
-    const TTypeAnnotationNode* leftInputItemType;
-    if (!EnsureNewSeqType<false>(node->Pos(), *leftInputType, ctx, &leftInputItemType)) {
-        return TStatus::Error;
-    }
-
-    YQL_ENSURE(leftInputItemType);
-    if (!EnsureTupleType(node->Pos(), *leftInputItemType, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!EnsureTupleTypeSize(node->Pos(), leftInputItemType, 2, ctx)) {
-        return TStatus::Error;
-    }
-
-    auto leftInputTupleType = leftInputItemType->Cast<TTupleExprType>();
-    if (!EnsureStructType(node->Pos(), *leftInputTupleType->GetItems()[0], ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!EnsureStructType(node->Pos(), *leftInputTupleType->GetItems()[1], ctx)) {
-        return TStatus::Error;
-    }
-
-    if (!EnsureAtom(*node->Child(TKqlStreamIdxLookupJoin::idx_LeftLabel), ctx)) {
-        return TStatus::Error;
-    }
-
-    TCoAtom leftLabel(node->Child(TKqlStreamIdxLookupJoin::idx_LeftLabel));
-
-    auto rightTable = ResolveTable(node->Child(TKqlStreamIdxLookupJoin::idx_RightTable), ctx, cluster, tablesData);
-    if (!rightTable.second) {
-        return TStatus::Error;
-    }
-
-    const TStructExprType* inputKeysType = leftInputTupleType->GetItems()[0]->Cast<TStructExprType>();
-    for (const auto& inputKey : inputKeysType->GetItems()) {
-        if (!rightTable.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {
-            return TStatus::Error;
-        }
-    }
-
-    if (!EnsureTupleOfAtoms(*node->Child(TKqlStreamIdxLookupJoin::idx_RightColumns), ctx)) {
-        return TStatus::Error;
-    }
-
-    TCoAtomList rightColumns{node->ChildPtr(TKqlStreamIdxLookupJoin::idx_RightColumns)};
-    for (const auto& rightColumn : rightColumns) {
-        if (!rightTable.second->GetColumnType(TString(rightColumn.Value()))) {
-            return TStatus::Error;
-        }
-    }
-
-    auto rightDataType = GetReadTableRowType(ctx, tablesData, cluster, rightTable.first, rightColumns, withSystemColumns);
-    if (!rightDataType) {
-        return TStatus::Error;
-    }
-
-    if (!EnsureAtom(*node->Child(TKqlStreamIdxLookupJoin::idx_RightLabel), ctx)) {
-        return TStatus::Error;
-    }
-
-    TCoAtom rightLabel(node->Child(TKqlStreamIdxLookupJoin::idx_RightLabel));
-    TCoAtom joinType(node->Child(TKqlStreamIdxLookupJoin::idx_JoinType));
-
-    const TStructExprType* leftDataType = leftInputTupleType->GetItems()[1]->Cast<TStructExprType>();
-    TVector<const TItemExprType*> resultStructItems;
-    for (const auto& member : leftDataType->GetItems()) {
-        resultStructItems.emplace_back(
-            ctx.MakeType<TItemExprType>(TString::Join(leftLabel.Value(), ".", member->GetName()), member->GetItemType())
-        );
-    }
-
-    if (RightJoinSideAllowed(joinType.Value())) {
-        for (const auto& member : rightDataType->Cast<TStructExprType>()->GetItems()) {
-            const bool makeOptional = RightJoinSideOptional(joinType.Value()) && !member->GetItemType()->IsOptionalOrNull();
-
-            const TTypeAnnotationNode* memberType = makeOptional
-                ? ctx.MakeType<TOptionalExprType>(member->GetItemType())
-                : member->GetItemType();
-
-            resultStructItems.emplace_back(
-                ctx.MakeType<TItemExprType>(TString::Join(rightLabel.Value(), ".", member->GetName()), memberType)
-            );
-        }
-    }
-
-    auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
-    node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
-    return TStatus::Ok;
-}
-
 TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
@@ -1621,7 +1569,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     YQL_ENSURE(inputItemType);
 
-    if (lookupStrategy.Value() == "LookupRows") {
+    if (lookupStrategy.Value() == TKqpStreamLookupStrategyName) {
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1640,7 +1588,7 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
         node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
 
-    } else if (lookupStrategy.Value() == "LookupJoinRows") {
+    } else if (lookupStrategy.Value() == TKqpStreamLookupJoinStrategyName) {
         if (!EnsureTupleType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -1694,7 +1642,7 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    auto inputType = node->Child(TKqpIndexLookupJoin::idx_Input)->GetTypeAnn();
+    auto inputType = node->Child(TKqlIndexLookupJoinBase::idx_Input)->GetTypeAnn();
     const TTypeAnnotationNode* inputItemType;
     if (!EnsureNewSeqType<false>(node->Pos(), *inputType, ctx, &inputItemType)) {
         return TStatus::Error;
@@ -1725,22 +1673,22 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    if (!EnsureAtom(*node->Child(TKqpIndexLookupJoin::idx_JoinType), ctx)) {
+    if (!EnsureAtom(*node->Child(TKqlIndexLookupJoinBase::idx_JoinType), ctx)) {
         return TStatus::Error;
     }
 
-    if (!EnsureAtom(*node->Child(TKqpIndexLookupJoin::idx_LeftLabel), ctx)) {
+    if (!EnsureAtom(*node->Child(TKqlIndexLookupJoinBase::idx_LeftLabel), ctx)) {
         return TStatus::Error;
     }
 
-    TCoAtom leftLabel(node->Child(TKqpIndexLookupJoin::idx_LeftLabel));
+    TCoAtom leftLabel(node->Child(TKqlIndexLookupJoinBase::idx_LeftLabel));
 
-    if (!EnsureAtom(*node->Child(TKqpIndexLookupJoin::idx_RightLabel), ctx)) {
+    if (!EnsureAtom(*node->Child(TKqlIndexLookupJoinBase::idx_RightLabel), ctx)) {
         return TStatus::Error;
     }
 
-    TCoAtom rightLabel(node->Child(TKqpIndexLookupJoin::idx_RightLabel));
-    TCoAtom joinType(node->Child(TKqpIndexLookupJoin::idx_JoinType));
+    TCoAtom rightLabel(node->Child(TKqlIndexLookupJoinBase::idx_RightLabel));
+    TCoAtom joinType(node->Child(TKqlIndexLookupJoinBase::idx_JoinType));
 
     TVector<const TItemExprType*> resultStructItems;
     for (const auto& item : leftRowType->GetItems()) {
@@ -1764,7 +1712,13 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
 
     auto outputRowType = ctx.MakeType<TStructExprType>(resultStructItems);
-    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
+    const bool isPhysical = TKqpIndexLookupJoin::Match(node.Get());
+    if (isPhysical) {
+        node->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputRowType));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(outputRowType));
+    }
+    
     return TStatus::Ok;
 }
 
@@ -1791,6 +1745,14 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     node->SetTypeAnn(node->Child(TKqpSinkEffect::idx_Stage)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+        return TStatus::Error;
+    }
+    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
     return TStatus::Ok;
 }
 
@@ -1892,7 +1854,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateStreamLookupConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
-            if (TKqpIndexLookupJoin::Match(input.Get())) {
+            if (TKqlIndexLookupJoinBase::Match(input.Get())) {
                 return AnnotateIndexLookupJoin(input, ctx);
             }
 
@@ -1924,10 +1886,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateSequencer(input, ctx, cluster, *tablesData);
             }
 
-            if (TKqlStreamIdxLookupJoin::Match(input.Get())) {
-                return AnnotateStreamIdxLookupJoin(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
-            }
-
             if (TKqpProgram::Match(input.Get())) {
                 return AnnotateKqpProgram(input, ctx);
             }
@@ -1950,6 +1908,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqlReturningList::Match(input.Get())) {
                 return AnnotateReturningList(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpTableSinkSettings::Match(input.Get())) {
+                return AnnotateTableSinkSettings(input, ctx);
             }
 
             return dqTransformer->Transform(input, output, ctx);

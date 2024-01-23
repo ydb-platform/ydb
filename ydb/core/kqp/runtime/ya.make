@@ -20,6 +20,7 @@ SRCS(
     kqp_stream_lookup_worker.h
     kqp_tasks_runner.cpp
     kqp_transport.cpp
+    kqp_write_actor.cpp
 )
 
 PEERDIR(

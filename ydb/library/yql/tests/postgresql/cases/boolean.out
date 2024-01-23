@@ -303,7 +303,7 @@ INSERT INTO BOOLTBL3 (d, b, o) VALUES ('null', null, 3);
 -- correct. Use a table as source to prevent constant simplification
 -- to interfer.
 CREATE TABLE booltbl4(isfalse bool, istrue bool, isnul bool);
-INSERT INTO booltbl4 VALUES (false, true, null);
+INSERT INTO booltbl4 (isfalse, istrue, isnul) VALUES (false, true, null);
 \pset null '(null)'
 -- AND expression need to return null if there's any nulls and not all
 -- of the value are true
@@ -325,6 +325,24 @@ SELECT isnul AND istrue AND istrue FROM booltbl4;
  (null)
 (1 row)
 
+SELECT isfalse AND isnul AND istrue FROM booltbl4;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT istrue AND isfalse AND isnul FROM booltbl4;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT isnul AND istrue AND isfalse FROM booltbl4;
+ ?column? 
+----------
+ f
+(1 row)
+
 -- OR expression need to return null if there's any nulls and none
 -- of the value is true
 SELECT isfalse OR isnul OR isfalse FROM booltbl4;
@@ -343,6 +361,24 @@ SELECT isnul OR isfalse OR isfalse FROM booltbl4;
  ?column? 
 ----------
  (null)
+(1 row)
+
+SELECT isfalse OR isnul OR istrue FROM booltbl4;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT istrue OR isfalse OR isnul FROM booltbl4;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT isnul OR istrue OR isfalse FROM booltbl4;
+ ?column? 
+----------
+ t
 (1 row)
 
 --

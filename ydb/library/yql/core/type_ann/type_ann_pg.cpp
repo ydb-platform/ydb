@@ -153,7 +153,15 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
             for (const auto& col : *childColumnOrder) {
                 auto itemIdx = structType->FindItem(col);
                 YQL_ENSURE(itemIdx);
-                pgTypes[j].push_back(structType->GetItems()[*itemIdx]->GetItemType()->Cast<TPgExprType>()->GetId());
+
+                const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
+                ui32 pgType;
+                bool convertToPg;
+                if (!ExtractPgType(type, pgType, convertToPg, child->Pos(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                pgTypes[j].push_back(pgType);
 
                 ++j;
             }
@@ -4282,7 +4290,6 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
         return IGraphTransformer::TStatus::Error;
     }
 
-    // const TStructExprType* outputRowType = nullptr;
     TExprNode* setItems = nullptr;
     TExprNode* setOps = nullptr;
     bool hasSort = false;
@@ -4343,9 +4350,6 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                     }
 
                     setItems = &option->Tail();
-                } else {
-                    /*outputRowType = */option->Tail().Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
-                        Cast<TStructExprType>();
                 }
             } else if (optionName == "limit" || optionName == "offset") {
                 if (pass != 0) {

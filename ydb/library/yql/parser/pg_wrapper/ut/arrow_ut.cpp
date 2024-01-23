@@ -10,6 +10,34 @@ extern "C" {
 #include "utils/fmgrprotos.h"
 }
 
+namespace {
+
+template <bool IsFixedSizeReader>
+void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* reader, auto out_fun) {
+    const auto& data = result->data();
+
+    for (int i = 0; i < data->length; i++) {
+        if (result->IsNull(i)) {
+            UNIT_ASSERT(expected[i] == nullptr);
+        } else {
+            UNIT_ASSERT(expected[i] != nullptr);
+
+            Datum item;
+            if constexpr (IsFixedSizeReader) {
+                item = reader->GetItem(*data, i).template As<Datum>();
+            } else {
+                item = Datum(reader->GetItem(*data, i).AsStringRef().Data() + sizeof(void*));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                TString(DatumGetCString(DirectFunctionCall1(out_fun, item))),
+                expected[i]
+            );
+        }
+    }
+}
+
+} // namespace {
+
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TArrowUtilsTests) {
@@ -48,26 +76,13 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     builder.Finish(&array);
 
     auto result = PgConvertNumeric<double>(array);
-    const auto& data = result->data();
-
+    
     const char* expected[] = {
         "1.1", "31.37", nullptr, "-1.337", "0"
     };
-    
-    NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    for (int i = 0; i < 5; i++) {
-        auto item = reader.GetItem(*data, i);
-        if (!item) {
-            UNIT_ASSERT(expected[i] == nullptr);
-        } else {
-            const char* addr = item.AsStringRef().Data() + sizeof(void*);
-            UNIT_ASSERT(expected[i] != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(
-                TString(DatumGetCString(DirectFunctionCall1(numeric_out, (Datum)addr))),
-                expected[i]
-            );
-        }
-    }
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
 }
 
 Y_UNIT_TEST(PgConvertNumericInt) {
@@ -89,21 +104,9 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     const char* expected[] = {
         "11", "3137", nullptr, "-1337", "0"
     };
-    
-    NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-    for (int i = 0; i < 5; i++) {
-        auto item = reader.GetItem(*data, i);
-        if (!item) {
-            UNIT_ASSERT(expected[i] == nullptr);
-        } else {
-            const char* addr = item.AsStringRef().Data() + sizeof(void*);
-            UNIT_ASSERT(expected[i] != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(
-                TString(DatumGetCString(DirectFunctionCall1(numeric_out, (Datum)addr))),
-                expected[i]
-            );
-        }
-    }
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
 }
 
 Y_UNIT_TEST(PgConvertDate32Date) {
@@ -126,7 +129,6 @@ Y_UNIT_TEST(PgConvertDate32Date) {
 
     auto converter = BuildPgColumnConverter(std::shared_ptr<arrow::DataType>(new arrow::Date32Type), targetType);
     auto result = converter(array);
-    const auto& data = result->data();
     UNIT_ASSERT_VALUES_EQUAL(result->length(), 6);
 
     const char* expected[] = {
@@ -134,21 +136,9 @@ Y_UNIT_TEST(PgConvertDate32Date) {
     };
 
     NUdf::TFixedSizeBlockReader<ui64, true> reader;
-    for (int i = 0; i < 6; i++) {
-        if (result->IsNull(i)) {
-            UNIT_ASSERT(expected[i] == nullptr);
-        } else {
-            auto item = reader.GetItem(*data, i).As<Datum>();
-            UNIT_ASSERT(expected[i] != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(
-                TString(DatumGetCString(DirectFunctionCall1(date_out, item))),
-                expected[i]
-            );
-        }
-    }
+    checkResult<true>(expected, result, &reader, date_out);
 }
 
 } // Y_UNIT_TEST_SUITE(TArrowUtilsTests)
 
 } // namespace NYql
-

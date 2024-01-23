@@ -273,6 +273,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
                     .Table(read.Table())
                     .LookupKeys(lookupKeys)
                     .Columns(read.Columns())
+                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                     .Done();
             }
         } else {
@@ -433,6 +434,7 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         .Table(lookup.Table())
         .LookupKeys(lookup.LookupKeys())
         .Columns(lookup.Columns())
+        .LookupStrategy().Build(TKqpStreamLookupStrategyName)
         .Done();
 }
 

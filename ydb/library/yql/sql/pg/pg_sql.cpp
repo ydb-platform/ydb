@@ -640,6 +640,7 @@ public:
         }
         auto loc = value->location;
         VariableSetStmt config;
+        config.kind = VAR_SET_VALUE;
         auto arg0 = ListNodeNth(value->args, 0);
         auto arg1 = ListNodeNth(value->args, 1);
         auto arg2 = ListNodeNth(value->args, 2);

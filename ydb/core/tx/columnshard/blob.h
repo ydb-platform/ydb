@@ -288,6 +288,10 @@ struct TBlobRange {
         return BlobId;
     }
 
+    bool IsValid() const {
+        return BlobId.IsValid() && Size && Offset + Size <= BlobId.BlobSize();
+    }
+
     ui32 GetBlobSize() const {
         return Size;
     }

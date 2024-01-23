@@ -416,7 +416,7 @@ namespace NKikimr::NHttpProxy {
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode) {
+            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
 
                 if (issueCode.has_value()) {

@@ -31,14 +31,18 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL;
 
-void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie) {
+void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
-    resp.MutablePartitionResponse()->MutableCmdGetOwnershipResult()->SetOwnerCookie(cookie);
+    auto* r = resp.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
+    r->SetOwnerCookie(cookie);
+    r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
+    r->SetSeqNo(seqNo);
+
     ctx.Send(Tablet, response.Release());
 }
 
@@ -146,8 +150,12 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
     auto &owner = ev->Owner;
     auto it = Owners.find(owner);
     if (it == Owners.end()) {
-        Owners[owner];
-        it = Owners.find(owner);
+        if (ev->RegisterIfNotExists) {
+            Owners[owner];
+            it = Owners.find(owner);
+        } else {
+            return ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, "SourceId isn't registered");
+        }
     }
     if (it->second.NeedResetOwner || ev->Force) { //change owner
         Y_ABORT_UNLESS(ReservedSize >= it->second.ReservedSize);
@@ -346,10 +354,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
-            const TString& ownerCookie = response.GetOwnership().OwnerCookie;
+            const auto& r = response.GetOwnership();
+            const TString& ownerCookie = r.OwnerCookie;
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
             if (it != Owners.end() && it->second.OwnerCookie == ownerCookie) {
-                ReplyOwnerOk(ctx, response.GetCookie(), ownerCookie);
+                auto sit = SourceIdStorage.GetInMemorySourceIds().find(NSourceIdEncoding::EncodeSimple(it->first));
+                auto seqNo = sit == SourceIdStorage.GetInMemorySourceIds().end() ? 0 : sit->second.SeqNo;
+                ReplyOwnerOk(ctx, response.GetCookie(), ownerCookie, seqNo);
             } else {
                 ReplyError(ctx, response.GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
             }

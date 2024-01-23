@@ -4,6 +4,7 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -59,6 +60,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            // TX
             HFunc(TEvTxProcessing::TEvReadSet, Handle);
             HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
             HFunc(TEvPQTablet::TEvSendReadSet, Handle);

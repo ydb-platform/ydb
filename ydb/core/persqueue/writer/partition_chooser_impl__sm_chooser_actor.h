@@ -142,9 +142,13 @@ private:
 
         TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
 
-        // Fast path: the partition ative and already written
-        TThis::SendUpdateRequests(ctx);
-        return TThis::ReplyResult(ctx);
+        if (response.GetCmdGetOwnershipResult().GetSeqNo() > 0) {
+            // Fast path: the partition ative and already written
+            TThis::SendUpdateRequests(ctx);
+            return TThis::ReplyResult(ctx);
+        }
+
+        TThis::InitTable(ctx);
     }
 
     STATEFN(StateOwnershipFast) {

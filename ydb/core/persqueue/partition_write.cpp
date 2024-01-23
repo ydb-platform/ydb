@@ -31,7 +31,7 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL;
 
-void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie) {
+void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& cookie, ui64 seqNo) {
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ReplyOwnerOk. Partition: " << Partition);
 
     THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
@@ -41,6 +41,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     auto* r = resp.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
     r->SetOwnerCookie(cookie);
     r->SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
+    r->SetSeqNo(seqNo);
 
     ctx.Send(Tablet, response.Release());
 }
@@ -357,7 +358,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             const TString& ownerCookie = r.OwnerCookie;
             auto it = Owners.find(TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie));
             if (it != Owners.end() && it->second.OwnerCookie == ownerCookie) {
-                ReplyOwnerOk(ctx, response.GetCookie(), ownerCookie);
+                auto sit = SourceIdStorage.GetInMemorySourceIds().find(NSourceIdEncoding::EncodeSimple(it->first));
+                auto seqNo = sit == SourceIdStorage.GetInMemorySourceIds().end() ? 0 : sit->second.SeqNo;
+                ReplyOwnerOk(ctx, response.GetCookie(), ownerCookie, seqNo);
             } else {
                 ReplyError(ctx, response.GetCookie(), NPersQueue::NErrorCode::WRONG_COOKIE, "new GetOwnership request is dropped already");
             }

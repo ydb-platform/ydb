@@ -350,6 +350,7 @@ private:
                 auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
                 cmd->SetOwnerCookie("ower_cookie");
                 cmd->SetStatus(Status);
+                cmd->SetSeqNo(SeqNo.value_or(0));
             } else {
                 response->Record.SetErrorCode(NPersQueue::NErrorCode::SOURCEID_DELETED);
             }

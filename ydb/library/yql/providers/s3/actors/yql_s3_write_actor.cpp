@@ -139,7 +139,7 @@ public:
         const TString& token)
         : TxId(txId)
         , Gateway(std::move(gateway))
-        , AuthInfo(crdentials.GetAuthInfo())
+        , Credentials(std::move(crdentials))
         , RetryPolicy(retryPolicy)
         , ActorSystem(TActivationContext::ActorSystem())
         , Key(key)
@@ -155,6 +155,9 @@ public:
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
+        if (!UpdateAuthInfo()) {
+            return;
+        }
         if (DirtyWrite && Parts->IsSealed() && Parts->Size() <= 1) {
             Become(&TS3FileWriteActor::SinglepartWorkingStateFunc);
             const size_t size = Max<size_t>(Parts->Volume(), 1);
@@ -359,6 +362,17 @@ private:
         }
     }
 
+    bool UpdateAuthInfo() {
+        try {
+            AuthInfo = Credentials.GetAuthInfo();
+            return true;
+        }
+        catch (const yexception& ex) {
+            Send(ParentId, new TEvPrivate::TEvUploadError(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed to get auth info: " << ex.what()));
+            return false;
+        }
+    }
+
     void StartUploadParts() {
         while (auto part = Parts->Pop()) {
             const auto size = part.size();
@@ -366,6 +380,9 @@ private:
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
+            if (!UpdateAuthInfo()) {
+                return;
+            }
             Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
                 IHTTPGateway::MakeYcHeaders(RequestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
                 std::move(part),
@@ -393,6 +410,9 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
+        if (!UpdateAuthInfo()) {
+            return;
+        }
         Gateway->Upload(Url + "?uploadId=" + UploadId,
             IHTTPGateway::MakeYcHeaders(RequestId, AuthInfo.GetToken(), "application/xml", AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             xml,
@@ -409,6 +429,9 @@ private:
             return;
         }
 
+        if (!UpdateAuthInfo()) {
+            return;
+        }
         Gateway->Delete(Url + "?uploadId=" + UploadId,
             IHTTPGateway::MakeYcHeaders(RequestId, AuthInfo.GetToken(), "application/xml", AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
             std::bind(&TS3FileWriteActor::OnMultipartUploadAbort, ActorSystem, SelfId(), TxId, RequestId, std::placeholders::_1),
@@ -421,7 +444,7 @@ private:
 
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     TActorSystem* const ActorSystem;
@@ -437,6 +460,7 @@ private:
     TString UploadId;
     bool DirtyWrite;
     TString Token;
+    TS3Credentials::TAuthInfo AuthInfo;
 };
 
 class TS3WriteActor : public TActorBootstrapped<TS3WriteActor>, public IDqComputeActorAsyncOutput {

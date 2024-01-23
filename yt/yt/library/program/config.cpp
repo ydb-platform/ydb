@@ -63,6 +63,8 @@ void TStockpileConfig::Register(TRegistrar registrar)
 
 void THeapProfilerConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("sampling_rate", &TThis::SamplingRate)
+        .Default();
     registrar.Parameter("snapshot_update_period", &TThis::SnapshotUpdatePeriod)
         .Default(TDuration::Seconds(5));
 }

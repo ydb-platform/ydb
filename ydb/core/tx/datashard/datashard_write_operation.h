@@ -148,7 +148,7 @@ public:
     }
 
     bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
-    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);  
+    void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();

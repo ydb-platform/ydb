@@ -1,14 +1,23 @@
 #include "key_validator.h"
-#include "ydb/core/base/appdata_fwd.h"
+#include "datashard_impl.h"
+#include "range_ops.h"
 
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/datashard/range_ops.h>
+
+
 
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
+
+TKeyValidator::TKeyValidator(const TDataShard& self, const NTable::TDatabase& db) 
+    : Self(self)
+    , Db(db)
+{
+
+}
 
 void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit, bool reverse)
 {
@@ -54,6 +63,60 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
         ++Info.DynKeysCount;
     }
     Info.SetLoaded();
+}
+
+bool TKeyValidator::IsValidKey(TKeyDesc& key) const {
+    ui64 localTableId = Self.GetLocalTableId(key.TableId);
+    return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
+}
+
+ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
+    if (TSysTables::IsSystemTable(tableId))
+        return 0;
+
+    const auto& userTables = Self.GetUserTables();
+    auto it = userTables.find(tableId.PathId.LocalPathId);
+    if (it == userTables.end()) {
+        Y_FAIL_S("TKeyValidator (tablet id: " << Self.TabletID() << " state: " << Self.GetState() << ") unable to find given table with id: " << tableId);
+        return 0;
+    } else {
+        return it->second->GetTableSchemaVersion();
+    }
+}
+
+std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys() const {
+    using EResult = NMiniKQL::IEngineFlat::EResult;
+
+    for (const auto& validKey : Info.Keys) {
+        TKeyDesc* key = validKey.Key.get();
+
+        bool valid = IsValidKey(*key);
+
+        if (valid) {
+            auto curSchemaVersion = GetTableSchemaVersion(key->TableId);
+            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
+                auto error = TStringBuilder()
+                             << "Schema version mismatch for table id: " << key->TableId
+                             << " key table version: " << key->TableId.SchemaVersion
+                             << " current table version: " << curSchemaVersion;
+                return {EResult::SchemeChanged, std::move(error)};
+            }
+        } else {
+            switch (key->Status) {
+                case TKeyDesc::EStatus::SnapshotNotExist:
+                    return {EResult::SnapshotNotExist, ""};
+                case TKeyDesc::EStatus::SnapshotNotReady:
+                    key->Status = TKeyDesc::EStatus::Ok;
+                    return {EResult::SnapshotNotReady, ""};
+                default:
+                    auto error = TStringBuilder()
+                                 << "Validate (" << __LINE__ << "): Key validation status: " << (ui32)key->Status;
+                    return {EResult::KeyError, std::move(error)};
+            }
+        }
+    }
+
+    return {EResult::Ok, ""};
 }
 
 NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() {

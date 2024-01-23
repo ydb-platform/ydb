@@ -147,7 +147,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
     TabletConfig = txBody.GetTabletConfig();
     BootstrapConfig = txBody.GetBootstrapConfig();
 
-    TPartitionGraph graph = MakePartitionGraph(TabletConfig);
+    TPartitionGraph graph;
+    graph.Rebuild(TabletConfig);
 
     for (const auto& p : TabletConfig.GetPartitions()) {
         auto node = graph.GetPartition(p.GetPartitionId());
@@ -155,15 +156,15 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             // Old configuration format without AllPartitions. Split/Merge is not supported.
             continue;
         }
-        if (node->Children.empty()) {
-            for (const auto* r : node->Parents) {
+        if (node.value()->Children.empty()) {
+            for (const auto* r : node.value()->Parents) {
                 if (extractTabletId != r->TabletId) {
                     Senders.insert(r->TabletId);
                 }
             }
         }
 
-        for (const auto* r : node->Children) {
+        for (const auto* r : node.value()->Children) {
             if (r->Children.empty()) {
                 if (extractTabletId != r->TabletId) {
                     Receivers.insert(r->TabletId);

@@ -962,13 +962,6 @@ message TEvSourceIdResponse {
     repeated TSource Source = 3;
 };
 
-message TEvCheckPartitionStatusRequest {
-    optional uint32 Partition = 1;
-};
-
-message TEvCheckPartitionStatusResponse {
-    optional ETopicPartitionStatus Status = 1;
-};
 
 message TTransaction {
     enum EKind {

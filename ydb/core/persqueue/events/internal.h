@@ -169,8 +169,6 @@ struct TEvPQ {
         EvCacheProxyForgetRead,
         EvGetFullDirectReadData,
         EvProvideDirectReadInfo,
-        EvCheckPartitionStatusRequest,
-        EvCheckPartitionStatusResponse,
         EvEnd
     };
 
@@ -493,13 +491,12 @@ struct TEvPQ {
     };
 
     struct TEvChangeOwner : public TEventLocal<TEvChangeOwner, EvChangeOwner> {
-        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force, const bool registerIfNotExists)
+        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force)
         : Cookie(cookie)
         , Owner(owner)
         , PipeClient(pipeClient)
         , Sender(sender)
         , Force(force)
-        , RegisterIfNotExists(registerIfNotExists)
         {}
 
         ui64 Cookie;
@@ -507,7 +504,6 @@ struct TEvPQ {
         TActorId PipeClient;
         TActorId Sender;
         bool Force;
-        bool RegisterIfNotExists;
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
@@ -992,18 +988,6 @@ struct TEvPQ {
 
     struct TEvProvideDirectReadInfo : public TEventLocal<TEvProvideDirectReadInfo, EvProvideDirectReadInfo> {
     };
-
-    struct TEvCheckPartitionStatusRequest : public TEventPB<TEvCheckPartitionStatusRequest, NKikimrPQ::TEvCheckPartitionStatusRequest, EvCheckPartitionStatusRequest> {
-        TEvCheckPartitionStatusRequest() = default;
-
-        TEvCheckPartitionStatusRequest(ui32 partitionId) {
-            Record.SetPartition(partitionId);
-        }
-    };
-
-    struct TEvCheckPartitionStatusResponse : public TEventPB<TEvCheckPartitionStatusResponse, NKikimrPQ::TEvCheckPartitionStatusResponse, EvCheckPartitionStatusResponse> {
-    };
-
 
 };
 

@@ -53,30 +53,28 @@ const std::type_info& CallCtor()
 
 //! Creates TSerializer object which has preprocessors applied
 //! to a TStruct object referred to by writable.
-template <std::default_initializable TStruct>
-template <class TSerializer>
-TSerializer TExternalizedYsonStruct<TStruct>::CreateWritable(TStruct& writable)
+template <std::default_initializable TStruct, class TSerializer>
+TSerializer TExternalizedYsonStruct::CreateWritable(TStruct& writable)
 {
-    static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>);
+    static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct>);
     return TSerializer(&writable);
 }
 
 //! Creates TSerializer object which has preprocessors applied
 //! to a dummy object and has pointer to readOnly assigned afterwards.
-template <std::default_initializable TStruct>
-template <class TSerializer>
-TSerializer TExternalizedYsonStruct<TStruct>::CreateReadOnly(const TStruct& readOnly)
+template <std::default_initializable TStruct, class TSerializer>
+TSerializer TExternalizedYsonStruct::CreateReadOnly(const TStruct& readOnly)
 {
-    static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>);
+    static_assert(std::derived_from<TSerializer, TExternalizedYsonStruct>);
     auto ret = TSerializer();
-    ret.That = const_cast<TStruct*>(&readOnly);
+    ret.SetThat(const_cast<TStruct*>(&readOnly));
     return ret;
 }
 
 //! We need some writable instance of TStruct to refer to in order
 //! to have a default constructor required by TYsonStructRegistry::InitializeStruct.
 template <std::default_initializable TStruct>
-TStruct* TExternalizedYsonStruct<TStruct>::GetDefault() noexcept
+TStruct* TExternalizedYsonStruct::GetDefault() noexcept
 {
     thread_local TStruct defaultThat = {};
     //! NB: We reset default after every invocation
@@ -211,9 +209,10 @@ template <class TExternal, class TValue>
     // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParameter(const TString& key, TValue(TExternal::*field))
 {
-    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct<TExternal>>);
+    static_assert(std::derived_from<TStruct, TExternalizedYsonStruct>);
+    static_assert(std::same_as<typename TStruct::TExternal, TExternal>);
     auto universalAccessor = [field] (TStruct* serializer) -> auto& {
-        return serializer->That->*field;
+        return serializer->That_->*field;
     };
 
     return ParameterWithUniversalAccessor<TValue>(key, universalAccessor);
@@ -226,7 +225,7 @@ void TYsonStructRegistrar<TStruct>::ExternalPreprocessor(TExternalPreprocessor p
 {
     static_assert(CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPreprocessor([preprocessor = std::move(preprocessor)] (TYsonStructBase* target) {
-        preprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That);
+        preprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
 }
 
@@ -237,7 +236,7 @@ void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor
 {
     static_assert(CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPostprocessor([postprocessor = std::move(postprocessor)] (TYsonStructBase* target) {
-        postprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That);
+        postprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
 }
 
@@ -381,6 +380,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #undef DEFINE_YSON_STRUCT
 #undef DEFINE_YSON_STRUCT_LITE
 #undef REGISTER_EXTERNALIZED_YSON_STRUCT
+#undef REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT
 
 #define YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
 private: \
@@ -397,12 +397,16 @@ private: \
         this->SetDefaults(); \
     } \
 
+//! NB(arkady-e1ppa): Alias is used by registrar postprocessors
+//! in order to properly infer template argument.
 #define YSON_STRUCT_EXTERNAL_SERIALIZER_IMPL__DECLARE_ALIASES(TStruct, TSerializer) \
+public: \
+    using TExternal = TStruct; \
+    TStruct* That_ = nullptr; \
 private: \
     using TRegistrar = ::NYT::NYTree::TYsonStructRegistrar<TSerializer>; \
     using TThat = TStruct; \
     friend class ::NYT::NYTree::TYsonStructRegistry; \
-    template <std::default_initializable T> \
     friend class ::NYT::NYTree::TExternalizedYsonStruct; \
     template <class T> \
     friend const std::type_info& ::NYT::NYTree::CallCtor(); \
@@ -453,25 +457,70 @@ TStruct::TStruct() \
     YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
 }
 
-
 //! NB(arkady-e1ppa): These constructors are only used internally.
 //! Default one is required by TYsonStructRegistry::InitializeStruct.
 //! If you want to create an instance of a TStruct then:
 //! 1) Unless you are working with some serialization logic you shouldn't.
 //! 2) Use TExternalizedYsonStruct::CreateWritable and TExternalizedYsonStruct::CreateReadOnly
 //! instead to guarantee proper initialization as well as const-correctness.
-#define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer) \
-private: \
+#define EXTERNALIZED_YSON_STRUCT_IMPL__CTORS(TStruct, TSerializer) \
+public: \
+    TSerializer() \
+        : TSerializer(::NYT::NYTree::TExternalizedYsonStruct::template GetDefault<TStruct>()) \
+    { }; \
     explicit TSerializer(TStruct* ptr) \
         : ::NYT::NYTree::TYsonStructFinalClassHolder(std::type_index(typeid(TSerializer))) \
     { \
-        static_assert(std::derived_from<TSerializer, ::NYT::NYTree::TExternalizedYsonStruct<TStruct>>, "Class must inherit from TExternalizedYsonStruct"); \
-        ::NYT::NYTree::TExternalizedYsonStruct<TStruct>::That = ptr; \
+        static_assert(std::derived_from<TSerializer, ::NYT::NYTree::TExternalizedYsonStruct>, "Class must inherit from TExternalizedYsonStruct"); \
+        SetThat(ptr); \
         YSON_STRUCT_LITE_IMPL__CTOR_BODY(TSerializer); \
     } \
-    TSerializer() \
-        : TSerializer(::NYT::NYTree::TExternalizedYsonStruct<TStruct>::GetDefault()) \
-    { }; \
+
+#define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer) \
+    EXTERNALIZED_YSON_STRUCT_IMPL__CTORS(TStruct, TSerializer) \
+public: \
+    void SetThat(TStruct* ptr) \
+    { \
+        That_ = ptr; \
+    } \
+    YSON_STRUCT_EXTERNAL_SERIALIZER_IMPL__DECLARE_ALIASES(TStruct, TSerializer) \
+
+//! TODO(arkady-e1ppa):
+/*
+    Code below is terrible both in terms of internal implementation and user experience.
+    Ideally we would want to abolish the macro below and instead use magic method
+    "GetThat" whenever we want to assign That_. Properly implementing CreateReadOnly
+    is likely to require some more tinkering but should ultimately be possible to do.
+
+    Magic GetThat should be something along the lines
+    static TStruct* GetThat(this auto& self)
+    {
+        return self.That_;
+    }
+
+    and called as TSerializer::GetThat(*this) which would trigger the correct overload of it and
+    deduce the most derived type in auto which would resolve .That_ as a field of the most derived
+    class.
+
+    This "deducing this" feature will come in C++23 and is likely to be properly supported in clang-18 or 19.
+
+    Another thing to consider is using some method (which is likely outside of standard) to list all
+    direct bases of the type so we can at least remove explicit enumeration of them in the user code.
+
+    Perhaps, there is another approach to consider?
+*/
+
+#define BASE_SET_THAT_ENTRY(TBase) \
+    TBase::SetThat(ptr); \
+
+#define REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer, TBases) \
+    EXTERNALIZED_YSON_STRUCT_IMPL__CTORS(TStruct, TSerializer) \
+public: \
+    void SetThat(TStruct* ptr) \
+    { \
+        That_ = ptr; \
+        PP_FOR_EACH(BASE_SET_THAT_ENTRY, TBases) \
+    } \
     YSON_STRUCT_EXTERNAL_SERIALIZER_IMPL__DECLARE_ALIASES(TStruct, TSerializer) \
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,6 +6,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/data_events/shards_splitter.h>
@@ -85,9 +86,6 @@ public:
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
-
-        BuildColumns();
-        PrepareBatchBuilder();
     }
 
     void Bootstrap() {
@@ -114,7 +112,9 @@ private:
     }
 
     i64 GetFreeSpace() const final {
-        return MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes());
+        return SchemeEntry
+            ? MemoryLimit - (MemoryInFlight + BatchBuilder->Bytes())
+            : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
@@ -128,18 +128,19 @@ private:
     }
 
     void AddToInputQueue(NMiniKQL::TUnboxedValueBatch&& data) {
+        YQL_ENSURE(SchemeEntry);
+        YQL_ENSURE(BatchBuilder);
+
         TVector<TCell> cells(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
-                cells[index] = MakeCell(
+                cells[SendIndexToWriteIndexMapping[index]] = MakeCell(
                     Columns[index].PType,
                     row.GetElement(index),
                     TypeEnv,
                     /* copy */ false);
             }
-            BatchBuilder->AddRow(
-                TConstArrayRef<TCell>{cells.begin(), cells.begin() + KeyColumns.size()},
-                TConstArrayRef<TCell>{cells.begin() + KeyColumns.size(), cells.end()});
+            BatchBuilder->AddRow(TConstArrayRef<TCell>{cells.begin(), cells.end()});
         });
     }
 
@@ -176,7 +177,6 @@ private:
             RuntimeError(TStringBuilder() << "Failed to get table: "
                 << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
-
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
@@ -185,7 +185,9 @@ private:
 
         CA_LOG_D("Resolved TableId=" << TableId);
 
-        ProcessRows();
+        Prepare();
+
+        Callbacks->ResumeExecution();
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -331,7 +333,7 @@ private:
                 Settings.GetTable().GetTableId(),
                 Settings.GetTable().GetVersion() + 1 // TODO: SchemeShard returns wrong version.
             },
-            ColumnIds,
+            WriteColumnIds,
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
@@ -404,49 +406,51 @@ private:
         TActorBootstrapped<TKqpWriteActor>::PassAway();
     }
 
-    void BuildColumns() {
-        KeyColumns.reserve(Settings.KeyColumnsSize());
-        i32 number = 0;
-        for (const auto& column : Settings.GetKeyColumns()) {
-            KeyColumns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
+    void Prepare() {
+        YQL_ENSURE(SchemeEntry);
+        std::vector<std::pair<TString, NScheme::TTypeInfo>> batchBuilderColumns;
+        THashMap<ui32, ui32> writeColumnIdToIndex;
+        {
+            batchBuilderColumns.reserve(Settings.ColumnsSize());
+            WriteColumnIds.reserve(Settings.ColumnsSize());
+            if (!SchemeEntry->ColumnTableInfo) {
+                RuntimeError("Expected column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            }
+            if (!SchemeEntry->ColumnTableInfo->Description.HasSchema()) {
+                RuntimeError("Unknown schema for column table.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            }
+            i32 number = 0;
+            for (const auto& column : SchemeEntry->ColumnTableInfo->Description.GetSchema().GetColumns()) {
+                Y_ABORT_UNLESS(column.HasTypeId());
+                auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                    column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                batchBuilderColumns.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
+                WriteColumnIds.push_back(column.GetId());
+                writeColumnIdToIndex[column.GetId()] = number++;
+            }
         }
 
-        ColumnIds.reserve(Settings.ColumnsSize());
-        Columns.reserve(Settings.ColumnsSize());
-        number = 0;
-        for (const auto& column : Settings.GetColumns()) {
-            ColumnIds.push_back(column.GetId());
-            Columns.emplace_back(
-                column.GetName(),
-                column.GetId(),
-                NScheme::TTypeInfo {
-                    static_cast<NScheme::TTypeId>(column.GetTypeId()),
-                    column.GetTypeId() == NScheme::NTypeIds::Pg
-                        ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
-                        : nullptr
-                },
-                column.GetTypeInfo().GetPgTypeMod(),
-                number++
-            );
+        {
+            SendIndexToWriteIndexMapping.resize(Settings.ColumnsSize());
+            Columns.reserve(Settings.ColumnsSize());
+            i32 number = 0;
+            for (const auto& column : Settings.GetColumns()) {
+                SendIndexToWriteIndexMapping[number] = writeColumnIdToIndex.at(column.GetId());
+                Columns.emplace_back(
+                    column.GetName(),
+                    column.GetId(),
+                    NScheme::TTypeInfo {
+                        static_cast<NScheme::TTypeId>(column.GetTypeId()),
+                        column.GetTypeId() == NScheme::NTypeIds::Pg
+                            ? NPg::TypeDescFromPgTypeId(column.GetTypeInfo().GetPgTypeId())
+                            : nullptr
+                    },
+                    column.GetTypeInfo().GetPgTypeMod(),
+                    number++
+                );
+            }
         }
-    }
 
-    void PrepareBatchBuilder() {
-        std::vector<std::pair<TString, NScheme::TTypeInfo>> columns;
-        for (const auto& column : Columns) {
-            columns.emplace_back(column.Name, column.PType);
-        }
         std::set<std::string> notNullColumns;
         for (const auto& column : Settings.GetColumns()) {
             if (column.GetNotNull()) {
@@ -457,7 +461,7 @@ private:
         BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>(arrow::Compression::UNCOMPRESSED, notNullColumns);
 
         TString err;
-        if (!BatchBuilder->Start(columns, 0, 0, err)) {
+        if (!BatchBuilder->Start(batchBuilderColumns, 0, 0, err)) {
             RuntimeError("Failed to start batch builder: " + err, NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
         }
     }
@@ -498,9 +502,9 @@ private:
     const NYql::NDq::TTxId TxId;
     const TTableId TableId;
 
-    TVector<TSysTables::TTableColumnInfo> KeyColumns;
     TVector<TSysTables::TTableColumnInfo> Columns;
-    std::vector<ui32> ColumnIds;
+    TVector<ui32> SendIndexToWriteIndexMapping;
+    std::vector<ui32> WriteColumnIds;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
 

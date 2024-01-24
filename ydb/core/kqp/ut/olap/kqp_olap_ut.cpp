@@ -5550,13 +5550,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const TString query = R"(
             CREATE TABLE `/Root/ColumnShard` (
                 Col1 Uint64 NOT NULL,
-                Col2 String NOT NULL,
-                Col3 Int32,
+                Col2 Int32,
                 Col4 String,
-                PRIMARY KEY (Col1, Col2)
+                Col3 String NOT NULL,
+                PRIMARY KEY (Col1, Col3)
             )
             PARTITION BY HASH(Col1)
-            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
         )";
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -5566,7 +5566,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto client = kikimr.GetQueryClient();
         { 
             auto prepareResult = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/ColumnShard` (Col2, Col4, Col3, Col1) VALUES
+                REPLACE INTO `/Root/ColumnShard` (Col3, Col4, Col2, Col1) VALUES
                     ("test100", "100", 1000, 100u);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
@@ -5574,14 +5574,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/ColumnShard` (Col1, Col2, Col3, Col4) VALUES
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col3, Col2, Col4) VALUES
                     (1u, "test1", 10, "1"), (2u, "test2", NULL, "2"), (3u, "test3", 12, NULL), (4u, "test4", NULL, NULL);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
         }
 
         auto it = client.StreamExecuteQuery(R"(
-            SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2, Col3, Col4;
+            SELECT Col1, Col3, Col2, Col4 FROM `/Root/ColumnShard` ORDER BY Col1, Col3, Col2, Col4;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
         TString output = StreamResultToYson(it);
@@ -5639,6 +5639,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([])");
         }
+    }
+
+    Y_UNIT_TEST(OlapReplace_Duplicates) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString query = R"(
+            CREATE TABLE `/Root/ColumnShard` (
+                Col1 Uint64 NOT NULL,
+                Col2 Int32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+        )";
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        { 
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2) VALUES
+                    (100u, 1000), (100u, 1000);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        { 
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnShard` (Col1, Col2) VALUES
+                    (100u, 1000), (100u, 1000);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        auto it = client.StreamExecuteQuery(R"(
+            SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString output = StreamResultToYson(it);
+        CompareYson(output, R"([[100u;[1000]]])");
     }
 }
 

@@ -125,11 +125,11 @@ bool TTpchCommandRun::RunBench(TConfig& config)
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
             testInfo.Mean * 0.001, testInfo.Std * 0.001) << Endl;
         if (collectJsonSensors) {
-            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
-            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
-            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, queryN));
-            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, queryN));
-            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
+            jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Max", testInfo.Max, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Mean", testInfo.Mean, getQueryNumber(queryN)));
+            jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, getQueryNumber(queryN)));
         }
     }
 
@@ -256,7 +256,7 @@ void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
 
 int TTpchCommandInit::Run(TConfig& config) {
     StoreType = to_lower(StoreType);
-    TString storageType = "";
+    TString storageType = "-- ";
     TString notNull = "";
     TString createExternalDataSource;
     TString external;
@@ -266,10 +266,10 @@ int TTpchCommandInit::Run(TConfig& config) {
         storageType = "STORE = COLUMN, --";
         notNull = "NOT NULL";
     } else if (StoreType == "s3") {
-        storageType = R"(DATA_SOURCE = "_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )";
+        storageType = R"(DATA_SOURCE = "{path}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )";
         notNull = "NOT NULL";
         createExternalDataSource = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `_tpc_s3_external_source` WITH (
+            CREATE EXTERNAL DATA SOURCE `{{path}}_tpc_s3_external_source` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="https://storage.yandexcloud.net/{}/",
                 AUTH_METHOD="NONE"
@@ -279,7 +279,6 @@ int TTpchCommandInit::Run(TConfig& config) {
         partitioning = "--";
         primaryKey = "--";
     } else if (StoreType != "row") {
-        storageType = "-- ";
         throw yexception() << "Incorrect storage type. Available options: \"row\", \"column\"." << Endl;
     }
 
@@ -293,9 +292,9 @@ int TTpchCommandInit::Run(TConfig& config) {
     SubstGlobal(createSql, "{notnull}", notNull);
     SubstGlobal(createSql, "{partitioning}", partitioning);
     SubstGlobal(createSql, "{primary_key}", primaryKey);
-    SubstGlobal(createSql, "{path}", TablesPath);
     SubstGlobal(createSql, "{scale}", Scale);
     SubstGlobal(createSql, "{store}", storageType);
+    SubstGlobal(createSql, "{path}", TablesPath);
     SetPartitionByCols(createSql);
 
     Cout << createSql << Endl;

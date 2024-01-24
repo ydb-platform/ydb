@@ -157,8 +157,7 @@ public:
         LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
         try {
             BeginPartsUpload(Credentials.GetAuthInfo());
-        }
-        catch (const yexception& ex) {
+        } catch (...) {
             FailOnException();
         }
     }
@@ -424,8 +423,7 @@ private:
     void SafeAbortMultipartUpload() {
         try {
             AbortMultipartUpload(Credentials.GetAuthInfo());
-        }
-        catch (const yexception& ex) {
+        } catch (...) {
             LOG_W("TS3FileWriteActor", "Failed to abort multipart upload, error: " << CurrentExceptionMessage());
         }
     }

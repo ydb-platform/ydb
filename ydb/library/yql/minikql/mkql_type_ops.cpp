@@ -260,6 +260,21 @@ bool WriteDatetime(IOutputStream& out, ui32 value) {
     return true;
 }
 
+bool WriteDatetime64(IOutputStream& out, i64 value) {
+    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 < value || value > NUdf::MAX_DATETIME64)) {
+        return false;
+    }
+
+    const auto date = value / 86400u;
+    value -= date * 86400u;
+    if (!WriteDate32(out, date)) {
+        return false;
+    }
+    out << 'T';
+    WriteTime(out, value);
+    return true;
+}
+
 void WriteUs(IOutputStream& out, ui32 value) {
     if (value) {
         out << '.';
@@ -269,6 +284,24 @@ void WriteUs(IOutputStream& out, ui32 value) {
 
 bool WriteTimestamp(IOutputStream& out, ui64 value) {
     if (value >= NUdf::MAX_TIMESTAMP) {
+        return false;
+    }
+
+    const auto date = value / 86400000000ull;
+    value -= date * 86400000000ull;
+    if (!WriteDate(out, date)) {
+        return false;
+    }
+    out << 'T';
+    const auto time = value / 1000000ull;
+    value -= time * 1000000ull;
+    WriteTime(out, time);
+    WriteUs(out, value);
+    return true;
+}
+
+bool WriteTimestamp64(IOutputStream& out, i64 value) {
+    if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 < value || value > NUdf::MAX_TIMESTAMP64)) {
         return false;
     }
 
@@ -405,12 +438,6 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         }
         break;
 
-    case NUdf::EDataSlot::Date32:
-        if (!WriteDate32(out, value.Get<i32>())) {
-            return NUdf::TUnboxedValuePod();
-        }
-        break;
-
     case NUdf::EDataSlot::Datetime:
         if (!WriteDatetime(out, value.Get<ui32>())) {
             return NUdf::TUnboxedValuePod();
@@ -463,6 +490,32 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         out << ',' << tz.name();
         break;
     }
+
+    case NUdf::EDataSlot::Date32:
+        if (!WriteDate32(out, value.Get<i32>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        break;
+
+    case NUdf::EDataSlot::Datetime64:
+        if (!WriteDatetime64(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        out << 'Z';
+        break;
+
+    case NUdf::EDataSlot::Timestamp64:
+        if (!WriteTimestamp64(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        out << 'Z';
+        break;
+
+    case NUdf::EDataSlot::Interval64: // todo
+        if (!WriteInterval(out, value.Get<i64>())) {
+            return NUdf::TUnboxedValuePod();
+        }
+        break;
 
     case NUdf::EDataSlot::DyNumber: {
         out << NDyNumber::DyNumberToString(value.AsStringRef());

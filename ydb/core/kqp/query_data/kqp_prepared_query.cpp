@@ -268,32 +268,32 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
     }
 }
 
-bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState) const {
+bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState, bool withSessionId) const {
     if (!tempTablesState) {
         return false;
     }
-    YQL_ENSURE(tempTablesState->SessionId);
-    auto tempTables = THashSet<TString>();
-    for (const auto& [path, info] : tempTablesState->TempTables) {
-        tempTables.insert(path.second + *tempTablesState->SessionId);
-    }
     for (const auto& table: QueryTables) {
-        if (tempTables.contains(table)) {
+        auto infoIt = tempTablesState->FindInfo(table, withSessionId);
+        if (infoIt != tempTablesState->TempTables.end()) {
             return true;
         }
     }
 
-    for (const auto& tx: Transactions) {
-        auto optPath = tx->GetSchemeOpTempTablePath();
-        if (!optPath) {
-            continue;
-        } else {
-            const auto& [isCreate, path] = *optPath;
-            if (isCreate) {
-                return true;
+
+    if (withSessionId) {
+        for (const auto& tx: Transactions) {
+            auto optPath = tx->GetSchemeOpTempTablePath();
+            if (!optPath) {
+                continue;
             } else {
-                if (tempTables.contains(JoinPath({path.first, path.second}))) {
+                const auto& [isCreate, path] = *optPath;
+                if (isCreate) {
                     return true;
+                } else {
+                    auto infoIt = tempTablesState->FindInfo(JoinPath({path.first, path.second}), withSessionId);
+                    if (infoIt != tempTablesState->TempTables.end()) {
+                        return true;
+                    }
                 }
             }
         }

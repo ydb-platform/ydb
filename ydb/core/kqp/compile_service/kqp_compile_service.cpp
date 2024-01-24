@@ -567,7 +567,9 @@ private:
             Counters->ReportCompileRequestGet(dbCounters);
 
             auto compileResult = QueryCache.FindByUid(*request.Uid, request.KeepInCache);
-            compileResult = WithCache(std::move(compileResult), request.TempTablesState);
+            if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+                compileResult = nullptr;
+            }
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
                 if (compileResult->Query->UserSid == userSid) {
@@ -611,7 +613,9 @@ private:
         }
 
         auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
-        compileResult = WithCache(std::move(compileResult), request.TempTablesState);
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+            compileResult = nullptr;
+        }
 
         if (compileResult) {
             Counters->ReportQueryCacheHit(dbCounters, true);
@@ -676,7 +680,9 @@ private:
         Counters->ReportRecompileRequestGet(dbCounters);
 
         TKqpCompileResult::TConstPtr compileResult = QueryCache.FindByUid(request.Uid, false);
-        compileResult = WithCache(std::move(compileResult), request.TempTablesState);
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+            compileResult = nullptr;
+        }
 
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
@@ -741,11 +747,11 @@ private:
 
         bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
 
-        bool hasTempTables = WithCache(compileResult, compileRequest.TempTablesState, true) == nullptr;
+        bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
-                if (!hasTempTables) {
+                if (!hasTempTablesNameClashes) {
                     UpdateQueryCache(compileResult, keepInCache);
                 }
 
@@ -760,7 +766,7 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
                 }
             } else {
-                if (!hasTempTables) {
+                if (!hasTempTablesNameClashes) {
                     if (QueryCache.FindByUid(compileResult->Uid, false)) {
                         QueryCache.EraseByUid(compileResult->Uid);
                     }
@@ -814,36 +820,17 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    TKqpCompileResult::TConstPtr WithCache(
+    bool HasTempTablesNameClashes(
             TKqpCompileResult::TConstPtr compileResult,
-            TKqpTempTablesState::TConstPtr tempTablesState, bool forInsert = false) {
+            TKqpTempTablesState::TConstPtr tempTablesState, bool withSessionId = false) {
         if (!compileResult) {
-            return nullptr;
+            return false;
         }
         if (!compileResult->PreparedQuery) {
-            return compileResult;
+            return false;
         }
-        if (forInsert) {
-            auto hasTempTables = compileResult->PreparedQuery->HasTempTables(tempTablesState);
-            if (hasTempTables) {
-                return nullptr;
-            }
-            return compileResult;
-        }
-        if (!tempTablesState) {
-            return compileResult;
-        }
-        auto tables = compileResult->PreparedQuery->GetQueryTables();
-        auto tempTables = THashSet<TString>();
-        for (const auto& [path, info] : tempTablesState->TempTables) {
-            tempTables.insert(path.second);
-        }
-        for (const auto& path: tables) {
-            if (tempTables.contains(path)) {
-                return nullptr;
-            }
-        }
-        return compileResult;
+
+        return compileResult->PreparedQuery->HasTempTables(tempTablesState, withSessionId);
     }
 
     void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache) {
@@ -867,7 +854,9 @@ private:
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
         if (parseResult && parseResult->Ast->IsOk()) {
             auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.KeepInCache);
-            compileResult = WithCache(std::move(compileResult), compileRequest.TempTablesState);
+            if (HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+                compileResult = nullptr;
+            }
             if (compileResult) {
                 Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
 

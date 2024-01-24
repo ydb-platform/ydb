@@ -180,8 +180,11 @@ public:
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
 
-        TempTablesState.SessionId = TryDecodeYdbSessionId(SessionId);
-        LOG_D("Create session actor with id " << *TempTablesState.SessionId);
+        auto optSessionId = TryDecodeYdbSessionId(SessionId);
+        YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
+
+        TempTablesState.SessionId = *optSessionId;
+        LOG_D("Create session actor with id " << TempTablesState.SessionId);
     }
 
     void Bootstrap() {
@@ -1063,7 +1066,7 @@ public:
         bool temporary = GetTemporaryTableInfo(tx).has_value();
 
         auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
-            temporary, *TempTablesState.SessionId, QueryState->UserRequestContext);
+            temporary, TempTablesState.SessionId, QueryState->UserRequestContext);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
     }
@@ -1160,7 +1163,7 @@ public:
         }
     }
 
-    std::optional<std::pair<bool, TKqpTempTablesState::TTempTableInfo>>
+    std::optional<std::pair<bool, std::pair<TString, TKqpTempTablesState::TTempTableInfo>>>
     GetTemporaryTableInfo(TKqpPhyTxHolder::TConstPtr tx) {
         if (!tx) {
             return std::nullopt;
@@ -1172,22 +1175,15 @@ public:
         const auto& [isCreate, path] = *optPath;
         if (isCreate) {
             auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-            return {{true, {path.second, path.first, Settings.Cluster, userToken, Settings.Database}}};
+            return {{true, {JoinPath({path.first, path.second}), {path.second, path.first, userToken}}}};
         }
 
-        TString name = path.second;
-        auto pos = name.find(*TempTablesState.SessionId);
-
-        if (pos == TString::npos) {
-            return std::nullopt;
-        }
-        name.erase(pos, name.size());
-
-        auto it = TempTablesState.TempTables.find(std::make_pair(Settings.Cluster, JoinPath({path.first, name})));
+        auto it = TempTablesState.FindInfo(JoinPath({path.first, path.second}));
         if (it == TempTablesState.TempTables.end()) {
             return std::nullopt;
         }
-        return {{false, it->second}};
+
+        return {{false, {it->first, {}}}};
     }
 
     void UpdateTempTablesState() {
@@ -1200,11 +1196,11 @@ public:
         }
         auto optInfo = GetTemporaryTableInfo(tx);
         if (optInfo) {
-            auto [isCreate, tempTableInfo] = *optInfo;
+            auto [isCreate, info] = *optInfo;
             if (isCreate) {
-                TempTablesState.TempTables[std::make_pair(tempTableInfo.Database, JoinPath({tempTableInfo.WorkingDir, tempTableInfo.Name}))] = tempTableInfo;
+                TempTablesState.TempTables[info.first] = info.second;
             } else {
-                TempTablesState.TempTables.erase(std::make_pair(tempTableInfo.Database, JoinPath({tempTableInfo.WorkingDir, tempTableInfo.Name})));
+                TempTablesState.TempTables.erase(info.first);
             }
             QueryState->UpdateTempTablesState(TempTablesState);
         }
@@ -1883,7 +1879,8 @@ public:
             Become(&TKqpSessionActor::FinalCleanupState);
 
             LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
-            auto tempTablesManager = CreateKqpTempTablesManager(std::move(TempTablesState), SelfId());
+            auto tempTablesManager = CreateKqpTempTablesManager(
+                std::move(TempTablesState), SelfId(), Settings.Database);
             RegisterWithSameMailbox(tempTablesManager);
             return;
         } else {

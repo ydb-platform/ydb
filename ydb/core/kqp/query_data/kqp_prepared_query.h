@@ -192,7 +192,7 @@ public:
 
     void FillTables(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyStage>& stages);
 
-    bool HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState) const;
+    bool HasTempTables(TKqpTempTablesState::TConstPtr tempTablesState, bool withSessionId) const;
 };
 
 

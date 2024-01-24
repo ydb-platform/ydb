@@ -76,7 +76,7 @@ jobs:
         # tricky: we are searching job with name that contains build_preset
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
         
-        echo "Pre-commit [check]($check_url) for ${{ github.event.pull_request.head.sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
+        echo "Pre-commit [check]($check_url) for ${{ inputs.commit_sha }} has started." | .github/scripts/tests/comment-pr.py --rewrite
     
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd

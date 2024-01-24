@@ -33,6 +33,7 @@ enum class EOperKind {
 struct TOperDesc {
     ui32 OperId = 0;
     TString Name;
+    TString Descr;
     EOperKind Kind = EOperKind::Binary;
     ui32 LeftType = 0;
     ui32 RightType = 0;
@@ -50,6 +51,7 @@ struct TProcDesc {
     ui32 ProcId = 0;
     TString Name;
     TString Src;
+    TString Descr;
     TVector<ui32> ArgTypes;
     ui32 ResultType = 0;
     bool IsStrict = true;
@@ -81,6 +83,7 @@ constexpr char InvalidCategory = '\0';
 struct TTypeDesc {
     ui32 TypeId = 0;
     ui32 ArrayTypeId = 0;
+    TString Descr;
     TString Name;
     ui32 ElementTypeId = 0;
     bool PassByValue = false;
@@ -155,6 +158,19 @@ struct TAggregateDesc {
     TString InitValue;
 };
 
+struct TAmDesc {
+    ui32 Oid = 0;
+    TString Descr;
+    TString AmName;
+    uint8_t AmType = 0;
+};
+
+struct TNamespaceDesc {
+    ui32 Oid = 0;
+    TString Name;
+    TString Descr;
+};
+
 enum class EOpClassMethod {
     Btree,
     Hash
@@ -206,6 +222,7 @@ struct TConversionDesc {
     ui32 ConversionId = 0;
     TString From;
     TString To;
+    TString Descr;
     ui32 ProcId = 0;
 };
 
@@ -222,6 +239,16 @@ const TTypeDesc& LookupType(ui32 typeId);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded);
 void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
+
+const TAmDesc& LookupAm(ui32 oid);
+void EnumAm(std::function<void(ui32, const TAmDesc&)> f);
+
+void EnumConversions(std::function<void(const TConversionDesc&)> f);
+
+const TNamespaceDesc& LookupNamespace(ui32 oid);
+void EnumNamespace(std::function<void(ui32, const TNamespaceDesc&)> f);
+
+void EnumOperators(std::function<void(const TOperDesc&)> f);
 
 bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);

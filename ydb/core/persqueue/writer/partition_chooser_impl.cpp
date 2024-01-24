@@ -3,7 +3,6 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
-//#include <ydb/library/actors/core/actorid.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
 namespace NKikimr::NPQ {

@@ -91,9 +91,6 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
 
-    // auto* appData = env.Runtime->GetAppData();
-    // Y_ABORT_UNLESS(appData);
-
     auto vdisksTotal = [&](TString subsystem, TString counter, bool derivative = false) {
         ui64 ctr = 0;
         for (const auto& vslot : baseConfig.GetVSlot()) {
@@ -141,7 +138,6 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
 
     if constexpr(VERBOSE) {
         Cerr << str.Str() << Endl;
-        // env.Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
     }
     UNIT_ASSERT_VALUES_EQUAL_C(dsproxyCost, vdiskCost, str.Str());
 }

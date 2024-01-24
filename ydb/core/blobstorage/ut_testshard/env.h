@@ -335,7 +335,7 @@ struct TEnvironmentSetup {
             auto *cmd = request.AddCommand();
             auto *vg = cmd->MutableAllocateVirtualGroup();
             vg->SetName("vg");
-            vg->SetHiveId(Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+            vg->SetHiveId(Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
             vg->SetStoragePoolName("virtual");
             auto *prof = vg->AddChannelProfiles();
             prof->SetStoragePoolName(StoragePoolName);

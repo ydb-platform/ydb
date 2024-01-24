@@ -7,11 +7,10 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/mind/hive/hive.h>
 
-namespace {
-
 using namespace NKikimr;
-using namespace NSchemeShard;
+using namespace NKikimr::NSchemeShard;
 
+namespace {
 
 void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
                    const TChannelsBindings& channelsBindings,

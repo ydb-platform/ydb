@@ -16,7 +16,7 @@ public:
     };
 
     enum class EBinaryOp {
-        And,
+        And = 0,
         Or,
         Xor,
 

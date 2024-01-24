@@ -1,14 +1,15 @@
 LIBRARY()
 
 SRCS(
-    container.cpp
-    range.cpp
-    filter.cpp
-    predicate.cpp
+    constructor.cpp
+    meta.cpp
+    checker.cpp
+    program.cpp
+    GLOBAL composite.cpp
+    simple.cpp
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
     ydb/core/protos
     ydb/core/formats/arrow
 )

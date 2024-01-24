@@ -1,35 +1,11 @@
-#include "bloom.h"
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
-#include <ydb/core/formats/arrow/hash/calcer.h>
+#include "constructor.h"
+#include "meta.h"
+
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <ydb/core/tx/schemeshard/olap/common/common.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<arrow::RecordBatch> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
-    std::vector<bool> flags;
-    flags.resize(BitsCount, false);
-    for (ui32 i = 0; i < HashesCount; ++i) {
-        NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(3 * i);
-        for (; reader.IsCorrect(); reader.ReadNext()) {
-            hashCalcer.Start();
-            for (auto&& i : reader) {
-                NArrow::NHash::TXX64::AppendField(i.GetCurrentChunk(), i.GetCurrentRecordIndex(), hashCalcer);
-            }
-            flags[hashCalcer.Finish() % BitsCount] = true;
-        }
-    }
-
-    arrow::BooleanBuilder builder;
-    auto res = builder.Reserve(flags.size());
-    NArrow::TStatusValidator::Validate(builder.AppendValues(flags));
-    std::shared_ptr<arrow::BooleanArray> out;
-    NArrow::TStatusValidator::Validate(builder.Finish(&out));
-
-    return arrow::RecordBatch::Make(ResultSchema, BitsCount, {out});
-}
-
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const ui32 indexId, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
     for (auto&& i : ColumnNames) {
         auto* columnInfo = currentSchema.GetColumns().GetByName(i);
@@ -39,7 +15,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::Do
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TBloomIndexMeta>(columnIds, FalsePositiveProbability);
+    return std::make_shared<TBloomIndexMeta>(indexId, columnIds, FalsePositiveProbability);
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

@@ -734,6 +734,35 @@ inline const TString FormatNumeric(const TString& value)
     return (value == "0") ? Zero : value;
 }
 
+const TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
+    static const TString nan = "NaN";
+    static const TString inf = "Infinity";
+    static const TString minf = "-Infinity";
+
+    try {
+        return (value == "") ? ""
+             : (value == "nan") ? nan
+             : (value == "inf") ? inf
+             : (value == "-inf") ? minf
+             : formatter(value);
+    } catch (const std::exception& e) {
+        Cerr << "Unexpected float value '" << value << "'\n";
+        return "";
+    }
+}
+
+inline const TString FormatFloat4(const TString& value)
+{
+    return FormatFloat(value,
+        [] (const TString& val) { return TString(fmt::format("{0}", std::stof(val))); });
+}
+
+inline const TString FormatFloat8(const TString& value)
+{
+    return FormatFloat(value,
+        [] (const TString& val) { return TString(fmt::format("{0}", std::stod(val))); });
+}
+
 inline const TString FormatTransparent(const TString& value)
 {
     return value;
@@ -742,6 +771,8 @@ inline const TString FormatTransparent(const TString& value)
 static const THashMap<TColumnType, CellFormatter> ColumnFormatters {
     { "bool", FormatBool },
     { "numeric", FormatNumeric },
+    { "float4", FormatFloat4 },
+    { "float8", FormatFloat8 },
 };
 
 static const THashSet<TColumnType> RightAlignedTypes {
@@ -751,6 +782,7 @@ static const THashSet<TColumnType> RightAlignedTypes {
     "float4",
     "float8",
     "numeric",
+    "oid",
 };
 
 struct TColumn {
@@ -1100,6 +1132,7 @@ int Main(int argc, char* argv[])
         }
 
         if (program->HasResults()) {
+            // PrintExprTo(program, Cout);
             // Cout << program->ResultsAsString() << Endl;
 
             const auto root = ParseYson(program->ResultsAsString());

@@ -260,7 +260,6 @@ public:
 
             appData->ChannelProfiles->Profiles.emplace_back();
             TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
-            ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
                 Y_ABORT_UNLESS(channel.HasErasureSpecies());
                 Y_ABORT_UNLESS(channel.HasPDiskCategory());
@@ -274,7 +273,6 @@ public:
 
                 const TString kind = channel.GetStoragePoolKind();
                 outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind));
-                ++channelIdx;
             }
         }
     }
@@ -995,13 +993,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
-
-    std::vector<TString> hostnamePatterns;
-    if (runConfig.AppConfig.HasQueryServiceConfig()) {
-        const auto& patterns = runConfig.AppConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        hostnamePatterns = {patterns.begin(), patterns.end()};
-    }
-    AppData->ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(hostnamePatterns);
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()

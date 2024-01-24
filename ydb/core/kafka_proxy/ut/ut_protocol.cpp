@@ -288,8 +288,8 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
     return result;
 }
 
-struct TopicToCreate {
-    TopicToCreate(
+struct TTopicConfig {
+    TTopicConfig(
             TString name,
             ui32 partionsNumber,
             std::optional<TString> retentionMs = std::nullopt,
@@ -604,7 +604,7 @@ public:
         return WriteAndRead<TFetchResponseData>(header, request);
     }
 
-    TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TopicToCreate> topicsToCreate, bool validateOnly = false) {
+    TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
         Cerr << ">>>>> TCreateTopicsRequestData\n";
         
         TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_TOPICS, 7);
@@ -634,7 +634,7 @@ public:
         return WriteAndRead<TCreateTopicsResponseData>(header, request);
     }
 
-    TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TopicToCreate> topicsToCreate, bool validateOnly = false) {
+    TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
         Cerr << ">>>>> TCreateTopicsRequestData\n";
         
         TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);
@@ -1576,8 +1576,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
-                TopicToCreate("topic-999-test", 12),
-                TopicToCreate("topic-998-test", 13)
+                TTopicConfig("topic-999-test", 12),
+                TTopicConfig("topic-998-test", 13)
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-999-test");
@@ -1595,8 +1595,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Duplicate topics
             auto msg = client.CreateTopics({
-                TopicToCreate("topic-997-test", 1),
-                TopicToCreate("topic-997-test", 1)
+                TTopicConfig("topic-997-test", 1),
+                TTopicConfig("topic-997-test", 1)
             });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
@@ -1613,9 +1613,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // One OK, two duplicate topics
             auto msg = client.CreateTopics({
-                TopicToCreate("topic-996-test", 1),
-                TopicToCreate("topic-995-test", 1),
-                TopicToCreate("topic-995-test", 1)
+                TTopicConfig("topic-996-test", 1),
+                TTopicConfig("topic-995-test", 1),
+                TTopicConfig("topic-995-test", 1)
             });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
@@ -1636,11 +1636,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Existing topic
-            client.CreateTopics({ TopicToCreate("topic-994-test", 1) });
+            client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             auto result = pqClient.DescribeTopic("/Root/topic-994-test", describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result.IsSuccess());
             
-            auto msg = client.CreateTopics({ TopicToCreate("topic-994-test", 1) });
+            auto msg = client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-994-test");
         }
@@ -1650,7 +1650,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             ui64 retentionMs = 168 * 60 * 60 * 1000;
             ui64 retentionBytes = 51'200'000'000ul;
 
-            auto msg = client.CreateTopics({ TopicToCreate("topic-993-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
+            auto msg = client.CreateTopics({ TTopicConfig("topic-993-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-993-test");
 
@@ -1662,7 +1662,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // retention.ms is not number
-            auto msg = client.CreateTopics({ TopicToCreate("topic-992-test", 1, "not_a_number", "42")});
+            auto msg = client.CreateTopics({ TTopicConfig("topic-992-test", 1, "not_a_number", "42")});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-992-test");
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_CONFIG);
@@ -1673,7 +1673,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // retention.bytes is not number
-            auto msg = client.CreateTopics({ TopicToCreate("topic-991-test", 1, "42", "not_a_number")});
+            auto msg = client.CreateTopics({ TTopicConfig("topic-991-test", 1, "42", "not_a_number")});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-991-test");
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_CONFIG);
@@ -1684,28 +1684,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Empty topic name
-            auto msg = client.CreateTopics({ TopicToCreate("", 1)});
+            auto msg = client.CreateTopics({ TTopicConfig("", 1)});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
         }
 
         {
             // Wrong topic name
-            auto msg = client.CreateTopics({ TopicToCreate("//////", 1)});
+            auto msg = client.CreateTopics({ TTopicConfig("//////", 1)});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
         }
 
         {
             // Wrong topic name
-            auto msg = client.CreateTopics({ TopicToCreate("/Root/", 1)});
+            auto msg = client.CreateTopics({ TTopicConfig("/Root/", 1)});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
         }
 
         {
             // Wrong topic name
-            auto msg = client.CreateTopics({ TopicToCreate("/Root//", 1)});
+            auto msg = client.CreateTopics({ TTopicConfig("/Root//", 1)});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
         }
@@ -1715,7 +1715,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             ui64 retentionMs = 13 * 60 * 60 * 1000;
             ui64 retentionBytes = 11'000'000'000ul;
 
-            auto msg = client.CreateTopics({ TopicToCreate("topic-990-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
+            auto msg = client.CreateTopics({ TTopicConfig("topic-990-test", 1, std::to_string(retentionMs), std::to_string(retentionBytes))});
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-990-test");
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, INVALID_REQUEST);
@@ -1727,7 +1727,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Set only ms retention
             ui64 retentionMs = 168 * 60 * 60 * 1000;
-            auto msg = client.CreateTopics({ TopicToCreate("topic-989-test", 1, std::to_string(retentionMs)) });
+            auto msg = client.CreateTopics({ TTopicConfig("topic-989-test", 1, std::to_string(retentionMs)) });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-989-test");
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {   
             // Validation only
-            auto msg = client.CreateTopics({ TopicToCreate("topic-988-test", 1)}, true);
+            auto msg = client.CreateTopics({ TTopicConfig("topic-988-test", 1)}, true);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-988-test");
 
@@ -1814,8 +1814,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Validate only
             auto msg = client.CreatePartitions({
-                TopicToCreate(topic1Name, 11),
-                TopicToCreate(topic2Name, 21)
+                TTopicConfig(topic1Name, 11),
+                TTopicConfig(topic2Name, 21)
             }, true);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topic1Name);
@@ -1833,8 +1833,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Increase partitions number
             auto msg = client.CreatePartitions({
-                TopicToCreate(shortTopic1Name, 11),
-                TopicToCreate(shortTopic2Name, 21)
+                TTopicConfig(shortTopic1Name, 11),
+                TTopicConfig(shortTopic2Name, 21)
             });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
@@ -1855,28 +1855,22 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Check with two same topic names
             auto msg = client.CreatePartitions({
-                TopicToCreate(shortTopic1Name, 11),
-                TopicToCreate(shortTopic1Name, 11)
+                TTopicConfig(shortTopic1Name, 12),
+                TTopicConfig(shortTopic1Name, 12)
             });
 
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, DUPLICATE_RESOURCE);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].Name.value(), shortTopic1Name);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, DUPLICATE_RESOURCE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
 
-            auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
-            UNIT_ASSERT(result1.IsSuccess());
-            UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetPartitions().size(), 11);
-
-            auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
-            UNIT_ASSERT(result2.IsSuccess());
-            UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetPartitions().size(), 21);
+            auto result = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_EQUAL(result.GetTopicDescription().GetPartitions().size(), 11);
         }
 
         {
             // Check with lesser partitions number
-            auto msg = client.CreatePartitions({ TopicToCreate(shortTopic1Name, 1) });
+            auto msg = client.CreatePartitions({ TTopicConfig(shortTopic1Name, 1) });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), shortTopic1Name);
@@ -1890,11 +1884,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             // Check with nonexistent topic name
             auto topicName = "NonExTopicName";
-            auto msg = client.CreatePartitions({ TopicToCreate(topicName, 1) });
+            auto msg = client.CreatePartitions({ TTopicConfig(topicName, 1) });
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].Name.value(), topicName);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, INVALID_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[0].ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
 
             auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result1.IsSuccess());

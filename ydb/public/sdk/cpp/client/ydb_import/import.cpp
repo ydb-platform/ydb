@@ -159,6 +159,8 @@ TFuture<TImportFromS3Response> TImportClient::ImportFromS3(const TImportFromS3Se
         request.mutable_settings()->set_number_of_retries(settings.NumberOfRetries_.GetRef());
     }
 
+    request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
+
     return Impl_->ImportFromS3(std::move(request), settings);
 }
 

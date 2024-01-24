@@ -21,12 +21,21 @@ public:
 
 class TProgramContainer {
 private:
+    NKikimrSSA::TProgram ProgramProto;
     std::shared_ptr<NSsa::TProgram> Program;
     std::shared_ptr<arrow::RecordBatch> ProgramParameters; // TODO
     TKernelsRegistry KernelsRegistry;
     std::optional<std::set<std::string>> OverrideProcessingColumnsSet;
     std::optional<std::vector<TString>> OverrideProcessingColumnsVector;
 public:
+    TString ProtoDebugString() const {
+        return ProgramProto.DebugString();
+    }
+
+    TString DebugString() const {
+        return Program ? Program->DebugString() : "NO_PROGRAM";
+    }
+
     bool HasOverridenProcessingColumnIds() const {
         return !!OverrideProcessingColumnsVector;
     }
@@ -75,8 +84,6 @@ public:
 
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
-
-    bool HasEarlyFilterOnly() const;
 private:
     bool ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program, TString& error);
 };

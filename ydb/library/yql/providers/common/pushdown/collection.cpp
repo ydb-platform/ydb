@@ -382,18 +382,21 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         return false;
     }
 
-    bool equality = compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>();
-    auto leftList = GetComparisonNodes(compare.Left());
-    auto rightList = GetComparisonNodes(compare.Right());
+    const auto leftList = GetComparisonNodes(compare.Left());
+    const auto rightList = GetComparisonNodes(compare.Right());
     YQL_ENSURE(leftList.size() == rightList.size(), "Different sizes of lists in comparison!");
 
     for (size_t i = 0; i < leftList.size(); ++i) {
         if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, settings) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, settings)) {
             return false;
         }
-        if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType, settings)) {
-            return false;
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)) {
+            if (!IsComparableTypes(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>(), inputType, settings)) {
+                return false;
+            }
         }
+
         if (IsLikeOperator(compare) && settings.IsEnabled(TSettings::EFeatureFlag::LikeOperatorOnlyForUtf8) && !IsSupportedLikeForUtf8(leftList[i], rightList[i])) {
             // (KQP OLAP) If SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
             return false;

@@ -8,8 +8,8 @@
 #include <util/stream/str.h>
 
 extern "C" {
-#include <datatype/timestamp.h>
-#include <utils/datetime.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
+#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
 }
 
 using namespace NYql;
@@ -81,13 +81,61 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         }
     }
 
+    Y_UNIT_TEST(IntervalBackwardsCompatibility) {
+        for (i64 v = -NUdf::MAX_TIMESTAMP + 1; v < (i64)NUdf::MAX_TIMESTAMP; ++v) {
+            const auto str = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(v));
+            UNIT_ASSERT(str.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Interval64, str.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_EQUAL(v, v64.Get<i64>());
+            const auto str64 = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_EQUAL(str.AsStringRef(), str64.AsStringRef());
+        }
+    }
+
+    Y_UNIT_TEST(Interval64FromToString) {
+        for (i64 v = -NUdf::MAX_INTERVAL64; v <= NUdf::MAX_INTERVAL64; ++v) {
+            const auto str = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v));
+            UNIT_ASSERT(str.HasValue());
+            auto vv = ValueFromString(NUdf::EDataSlot::Interval64, str.AsStringRef());
+            UNIT_ASSERT(vv.HasValue());
+            UNIT_ASSERT_EQUAL(v, vv.Get<i64>());
+        }
+    }
+
+    Y_UNIT_TEST(IntervalFromToString) {
+        for (i64 v = -NUdf::MAX_TIMESTAMP + 1; v < (i64)NUdf::MAX_TIMESTAMP; ++v) {
+            const auto str = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(v));
+            UNIT_ASSERT(str.HasValue());
+            auto vv = ValueFromString(NUdf::EDataSlot::Interval, str.AsStringRef());
+            UNIT_ASSERT(vv.HasValue());
+            UNIT_ASSERT_EQUAL(v, vv.Get<i64>());
+        }
+    }
+
+    Y_UNIT_TEST(Interval64) {
+        auto v = ValueFromString(NUdf::EDataSlot::Interval64, "P1D");
+        UNIT_ASSERT(v.HasValue());
+        Cerr << "amikish v=" << v.Get<i64>() << Endl;
+
+        const auto vv = ValueToString(NUdf::EDataSlot::Interval64, v);
+        UNIT_ASSERT(vv.HasValue());
+        Cerr << "amikish v=" << vv.AsStringRef() << Endl;
+
+        auto vplus = v.Get<i64>() + 1 * 1000000;
+        const auto vvv = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(vplus));
+        UNIT_ASSERT(vvv.HasValue());
+        Cerr << "amikish v=" << vvv.AsStringRef() << Endl;
+    }
+
     Y_UNIT_TEST(Datetime64) {
-        i64 v = 0;
-        const NUdf::TUnboxedValue& str= ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v));
-        UNIT_ASSERT(str.HasValue());
-        auto uvp = ValueFromString(NUdf::EDataSlot::Datetime64, str.AsStringRef());
-        UNIT_ASSERT(uvp.HasValue());
-        UNIT_ASSERT_EQUAL(v, uvp.Get<i64>());
+        auto v = ValueFromString(NUdf::EDataSlot::Datetime64, "1970-01-01T01:01:01Z");
+        UNIT_ASSERT(v.HasValue());
+        Cerr << "amikish v=" << v.Get<i64>() << Endl;
+        const auto vv = ValueToString(NUdf::EDataSlot::Datetime64, v);
+        UNIT_ASSERT(vv.HasValue());
+        Cerr << "amikish v=" << vv.AsStringRef() << Endl;
     }
 
     Y_UNIT_TEST(DateInOut) {

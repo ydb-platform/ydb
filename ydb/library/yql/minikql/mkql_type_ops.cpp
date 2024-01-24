@@ -261,7 +261,7 @@ bool WriteDatetime(IOutputStream& out, ui32 value) {
 }
 
 bool WriteDatetime64(IOutputStream& out, i64 value) {
-    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 < value || value > NUdf::MAX_DATETIME64)) {
+    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
         return false;
     }
 
@@ -318,10 +318,11 @@ bool WriteTimestamp64(IOutputStream& out, i64 value) {
     return true;
 }
 
+template <i64 UpperBound>
 bool WriteInterval(IOutputStream& out, i64 signedValue) {
     ui64 value = signedValue < 0 ? -signedValue : signedValue;
 
-    if (value >= NUdf::MAX_TIMESTAMP) {
+    if (value > UpperBound) {
         return false;
     }
 
@@ -453,7 +454,7 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         break;
 
     case NUdf::EDataSlot::Interval:
-        if (!WriteInterval(out, value.Get<i64>())) {
+        if (!WriteInterval<NUdf::MAX_TIMESTAMP - 1>(out, value.Get<i64>())) {
             return NUdf::TUnboxedValuePod();
         }
         break;
@@ -511,8 +512,8 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         out << 'Z';
         break;
 
-    case NUdf::EDataSlot::Interval64: // todo
-        if (!WriteInterval(out, value.Get<i64>())) {
+    case NUdf::EDataSlot::Interval64:
+        if (!WriteInterval<NUdf::MAX_INTERVAL64>(out, value.Get<i64>())) {
             return NUdf::TUnboxedValuePod();
         }
         break;
@@ -1630,6 +1631,7 @@ bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& 
     return true;
 }
 
+template <i64 UpperBound>
 NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     if (buf.empty()) {
         return NUdf::TUnboxedValuePod();
@@ -1712,7 +1714,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         + seconds.value_or(0U) * 1000000ull
         + microseconds.value_or(0U);
 
-    if (value >= NUdf::MAX_TIMESTAMP) {
+    if (value > UpperBound) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -1865,7 +1867,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         return ParseTimestamp(buf);
 
     case NUdf::EDataSlot::Interval:
-        return ParseInterval(buf);
+        return ParseInterval<NUdf::MAX_TIMESTAMP - 1>(buf);
 
     case NUdf::EDataSlot::TzDate:
         return ParseTzDate(buf);
@@ -1898,16 +1900,13 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         return ParseDate32(buf);
 
     case NUdf::EDataSlot::Datetime64:
-        //TODO
-        return {};
+        return ParseDatetime(buf);
 
     case NUdf::EDataSlot::Timestamp64:
-        //TODO
-        return {};
+        return ParseTimestamp(buf);
 
     case NUdf::EDataSlot::Interval64:
-        //TODO
-        return {};
+        return ParseInterval<NUdf::MAX_INTERVAL64>(buf);
 
     case NUdf::EDataSlot::Decimal:
     default:

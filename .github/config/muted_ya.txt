@@ -16,8 +16,6 @@ ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
-ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
@@ -68,8 +66,6 @@ ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane sole*
-ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
-ydb/tests/fq/s3 *
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*

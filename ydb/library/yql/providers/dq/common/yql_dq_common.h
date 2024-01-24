@@ -4,7 +4,6 @@
 
 #include <util/generic/string.h>
 #include <map>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 
 namespace NYql {
 namespace NCommon {

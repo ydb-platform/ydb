@@ -43,7 +43,6 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/common/transform
     ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/s3/common

@@ -12,7 +12,6 @@
 #include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 namespace NYql {
 

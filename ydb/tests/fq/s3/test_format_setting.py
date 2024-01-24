@@ -806,6 +806,11 @@ Pear;15;33'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        issues = describe_result.query.issue[0].issues
+        assert "Invalid data format" in str(issues), str(describe_result)
+        assert "name: put, type: Date, ERROR: text " in str(issues), str(describe_result)
+        assert "is not like Date" in str(issues), str(describe_result)
 
     @yq_all
     @pytest.mark.parametrize("filename", [
@@ -835,6 +840,8 @@ Pear;15;33'''
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
         assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[1].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[2].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
 
     @yq_all
     @pytest.mark.parametrize("filename", [
@@ -863,4 +870,6 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
-        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[0].bytes_value == b"", str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[1].bytes_value == b"", str(data.result.result_set)
+        assert data.result.result_set.rows[0].items[2].bytes_value == b"", str(data.result.result_set)

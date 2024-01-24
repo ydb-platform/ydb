@@ -158,11 +158,16 @@ struct TAggregateDesc {
     TString InitValue;
 };
 
+enum class EAmType {
+    Table = 't',
+    Index = 'i'
+};
+
 struct TAmDesc {
     ui32 Oid = 0;
     TString Descr;
     TString AmName;
-    uint8_t AmType = 0;
+    EAmType AmType = EAmType::Index;
 };
 
 struct TNamespaceDesc {

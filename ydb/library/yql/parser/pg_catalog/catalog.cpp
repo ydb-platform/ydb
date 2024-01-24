@@ -1108,7 +1108,13 @@ public:
             CurrDesc_.AmName = value;
         } else if (key == "amtype") {
             Y_ENSURE(value.Size() == 1);
-            CurrDesc_.AmType = value[0];
+            if ((char)EAmType::Index == value[0]) {
+                CurrDesc_.AmType = EAmType::Index;
+            } else if ((char)EAmType::Table == value[0]) {
+                CurrDesc_.AmType = EAmType::Table;
+            } else {
+                Y_ENSURE(false, "Expected correct AmType");
+            }
         }
     }
 

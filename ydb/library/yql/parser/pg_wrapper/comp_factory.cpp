@@ -328,7 +328,6 @@ public:
         } else if (Table_ == "pg_namespace") {
             static const std::pair<const char*, TPgNamespaceFiller> AllPgNamespaceFillers[] = {
                 {"nspname", [](const NPg::TNamespaceDesc& desc) {return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN));}},
-                {"desc", [](const NPg::TNamespaceDesc& desc) {return PointerDatumToPod((Datum)MakeVar(desc.Descr));}},
                 {"oid", [](const NPg::TNamespaceDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
             };
 
@@ -336,7 +335,6 @@ public:
         } else if (Table_ == "pg_am") {
             static const std::pair<const char*, TPgAmFiller> AllPgAmFillers[] = {
                 {"oid", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
-                {"descr", [](const NPg::TAmDesc& desc) { return PointerDatumToPod((Datum)MakeVar(desc.Descr)); }},
                 {"amname", [](const NPg::TAmDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.AmName, NAMEDATALEN)); }},
                 {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.AmType)); }},
             };

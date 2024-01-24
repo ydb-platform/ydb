@@ -12,6 +12,7 @@ ydb/core/persqueue/ut [31/40]*
 ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
+ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
@@ -34,6 +35,7 @@ ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplits
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/tests/fq/generic *
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
+ydb/tests/fq/s3 *
 ydb/tests/fq/yds test_metrics_cleanup.py.TestCleanup.test_cleanup[v1]
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication[mirror-3-dc]

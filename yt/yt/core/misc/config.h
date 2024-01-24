@@ -10,6 +10,38 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TExponentialBackoffOptions
+{
+    static constexpr int DefaultInvocationCount = 10;
+    static constexpr auto DefaultMinBackoff = TDuration::Seconds(1);
+    static constexpr auto DefaultMaxBackoff = TDuration::Seconds(5);
+    static constexpr double DefaultBackoffMultiplier = 1.5;
+    static constexpr double DefaultBackoffJitter = 0.1;
+
+    int InvocationCount = DefaultInvocationCount;
+    TDuration MinBackoff = DefaultMinBackoff;
+    TDuration MaxBackoff = DefaultMaxBackoff;
+    double BackoffMultiplier = DefaultBackoffMultiplier;
+    double BackoffJitter = DefaultBackoffJitter;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TConstantBackoffOptions
+{
+    static constexpr int DefaultInvocationCount = 10;
+    static constexpr auto DefaultBackoff = TDuration::Seconds(3);
+    static constexpr double DefaultBackoffJitter = 0.1;
+
+    int InvocationCount = DefaultInvocationCount;
+    TDuration Backoff = DefaultBackoff;
+    double BackoffJitter = DefaultBackoffJitter;
+
+    operator TExponentialBackoffOptions() const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TLogDigestConfig
     : public NYTree::TYsonStruct
 {
@@ -114,4 +146,36 @@ DEFINE_REFCOUNTED_TYPE(TAdaptiveHedgingManagerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+class TExponentialBackoffOptionsSerializer
+    : public NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TConstantBackoffOptionsSerializer
+    : public NYTree::TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
+
+    static void Register(TRegistrar registrar);
+};
+
+
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TExponentialBackoffOptions, NYT::NDetail::TExponentialBackoffOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TConstantBackoffOptions, NYT::NDetail::TConstantBackoffOptionsSerializer);

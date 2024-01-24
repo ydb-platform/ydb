@@ -831,7 +831,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasQueryService) {
             server.AddService(new NGRpcService::TGRpcYdbQueryService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasDataStreams.IsRlAllowed()));
+                grpcRequestProxies, hasDataStreams.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasLogStore) {

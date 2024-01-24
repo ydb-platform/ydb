@@ -610,7 +610,7 @@ NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonV
             return result;
         }
 
-        if (plan.GetMapSafe().at("Node Type") == "TableLookup" ) {
+        if (plan.GetMapSafe().at("Node Type") == "TableLookup") {
             NJson::TJsonValue newOps;
             NJson::TJsonValue op;
 

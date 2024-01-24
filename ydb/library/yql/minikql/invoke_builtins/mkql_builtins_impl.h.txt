@@ -1188,6 +1188,12 @@ void AddUnaryIntegralKernels(TKernelFamilyBase& owner) {
     AddUnaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
 }
 
+template<template<typename, typename> class TFunc>
+void AddUnaryRealKernels(TKernelFamilyBase& owner) {
+    AddUnaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc>(owner);
+}
+
 template<template<typename, typename, typename> class TFunc>
 void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
     AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui8>, TFunc>(owner);
@@ -1264,12 +1270,61 @@ void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
 }
 
 template<template<typename, typename, typename> class TFunc>
+void AddBinaryRealKernels(TKernelFamilyBase& owner) {
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<float>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+}
+
+template<template<typename, typename, typename> class TFuncForIntegral, template<typename, typename, typename> class TFuncForReal>
 class TBinaryNumericKernelFamily : public TKernelFamilyBase {
 public:
     TBinaryNumericKernelFamily(TKernelFamily::ENullMode nullMode = TKernelFamily::ENullMode::Default)
         : TKernelFamilyBase(nullMode)
     {
-        AddBinaryIntegralKernels<TFunc>(*this);
+        AddBinaryIntegralKernels<TFuncForIntegral>(*this);
+        AddBinaryRealKernels<TFuncForReal>(*this);
     }
 };
 
@@ -1280,6 +1335,7 @@ public:
         : TKernelFamilyBase(nullMode)
     {
         AddUnaryIntegralKernels<TFunc>(*this);
+        AddUnaryRealKernels<TFunc>(*this);
     }
 };
 

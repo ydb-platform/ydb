@@ -11,6 +11,8 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
+    static constexpr bool DefaultNulls = true;
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return std::fmod(left, right);
@@ -91,7 +93,7 @@ void RegisterMod(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterMod(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod>>(TKernelFamily::ENullMode::AlwaysNull);
+    kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod, TMod>>(TKernelFamily::ENullMode::AlwaysNull);
 }
 
 } // namespace NMiniKQL

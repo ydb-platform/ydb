@@ -263,7 +263,7 @@ void RegisterSub(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterSub(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Sub"] = std::make_unique<TBinaryNumericKernelFamily<TSub>>();
+    kernelFamilyMap["Sub"] = std::make_unique<TBinaryNumericKernelFamily<TSub, TSub>>();
 }
 
 } // namespace NMiniKQL

@@ -12,6 +12,8 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
+    static constexpr bool DefaultNulls = true;
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return left / right;
@@ -167,7 +169,7 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterDiv(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv>>(TKernelFamily::ENullMode::AlwaysNull);
+    kernelFamilyMap["Div"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralDiv, TDiv>>(TKernelFamily::ENullMode::AlwaysNull);
 }
 
 } // namespace NMiniKQL

@@ -98,7 +98,7 @@ void RegisterMul(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul>>();
+    kernelFamilyMap["Mul"] = std::make_unique<TBinaryNumericKernelFamily<TMul, TMul>>();
 }
 
 } // namespace NMiniKQL

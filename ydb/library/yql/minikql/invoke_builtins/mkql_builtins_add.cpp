@@ -193,7 +193,7 @@ void RegisterAdd(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterAdd(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd>>();
+    kernelFamilyMap["Add"] = std::make_unique<TBinaryNumericKernelFamily<TAdd, TAdd>>();
 }
 
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry) {

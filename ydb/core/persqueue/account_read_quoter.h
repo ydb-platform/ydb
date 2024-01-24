@@ -80,7 +80,8 @@ public:
         ui32 partition,
         const TQuoterParams& params,
         ui64 quotaCreditBytes,
-        const TTabletCountersBase& counters
+        const TTabletCountersBase& counters,
+        const TDuration& doNotQuoteAfterErrorPeriod
     );
 
     void Bootstrap(const TActorContext& ctx);
@@ -134,11 +135,12 @@ private:
 
     bool QuotaRequestInFlight = false;
     ui64 CurrentQuotaRequestCookie = 0;
-    THashSet<ui64> InProcessReadRequestCookies;
+    THashSet<ui64> InProcessQuotaRequestCookies;
 
 
     bool CountersInited = false;
     TInstant LastReportedErrorTime;
+    TDuration DoNotQuoteAfterErrorPeriod;
 };
 
 class TAccountReadQuoter : public TBasicAccountQuoter {

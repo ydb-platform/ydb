@@ -29,7 +29,8 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     ui32 partition,
     const TQuoterParams& params,
     ui64 quotaCreditBytes,
-    const TTabletCountersBase& counters
+    const TTabletCountersBase& counters,
+    const TDuration& doNotQuoteAfterErrorPeriod
 )
         : KesusPath(params.KesusPath)
         , ResourcePath(params.ResourcePath)
@@ -39,6 +40,7 @@ TBasicAccountQuoter::TBasicAccountQuoter(
         , Recepient(recepient)
         , TabletId(tabletId)
         , CreditBytes(quotaCreditBytes)
+        , DoNotQuoteAfterErrorPeriod(doNotQuoteAfterErrorPeriod)
 {
     Counters.Populate(counters);
 }
@@ -78,8 +80,8 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
         LimiterDescription() << " quota required for cookie=" << ev->Get()->Cookie
     );
     InitCounters(ctx);
-    bool hasActualErrors = ctx.Now() - LastReportedErrorTime <= DO_NOT_QUOTE_AFTER_ERROR_PERIOD;
-    if ((QuotaRequestInFlight || !InProcessReadRequestCookies.empty()) && !hasActualErrors) {
+    bool hasActualErrors = ctx.Now() - LastReportedErrorTime <= DoNotQuoteAfterErrorPeriod;
+    if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
         Queue.emplace_back(ev, ctx.Now());
     } else {
         ApproveQuota(ev, ctx.Now(), ctx);
@@ -93,12 +95,12 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
         << " bytes by cookie=" << ev->Get()->RequestCookie
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
     );
-    auto it = InProcessReadRequestCookies.find(ev->Get()->RequestCookie);
-    Y_ABORT_UNLESS(it != InProcessReadRequestCookies.end());
-    InProcessReadRequestCookies.erase(it);
+    auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
+    Y_ABORT_UNLESS(it != InProcessQuotaRequestCookies.end());
+    InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {
-        if (ConsumedBytesInCredit >= CreditBytes) {
+        if (ConsumedBytesInCredit >= CreditBytes && ResourcePath) {
             TThis::Send(MakeQuoterServiceID(),
                 new TEvQuota::TEvRequest(
                     TEvQuota::EResourceOperator::And,
@@ -132,7 +134,7 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
-            LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got read quota error: " << ev->Get()->Result);
+            LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got quota request error: " << ev->Get()->Result);
             LastReportedErrorTime = ctx.Now();
         }
         return;
@@ -143,7 +145,7 @@ void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& e
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
         LimiterDescription() << " approve read for cookie=" << ev->Get()->Cookie
     );
-    InProcessReadRequestCookies.insert(ev->Get()->Cookie);
+    InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
     auto waitTime = ctx.Now() - startWait;
     TThis::Send(Recepient, new NAccountQuoterEvents::TEvResponse(ev, waitTime));
@@ -177,7 +179,7 @@ TAccountReadQuoter::TAccountReadQuoter(
     const TTabletCountersBase& counters
 )
     : TBasicAccountQuoter(tabletActor, recepient, tabletId, topicConverter, partition, GetQuoterParams(user),
-            AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters)
+            AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters, DO_NOT_QUOTE_AFTER_ERROR_PERIOD)
     , User(user)
 {
     LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_RATE_LIMITER,
@@ -225,7 +227,8 @@ TAccountWriteQuoter::TAccountWriteQuoter(
 )
     : TBasicAccountQuoter(tabletActor, recepient, tabletId, topicConverter, partition,
                           CreateQuoterParams(AppData()->PQConfig, topicConverter, tabletId, ctx),
-                          0 /** ToDo: discuss. Do we need write credit? */, counters)
+                          0 /** ToDo: discuss. Do we need write credit? */, counters,
+                          TDuration::Zero())
 {
     // LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_RATE_LIMITER,
     //     LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << ResourcePath);

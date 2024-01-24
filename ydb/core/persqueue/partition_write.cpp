@@ -276,7 +276,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     while (!Responses.empty()) {
         const auto& response = Responses.front();
 
-        const TDuration quotedTime = response.QuotedTime;
         const TDuration queueTime = response.QueueTime;
         const TDuration writeTime = ctx.Now() - response.WriteTimeBaseline;
 
@@ -328,7 +327,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
                 already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
-                quotedTime, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
+                PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
             );
             LOG_DEBUG_S(
                 ctx,
@@ -340,7 +339,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
             if (PartitionWriteQuotaWaitCounter) {
-                PartitionWriteQuotaWaitCounter->IncFor(quotedTime.MilliSeconds());
+                PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
 
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
@@ -393,6 +392,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         Responses.pop_front();
     }
     TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
+    PartitionQuotaWaitTimeForCurrentBlob = TDuration::Zero();
 }
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
@@ -465,13 +465,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleOnWrite TEvHandleWriteResponse.");
-
     HandleWriteResponse(ctx);
 }
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::HandleWriteResponse.");
-
     Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
     ui64 prevEndOffset = EndOffset;
 
@@ -505,10 +503,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //All ok
     auto now = ctx.Now();
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-        WriteQuota->Exaust(WriteNewSize, now);
-    } else {
-        WriteQuota->Exaust(WriteCycleSize, now);
+    if (IsQuotingEnabled()) {
+        if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteNewSize, 0, {}));
+        } else {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteCycleSize, 0, {}));
+        }
     }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
@@ -911,6 +911,7 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
             );
 
             sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
+
             return ProcessResult::Continue;
         }
 
@@ -1181,7 +1182,6 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 break;
         }
     }
-
     if (const auto heartbeat = sourceIdBatch.CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
             LOG_INFO_S(
@@ -1216,6 +1216,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             LastEmittedHeartbeat = heartbeat->Version;
         }
     }
+
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
@@ -1376,22 +1377,13 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
     FilterDeadlinedWrites(ctx);
 }
 
-bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx) {
+bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::ProcessWrites.");
 
     FilterDeadlinedWrites(ctx);
 
-    if (!WriteQuota->CanExaust(now)) { // Waiting for partition quota.
-        SetDeadlinesForWrites(ctx);
-        return false;
-    }
-
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) { // Waiting for topic quota.
         SetDeadlinesForWrites(ctx);
-
-        if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) {
-            StartTopicQuotaWaitTimeForCurrentBlob = now;
-        }
         return false;
     }
 
@@ -1521,7 +1513,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
             Y_ABORT_UNLESS(!res);
         }
         Y_ABORT_UNLESS(Requests.empty()
-                    || !WriteQuota->CanExaust(now)
                     || WaitingForPreviousBlobQuota()
                     || WaitingForSubDomainQuota(ctx)
                     || SourceManager.WaitSources()); //in this case all writes must be processed or no quota left
@@ -1531,7 +1522,8 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     }
 
     WritesTotal.Inc();
-    WriteBlobWithQuota(ctx, std::move(request));
+    PendingWriteRequest = std::move(request);
+    RequestBlobQuota();
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
@@ -1543,14 +1535,7 @@ void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
             " Amount: " << dataSize << "." <<
             " Cookie: " << cookie
     );
-
-    Send(MakeQuoterServiceID(),
-        new TEvQuota::TEvRequest(
-            TEvQuota::EResourceOperator::And,
-            { TEvQuota::TResourceLeaf(TopicWriteQuoterPath, TopicWriteQuotaResourcePath, dataSize) },
-            TDuration::Max()),
-        0,
-        cookie);
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvRequestQuota(cookie, nullptr));
 }
 
 bool TPartition::WaitingForPreviousBlobQuota() const {
@@ -1570,29 +1555,35 @@ bool TPartition::WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 w
     return MeteringDataSize(ctx) + withSize > ReserveSize();
 }
 
-void TPartition::WriteBlobWithQuota(const TActorContext& /*ctx*/, THolder<TEvKeyValue::TEvRequest>&& request) {
-    PQ_LOG_T("TPartition::WriteBlobWithQuota.");
+void TPartition::RequestBlobQuota() {
+    PQ_LOG_T("TPartition::RequestBlobQuota.");
     
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
-    const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();
-    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) {
+    const bool skip = !IsQuotingEnabled();
+    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*PendingWriteRequest)) {
         // Request with data. We should check before attempting to write data whether we have enough quota.
         Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());
 
         TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
         RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie);
+    } else {
+        WritePendingBlob();
     }
 
-    AddMetaKey(request.Get());
+}
 
+void TPartition::WritePendingBlob() {
+    Y_ABORT_UNLESS(CurrentStateFunc() == &TThis::StateWrite);
+
+    AddMetaKey(PendingWriteRequest.Get());
     WriteStartTime = TActivationContext::Now();
     // Write blob
 #if 1
     // PQ -> CacheProxy -> KV
-    Send(BlobCache, request.Release());
+    Send(BlobCache, PendingWriteRequest.Release());
 #else
-    Send(Tablet, request.Release());
+    Send(Tablet, PendingWriteRequest.Release());
 #endif
 }
 

@@ -4,30 +4,31 @@
 namespace NKikimr::NPQ  {
 
 TWriteQuoter::TWriteQuoter(
-    TActorId partitionActor,
     const NPersQueue::TTopicConverterPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
     ui32 partition,
     TActorId tabletActor,
+    const TActorId& parent,
     ui64 tabletId,
     bool isLocalDc,
     const TTabletCountersBase& counters,
     const TActorContext& ctx
 )
     : TPartitionQuoterBase(
-            partitionActor, topicConverter, config, partition, tabletActor,
+            topicConverter, config, partition, tabletActor, parent,
             IsQuotingEnabled(AppData()->PQConfig, isLocalDc) ? TMaybe<TQuotaTracker>{CreatePartitionTotalQuotaTracker(config, ctx)} : Nothing(),
             tabletId, counters,
-            //ToDo: discuss - infinite inflight requests for write quota - ?
-            Max<ui32>()
+            //ToDo: discuss - 1 inflight request for write quota - ?
+            1
     )
     , QuotingEnabled(IsQuotingEnabled(AppData()->PQConfig, isLocalDc))
 {
     if (QuotingEnabled)
         AccountQuotaTracker = CreateAccountQuotaTracker(TString{});
+    UpdateQuotaConfigImpl(true, ctx);
 }
 
-void TReadQuoter::OnAccountQuotaApproved(TRequestContext& context) {
+void TWriteQuoter::OnAccountQuotaApproved(TRequestContext& context) {
     CheckTotalPartitionQuota(context);
 }
 
@@ -42,7 +43,21 @@ void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr&) {
 void TWriteQuoter::HandleWakeUpImpl() {
 }
 
-void TWriteQuoter::UpdateQuotaConfigImpl(bool) {
+void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext& ctx) {
+    if (PartitionTotalQuotaTracker.Defined()) {
+        ctx.Send(GetParent(), NReadQuoterEvents::TEvQuotaCountersUpdated::WriteCounters(PartitionTotalQuotaTracker->GetTotalSpeed()));
+    }
+}
+
+void TWriteQuoter::UpdateCounters(const TActorContext&) {
+}
+
+void TWriteQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    Die(ctx);
+}
+
+void TWriteQuoter:: HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr&, const TActorContext&) {
+
 }
 
 ui64 TWriteQuoter::GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext&) const {
@@ -51,10 +66,10 @@ ui64 TWriteQuoter::GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTa
 
 ui64 TWriteQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext&) const {
         return pqTabletConfig.GetPartitionConfig().GetBurstSize();
-
 }
+
 IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
-    return new TEvPQ::TEvApproveWriteQuota(IEventHandle::Downcast<TEvPQ::TEvWrite>(std::move(context.Request->Get()->Request)), context.WaitTime);
+    return new TEvPQ::TEvApproveWriteQuota(context.Request->Get()->Cookie, context.AccountQuotaWaitTime, ActorContext().Now() - context.PartitionQuotaWaitStart);
 };
 
 THolder<TAccountQuoterHolder>& TWriteQuoter::GetAccountQuotaTracker(TEvPQ::TEvRequestQuota::TPtr&) {

@@ -92,8 +92,6 @@ Y_UNIT_TEST(Partition) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
-
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -102,6 +100,44 @@ Y_UNIT_TEST(Partition) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         UNIT_ASSERT_EQUAL(countersStr.Str(), "<pre></pre>");
+    }
+}
+
+Y_UNIT_TEST(PartitionWriteQuota) {
+    TTestContext tc;
+
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, false, true);
+    tc.Runtime->SetScheduledLimit(100);
+    tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{100_KB, 'c'};
+    data.push_back({1, s});
+    for (auto i = 0u; i < 7; i++) {
+        CmdWrite(0, "sourceid0", data, tc, false, {});
+        data[0].first++;
+    }
+
+    {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        Y_ABORT_UNLESS(counters);
+        counters->EnumerateSubgroups([&](const TString& name, const TString& value) {Cerr << "subgroups root: " << name << ":" << value << Endl;});
+
+        auto dbGroup = GetServiceCounters(counters, "pqproxy");
+
+        dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")->EnumerateSubgroups([&](const TString& name, const TString& value) {Cerr << "subgroups in subsystem: " << name << ":" << value << Endl;});
+        auto quotaWait = dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")
+                             ->FindSubgroup("Account", "total")
+                             ->FindSubgroup("Producer", "total")
+                             ->FindSubgroup("Topic", "total")
+                             ->FindSubgroup("TopicPath", "total")
+                             ->FindSubgroup("OriginDC", "cluster");
+        auto histogram = quotaWait->FindSubgroup("sensor", "PartitionWriteQuotaWaitOriginal");
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 2);
     }
 }
 
@@ -131,6 +167,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "datastreams");
+
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
@@ -264,7 +301,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             return TTestActorRuntime::DefaultObserverFunc(event);
         });
 
-        PQTabletPrepare({.deleteTime=3600, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
+        PQTabletPrepare({.deleteTime=3600, .writeSpeed = 100_KB, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 325;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);

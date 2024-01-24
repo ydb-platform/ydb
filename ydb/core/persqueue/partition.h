@@ -110,7 +110,7 @@ private:
     void CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::TEvRequest* request, const TString& errorStr, const TWriteMsg& p, TPartitionSourceManager::TModificationBatch& sourceIdBatch, NPersQueue::NErrorCode::EErrorCode errorCode = NPersQueue::NErrorCode::BAD_REQUEST);
     void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
     void CreateMirrorerActor();
-    void DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx);
+    void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FailBadClient(const TActorContext& ctx);
     void FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -118,7 +118,7 @@ private:
     void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvApproveQuota::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvApproveReadQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx);
@@ -145,7 +145,7 @@ private:
     void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
@@ -199,7 +199,8 @@ private:
     void CheckHeadConsistency() const;
     void HandleWrites(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
-    void WriteBlobWithQuota(const TActorContext& ctx, THolder<TEvKeyValue::TEvRequest>&& request);
+    void RequestBlobQuota();
+    void WritePendingBlob();
 
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);
@@ -324,7 +325,7 @@ private:
     template <typename T>
     void EmplaceRequest(T&& body, const TActorContext& ctx) {
         const auto now = ctx.Now();
-        Requests.emplace_back(body, WriteQuota->GetQuotedTime(now), now - TInstant::Zero());
+        Requests.emplace_back(body, now - TInstant::Zero());
     }
     void EmplaceResponse(TMessage&& message, const TActorContext& ctx);
 
@@ -448,7 +449,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(TEvPQ::TEvApproveQuota, Handle);
+            HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -469,7 +470,7 @@ private:
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
-            HFuncTraced(TEvQuota::TEvClearance, Handle);
+            HFuncTraced(TEvPQ::TEvApproveWriteQuota, Handle);
             HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
@@ -505,7 +506,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(TEvPQ::TEvApproveQuota, Handle);
+            HFuncTraced(TEvPQ::TEvApproveReadQuota, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -527,7 +528,7 @@ private:
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);
-            HFuncTraced(TEvQuota::TEvClearance, Handle);
+            HFuncTraced(TEvPQ::TEvApproveWriteQuota, Handle);
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
@@ -699,8 +700,8 @@ private:
     TSet<THasDataDeadline> HasDataDeadlines;
     ui64 HasDataReqNum;
 
-    TMaybe<TQuotaTracker> WriteQuota;
     TActorId ReadQuotaTrackerActor;
+    TActorId WriteQuotaTrackerActor;
     THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
@@ -736,17 +737,18 @@ private:
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
+    ui64 NextTopicWriteQuotaRequestCookie = 1;
 
     // Wait topic quota metrics
+    ui64 TotalPartitionWriteSpeed = 0;
     THolder<TPercentileCounter> TopicWriteQuotaWaitCounter;
-    TInstant StartTopicQuotaWaitTimeForCurrentBlob;
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
+    TDuration PartitionQuotaWaitTimeForCurrentBlob;
 
-    // Topic quota parameters
-    TString TopicWriteQuoterPath;
-    TString TopicWriteQuotaResourcePath;
-    ui64 NextTopicWriteQuotaRequestCookie = 1;
+    //Pending request
+    THolder<TEvKeyValue::TEvRequest> PendingWriteRequest;
+
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 

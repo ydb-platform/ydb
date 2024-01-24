@@ -12,6 +12,7 @@ PEERDIR(
 
 SRCS(
     pg_sql_dummy.cpp
+    pg_sql_dummy.c
 )
 
 YQL_LAST_ABI_VERSION()

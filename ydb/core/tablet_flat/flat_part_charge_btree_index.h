@@ -316,70 +316,70 @@ public:
     }
 
 private:
-    bool DoPrechargeGroups(bool chargeGroups, TRowId row1, TRowId row2) const noexcept {
-        Cerr << "Groups " << chargeGroups << " " << row1 << " " << row2 << Endl;
+    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId) const noexcept {
+        Cerr << "Groups " << chargeGroups << " " << beginRowId << " " << endRowId << Endl;
         bool ready = true;
         
-        if (chargeGroups && row1 < row2) {
+        if (chargeGroups && beginRowId < endRowId) {
             for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, row1, row2 - 1);
+                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId);
             }
         }
 
         return ready;
     }
 
-    bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
+    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId) const noexcept {
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
-        Y_ABORT_UNLESS(row2 < meta.RowCount);
-        
-        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+        TVector<TNodeState> level, nextLevel(Reserve(3));
 
-        const auto iterateLevel = [&](const auto& tryLoadNext) {
-            for (ui32 i : xrange<ui32>(level.size())) {
-                TRecIdx from = 0, to = level[i].GetKeysCount();
-                if (level[i].BeginRowId < row1) {
-                    from = level[i].Seek(row1);
+        const auto iterateLevel = [&](const auto& tryHandleChild) {
+            for (const auto &node : level) {
+                TRecIdx from = 0, to = node.GetChildrenCount();
+                if (node.BeginRowId < beginRowId) {
+                    from = node.Seek(beginRowId);
                 }
-                if (level[i].EndRowId > row2 + 1) {
-                    to = level[i].Seek(row2);
+                if (node.EndRowId > endRowId) {
+                    to = node.Seek(endRowId - 1) + 1;
                 }
-                for (TRecIdx j : xrange(from, to + 1)) {
-                    ready &= tryLoadNext(level[i], j);
+                for (TRecIdx pos : xrange(from, to)) {
+                    auto child = node.GetChild(pos);
+                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    TRowId endRowId = child.RowCount;
+                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
                 }
             }
         };
 
-        const auto tryLoadNode = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return TryLoadNode(current, pos, nextLevel);
+        const auto tryHandleNode = [&](TChildState child) -> bool {
+            return TryLoadNode(child, nextLevel);
         };
 
-        const auto hasDataPage = [&](TNodeState& current, TRecIdx pos) -> bool {
-            return HasDataPage(current.GetShortChild(pos).PageId, groupId);
+        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+            return HasDataPage(child.PageId, groupId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= TryLoadRoot(meta, level);
+                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
             } else {
-                iterateLevel(tryLoadNode);
-                level.swap(nextLevel);
-                nextLevel.clear();
+                iterateLevel(tryHandleNode);
             }
+            level.swap(nextLevel);
+            nextLevel.clear();
         }
 
-        if (!ready) {
-            // some index pages are missing, do not continue
+        if (!ready) { // some index pages are missing, do not continue
             return ready;
         }
 
         if (meta.LevelCount == 0) {
-            ready &= HasDataPage(meta.PageId, groupId);
+            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
         } else {
-            iterateLevel(hasDataPage);
+            iterateLevel(tryHandleDataPage);
         }
 
         return ready;

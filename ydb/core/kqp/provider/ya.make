@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    rewrite_io_utils.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
     yql_kikimr_exec.cpp
@@ -48,9 +49,10 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/result/provider
-    ydb/library/yql/sql/settings
+    ydb/library/yql/sql
     ydb/library/ydb_issue/proto
     ydb/library/yql/public/issue
+    ydb/library/yql/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

@@ -722,8 +722,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotTailCleanup) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -806,8 +804,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotAndSplit) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -971,8 +967,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotReadWithLongPlanQueue) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -1349,8 +1343,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotLockedWrites) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1443,8 +1435,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotLockedWritesRestart) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1544,8 +1534,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithoutConflicts) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1673,8 +1661,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithConflicts) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1839,8 +1825,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotReadLockedWrites) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -1997,8 +1981,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotLockedWritesWithReadConflicts) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         NKikimrConfig::TAppConfig app;
@@ -2146,8 +2128,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteBulkUpsertConflict) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2244,8 +2224,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteReuseAfterCommit) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2329,8 +2307,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteDistributedCommitSuccess) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2436,8 +2412,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteDistributedCommitAborted) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2548,8 +2522,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteDistributedCommitFreeze) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2675,8 +2647,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteDistributedCommitCrossConflict) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2857,8 +2827,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteCleanupOnSplit) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -2954,8 +2922,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteCleanupOnCopyTable) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3076,8 +3042,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST_TWIN(LockedWriteWithAsyncIndex, WithRestart) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -3211,8 +3175,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWritesLimitedPerKey) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
         controls.MutableDataShardControls()->SetMaxLockedWritesPerKey(2);
 
@@ -3407,8 +3369,6 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(LockedWriteWithAsyncIndexAndVolatileCommit) {
         TPortManager pm;
         TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
 
         TServerSettings serverSettings(pm.GetPort(2134));

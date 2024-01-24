@@ -2785,6 +2785,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(200);
         });
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2830,41 +2831,33 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // If assured space is not set, usage is always set to 1
-        auto groupMetricsExchange = MakeHolder<TEvBlobStorage::TEvControllerGroupMetricsExchange>();
-        for (const auto& [group, tablets] : groupToTablets) {
-            NKikimrBlobStorage::TGroupMetrics* metrics = groupMetricsExchange->Record.AddGroupMetrics();
+        auto updateDiskStatus = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
-            metrics->SetGroupId(group);
-            metrics->MutableGroupParameters()->SetGroupID(group);
-            metrics->MutableGroupParameters()->SetStoragePoolName("def1");
-            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(300'000'000);
+        for (ui32 groupId = 0x80000000; groupId < 0x8000000a; ++groupId) {
+            NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = updateDiskStatus->Record.AddVDisksMetrics();
+
+            vdiskMetrics->MutableVDiskId()->SetGroupID(groupId);
+            vdiskMetrics->MutableVDiskId()->SetGroupGeneration(1);
+            vdiskMetrics->MutableVDiskId()->SetRing(0);
+            vdiskMetrics->MutableVDiskId()->SetDomain(0);
+            vdiskMetrics->MutableVDiskId()->SetVDisk(0);
+            vdiskMetrics->SetAvailableSize(30'000'000);
+
         }
 
-        runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerGroupMetricsExchange));
-            runtime.DispatchEvents(options);
-        }
+        runtime.SendToPipe(MakeBSControllerID(0), sender, updateDiskStatus.Release(), 0, GetPipeConfigWithRetries());
 
         TChannelsBindings channels = BINDED_CHANNELS;
-        for (auto& bind : channels) {
-            bind.SetSize(200'000'000);
-        }
+        channels[0].SetSize(500'000'000);
         for (auto tablet : {tabletA, tabletB}) {
             TAutoPtr<TEvHive::TEvCreateTablet> updateTablet(new TEvHive::TEvCreateTablet(testerTablet, 100500 + (tablet - tabletBase), tabletType, channels));
             SendCreateTestTablet(runtime, hiveTablet, testerTablet, updateTablet, 0, true);
         }
-        runtime.SendToPipe(hiveTablet, sender, new NHive::TEvPrivate::TEvStartStorageBalancer({
-            .NumReassigns = 100,
-            .MaxInFlight = 1,
-            .StoragePool = "def1",
-        }));
 
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRestartComplete, 4); // should actually be less than 4
-            runtime.DispatchEvents(options, TDuration::Seconds(10));
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvStorageBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Minutes(1));
         }
 
         UNIT_ASSERT_VALUES_UNEQUAL(getGroup(tabletA), getGroup(tabletB));
@@ -6071,7 +6064,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeExclusive);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6096,7 +6089,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeShared);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6177,7 +6170,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED);
+            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesModeExclusive);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);
@@ -6203,7 +6196,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetTxId(++txId);
             ev->Record.MutableDomainKey()->SetSchemeShard(subdomainKey.GetSchemeShard());
             ev->Record.MutableDomainKey()->SetPathId(subdomainKey.GetPathId());
-            ev->Record.SetServerlessComputeResourcesMode(NKikimrSubDomains::SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED);
             runtime.SendToPipe(hiveTablet, sender, ev.Release());
             TAutoPtr<IEventHandle> handle;
             TEvHive::TEvUpdateDomainReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateDomainReply>(handle);

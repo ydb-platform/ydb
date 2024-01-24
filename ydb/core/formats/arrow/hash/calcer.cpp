@@ -9,7 +9,7 @@
 
 namespace NKikimr::NArrow::NHash {
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const {
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
     NArrow::SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;

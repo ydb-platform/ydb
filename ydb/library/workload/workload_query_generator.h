@@ -61,6 +61,11 @@ using TBulkDataGeneratorList = std::list<std::shared_ptr<IBulkDataGenerator>>;
 class IWorkloadQueryGenerator {
 public:
     struct TWorkloadType {
+        explicit TWorkloadType(int type, const TString& commandName, const TString& description)
+            : Type(type)
+            , CommandName(commandName)
+            , Description(description)
+        {}
         int Type = 0;
         TString CommandName;
         TString Description;

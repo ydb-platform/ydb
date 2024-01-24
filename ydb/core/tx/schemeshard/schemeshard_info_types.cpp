@@ -2305,7 +2305,7 @@ TColumnTableInfo::TColumnTableInfo(
 
     if (Description.HasSchema()) {
         TOlapSchema schema;
-        schema.Parse(Description.GetSchema());
+        schema.ParseFromLocalDB(Description.GetSchema());
     }
 
     ColumnShards.reserve(Sharding.GetColumnShards().size());

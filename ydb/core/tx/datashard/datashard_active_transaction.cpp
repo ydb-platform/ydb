@@ -62,7 +62,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
             Y_ABORT_UNLESS(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
-            EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
+            EngineBay.GetKeyValidator().AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                                             tx.GetTableId().GetTableId()),
                                    {}, range.ToTableRange(), info->KeyColumnTypes);
         } else {

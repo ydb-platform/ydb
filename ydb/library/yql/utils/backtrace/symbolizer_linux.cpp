@@ -1,8 +1,8 @@
 #include "symbolizer.h"
-#include "fake_llvm_symbolizer/fake_llvm_symbolizer.h"
 
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/dwarf_backtrace/backtrace.h>
 
 #include <util/generic/hash.h>
 #include <util/system/execpath.h>
@@ -68,9 +68,23 @@ public:
             return TStringBuilder() << "StackFrame: " << modulePath << " " << address << " " <<  offset << "\n";
         }
 
-        llvm::object::SectionedAddress secAddr;
-        secAddr.Address = address - offset;
-        return NYql::NBacktrace::SymbolizeAndDumpToString(modulePath, secAddr, offset);
+        std::array<const void*, 1> addrs = { (const void*)address };
+        TString output;
+        TStringOutput out(output);
+
+        auto error = NDwarf::ResolveBacktraceLocked(addrs, [&](const NDwarf::TLineInfo& info) {
+            if (!info.FileName.Empty())
+                out << info.FileName << ":" << info.Line << ":" << info.Col << " ";
+            if (!info.FunctionName.Empty())
+                out << "in " << info.FunctionName << " ";
+            return NDwarf::EResolving::Continue;
+        });
+
+        if (error) {
+            out << "LibBacktrace failed: (" << error->Code << ") " << error->Message;
+        }
+
+        return output;
     }
 
 private:

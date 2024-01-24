@@ -1,11 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
-#include "change_sender_common_ops.h"
-
-#include <library/cpp/digest/md5/md5.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_sender_common_ops.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
@@ -13,6 +9,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+
+#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -218,20 +218,20 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRequestRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRequestRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRequestRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRequestRecords>()->Records) {
                     requested.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -307,14 +307,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                     return TTestActorRuntime::EEventAction::PROCESS;
                 }
 
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         bool inited = false;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
 
@@ -416,14 +416,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         THashSet<ui64> removed;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
                 break;
 
-            case TEvChangeExchange::EvRemoveRecords:
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            case NChangeExchange::TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
                 break;
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -1886,7 +1886,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2143,7 +2143,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2240,7 +2240,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         env.GetServer()->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 if (preventEnqueueing || (preventEnqueueingOnSpecificSender && *preventEnqueueingOnSpecificSender == ev->Recipient)) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -2432,7 +2432,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         TVector<THolder<IEventHandle>> enqueued;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                 enqueued.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -2474,8 +2474,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THashSet<ui64> enqueued;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>()->Records) {
                     enqueued.insert(record.Order);
                 }
 
@@ -2506,8 +2506,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THashSet<ui64> removed;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchange::EvRemoveRecords) {
-                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvRemoveRecords) {
+                for (const auto& record : ev->Get<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>()->Records) {
                     removed.insert(record);
                 }
             }
@@ -2743,7 +2743,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 }
                 break;
 
-            case TEvChangeExchange::EvEnqueueRecords:
+            case NChangeExchange::TEvChangeExchange::EvEnqueueRecords:
                 delayed.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
 
@@ -2926,7 +2926,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         bool ready = false;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 ready = true;
             }
 
@@ -2948,7 +2948,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         THolder<IEventHandle> delayed;
         prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchangePrivate::EvReady) {
                 delayed.Reset(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

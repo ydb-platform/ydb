@@ -271,6 +271,7 @@ public:
     bool EnableStatistics = false;
     bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
+    bool EnableAddColumsWithDefaults = false;
 
     TShardDeleter ShardDeleter;
 
@@ -331,6 +332,11 @@ public:
 
     bool IsServerlessDomain(const TPath& domain) const {
         return IsServerlessDomain(domain.DomainInfo());
+    }
+
+    bool IsServerlessDomainGlobal(TPathId domainPathId, TSubDomainInfo::TConstPtr domainInfo) const {
+        const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
+        return IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != domainPathId;
     }
 
     TPathId MakeLocalId(const TLocalPathId& localPathId) const {

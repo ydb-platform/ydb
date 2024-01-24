@@ -475,6 +475,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
             return false;
     }
 
+    ProgramProto = programProto;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);

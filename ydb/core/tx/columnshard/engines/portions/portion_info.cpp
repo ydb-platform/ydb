@@ -1,5 +1,6 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -103,16 +104,16 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
     return sum;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& columnIds) const {
+ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     ui64 sum = 0;
     const ui32 numRows = NumRows();
     for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-        if (columnIds.contains(i)) {
+        if (entityIds.contains(i)) {
             sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
         }
     }
     for (auto&& r : Records) {
-        if (columnIds.contains(r.ColumnId)) {
+        if (entityIds.contains(r.ColumnId)) {
             sum += r.GetMeta().GetRawBytesVerified();
         }
     }
@@ -206,6 +207,16 @@ bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
 }
 
+void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+    for (auto& record : Records) {
+        db.EraseColumn(*this, record);
+    }
+}
+void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
+    for (auto& record : Records) {
+        db.WriteColumn(*this, record);
+    }
+}
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

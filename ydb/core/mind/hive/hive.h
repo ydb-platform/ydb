@@ -256,6 +256,10 @@ struct THiveSharedSettings {
     TDuration GetStoragePoolFreshPeriod() const {
         return TDuration::MilliSeconds(CurrentConfig.GetStoragePoolFreshPeriod());
     }
+
+    double GetMinGroupUsageToBalance() const {
+        return CurrentConfig.GetMinGroupUsageToBalance();
+    }
 };
 
 struct TDrainSettings {
@@ -276,7 +280,7 @@ struct TBalancerSettings {
 
 struct TStorageBalancerSettings {
     ui64 NumReassigns;
-    ui64 MaxInFlight;
+    ui64 MaxInFlight = 1;
     TString StoragePool;
 };
 

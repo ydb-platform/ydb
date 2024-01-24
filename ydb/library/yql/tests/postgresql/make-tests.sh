@@ -5,7 +5,7 @@
   --dstdir=cases \
   --runner=../../tools/pgrun/pgrun \
   --splitter="../../tools/pgrun/pgrun split-statements" \
-  --skip=uuid,char,varchar \
+  --skip=uuid \
   --report=pg_tests.csv \
   $@
 

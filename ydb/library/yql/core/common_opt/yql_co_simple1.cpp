@@ -3691,7 +3691,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["Lookup"] = std::bind(&OptimizeContains<false, true>, _1, _2);
     map["Contains"] = std::bind(&OptimizeContains<false>, _1, _2);
     map["ListHas"] = std::bind(&OptimizeContains<true>, _1, _2);
-    map["ListUniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["Uniq"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         return ctx.Builder(node->Pos())
             .Callable("DictKeys")
                 .Callable(0, "ToDict")
@@ -3713,7 +3713,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Seal()
             .Build();
     };
-    map["ListUniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["UniqStable"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
         const TTypeAnnotationNode* itemType = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         auto expandedItemType = ExpandType(node->Pos(), *itemType, ctx);
         auto setCreate = ctx.Builder(node->Pos())

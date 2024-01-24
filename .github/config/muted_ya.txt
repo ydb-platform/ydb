@@ -42,8 +42,6 @@ ydb/tests/functional/clickbench test.py.test_run_*column]
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*
-ydb/tests/functional/sqs/large test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format*]
-ydb/tests/functional/sqs/large [*/10]*
 ydb/tests/functional/sqs/merge_split_common_table/fifo *
 ydb/tests/functional/sqs/merge_split_common_table/std *
 ydb/tests/functional/tenants test_dynamic_tenants.py.*

@@ -1392,9 +1392,9 @@
     ],
     "test.test[lineage-member_over_if_struct-default.txt-Lineage]": [
         {
-            "checksum": "8c0c9c8cf3dab1578139b7ea161a7953",
-            "size": 1641,
-            "uri": "https://{canondata_backend}/1784826/8a2f0d0a55779bdbe0866a62e74103aa1da6a4f8/resource.tar.gz#test.test_lineage-member_over_if_struct-default.txt-Lineage_/results.txt"
+            "checksum": "c5247249149bfd4aaae53e1e59df6d51",
+            "size": 2635,
+            "uri": "https://{canondata_backend}/1936842/f3a8c0f08294d14afbd751e1b12877fbc9d546a9/resource.tar.gz#test.test_lineage-member_over_if_struct-default.txt-Lineage_/results.txt"
         }
     ],
     "test.test[lineage-member_over_if_struct-default.txt-Plan]": [

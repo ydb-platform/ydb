@@ -243,7 +243,7 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
     {}
 
     TString TopicPath;
-    EStatus Status;
+    EKafkaErrors Status;
     TString Message;
 };
 };

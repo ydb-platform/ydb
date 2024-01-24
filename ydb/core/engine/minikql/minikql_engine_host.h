@@ -98,7 +98,7 @@ public:
     ui64 GetShardId() const override;
     const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
     bool IsReadonly() const override;
-    bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
+    bool IsValidKey(TKeyDesc& key) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
@@ -193,6 +193,7 @@ public:
     }
 };
 
+bool IsValidKey(const TEngineHost::TScheme& scheme, ui64 localTableId, TKeyDesc& key);
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);
 NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeInfo type);
 NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme,
@@ -203,4 +204,6 @@ NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const N
 void ConvertTableKeys(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
     const TArrayRef<const TCell>& row, TSmallVec<TRawTypeValue>& key, ui64* keyDataBytes);
 
+void ConvertTableValues(const NTable::TScheme& scheme, const NTable::TScheme::TTableInfo* tableInfo,
+    const TArrayRef<const IEngineFlatHost::TUpdateCommand>& commands,  TSmallVec<NTable::TUpdateOp>& ops, ui64* valueBytes);
 }}

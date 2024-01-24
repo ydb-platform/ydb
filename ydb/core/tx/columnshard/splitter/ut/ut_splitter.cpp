@@ -40,8 +40,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-            Y_ABORT_UNLESS(false);
-            return nullptr;
+            return std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>());
         }
 
         virtual ui32 GetColumnId(const std::string& columnName) const override {

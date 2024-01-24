@@ -46,7 +46,7 @@ public:
         const Ydb::Table::QueryStatsCollection::Mode& statsMode,
         bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+        bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool allowSinglePartitionOpt,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
@@ -100,7 +100,7 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     ui32 nComputeTasks = 0;
     ui32 nScanTasks = 0;
-    bool DoOptimization;
+    bool AllowSinglePartitionOpt;
 
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources

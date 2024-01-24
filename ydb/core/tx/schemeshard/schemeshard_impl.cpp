@@ -4271,7 +4271,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
-    ExternalSourceFactory = appData->ExternalSourceFactory;
+    EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6720,6 +6720,11 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         LoadTableProfiles(nullptr, ctx);
     }
 
+    if (appConfig.HasQueryServiceConfig()) {
+        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()));
+    }
+
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
     }
@@ -6744,6 +6749,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
+    EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

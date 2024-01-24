@@ -11907,6 +11907,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AsSet"] = &AsDictWrapper<false, true>;
         Functions["AsSetStrict"] = &AsDictWrapper<true, true>;
         Functions["DictFromKeys"] = &DictFromKeysWrapper;
+        Functions["Uniq"] = &UniqWrapper;
+        Functions["UniqStable"] = &UniqWrapper;
         Functions["If"] = &IfWrapper<false>;
         Functions["IfStrict"] = &IfWrapper<true>;
         Functions[IfName] = &IfWorldWrapper;
@@ -12170,7 +12172,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListNotNull"] = &ListNotNullWrapper;
         Functions["ListFlatten"] = &ListFlattenWrapper;
         Functions["ListUniq"] = &ListUniqWrapper;
-        Functions["ListUniqStable"] = &ListUniqWrapper;
+        Functions["ListUniqStable"] = &ListUniqStableWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;

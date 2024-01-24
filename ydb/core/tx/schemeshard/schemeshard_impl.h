@@ -271,6 +271,7 @@ public:
     bool EnableStatistics = false;
     bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
+    bool EnableAddColumsWithDefaults = false;
 
     TShardDeleter ShardDeleter;
 
@@ -310,7 +311,7 @@ public:
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,

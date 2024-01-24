@@ -938,7 +938,7 @@ private:
     }
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
-        const NKqpProto::TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
+        const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
         NLWTrace::TOrbit orbit, NWilson::TSpan span, const std::optional<TString>& replayMessage = std::nullopt)
     {
         const auto& query = compileResult->Query;
@@ -953,7 +953,7 @@ private:
             << ", status:" << compileResult->Status);
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit), replayMessage);
-        responseEv->Stats.CopyFrom(compileStats);
+        responseEv->Stats = compileStats;
 
         if (span) {
             span.End();
@@ -965,8 +965,8 @@ private:
     void ReplyFromCache(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TActorContext& ctx, ui64 cookie, NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
-        NKqpProto::TKqpStatsCompile stats;
-        stats.SetFromCache(true);
+        TKqpStatsCompile stats;
+        stats.FromCache = true;
 
         LWTRACK(KqpCompileServiceReplyFromCache, orbit);
         Reply(sender, compileResult, stats, ctx, cookie, std::move(orbit), std::move(span));
@@ -976,7 +976,7 @@ private:
         const TIssues& issues, const TActorContext& ctx, ui64 cookie, NLWTrace::TOrbit orbit, NWilson::TSpan span)
     {
         LWTRACK(KqpCompileServiceReplyError, orbit);
-        Reply(sender, TKqpCompileResult::Make(uid, status, issues, ETableReadType::Other), NKqpProto::TKqpStatsCompile(), ctx, cookie, std::move(orbit), std::move(span));
+        Reply(sender, TKqpCompileResult::Make(uid, status, issues, ETableReadType::Other), TKqpStatsCompile{}, ctx, cookie, std::move(orbit), std::move(span));
     }
 
     void ReplyInternalError(const TActorId& sender, const TString& uid, const TString& message,

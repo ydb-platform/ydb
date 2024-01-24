@@ -332,7 +332,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.simple_rel_array_size
         * sizeof(RelOptInfo*));
     root.simple_rte_array = (RangeTblEntry**)palloc0(
-        root.simple_rel_array_size * sizeof(RangeTblEntry)
+        root.simple_rel_array_size * sizeof(RangeTblEntry*)
     );
     for (int i = 0; i <= rels->length; i++) {
         root.simple_rte_array[i] = makeNode(RangeTblEntry);

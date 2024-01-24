@@ -284,11 +284,10 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
 std::pair<IEngineFlat::EResult, TString> TKqpDatashardComputeContext::ValidateKeys(
     const IEngineFlat::TValidationInfo& validationInfo)
 {
-    std::pair<ui64, ui64> maxSnapshotTime = {0,0}; // unused for now
     for (auto& validKey : validationInfo.Keys) {
         TKeyDesc * key = validKey.Key.get();
 
-        bool valid = EngineHost.IsValidKey(*key, maxSnapshotTime);
+        bool valid = EngineHost.IsValidKey(*key);
 
         if (valid) {
             auto curSchemaVersion = EngineHost.GetTableSchemaVersion(key->TableId);

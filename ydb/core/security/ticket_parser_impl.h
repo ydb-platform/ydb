@@ -450,7 +450,7 @@ private:
     }
 
     template <typename TSubjectType>
-    TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
+    typename TPermissionRecord::TTypeCase ConvertSubjectType(const TSubjectType& type) {
         switch (type) {
         case TSubjectType::kUserAccount:
             return TPermissionRecord::TTypeCase::USER_ACCOUNT_TYPE;

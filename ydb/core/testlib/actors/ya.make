@@ -8,6 +8,7 @@ PEERDIR(
     ydb/library/actors/testlib
     library/cpp/testing/unittest
     ydb/core/base
+    ydb/core/external_sources
     ydb/core/mon
     ydb/core/mon_alloc
     ydb/core/scheme

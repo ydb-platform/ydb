@@ -427,19 +427,21 @@ TTracingControl& TGRpcRequestProxyImpl::GetTracingControl(TStringBuf type) {
 }
 
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
-    NWilson::TTraceId traceId{};
+    auto requestType = ctx.GetInternalRequestType();
+    if (requestType.empty()) {
+        return;
+    }
+    NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
     }
-    auto requestType = ctx.GetInternalRequestType();
     auto& control = GetTracingControl(requestType);
     if (traceId && control.ThrottleExternal()) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Dropping external traceId " << traceId.GetHexTraceId() << " for request type " << requestType);
         traceId = {};
     }
     if (!traceId && control.SampleThrottle()) {
-        // TODO(pumpurum): Use TTracingControl::SampledVerbosity()
-        traceId = NWilson::TTraceId::NewTraceId(15, 4095);
+        traceId = NWilson::TTraceId::NewTraceId(control.SampledVerbosity(), 4095);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Created new traceId " << traceId.GetHexTraceId() << " for request type " << requestType);
     }
     if (traceId) {

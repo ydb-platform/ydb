@@ -1246,8 +1246,8 @@ message TImmediateControlsConfig {
     }
 
     message TTracingControls {
-        message TSamplingThrottingOptions {
-            message TThrottingOptions {
+        message TSamplingThrottlingOptions {
+            message TThrottlingOptions {
                 optional uint64 MaxRatePerMinute = 1 [(ControlOptions) = {
                     Description: "Maximum amount of traced requests per minute",
                     MinValue: 0,
@@ -1278,20 +1278,20 @@ message TImmediateControlsConfig {
             }
 
             optional TSamplingOptions Sampling = 1;
-            optional TThrottingOptions SampledThrottling = 2;
-            optional TThrottingOptions ExternalThrottling = 3;
+            optional TThrottlingOptions SampledThrottling = 2;
+            optional TThrottlingOptions ExternalThrottling = 3;
         }
 
         message TKeyValue {
-            optional TSamplingThrottingOptions AcquireLock = 1;
-            optional TSamplingThrottingOptions ExecuteTransaction = 2;
-            optional TSamplingThrottingOptions Read = 3;
-            optional TSamplingThrottingOptions ReadRange = 4;
-            optional TSamplingThrottingOptions ListRange = 5;
-            optional TSamplingThrottingOptions GetStorageChannelStatus = 6;
+            optional TSamplingThrottlingOptions AcquireLock = 1;
+            optional TSamplingThrottlingOptions ExecuteTransaction = 2;
+            optional TSamplingThrottlingOptions Read = 3;
+            optional TSamplingThrottlingOptions ReadRange = 4;
+            optional TSamplingThrottlingOptions ListRange = 5;
+            optional TSamplingThrottlingOptions GetStorageChannelStatus = 6;
         }
 
-        optional TSamplingThrottingOptions KeyValue = 1;
+        optional TSamplingThrottlingOptions KeyValue = 1;
     }
 
     optional TDataShardControls DataShardControls = 1;

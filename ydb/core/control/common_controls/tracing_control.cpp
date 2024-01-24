@@ -16,30 +16,47 @@ const NKikimrConfig::TImmediateControlOptions& GetImmediateControlOptionsForFiel
     return fieldOptions.GetExtension(NKikimrConfig::ControlOptions);
 }
 
+TThrottler CreateThrottler(TIntrusivePtr<TControlBoard>& icb, TIntrusivePtr<ITimeProvider> timeProvider, TString domain) {
+    TControlWrapper maxRatePerMinute;
+    TControlWrapper maxBurst;
+
+    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> kek = {{
+        {maxRatePerMinute, "MaxRatePerMinute"},
+        {maxBurst, "MaxBurst"},
+    }};
+    const auto& throttlingOptions = *NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TThrottlingOptions::descriptor();
+    for (auto& [control, fieldName] : kek) {
+        const auto& controlOptions = GetImmediateControlOptionsForField(throttlingOptions, TString(fieldName));
+
+        control.Reset(controlOptions.GetDefaultValue(), controlOptions.GetMinValue(), controlOptions.GetMaxValue());
+        icb->RegisterSharedControl(control, domain + "." + fieldName);
+    }
+
+    return TThrottler(std::move(maxRatePerMinute), std::move(maxBurst), std::move(timeProvider));
+}
+
 }
 
 TTracingControl::TTracingControl(TIntrusivePtr<TControlBoard>& icb, TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider>& randomProvider, TString controlDomain)
 {
-    Y_UNUSED(icb, controlDomain, GetImmediateControlOptionsForField);
-    TControlWrapper samplingPPM;
-    TControlWrapper maxRatePerMinute;
-    TControlWrapper maxBurst;
+    SampledThrottler = CreateThrottler(icb, timeProvider, controlDomain + ".SampledThrottling");
+    ExternalThrottler = CreateThrottler(icb, timeProvider, controlDomain + ".ExternalThrottling");
 
-    // const std::array<std::tuple<TControlWrapper&, TStringBuf>, 3> kek = {{
-    //     {samplingPPM, "SamplingPPM"},
-    //     {maxRatePerMinute, "MaxRatePerMinute"},
-    //     {maxBurst, "MaxBurst"},
-    // }};
-    //
-    // for (auto [control, name] : kek) {
-    //     auto& controlOptions = GetImmediateControlOptionsForField(*NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingControls::descriptor(), TString(name));
-    //     control.Reset(controlOptions.GetDefaultValue(), controlOptions.GetMinValue(), controlOptions.GetMaxValue());
-    //     icb->RegisterSharedControl(control, controlDomain + "." + name);
-    // }
+    TControlWrapper samplingPPM;
+    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> kek = {{
+        {samplingPPM, "PPM"},
+        {SampledLevel, "Level"},
+    }};
+
+    const auto& samplingOptions = *NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TSamplingOptions::descriptor();
+    for (auto [control, name] : kek) {
+        const auto& controlOptions = GetImmediateControlOptionsForField(samplingOptions, TString(name));
+        control.Reset(controlOptions.GetDefaultValue(), controlOptions.GetMinValue(), controlOptions.GetMaxValue());
+        icb->RegisterSharedControl(control, controlDomain + ".Sampling." + name);
+    }
 
     Sampler = TSampler(std::move(samplingPPM), randomProvider->GenRand64());
-    Throttler = TThrottler(std::move(maxRatePerMinute), std::move(maxBurst), std::move(timeProvider));
 }
 
 } // namespace NKikimr

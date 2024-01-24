@@ -12,7 +12,7 @@ public:
             TIntrusivePtr<IRandomProvider>& randomProvider, TString controlDomain);
 
     bool SampleThrottle() {
-        return Sampler.Sample() && !Throttler.Throttle();
+        return Sampler.Sample() && !SampledThrottler.Throttle();
     }
 
     bool ThrottleExternal() {
@@ -20,13 +20,14 @@ public:
     }
 
     ui8 SampledVerbosity() const {
-        Y_ABORT("TODO");
+        return SampledLevel;
     }
 
 private:
     TSampler Sampler;
-    TThrottler Throttler;
+    TThrottler SampledThrottler;
     TThrottler ExternalThrottler;
+    TControlWrapper SampledLevel;
 };
 
 } // namespace NKikimr

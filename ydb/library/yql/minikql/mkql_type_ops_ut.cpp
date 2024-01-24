@@ -81,6 +81,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         }
     }
 
+    Y_UNIT_TEST(Datetime64) {
+        i64 v = 0;
+        const NUdf::TUnboxedValue& str= ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v));
+        UNIT_ASSERT(str.HasValue());
+        auto uvp = ValueFromString(NUdf::EDataSlot::Datetime64, str.AsStringRef());
+        UNIT_ASSERT(uvp.HasValue());
+        UNIT_ASSERT_EQUAL(v, uvp.Get<i64>());
+    }
+
     Y_UNIT_TEST(DateInOut) {
         ui32 year = 1970;
         ui32 month = 1;
@@ -178,7 +187,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         return ValueFromString(NUdf::EDataSlot::Timestamp, buf);
     }
 
-    Y_UNIT_TEST(TimestampSeriailization) {
+    Y_UNIT_TEST(TimestampSerialization) {
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045#"));
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05.55045"));
         UNIT_ASSERT(!ParseTimestamp("2020-07-28T21:46:05."));

@@ -202,7 +202,7 @@ Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
         auto diffReadWithSameConsumers = (tc.Runtime->GetTimeProvider()->Now() - startTimeReadWithSameConsumer).Seconds();
-        UNIT_ASSERT(diffReadWithSameConsumers >= 9); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota 
+        UNIT_ASSERT(diffReadWithSameConsumers >= 9); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
 
         //check not throttling on total partition quota
         auto startTimeReadWithDifferentConsumers = tc.Runtime->GetTimeProvider()->Now();
@@ -223,11 +223,12 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(1000);
+
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
 
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
         TVector<std::pair<ui64, TString>> data;
-        TString s{150_KB, 'c'};
+        TString s{2_MB, 'c'};
         data.push_back({1, s});
         auto startTime = tc.Runtime->GetTimeProvider()->Now();
         CmdWrite(0, "sourceid0", data, tc);

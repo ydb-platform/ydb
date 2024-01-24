@@ -621,7 +621,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetSourceIdCount(SourceIdStorage.GetInMemorySourceIds().size());
     result.SetSourceIdRetentionPeriodSec((ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now())).Seconds());
 
-    //ToDo: !! Get total speed
     result.SetWriteBytesQuota(TotalPartitionWriteSpeed);
 
     TVector<ui64> resSpeed;
@@ -2496,11 +2495,11 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     // Search for proper request
     Y_ABORT_UNLESS(TopicQuotaRequestCookie == cookie);
     TopicQuotaRequestCookie = 0;
+    TopicQuotaConsumedCookie = cookie;
     Y_ASSERT(!WaitingForPreviousBlobQuota());
     WritePendingBlob();
 
     // Metrics
-    //ToDo: !! fill proper timings and extract them here
     TopicQuotaWaitTimeForCurrentBlob = ev->Get()->AccountQuotaWaitTime;
     PartitionQuotaWaitTimeForCurrentBlob = ev->Get()->PartitionQuotaWaitTime;
     if (TopicWriteQuotaWaitCounter) {

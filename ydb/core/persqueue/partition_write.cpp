@@ -505,10 +505,11 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     if (IsQuotingEnabled()) {
         if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteNewSize, 0, {}));
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteNewSize, TopicQuotaConsumedCookie, {}));
         } else {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteCycleSize, 0, {}));
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteCycleSize, TopicQuotaConsumedCookie, {}));
         }
+        TopicQuotaConsumedCookie = 0;
     }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);

@@ -49,7 +49,7 @@ void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvR
     auto pendingIter = PendingAccountQuotaRequests.find(ev->Get()->Request->Get()->Cookie);
     Y_ABORT_UNLESS(!pendingIter.IsEnd());
     pendingIter->second.Request->Get()->Request = std::move(ev->Get()->Request->Get()->Request);
-    TRequestContext context{pendingIter->second.Request, ev->Sender, ev->Get()->WaitTime, ctx.Now()};
+    TRequestContext context{pendingIter->second.Request, pendingIter->second.PartitionActor, ev->Get()->WaitTime, ctx.Now()};
     PendingAccountQuotaRequests.erase(pendingIter);
     OnAccountQuotaApproved(context);
 }
@@ -120,7 +120,7 @@ TQuotaTracker TPartitionQuoterBase::CreatePartitionTotalQuotaTracker(const NKiki
 }
 
 //ToDo: (?) Remove from a basic class maybe?
-THolder<TAccountQuoterHolder> TPartitionQuoterBase::CreateAccountQuotaTracker(const TString& user) const {
+THolder<TAccountQuoterHolder> TPartitionQuoterBase::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
     if (TabletActor && quotingConfig.GetEnableQuoting()) {
@@ -129,7 +129,7 @@ THolder<TAccountQuoterHolder> TPartitionQuoterBase::CreateAccountQuotaTracker(co
                 actorId = TActivationContext::Register(
                     new TAccountReadQuoter(
                         TabletActor,
-                        SelfId(),
+                        ctx.SelfID,
                         TabletId,
                         TopicConverter,
                         Partition,
@@ -143,12 +143,12 @@ THolder<TAccountQuoterHolder> TPartitionQuoterBase::CreateAccountQuotaTracker(co
             actorId = TActivationContext::Register(
                 new TAccountWriteQuoter(
                     TabletActor,
-                    SelfId(),
+                    ctx.SelfID,
                     TabletId,
                     TopicConverter,
                     Partition,
                     Counters,
-                    ActorContext()
+                    ctx
                 ),
                 Parent
             );
@@ -317,7 +317,7 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(
-                CreateAccountQuotaTracker(consumerStr),
+                CreateAccountQuotaTracker(consumerStr, ctx),
                 GetConsumerReadBurst(PQTabletConfig, ctx),
                 GetConsumerReadSpeed(PQTabletConfig, ctx)
         );

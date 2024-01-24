@@ -80,7 +80,7 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
         LimiterDescription() << " quota required for cookie=" << ev->Get()->Cookie
     );
     InitCounters(ctx);
-    bool hasActualErrors = ctx.Now() - LastReportedErrorTime <= DoNotQuoteAfterErrorPeriod;
+    bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
     if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
         Queue.emplace_back(ev, ctx.Now());
     } else {
@@ -122,7 +122,7 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
     QuotaRequestInFlight = false;
     const ui64 cookie = ev->Cookie;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() << "Got read quota:" << ev->Get()->Result << ". Cookie: " << cookie
+        LimiterDescription() << "Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie
     );
 
     Y_ABORT_UNLESS(CurrentQuotaRequestCookie == cookie);
@@ -230,9 +230,6 @@ TAccountWriteQuoter::TAccountWriteQuoter(
                           0 /** ToDo: discuss. Do we need write credit? */, counters,
                           TDuration::Zero())
 {
-    // LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_RATE_LIMITER,
-    //     LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << ResourcePath);
-
 }
 
 TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
@@ -264,12 +261,10 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 }
 
 void TAccountWriteQuoter::InitCountersImpl(const TActorContext&) {
-    //ToDo: !!
 }
 
 THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpdateEvent() {
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
-    // ToDo: !! partition - reaction for write counters
 }
 
 TString TAccountWriteQuoter::LimiterDescription() const {

@@ -791,8 +791,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
                                                            5000, 10'000, 30'000, 99'999'999});
     SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WriteBigLatency"}, true, "sensor", false);
     WritesTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"WritesTotal"}, true, "sensor", false);
-    //ToDo: !! Counters
-    if (IsQuotingEnabled() /*&& !TopicWriteQuotaResourcePath.empty()*/) {
+    if (IsQuotingEnabled()) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,

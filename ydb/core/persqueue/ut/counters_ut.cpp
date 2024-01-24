@@ -92,6 +92,8 @@ Y_UNIT_TEST(Partition) {
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
+
+        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -112,9 +114,9 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     tc.Runtime->SetScheduledLimit(100);
     tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
 
-    PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {}, tc);
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_KB}, {}, tc);
     TVector<std::pair<ui64, TString>> data;
-    TString s{100_KB, 'c'};
+    TString s{50_KB, 'c'};
     data.push_back({1, s});
     for (auto i = 0u; i < 7; i++) {
         CmdWrite(0, "sourceid0", data, tc, false, {});
@@ -124,11 +126,8 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     {
         auto counters = tc.Runtime->GetAppData(0).Counters;
         Y_ABORT_UNLESS(counters);
-        counters->EnumerateSubgroups([&](const TString& name, const TString& value) {Cerr << "subgroups root: " << name << ":" << value << Endl;});
-
         auto dbGroup = GetServiceCounters(counters, "pqproxy");
 
-        dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")->EnumerateSubgroups([&](const TString& name, const TString& value) {Cerr << "subgroups in subsystem: " << name << ":" << value << Endl;});
         auto quotaWait = dbGroup->FindSubgroup("subsystem", "partitionWriteQuotaWait")
                              ->FindSubgroup("Account", "total")
                              ->FindSubgroup("Producer", "total")
@@ -136,8 +135,11 @@ Y_UNIT_TEST(PartitionWriteQuota) {
                              ->FindSubgroup("TopicPath", "total")
                              ->FindSubgroup("OriginDC", "cluster");
         auto histogram = quotaWait->FindSubgroup("sensor", "PartitionWriteQuotaWaitOriginal");
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 2);
+        TStringStream histogramStr;
+        histogram->OutputHtml(histogramStr);
+        Cerr << "=== Total histogram: ===\n " << histogramStr.Str() << "=== === === ===" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 1);
     }
 }
 

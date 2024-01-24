@@ -23,8 +23,6 @@ TWriteQuoter::TWriteQuoter(
     )
     , QuotingEnabled(IsQuotingEnabled(AppData()->PQConfig, isLocalDc))
 {
-    if (QuotingEnabled)
-        AccountQuotaTracker = CreateAccountQuotaTracker(TString{});
     UpdateQuotaConfigImpl(true, ctx);
 }
 
@@ -37,7 +35,13 @@ void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
     //ToDo !! - check, do nothing?
 }
 
-void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr&) {
+void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
+    if (AccountQuotaTracker) {
+        Send(
+            AccountQuotaTracker->Actor,
+            new NAccountQuoterEvents::TEvConsumed(ev->Get()->ConsumedBytes, ev->Get()->RequestCookie)
+        );
+    }
 }
 
 void TWriteQuoter::HandleWakeUpImpl() {
@@ -73,6 +77,8 @@ IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
 };
 
 THolder<TAccountQuoterHolder>& TWriteQuoter::GetAccountQuotaTracker(TEvPQ::TEvRequestQuota::TPtr&) {
+    if (!AccountQuotaTracker && QuotingEnabled)
+        AccountQuotaTracker = CreateAccountQuotaTracker(TString{}, ActorContext());
     return AccountQuotaTracker;
 }
 

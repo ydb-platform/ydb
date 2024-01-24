@@ -34,7 +34,7 @@ struct TEvAccountQuotaCountersUpdated : public TEventLocal<TEvAccountQuotaCounte
     TAutoPtr<TTabletCountersBase> AccountQuotaCounters;
 };
 
-struct TEvQuotaCountersUpdated : public TEventLocal<TEvQuotaCountersUpdated, TEvPQ::EvQuotaCountersUpdated> {     
+struct TEvQuotaCountersUpdated : public TEventLocal<TEvQuotaCountersUpdated, TEvPQ::EvQuotaCountersUpdated> {
     TEvQuotaCountersUpdated() = default;
 
     static TEvQuotaCountersUpdated* ReadCounters(ui32 avgInflightLimitThrottledMicroseconds) {
@@ -162,7 +162,7 @@ protected:
 protected:
     void CheckTotalPartitionQuota(TRequestContext& context);
     void ApproveQuota(TRequestContext& context);
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user) const;
+    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
     TQuotaTracker CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
     inline const TActorId& GetParent() const {return Parent;}

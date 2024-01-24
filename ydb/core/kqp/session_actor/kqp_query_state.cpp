@@ -115,7 +115,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     YQL_ENSURE(compiledVersion == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1,
         "Unexpected prepared query version: " << compiledVersion);
 
-    CompileStats.Swap(&ev->Stats);
+    CompileStats = ev->Stats;
     PreparedQuery = CompileResult->PreparedQuery;
     if (ev->ReplayMessage) {
         ReplayMessage = *ev->ReplayMessage;

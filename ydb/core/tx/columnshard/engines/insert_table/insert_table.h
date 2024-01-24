@@ -64,7 +64,7 @@ private:
     bool Loaded = false;
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
-    static constexpr const TDuration CleanDelay = TDuration::Minutes(10);
+    static constexpr ui64 CleanupPackageSize = 10000;
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
@@ -76,9 +76,6 @@ public:
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
     std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
-private:
-
-    mutable TInstant LastCleanup;
 };
 
 }

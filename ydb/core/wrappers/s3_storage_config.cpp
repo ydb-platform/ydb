@@ -183,7 +183,7 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
 }
 
 IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose);
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose, UseVirtualAddressing);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))
@@ -204,6 +204,7 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Set
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
     , StorageClass(ConvertStorageClass(settings.GetStorageClass()))
+    , UseVirtualAddressing(settings.GetUseVirtualAddressing())
 {
     Bucket = settings.GetBucket();
 }

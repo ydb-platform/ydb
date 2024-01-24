@@ -3890,7 +3890,7 @@ void TPersQueue::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext
     if (it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
-        auto response = THolder<TEvPQ::TEvSourceIdResponse>();
+        auto response = MakeHolder<TEvPQ::TEvSourceIdResponse>();
         response->Record.SetError("Partition was not found");
         Send(ev->Sender, response.Release());
 

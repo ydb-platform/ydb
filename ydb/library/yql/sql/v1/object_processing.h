@@ -37,6 +37,7 @@ class TCreateObject: public TObjectProcessorImpl {
 private:
     using TBase = TObjectProcessorImpl;
     std::map<TString, TDeferredAtom> Features;
+    std::set<TString> FeaturesToReset;
 protected:
     bool ExistingOk = false;
 protected:
@@ -46,9 +47,10 @@ protected:
     virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
 public:
     TCreateObject(TPosition pos, const TString& objectId,
-        const TString& typeId, bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context)
+        const TString& typeId, bool existingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
         : TBase(pos, objectId, typeId, context)
         , Features(std::move(features))
+        , FeaturesToReset(std::move(featuresToReset))
         , ExistingOk(existingOk) {
     }
 };

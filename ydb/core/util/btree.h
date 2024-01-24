@@ -11,6 +11,7 @@
 #include <util/system/yassert.h>
 
 #include <atomic>
+#include <cstddef>
 #include <vector>
 
 namespace NKikimr {

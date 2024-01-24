@@ -56,6 +56,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTablePgTypes)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAccessServiceBulkAuthorization)
+    FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -249,6 +249,7 @@ public:
         if (!Context.TypeEnv) {
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(Alloc());
         }
+        YQL_ENSURE(std::addressof(Alloc()) == std::addressof(TypeEnv().GetAllocator()));
     }
 
     ~TDqTaskRunner() {
@@ -480,7 +481,7 @@ public:
                 task.GetParameterValue(name, type, TypeEnv(), graphHolderFactory, structMembers[i]);
 
                 {
-                    auto guard = TypeEnv().BindAllocator();
+                    auto guard = BindAllocator();
                     ValidateParamValue(name, type, structMembers[i]);
                 }
             }
@@ -796,7 +797,7 @@ public:
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = {}) override {
-        auto guard = Context.TypeEnv ? Context.TypeEnv->BindAllocator() : AllocatedHolder->SelfTypeEnv->BindAllocator();
+        auto guard = Guard(Alloc());
         if (memoryLimit) {
             guard.GetMutex()->SetLimit(*memoryLimit);
         }
@@ -804,7 +805,7 @@ public:
     }
 
     bool IsAllocatorAttached() override {
-        return Context.TypeEnv ? Context.TypeEnv->GetAllocator().IsAttached() : AllocatedHolder->SelfTypeEnv->GetAllocator().IsAttached();
+        return Alloc().IsAttached();
     }
 
     const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
@@ -816,6 +817,7 @@ public:
     }
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const override {
+        YQL_ENSURE(SelfAlloc);
         return SelfAlloc;
     }
 

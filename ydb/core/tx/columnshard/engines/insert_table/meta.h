@@ -23,9 +23,8 @@ public:
     TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)
         : OriginalProto(proto)
     {
-        if (proto.HasDirtyWriteTimeSeconds()) {
-            DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
-        }
+        AFL_VERIFY(proto.HasDirtyWriteTimeSeconds())("data", proto.DebugString());
+        DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
         NumRows = proto.GetNumRows();
         RawBytes = proto.GetRawBytes();
     }

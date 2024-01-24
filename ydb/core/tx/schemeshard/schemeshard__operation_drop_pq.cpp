@@ -298,7 +298,6 @@ public:
     }
 
     void SetPQShards(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
-        ui32 drops = 0;
         for (auto shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
             TTopicTabletInfo::TPtr info = shard.second;
@@ -308,7 +307,6 @@ public:
             TTxState::ETxState operation = TTxState::DeleteParts;
             if (tabletId != InvalidTabletId) {
                 operation = TTxState::DropParts;
-                ++drops;
             }
 
             txState.Shards.emplace_back(shardIdx, ETabletType::PersQueue, operation);

@@ -2,8 +2,12 @@
 
 #include <ydb/core/base/defs.h>
 
+namespace NKikimr {
+    struct TPathId;
+}
+
 namespace NKikimr::NReplication::NService {
 
-IActor* CreateLocalTableWriter(const TString& path);
+IActor* CreateLocalTableWriter(const TPathId& tablePathId);
 
 }

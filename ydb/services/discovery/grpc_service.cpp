@@ -29,12 +29,11 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, CB) \
     MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcDiscoveryService>>   \
         (this, &Service_, CQ_,                                                                                \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                      \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
                     new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
-                        (ctx, CB, "Discovery." #NAME,                                                         \
-                            TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                  \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                     \
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
@@ -56,7 +55,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
      ADD_LEGACY_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
-         ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx, "Discovery.ListEndpoints"));
+         ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
      })
 
 #undef ADD_REQUEST

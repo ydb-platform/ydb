@@ -1291,7 +1291,7 @@ message TImmediateControlsConfig {
             optional TSamplingThrottlingOptions GetStorageChannelStatus = 6;
         }
 
-        optional TSamplingThrottlingOptions KeyValue = 1;
+        optional TKeyValue KeyValue = 1;
     }
 
     optional TDataShardControls DataShardControls = 1;

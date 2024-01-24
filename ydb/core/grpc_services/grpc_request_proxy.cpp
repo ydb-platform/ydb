@@ -82,7 +82,8 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    TTracingControl& GetTracingControl(TStringBuf type);
+    static TString InternalRequestTypeToControlDomain(const TString& type);
+    TTracingControl& GetTracingControl(const TString& type);
     void MaybeStartTracing(IRequestProxyCtx& ctx);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
@@ -414,11 +415,27 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 
-TTracingControl& TGRpcRequestProxyImpl::GetTracingControl(TStringBuf type) {
+TString TGRpcRequestProxyImpl::InternalRequestTypeToControlDomain(const TString& type) {
+    static constexpr TStringBuf ydbNamespacePrefix = "Ydb.";
+    static constexpr TStringBuf requestSuffix = "Request";
+
+    TString controlDomain = type;
+    if (controlDomain.StartsWith(ydbNamespacePrefix)) {
+        controlDomain.erase(0, ydbNamespacePrefix.size());
+    }
+    if (controlDomain.EndsWith(requestSuffix)) {
+        controlDomain.erase(controlDomain.size() - requestSuffix.size());
+    }
+
+    return controlDomain;
+}
+
+TTracingControl& TGRpcRequestProxyImpl::GetTracingControl(const TString& type) {
     if (auto it = TracingControls.find(type); it != TracingControls.end()) {
         return it->second;
     }
-    auto domain = TString::Join("TracingControls.", type);
+    auto tracingControlsDomain = InternalRequestTypeToControlDomain(type);
+    auto domain = TString::Join("TracingControls.", tracingControlsDomain);
     TTracingControl control(Icb, TAppData::TimeProvider, TAppData::RandomProvider, std::move(domain));
     return TracingControls.emplace(type, std::move(control)).first->second;
 }

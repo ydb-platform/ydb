@@ -368,7 +368,7 @@ public:
     virtual void LegacyFinishSpan() = 0;
 
     // Used for per-type sampling
-    virtual TStringBuf GetInternalRequestType() const = 0;
+    virtual const TString& GetInternalRequestType() const = 0;
 
     // validation
     virtual bool Validate(TString& error) = 0;
@@ -488,8 +488,9 @@ public:
 
     void StartTracing(NWilson::TSpan&& /*span*/) override {}
     void LegacyFinishSpan() override {}
-    TStringBuf GetInternalRequestType() const override {
-        return {};
+    const TString& GetInternalRequestType() const final {
+        static const TString empty = "";
+        return empty;
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -710,10 +711,9 @@ public:
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, TStringBuf internalType, bool rlAllowed = true)
+    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, bool rlAllowed = true)
         : Ctx_(ctx)
         , RlAllowed_(rlAllowed)
-        , InternalType(internalType)
     { }
 
     bool IsClientLost() const override {
@@ -897,8 +897,8 @@ public:
         Span_.End();
     }
 
-    TStringBuf GetInternalRequestType() const override {
-        return InternalType;
+    const TString& GetInternalRequestType() const final {
+        return TRequest::descriptor()->full_name();
     }
 
     // IRequestCtxBase
@@ -919,7 +919,6 @@ private:
     bool RlAllowed_;
     IGRpcProxyCounters::TPtr Counters_;
     NWilson::TSpan Span_;
-    const TStringBuf InternalType;
 };
 
 template <typename TDerived>
@@ -1041,9 +1040,8 @@ public:
 
     using TFinishWrapper = std::function<void(const NYdbGrpc::IRequestContextBase::TAsyncFinishResult&)>;
 
-    TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx, TStringBuf internalType)
+    TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
-        , InternalType(internalType)
     { }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -1315,8 +1313,8 @@ public:
 
     void LegacyFinishSpan() override {}
 
-    TStringBuf GetInternalRequestType() const final {
-        return InternalType;
+    const TString& GetInternalRequestType() const final {
+        return TRequest::descriptor()->full_name();
     }
 
     void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
@@ -1376,8 +1374,6 @@ private:
     TAuditLogParts AuditLogParts;
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
-
-    const TStringBuf InternalType;
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
@@ -1385,8 +1381,8 @@ class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId,
 public:
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
 
-    TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx, TStringBuf internalType)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx, internalType)
+    TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
+        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
     { }
 
     bool Validate(TString& error) override {
@@ -1432,8 +1428,8 @@ public:
             TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>;
 
     template <typename TCallback>
-    TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TStringBuf internalType, TRequestAuxSettings auxSettings = {})
-        : TBase(ctx, internalType)
+    TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
+        : TBase(ctx)
         , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
     { }
@@ -1486,9 +1482,9 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx, TStringBuf internalType)
+    TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx, internalType)
+            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
     { }
 
     TRateLimiterMode GetRlMode() const override {
@@ -1510,9 +1506,9 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestWrapperNoAuth(NYdbGrpc::IRequestContextBase* ctx, TStringBuf internalType)
+    TGRpcRequestWrapperNoAuth(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-            TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx, internalType)
+            TGRpcRequestWrapperNoAuth<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
     { }
 
     TRateLimiterMode GetRlMode() const override {
@@ -1539,9 +1535,9 @@ public:
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
 
-    TGRpcRequestValidationWrapper(NYdbGrpc::IRequestContextBase* ctx, TStringBuf internalType, bool rlAllowed = true)
+    TGRpcRequestValidationWrapper(NYdbGrpc::IRequestContextBase* ctx, bool rlAllowed = true)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-            TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx, internalType)
+            TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
         , RlAllowed(rlAllowed)
     { }
 

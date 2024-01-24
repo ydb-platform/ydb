@@ -24,9 +24,9 @@ public:
             TGRpcRequestWrapperImpl<
                 TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>>;
 
-    TGrpcRequestFunctionCall(NYdbGrpc::IRequestContextBase* ctx, TFuncCallback cb,
-        TStringBuf internalType, TRequestAuxSettings auxSettings = {})
-        : TBase(ctx, internalType)
+    TGrpcRequestFunctionCall(NYdbGrpc::IRequestContextBase* ctx,
+        TFuncCallback cb, TRequestAuxSettings auxSettings = {})
+        : TBase(ctx)
         , PassMethod(cb)
         , AuxSettings(std::move(auxSettings))
     { }
@@ -49,7 +49,6 @@ public:
             return true;
         }
     }
-
 private:
     TFuncCallback PassMethod;
     const TRequestAuxSettings AuxSettings;

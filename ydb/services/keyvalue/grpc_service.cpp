@@ -40,26 +40,26 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_METHOD macro collision
 #endif
 
-#define SETUP_METHOD(methodName, method, rlMode)                                                            \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                                               \
-        Ydb::KeyValue::Y_CAT(methodName, Request),                                                          \
-        Ydb::KeyValue::Y_CAT(methodName, Response),                                                         \
-        TKeyValueGRpcService>>                                                                              \
-    (                                                                                                       \
-        this,                                                                                               \
-        &Service_,                                                                                          \
-        CQ,                                                                                                 \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                     \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                              \
-            ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                            \
-                Ydb::KeyValue::Y_CAT(methodName, Request),                                                  \
-                Ydb::KeyValue::Y_CAT(methodName, Response)>(reqCtx, &method,                                \
-                    "KeyValue." Y_STRINGIZE(methodName), TRequestAuxSettings{rlMode, nullptr}));            \
-        },                                                                                                  \
-        &Ydb::KeyValue::V1::KeyValueService::AsyncService::Y_CAT(Request, methodName),                      \
-        "KeyValue/" Y_STRINGIZE(methodName),                                                                \
-        logger,                                                                                             \
-        getCounterBlock("keyvalue", Y_STRINGIZE(methodName))                                                \
+#define SETUP_METHOD(methodName, method, rlMode)                                                             \
+    MakeIntrusive<NGRpcService::TGRpcRequest<                                                                \
+        Ydb::KeyValue::Y_CAT(methodName, Request),                                                  \
+        Ydb::KeyValue::Y_CAT(methodName, Response),                                                 \
+        TKeyValueGRpcService>>                                                                        \
+    (                                                                                                        \
+        this,                                                                                                \
+        &Service_,                                                                                           \
+        CQ,                                                                                                  \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                         \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                               \
+            ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                             \
+                Ydb::KeyValue::Y_CAT(methodName, Request),                                          \
+                Ydb::KeyValue::Y_CAT(methodName, Response)>(reqCtx, &method,                        \
+                    TRequestAuxSettings{rlMode, nullptr}));                                                  \
+        },                                                                                                   \
+        &Ydb::KeyValue::V1::KeyValueService::AsyncService::Y_CAT(Request, methodName),       \
+        "KeyValue/" Y_STRINGIZE(methodName),                                                          \
+        logger,                                                                                              \
+        getCounterBlock("keyvalue", Y_STRINGIZE(methodName))                                             \
     )->Run()
 
     SETUP_METHOD(CreateVolume, DoCreateVolumeKeyValue, TRateLimiterMode::Rps);

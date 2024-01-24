@@ -27,11 +27,11 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 #define ADD_REQUEST_NEW(NAME, CB) \
      MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>>   \
          (this, &Service_, CQ_,                                                                                   \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                          \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                             \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));            \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                           \
                     new TGrpcRequestOperationCall<Monitoring::NAME##Request, Monitoring::NAME##Response>          \
-                         (ctx, &CB, "Monitoring." #NAME, TRequestAuxSettings{TRateLimiterMode::Off, nullptr}));   \
+                         (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Off, nullptr}));                        \
             }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                            \
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
@@ -46,7 +46,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
         #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
     ADD_REQUEST_OLD(NodeCheck, NodeCheckRequest, NodeCheckResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvNodeCheckRequest(reqCtx, "Monitoring.NodeCheck"));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvNodeCheckRequest(reqCtx));
     });
 
 

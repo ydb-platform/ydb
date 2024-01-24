@@ -49,7 +49,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
-                                (ctx, &CB, "Table." #NAME, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr __VA_OPT__(, TAuditMode::__VA_ARGS__)})); \
+                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr __VA_OPT__(, TAuditMode::__VA_ARGS__)})); \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
             ++proxyCounter;                                                                                           \
@@ -65,7 +65,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                          \
-                                (ctx, &CB, "Table." #NAME, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));    \
+                                (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), nullptr}));    \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
                     #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
             ++proxyCounter;                                                                                           \

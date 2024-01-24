@@ -154,7 +154,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
     ADD_REQUEST(Infinite, InfiniteRequest, InfiniteResponse, {
-        ActorSystem_->Register(new TInfiniteRpc(new TEvInfiniteRequest(ctx, TStringBuf{})));
+        ActorSystem_->Register(new TInfiniteRpc(new TEvInfiniteRequest(ctx)));
     })
 #undef ADD_REQUEST
 
@@ -174,7 +174,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             CQ_,
             &Draft::Dummy::DummyService::AsyncService::RequestBiStreamPing,
             [this](TIntrusivePtr<TBiStreamGRpcRequest::IContext> context) {
-                ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context, TStringBuf{}));
+                ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context));
             },
             *ActorSystem_,
             "DummyService/BiStreamPing",

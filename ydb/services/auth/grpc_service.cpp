@@ -28,7 +28,7 @@ void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         #NAME, logger, getCounterBlock("login", #NAME))->Run();
 
     ADD_REQUEST(Login, LoginRequest, LoginResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvLoginRequest(reqCtx, "Auth.Login"));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvLoginRequest(reqCtx));
     })
 
 #undef ADD_REQUEST

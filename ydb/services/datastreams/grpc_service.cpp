@@ -49,11 +49,11 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
         (this, &Service_, CQ_,                                                                                                      \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                            \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                               \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \
-                        (ctx, CB, "DataStreams." #NAME, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));        \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
             }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                            \
             #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 

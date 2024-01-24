@@ -22,7 +22,7 @@ void TGRpcOperationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                  \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                           \
                     new TCALL<Operations::NAME##Request, Operations::NAME##Response>                              \
-                        (ctx, &CB, "Operation." #NAME, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                         \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                         \
             }, &Operation::V1::OperationService::AsyncService::Request ## NAME,                                   \
             #NAME, logger, getCounterBlock("operation", #NAME))->Run();
 

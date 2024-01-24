@@ -295,10 +295,6 @@ private:
         std::vector<TFieldsLineage> results;
         TMaybe<bool> hasStructItems;
         for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
-            if (index == 0 && node.IsCallable("If")) {
-                continue;
-            }
-
             if (index != 0 && node.IsCallable("SqlIn")) {
                 continue;
             }

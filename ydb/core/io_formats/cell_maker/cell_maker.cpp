@@ -1,17 +1,19 @@
-#include "csv.h"
-
-#include <contrib/libs/double-conversion/double-conversion/double-conversion.h>
+#include "cell_maker.h"
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>
 
-#include <library/cpp/string_utils/quote/quote.h>
-
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/utils/utf8.h>
+
+#include <contrib/libs/double-conversion/double-conversion/double-conversion.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/yson/json2yson.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
@@ -178,6 +180,15 @@ namespace {
                 return false;
             }
 
+            return Conv(c, t, pool, conv);
+        }
+
+        static bool MakeDirect(TCell& c, const T& v, TMemoryPool& pool, TString&, TConverter<T, U> conv = &Implicit<T, U>) {
+            return Conv(c, v, pool, conv);
+        }
+
+    private:
+        static bool Conv(TCell& c, const T& t, TMemoryPool& pool, TConverter<T, U> conv) {
             auto& u = *pool.Allocate<U>();
             u = conv(t);
             c = TCell(reinterpret_cast<const char*>(&u), sizeof(u));
@@ -195,10 +206,11 @@ namespace {
                 return false;
             }
 
-            const auto u = pool.AppendString(conv(t));
-            c = TCell(u.data(), u.size());
+            return Conv(c, t, pool, conv);
+        }
 
-            return true;
+        static bool MakeDirect(TCell& c, const T& v, TMemoryPool& pool, TString&, TConverter<T, TStringBuf> conv = &Implicit<T, TStringBuf>) {
+            return Conv(c, v, pool, conv);
         }
 
         static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, TStringBuf> conv, void* parseParam) {
@@ -207,12 +219,30 @@ namespace {
                 return false;
             }
 
+            return Conv(c, t, pool, conv);
+        }
+
+    private:
+        static bool Conv(TCell& c, const T& t, TMemoryPool& pool, TConverter<T, TStringBuf> conv) {
             const auto u = pool.AppendString(conv(t));
             c = TCell(u.data(), u.size());
 
             return true;
         }
     };
+
+    NJson::TJsonWriterConfig DefaultJsonConfig() {
+        NJson::TJsonWriterConfig jsonConfig;
+        jsonConfig.ValidateUtf8 = false;
+        jsonConfig.WriteNanAsString = true;
+        return jsonConfig;
+    }
+
+    TString WriteJson(const NJson::TJsonValue& json) {
+        TStringStream str;
+        NJson::WriteJson(&str, &json, DefaultJsonConfig());
+        return str.Str();
+    }
 
 } // anonymous
 
@@ -272,6 +302,71 @@ bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPoo
     }
 }
 
+bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo type, TMemoryPool& pool, TString& err) {
+    if (value.IsNull()) {
+        return true;
+    }
+
+    try {
+        switch (type.GetTypeId()) {
+        case NScheme::NTypeIds::Bool:
+            return TCellMaker<bool>::MakeDirect(cell, value.GetBooleanSafe(), pool, err);
+        case NScheme::NTypeIds::Int8:
+            return TCellMaker<i8>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Uint8:
+            return TCellMaker<ui8>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Int16:
+            return TCellMaker<i16>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Uint16:
+            return TCellMaker<ui16>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Int32:
+            return TCellMaker<i32>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Uint32:
+            return TCellMaker<ui32>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Int64:
+            return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Uint64:
+            return TCellMaker<ui64>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::Float:
+            return TCellMaker<float>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+        case NScheme::NTypeIds::Double:
+            return TCellMaker<double>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+        case NScheme::NTypeIds::Date:
+            return TCellMaker<TInstant, ui16>::Make(cell, value.GetStringSafe(), pool, err, &Days);
+        case NScheme::NTypeIds::Datetime:
+            return TCellMaker<TInstant, ui32>::Make(cell, value.GetStringSafe(), pool, err, &Seconds);
+        case NScheme::NTypeIds::Timestamp:
+            return TCellMaker<TInstant, ui64>::Make(cell, value.GetStringSafe(), pool, err, &MicroSeconds);
+        case NScheme::NTypeIds::Interval:
+            return TCellMaker<i64>::MakeDirect(cell, value.GetIntegerSafe(), pool, err);
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return TCellMaker<TString, TStringBuf>::MakeDirect(cell, Base64Decode(value.GetStringSafe()), pool, err);
+        case NScheme::NTypeIds::Utf8:
+            return TCellMaker<TString, TStringBuf>::MakeDirect(cell, value.GetStringSafe(), pool, err);
+        case NScheme::NTypeIds::Yson:
+            return TCellMaker<TString, TStringBuf>::MakeDirect(cell, NJson2Yson::SerializeJsonValueAsYson(value), pool, err);
+        case NScheme::NTypeIds::Json:
+            return TCellMaker<TString, TStringBuf>::MakeDirect(cell, NFormats::WriteJson(value), pool, err);
+        case NScheme::NTypeIds::JsonDocument:
+            if (const auto& result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value))) {
+                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, result, pool, err, &BinaryJsonToStringBuf);
+            } else {
+                return false;
+            }
+        case NScheme::NTypeIds::DyNumber:
+            return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
+        case NScheme::NTypeIds::Decimal:
+            return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+        default:
+            return false;
+        }
+    } catch (const yexception&) {
+        return false;
+    }
+}
+
 bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     if (cell.IsNull()) {
         return true;
@@ -315,47 +410,6 @@ bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type) {
     default:
         return false;
     }
-}
-
-bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, NScheme::TTypeInfo>>& columnOrderTypes, TMemoryPool& pool,
-                         TVector<TCell>& keys, TVector<TCell>& values, TString& strError, ui64& numBytes)
-{
-    for (const auto& [keyOrder, pType] : columnOrderTypes) {
-        TStringBuf value = line.NextTok(',');
-        if (!value) {
-            strError = "Empty token";
-            return false;
-        }
-
-        TCell* cell = nullptr;
-
-        if (keyOrder != -1) {
-            if ((int)keys.size() < (keyOrder + 1)) {
-                keys.resize(keyOrder + 1);
-            }
-
-            cell = &keys.at(keyOrder);
-        } else {
-            cell = &values.emplace_back();
-        }
-
-        Y_ABORT_UNLESS(cell);
-
-        TString parseError;
-        if (!MakeCell(*cell, value, pType, pool, parseError)) {
-            strError = TStringBuilder() << "Value parse error: '" << value << "' " << parseError;
-            return false;
-        }
-
-        if (!CheckCellValue(*cell, pType)) {
-            strError = TStringBuilder() << "Value check error: '" << value << "'";
-            return false;
-        }        
-
-        numBytes += cell->Size();
-    }
-
-    return true;
 }
 
 }

@@ -7,7 +7,7 @@
 #include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/io_formats/csv.h>
+#include <ydb/core/io_formats/arrow/csv_arrow.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>

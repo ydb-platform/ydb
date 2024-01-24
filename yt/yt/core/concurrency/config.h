@@ -2,8 +2,7 @@
 
 #include "public.h"
 
-// TODO(arkady-e1ppa): Move backoff config+serialization into core/misc/config.h.
-#include <yt/yt/core/misc/backoff_strategy_config.h>
+#include <yt/yt/core/misc/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
 

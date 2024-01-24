@@ -6,7 +6,7 @@
 #include <yt/yt/core/actions/callback.h>
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/backoff_strategy_config.h>
+#include <yt/yt/core/misc/config.h>
 
 namespace NYT::NConcurrency {
 

@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/yson/public.h>
@@ -811,9 +812,6 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
 
     return fmt::format("{0}{1:<{2}}", delim, data, column.Width);
 }
-
-// from postgres/src/include/utils/builtins.h
-extern "C" ui64 hex_encode(const char *src, size_t len, char *dst);
 
 TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
     if (column.Type == "bytea") {

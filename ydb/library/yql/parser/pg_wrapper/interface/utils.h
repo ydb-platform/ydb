@@ -15,4 +15,7 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret);
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder();
 bool HasPgKernel(ui32 procOid);
 
+// from postgres/src/include/utils/builtins.h
+extern "C" ui64 hex_encode(const char *src, size_t len, char *dst);
+
 } // NYql

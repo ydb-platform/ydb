@@ -210,17 +210,9 @@ void WarnForUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
 
-void WarnForUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
-
 void AbortOnUnrecognizedOptions(
     const NLogging::TLogger& logger,
     const NYTree::TYsonStructPtr& config);
-
-void AbortOnUnrecognizedOptions(
-    const NLogging::TLogger& logger,
-    const NYTree::TYsonSerializablePtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

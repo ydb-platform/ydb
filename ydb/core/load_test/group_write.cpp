@@ -842,7 +842,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             if (now < NextGarbageCollectionTimestamp && !NextGarbageCollectionInQueue) {
                 using namespace std::placeholders;
-                WakeupQueue.Put(NextGarbageCollectionTimestamp, std::bind(&TTabletWriter::IssueGarbageCollectionIfPossible, this, _1), ctx);
+                Self.WakeupQueue.Put(NextGarbageCollectionTimestamp, std::bind(&TTabletWriter::IssueGarbageCollectionIfPossible, this, _1), ctx);
                 NextGarbageCollectionInQueue = true;
             }
         }

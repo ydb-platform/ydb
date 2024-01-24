@@ -1,9 +1,9 @@
-UNITTEST_FOR(ydb/core/io_formats)
+UNITTEST_FOR(ydb/core/io_formats/arrow)
 
 SIZE(SMALL)
 
 PEERDIR(
-    ydb/core/io_formats
+    ydb/core/io_formats/arrow
 
     # for NYql::NUdf alloc stuff used in binary_json
     ydb/library/yql/public/udf/service/exception_policy
@@ -13,7 +13,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_csv.cpp
+    csv_arrow_ut.cpp
 )
 
 END()

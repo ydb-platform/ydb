@@ -1,7 +1,6 @@
 from typing import List
 
-from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
-from ydb.library.yql.providers.generic.connector.tests.utils.database import Database
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind, EProtocol
 from ydb.library.yql.providers.generic.connector.tests.test_cases.base import BaseTestCase
 
 
@@ -20,9 +19,9 @@ class Factory:
             test_case_name = 'missing_table'
 
             test_case = TestCase(
-                name=test_case_name,
-                database=Database(name=test_case_name, kind=data_source_kind),
+                name_=test_case_name,
                 data_source_kind=data_source_kind,
+                protocol=EProtocol.NATIVE,
                 pragmas=dict(),
             )
 

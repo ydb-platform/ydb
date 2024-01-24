@@ -29,18 +29,42 @@ INSERT INTO FLOAT4_TBL(f1) VALUES ('5 . 0');
 INSERT INTO FLOAT4_TBL(f1) VALUES ('5.   0');
 INSERT INTO FLOAT4_TBL(f1) VALUES ('     - 3.0');
 INSERT INTO FLOAT4_TBL(f1) VALUES ('123            5');
+-- special inputs
+SELECT 'NaN'::float4;
+SELECT 'nan'::float4;
+SELECT '   NAN  '::float4;
+SELECT 'infinity'::float4;
+SELECT '          -INFINiTY   '::float4;
 -- bad special inputs
 SELECT 'N A N'::float4;
 SELECT 'NaN x'::float4;
 SELECT ' INFINITY    x'::float4;
+SELECT 'Infinity'::float4 + 100.0;
+SELECT 'Infinity'::float4 / 'Infinity'::float4;
 SELECT '42'::float4 / 'Infinity'::float4;
+SELECT 'nan'::float4 / 'nan'::float4;
+SELECT 'nan'::float4 / '0'::float4;
+SELECT 'nan'::numeric::float4;
+SELECT * FROM FLOAT4_TBL;
+SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 <> '1004.3';
 SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3';
 SELECT f.* FROM FLOAT4_TBL f WHERE '1004.3' > f.f1;
 SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 < '1004.3';
 SELECT f.* FROM FLOAT4_TBL f WHERE '1004.3' >= f.f1;
 SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3';
+SELECT f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+SELECT f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+SELECT f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+SELECT f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
 -- test divide by zero
 SELECT f.f1 / '0.0' from FLOAT4_TBL f;
+SELECT * FROM FLOAT4_TBL;
+-- test the unary float4abs operator
+SELECT f.f1, @f.f1 AS abs_f1 FROM FLOAT4_TBL f;
 -- test edge-case coercions to integer
 SELECT '32767.4'::float4::int2;
 SELECT '32767.6'::float4::int2;

@@ -498,7 +498,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui32 currIntOffset = NullsBitmapSize * sizeof(ui64) ;
     ui32 currStrOffset = 0;
     ui32 currIOffset = 0;
-    ui32 currIdx = 0;
     std::vector<GraceJoin::TColTypeInterface> ctiv;
 
     bool prevKeyColumn = false;
@@ -527,7 +526,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
             GraceJoin::TColTypeInterface cti{ MakeHashImpl(p.MKQLType), MakeEquateImpl(p.MKQLType), std::make_shared<TValuePacker>(true, p.MKQLType) , HolderFactory  };
             ColumnInterfaces.push_back(cti);
         }
-        currIdx++;
     }
 
     PackedKeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;

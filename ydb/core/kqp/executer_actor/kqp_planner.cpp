@@ -64,7 +64,7 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     bool useDataQueryPool, bool localComputeTasks, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    bool doOptimization, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    bool allowSinglePartitionOpt, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
     : TxId(txId)
     , ExecuterId(executer)
     , Snapshot(snapshot)
@@ -82,7 +82,7 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     , LocalComputeTasks(localComputeTasks)
     , MkqlMemoryLimit(mkqlMemoryLimit)
     , AsyncIoFactory(asyncIoFactory)
-    , DoOptimization(doOptimization)
+    , AllowSinglePartitionOpt(allowSinglePartitionOpt)
     , UserRequestContext(userRequestContext)
 {
     if (!Database) {
@@ -410,7 +410,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         ComputeTasks.clear();
     }
     
-    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization && LocalComputeTasks) {
+    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && AllowSinglePartitionOpt) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for (auto& [shardId, tasks]: TasksPerNode) {

@@ -48,6 +48,10 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     out << "debug";
 #endif
 
+#if defined(TSTRING_IS_STD_STRING)
+    out << "-std-string";
+#endif
+
 #if defined(_asan_enabled_)
     out << "-asan";
 #endif

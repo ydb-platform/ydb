@@ -165,15 +165,21 @@ static_assert(sizeof(TMkqlPAllocHeader) ==
 class TScopedAlloc {
 public:
     explicit TScopedAlloc(const TSourceLocation& location,
-            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false)
-        : MyState_(location, counters, supportsSizedAllocators)
+            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false, bool initiallyAcquired = true)
+        : InitiallyAcquired_(initiallyAcquired)
+        , MyState_(location, counters, supportsSizedAllocators)
     {
         MyState_.MainContext = PgInitializeMainContext();
-        Acquire();
+        if (InitiallyAcquired_) {
+            Acquire();
+        }
     }
 
     ~TScopedAlloc()
     {
+        if (!InitiallyAcquired_) {
+            Acquire();
+        }
         MyState_.KillAllBoxed();
         Release();
         PgDestroyMainContext(MyState_.MainContext);
@@ -201,6 +207,7 @@ public:
     bool IsAttached() const { return AttachedCount_ > 0; }
 
 private:
+    const bool InitiallyAcquired_;
     TAllocState MyState_;
     size_t AttachedCount_ = 0;
     TAllocState* PrevState_ = nullptr;

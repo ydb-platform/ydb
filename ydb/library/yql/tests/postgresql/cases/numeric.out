@@ -804,6 +804,24 @@ SELECT '-Infinity'::float8::numeric;
  -Infinity
 (1 row)
 
+SELECT 'NaN'::numeric::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT 'Infinity'::numeric::float8;
+  float8  
+----------
+ Infinity
+(1 row)
+
+SELECT '-Infinity'::numeric::float8;
+  float8   
+-----------
+ -Infinity
+(1 row)
+
 SELECT 'NaN'::float4::numeric;
  numeric 
 ---------
@@ -818,6 +836,24 @@ SELECT 'Infinity'::float4::numeric;
 
 SELECT '-Infinity'::float4::numeric;
   numeric  
+-----------
+ -Infinity
+(1 row)
+
+SELECT 'NaN'::numeric::float4;
+ float4 
+--------
+    NaN
+(1 row)
+
+SELECT 'Infinity'::numeric::float4;
+  float4  
+----------
+ Infinity
+(1 row)
+
+SELECT '-Infinity'::numeric::float4;
+  float4   
 -----------
  -Infinity
 (1 row)

@@ -17,6 +17,7 @@
 #include "internal_commands.h"
 #include "proxy_discovery_cache.h"
 #include "query_commands.h"
+#include "flow_commands.h"
 
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
@@ -360,6 +361,10 @@ public:
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false,  false);
         REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       false,  false);
+
+        REGISTER_ALL(TStartPipelineCommand,                "start_pipeline",                  Null,       Structured, false,  false);
+        REGISTER_ALL(TStopPipelineCommand,                 "stop_pipeline",                   Null,       Structured, false,  false);
+        REGISTER_ALL(TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, false,  false);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false,  true );

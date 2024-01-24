@@ -57,6 +57,37 @@ INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
 ERROR:  invalid input syntax for type double precision: "123           5"
 LINE 1: INSERT INTO FLOAT8_TBL(f1) VALUES ('123           5');
                                            ^
+-- special inputs
+SELECT 'NaN'::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT 'nan'::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT '   NAN  '::float8;
+ float8 
+--------
+    NaN
+(1 row)
+
+SELECT 'infinity'::float8;
+  float8  
+----------
+ Infinity
+(1 row)
+
+SELECT '          -INFINiTY   '::float8;
+  float8   
+-----------
+ -Infinity
+(1 row)
+
 -- bad special inputs
 SELECT 'N A N'::float8;
 ERROR:  invalid input syntax for type double precision: "N A N"
@@ -70,10 +101,40 @@ SELECT ' INFINITY    x'::float8;
 ERROR:  invalid input syntax for type double precision: " INFINITY    x"
 LINE 1: SELECT ' INFINITY    x'::float8;
                ^
+SELECT 'Infinity'::float8 + 100.0;
+ ?column? 
+----------
+ Infinity
+(1 row)
+
+SELECT 'Infinity'::float8 / 'Infinity'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
 SELECT '42'::float8 / 'Infinity'::float8;
  ?column? 
 ----------
         0
+(1 row)
+
+SELECT 'nan'::float8 / 'nan'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::float8 / '0'::float8;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::numeric::float8;
+ float8 
+--------
+    NaN
 (1 row)
 
 SELECT * FROM FLOAT8_TBL;
@@ -240,6 +301,30 @@ SELECT power(float8 '144', float8 '0.5');
     12
 (1 row)
 
+SELECT power(float8 'NaN', float8 '0.5');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 '144', float8 'NaN');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 'NaN', float8 'NaN');
+ power 
+-------
+   NaN
+(1 row)
+
+SELECT power(float8 '-1', float8 'NaN');
+ power 
+-------
+   NaN
+(1 row)
+
 SELECT power(float8 '1', float8 'NaN');
  power 
 -------
@@ -308,6 +393,30 @@ SELECT power(float8 '-0.1', float8 'inf');
      0
 (1 row)
 
+SELECT power(float8 '1.1', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-1.1', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '0.1', float8 '-inf');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-0.1', float8 '-inf');
+  power   
+----------
+ Infinity
+(1 row)
+
 SELECT power(float8 '1.1', float8 '-inf');
  power 
 -------
@@ -324,6 +433,18 @@ SELECT power(float8 'inf', float8 '-2');
  power 
 -------
      0
+(1 row)
+
+SELECT power(float8 'inf', float8 '2');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 'inf', float8 'inf');
+  power   
+----------
+ Infinity
 (1 row)
 
 SELECT power(float8 'inf', float8 '-inf');
@@ -346,12 +467,37 @@ SELECT power(float8 '-inf', float8 '-3');
     -0
 (1 row)
 
+SELECT power(float8 '-inf', float8 '2');
+  power   
+----------
+ Infinity
+(1 row)
+
+SELECT power(float8 '-inf', float8 '3');
+   power   
+-----------
+ -Infinity
+(1 row)
+
 SELECT power(float8 '-inf', float8 '3.5');
 ERROR:  a negative number raised to a non-integer power yields a complex result
+SELECT power(float8 '-inf', float8 'inf');
+  power   
+----------
+ Infinity
+(1 row)
+
 SELECT power(float8 '-inf', float8 '-inf');
  power 
 -------
      0
+(1 row)
+
+-- check edge cases for exp
+SELECT exp('inf'::float8), exp('-inf'::float8), exp('nan'::float8);
+   exp    | exp | exp 
+----------+-----+-----
+ Infinity |   0 | NaN
 (1 row)
 
 SELECT * FROM FLOAT8_TBL;
@@ -386,6 +532,43 @@ SELECT asinh(float8 '1');
  0.881373587019543
 (1 row)
 
+-- test Inf/NaN cases for hyperbolic functions
+SELECT sinh(float8 'infinity');
+   sinh   
+----------
+ Infinity
+(1 row)
+
+SELECT sinh(float8 '-infinity');
+   sinh    
+-----------
+ -Infinity
+(1 row)
+
+SELECT sinh(float8 'nan');
+ sinh 
+------
+  NaN
+(1 row)
+
+SELECT cosh(float8 'infinity');
+   cosh   
+----------
+ Infinity
+(1 row)
+
+SELECT cosh(float8 '-infinity');
+   cosh   
+----------
+ Infinity
+(1 row)
+
+SELECT cosh(float8 'nan');
+ cosh 
+------
+  NaN
+(1 row)
+
 SELECT tanh(float8 'infinity');
  tanh 
 ------
@@ -398,14 +581,50 @@ SELECT tanh(float8 '-infinity');
    -1
 (1 row)
 
+SELECT tanh(float8 'nan');
+ tanh 
+------
+  NaN
+(1 row)
+
+SELECT asinh(float8 'infinity');
+  asinh   
+----------
+ Infinity
+(1 row)
+
+SELECT asinh(float8 '-infinity');
+   asinh   
+-----------
+ -Infinity
+(1 row)
+
+SELECT asinh(float8 'nan');
+ asinh 
+-------
+   NaN
+(1 row)
+
 -- acosh(Inf) should be Inf, but some mingw versions produce NaN, so skip test
 -- SELECT acosh(float8 'infinity');
 SELECT acosh(float8 '-infinity');
 ERROR:  input is out of range
+SELECT acosh(float8 'nan');
+ acosh 
+-------
+   NaN
+(1 row)
+
 SELECT atanh(float8 'infinity');
 ERROR:  input is out of range
 SELECT atanh(float8 '-infinity');
 ERROR:  input is out of range
+SELECT atanh(float8 'nan');
+ atanh 
+-------
+   NaN
+(1 row)
+
 RESET extra_float_digits;
 -- test for over- and underflow
 INSERT INTO FLOAT8_TBL(f1) VALUES ('10e400');

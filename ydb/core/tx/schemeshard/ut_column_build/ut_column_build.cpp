@@ -12,7 +12,7 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
     Y_UNIT_TEST(AlreadyExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
     Y_UNIT_TEST(InvalidValue) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
     Y_UNIT_TEST(BuildColumnDoesnotRestoreDeletedRows) {
         TTestBasicRuntime runtime(1, false);
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
     Y_UNIT_TEST(BaseCase) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
 
     Y_UNIT_TEST(CancelBuild) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
 
         // Just create main table

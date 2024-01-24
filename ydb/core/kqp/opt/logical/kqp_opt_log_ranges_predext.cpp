@@ -57,6 +57,8 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
         case EKikimrTableKind::External:
         case EKikimrTableKind::Unspecified:
             return {};
+        case EKikimrTableKind::View:
+            YQL_ENSURE(false, "All views should have been rewritten at this stage.");
     }
 
     auto row = flatmap.Lambda().Args().Arg(0);

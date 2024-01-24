@@ -20,7 +20,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
         ReadSession = ev->Get()->Result;
 
-        Y_ABORT_UNLESS(!Worker);
+        Y_ABORT_UNLESS(Worker);
         Send(Worker, new TEvWorker::TEvHandshake());
     }
 

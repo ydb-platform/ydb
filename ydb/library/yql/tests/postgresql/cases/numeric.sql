@@ -607,9 +607,15 @@ SELECT 32767.5::int2; -- should fail
 SELECT 'NaN'::float8::numeric;
 SELECT 'Infinity'::float8::numeric;
 SELECT '-Infinity'::float8::numeric;
+SELECT 'NaN'::numeric::float8;
+SELECT 'Infinity'::numeric::float8;
+SELECT '-Infinity'::numeric::float8;
 SELECT 'NaN'::float4::numeric;
 SELECT 'Infinity'::float4::numeric;
 SELECT '-Infinity'::float4::numeric;
+SELECT 'NaN'::numeric::float4;
+SELECT 'Infinity'::numeric::float4;
+SELECT '-Infinity'::numeric::float4;
 SELECT '42'::int2::numeric;
 SELECT 'NaN'::numeric::int2;
 SELECT 'Infinity'::numeric::int2;

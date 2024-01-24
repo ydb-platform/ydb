@@ -465,7 +465,7 @@ private:
 
     template <typename TTokenRecord>
     bool CanInitBuiltinToken(const TString& key, TTokenRecord& record) {
-        if (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin) {
+        if (Config.GetUseBuiltinDomain() && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Builtin)) {
             if(record.Ticket.EndsWith("@" BUILTIN_ACL_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
                 SetToken(key, record, new NACLib::TUserToken({

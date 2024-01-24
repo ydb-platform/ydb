@@ -1178,7 +1178,7 @@ public:
             return {{true, {JoinPath({path.first, path.second}), {path.second, path.first, userToken}}}};
         }
 
-        auto it = TempTablesState.FindInfo(JoinPath({path.first, path.second}));
+        auto it = TempTablesState.FindInfo(JoinPath({path.first, path.second}), true);
         if (it == TempTablesState.TempTables.end()) {
             return std::nullopt;
         }

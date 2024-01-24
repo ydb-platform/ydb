@@ -121,11 +121,13 @@ struct TKikimrData {
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
 {
-    auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
-
     auto tablePath = table;
-    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        tablePath = tempTableInfoIt->first;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
@@ -141,11 +143,13 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
-    auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
-
     auto tablePath = table;
-    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        tablePath = tempTableInfoIt->first;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     if (!Tables.FindPtr(std::make_pair(cluster, tablePath))) {
@@ -165,11 +169,13 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
-    auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
-
     auto tablePath = table;
-    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        tablePath = tempTableInfoIt->first;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
@@ -181,11 +187,13 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
     const TStringBuf& table) const
 {
-    auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
-
     auto tablePath = table;
-    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        tablePath = tempTableInfoIt->first;
+    if (TempTablesState) {
+        auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
+
+        if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+            tablePath = tempTableInfoIt->first;
+        }
     }
 
     auto desc = Tables.FindPtr(std::make_pair(TString(cluster), TString(tablePath)));

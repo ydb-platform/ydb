@@ -336,10 +336,12 @@ public:
             auto newOp = TYdbOperation(op.GetOperation());
             TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
 
-            auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+            if (TempTablesState) {
+                auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
-            if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                table = tempTableInfoIt->first + TempTablesState->SessionId;
+                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+                    table = tempTableInfoIt->first + TempTablesState->SessionId;
+                }
             }
 
             const auto info = tableInfoMap.FindPtr(table);

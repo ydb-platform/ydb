@@ -493,7 +493,7 @@ struct TEvPQ {
     };
 
     struct TEvChangeOwner : public TEventLocal<TEvChangeOwner, EvChangeOwner> {
-        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force, const bool registerIfNotExists)
+        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force, const bool registerIfNotExists = true)
         : Cookie(cookie)
         , Owner(owner)
         , PipeClient(pipeClient)

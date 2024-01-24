@@ -48,47 +48,52 @@ public:
             return;
         }
         const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
-
         const TUserTable& TableInfo_ = *self->GetUserTables().at(tableId);
         Y_ABORT_UNLESS(TableInfo_.LocalTid == localTableId);
         Y_ABORT_UNLESS(TableInfo_.ShadowTid == shadowTableId);
+
+        const NTable::TScheme& scheme = txc.DB.GetScheme();
+        const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
 
         auto [readVersion, writeVersion] = self->GetReadWriteVersions(writeOp);
         writeTx->SetReadVersion(readVersion);
         writeTx->SetWriteVersion(writeVersion);
 
-        TDataShardUserDb userDb(*self, txc.DB, readVersion);
-        TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
-
-        TVector<TCell> keyCells;
-        TVector<NMiniKQL::IEngineFlatHost::TUpdateCommand> commands;
+        TSmallVec<TRawTypeValue> key;
+        TSmallVec<NTable::TUpdateOp> ops;
 
         const TSerializedCellMatrix& matrix = writeTx->GetMatrix();
 
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
-            keyCells.clear();
-            keyCells.reserve(TableInfo_.KeyColumnIds.size());
+            key.clear();
+            key.reserve(TableInfo_.KeyColumnIds.size());
             for (ui16 keyColIdx = 0; keyColIdx < TableInfo_.KeyColumnIds.size(); ++keyColIdx) {
                 const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
-                keyCells.emplace_back(cell);
+                ui32 keyCol = tableInfo->KeyColumns[keyColIdx];
+                if (cell.IsNull()) {
+                    key.emplace_back();
+                } else {
+                    NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, keyCol)->PType;
+                    key.emplace_back(cell.Data(), cell.Size(), vtypeInfo);
+                }
             }
 
-            commands.clear();
+            ops.clear();
             Y_ABORT_UNLESS(matrix.GetColCount() >= TableInfo_.KeyColumnIds.size());
-            commands.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
+            ops.reserve(matrix.GetColCount() - TableInfo_.KeyColumnIds.size());
 
             for (ui16 valueColIdx = TableInfo_.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
                 ui32 columnTag = writeTx->RecordOperation().GetColumnIds(valueColIdx);
                 const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
 
-                NMiniKQL::IEngineFlatHost::TUpdateCommand command = {columnTag, TKeyDesc::EColumnOperation::Set, {}, cell};
-                commands.emplace_back(std::move(command));
+                NScheme::TTypeInfo vtypeInfo = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeInfo));
             }
 
-            writeTx->GetEngineHost()->UpdateRow(fullTableId, keyCells, commands);
+            writeTx->GetUserDb().UpdateRow(fullTableId, key, ops);
         }
-        
+
         self->IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
         self->IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 

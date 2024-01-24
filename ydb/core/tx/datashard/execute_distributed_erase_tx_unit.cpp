@@ -45,7 +45,7 @@ public:
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
 
         if (eraseTx->HasDependents()) {
-            TDataShardUserDb userDb(DataShard, txc.DB, readVersion);
+            TDataShardUserDb userDb(DataShard, txc.DB, op->GetStepOrder(), readVersion, writeVersion, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
@@ -191,7 +191,7 @@ public:
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
-                    userDb->AddCommitTxId(globalTxId, writeVersion);
+                    userDb->AddCommitTxId(fullTableId, globalTxId, writeVersion);
                     commitAdded = true;
                 }
             } else {

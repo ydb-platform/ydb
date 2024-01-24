@@ -1,5 +1,6 @@
 #include "datashard_kqp_compute.h"
 #include "range_ops.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
@@ -86,6 +87,13 @@ TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* compute
         };
 }
 
+TKqpDatashardComputeContext::TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHost& engineHost, NDataShard::TDataShardUserDb& userDb)
+    : Shard(shard)
+    , EngineHost(engineHost)
+    , UserDb(userDb)
+{
+}
+
 ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId &tableId) const {
     MKQL_ENSURE_S(Shard);
     return Shard->GetLocalTableId(tableId);
@@ -138,38 +146,38 @@ const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTable
 }
 
 void TKqpDatashardComputeContext::TouchTableRange(const TTableId& tableId, const TTableRange& range) const {
-    if (LockTxId) {
+    if (UserDb.GetLockTxId()) {
         Shard->SysLocksTable().SetLock(tableId, range);
     }
-    Shard->SetTableAccessTime(tableId, Now);
+    Shard->SetTableAccessTime(tableId, UserDb.GetNow());
 }
 
 void TKqpDatashardComputeContext::TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const {
-    if (LockTxId) {
+    if (UserDb.GetLockTxId()) {
         Shard->SysLocksTable().SetLock(tableId, key);
     }
-    Shard->SetTableAccessTime(tableId, Now);
+    Shard->SetTableAccessTime(tableId, UserDb.GetNow());
 }
 
 void TKqpDatashardComputeContext::BreakSetLocks() const {
-    if (LockTxId) {
+    if (UserDb.GetLockTxId()) {
         Shard->SysLocksTable().BreakSetLocks();
     }
 }
 
 void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
-    LockTxId = lockTxId;
-    LockNodeId = lockNodeId;
+    UserDb.SetLockTxId(lockTxId);
+    UserDb.SetLockNodeId(lockNodeId);
 }
 
 void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
-    ReadVersion = readVersion;
+    UserDb.SetReadVersion(readVersion);
 }
 
 TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
-    Y_ABORT_UNLESS(!ReadVersion.IsMin(), "Cannot perform reads without ReadVersion set");
+    Y_ABORT_UNLESS(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
 
-    return ReadVersion;
+    return UserDb.GetReadVersion();
 }
 
 void TKqpDatashardComputeContext::SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId) {
@@ -186,8 +194,7 @@ TActorId TKqpDatashardComputeContext::GetTaskOutputChannel(ui64 taskId, ui64 cha
 
 void TKqpDatashardComputeContext::Clear() {
     Database = nullptr;
-    LockTxId = 0;
-    LockNodeId = 0;
+    SetLockTxId(0, 0);
 }
 
 bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount) {
@@ -615,6 +622,13 @@ bool TKqpDatashardComputeContext::ReadRowWide(const TTableId& tableId, NTable::T
     NUdf::TUnboxedValue* const* result, TKqpTableStats& stats)
 {
     return ReadRowWideImpl(tableId, iterator, systemColumnTags, skipNullKeys, result, stats);
+}
+
+bool TKqpDatashardComputeContext::HasVolatileReadDependencies() const {
+    return !UserDb.GetVolatileReadDependencies().empty();
+}
+const absl::flat_hash_set<ui64>& TKqpDatashardComputeContext::GetVolatileReadDependencies() const {
+    return UserDb.GetVolatileReadDependencies();
 }
 
 } // namespace NMiniKQL

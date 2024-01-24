@@ -362,7 +362,7 @@ template <bool Read>
 void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind,
     const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     if (Read) {
         Y_ABORT_UNLESS(readMeta);
@@ -387,10 +387,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
                 if constexpr (Read) {
-                    engineBay.GetKeyValidator().AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(),
                         tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.GetKeyValidator().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                    keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                         GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
@@ -405,9 +405,9 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                     << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
 
                 if constexpr (Read) {
-                    engineBay.GetKeyValidator().AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
                 } else {
-                    engineBay.GetKeyValidator().AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                    keyValidator.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
                 }
             }
 
@@ -424,10 +424,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
             if constexpr (Read) {
-                engineBay.GetKeyValidator().AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
+                keyValidator.AddReadRange(tableId,  GetColumns(*readMeta), tableRange.ToTableRange(),
                     tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.GetKeyValidator().AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
+                keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
@@ -440,10 +440,10 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
 
             if constexpr (Read) {
-                engineBay.GetKeyValidator().AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
+                keyValidator.AddReadRange(tableId,  GetColumns(*readMeta), tableInfo->Range.ToTableRange(),
                     tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
             } else {
-                engineBay.GetKeyValidator().AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
+                keyValidator.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes,
                     GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
             }
 
@@ -456,7 +456,7 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
 
 void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
     const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta& meta, const NScheme::TTypeRegistry& typeRegistry,
-    const TActorContext& ctx, TEngineBay& engineBay)
+    const TActorContext& ctx, TKeyValidator& keyValidator)
 {
     auto& tableMeta = meta.GetTable();
     auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(),
@@ -464,16 +464,16 @@ void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
 
     for (auto& read : meta.GetReads()) {
         KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr,
-            typeRegistry, ctx, engineBay);
+            typeRegistry, ctx, keyValidator);
     }
 
     if (meta.HasWrites()) {
         KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr,
-            &meta.GetWrites(), typeRegistry, ctx, engineBay);
+            &meta.GetWrites(), typeRegistry, ctx, keyValidator);
     }
 }
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TEngineBay& engineBay) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -491,10 +491,10 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
         if (sysLocks.IsMyKey(lockKey)) {
             auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
             if (NeedValidateLocks(locks.GetOp())) {
-                engineBay.GetKeyValidator().AddReadRange(sysLocksTableId, {}, point, lockRowType);
+                keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
             }
             if (NeedEraseLocks(locks.GetOp())) {
-                engineBay.GetKeyValidator().AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+                keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
             }
         }
     }

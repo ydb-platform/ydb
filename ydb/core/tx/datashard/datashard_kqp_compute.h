@@ -10,6 +10,7 @@ namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
         class TDataShard;
+        class TDataShardUserDb;
     }
 }
 
@@ -22,10 +23,7 @@ using TKqpTableStats = TEngineHostCounters;
 
 class TKqpDatashardComputeContext : public TKqpComputeContextBase {
 public:
-    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHost& engineHost, TInstant now)
-        : Shard(shard)
-        , EngineHost(engineHost)
-        , Now(now) {}
+    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHost& engineHost, NDataShard::TDataShardUserDb& userDb);
 
     ui64 GetLocalTableId(const TTableId& tableId) const;
     TString GetTablePath(const TTableId& tableId) const;
@@ -86,10 +84,8 @@ public:
     bool HadInconsistentReads() const { return InconsistentReads; }
     void SetInconsistentReads() { InconsistentReads = true; }
 
-    bool HasVolatileReadDependencies() const { return !VolatileReadDependencies.empty(); }
-    const absl::flat_hash_set<ui64>& GetVolatileReadDependencies() const { return VolatileReadDependencies; }
-    void AddVolatileReadDependency(ui64 txId) { VolatileReadDependencies.insert(txId); }
-
+    bool HasVolatileReadDependencies() const;
+    const absl::flat_hash_set<ui64>& GetVolatileReadDependencies() const;
 private:
     void TouchTableRange(const TTableId& tableId, const TTableRange& range) const;
     void TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
@@ -113,15 +109,11 @@ private:
     NDataShard::TDataShard* Shard;
     std::unordered_map<ui64, TEngineHostCounters> TaskCounters;
     TEngineHost& EngineHost;
-    TInstant Now;
-    ui64 LockTxId = 0;
-    ui32 LockNodeId = 0;
+    NDataShard::TDataShardUserDb& UserDb;
     bool PersistentChannels = false;
     bool TabletNotReady = false;
     bool InconsistentReads = false;
-    TRowVersion ReadVersion = TRowVersion::Min();
     THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
-    absl::flat_hash_set<ui64> VolatileReadDependencies;
 };
 
 class TKqpDatashardApplyContext : public NUdf::IApplyContext {

@@ -24,15 +24,25 @@ public:
             TArrayRef<const NTable::TTag> tags,
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) = 0;
+
+    virtual void UpdateRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
 };
 
-class TDataShardUserDb final : public IDataShardUserDb {
+class TDataShardUserDb final
+    : public IDataShardUserDb
+    , public IDataShardChangeGroupProvider {
 public:
-    TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TRowVersion& readVersion)
-        : Self(self)
-        , Db(db)
-        , ReadVersion(readVersion)
-    { }
+    TDataShardUserDb(
+            TDataShard& self,
+            NTable::TDatabase& db,
+            const TStepOrder& stepTxId,
+            const TRowVersion& readVersion,
+            const TRowVersion& writeVersion,
+            TInstant now
+    );
 
     NTable::EReady SelectRow(
             const TTableId& tableId,
@@ -49,26 +59,76 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) override;
 
-    void AddCommitTxId(ui64 txId, const TRowVersion& commitVersion);
+    void UpdateRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+
+public:
+    IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId);
+    TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
+    void ResetCollectedChanges();
+
+private:
+    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
+
+public:
+    std::optional<ui64> GetCurrentChangeGroup() const override;
+    ui64 GetChangeGroup() override;
+
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
+public:
+    void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
+    ui64 GetWriteTxId(const TTableId& tableId);
 
     absl::flat_hash_set<ui64>& GetVolatileReadDependencies() {
         return VolatileReadDependencies;
     }
 
-private:
-    class TReadTxObserver;
-    NTable::ITransactionMapPtr& GetReadTxMap();
-    NTable::ITransactionObserverPtr& GetReadTxObserver();
+    TVector<ui64> GetVolatileCommitTxIds() const;
+
+    NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId);
+    NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId);
+    void AddReadConflict(ui64 txId) const;
+    void CheckReadConflict(const TRowVersion& rowVersion) const;
     void CheckReadDependency(ui64 txId);
+    bool NeedToReadBeforeWrite(const TTableId& tableId);
+
+    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells);
+    void AddWriteConflict(ui64 txId) const;
+    void BreakWriteConflict(ui64 txId);
+
+private:
+    static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
+
+    void UpdateRowInt(const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;
-    TRowVersion ReadVersion;
-    NTable::ITransactionMapPtr TxMap;
-    TIntrusivePtr<NTable::TDynamicTransactionMap> DynamicTxMap;
-    NTable::ITransactionObserverPtr TxObserver;
-    absl::flat_hash_set<ui64> VolatileReadDependencies;
+
+    TDataShardChangeGroupProvider ChangeGroupProvider;
+    
+    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
+    YDB_ACCESSOR_DEF(ui64, LockTxId);
+    YDB_ACCESSOR_DEF(ui32, LockNodeId);
+    YDB_ACCESSOR_DEF(ui64, VolatileTxId);
+    YDB_ACCESSOR_DEF(bool, IsImmediateTx);
+    YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
+
+    YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);
+    YDB_ACCESSOR_DEF(TRowVersion, WriteVersion);
+
+    YDB_READONLY_DEF(TInstant, Now);
+
+    YDB_READONLY_DEF(absl::flat_hash_set<ui64>, VolatileReadDependencies);
+    absl::flat_hash_set<ui64> CommittedLockChanges;
+    absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
+    absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
+
+    absl::flat_hash_set<ui64> VolatileCommitTxIds;
+    YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
+    YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
 };
 
 } // namespace NKikimr::NDataShard

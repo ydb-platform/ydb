@@ -82,6 +82,9 @@ public:
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TMonotonic, TVSlotInfo*>>;
 
+    // VDisk will be considered READY during this period after reporting its READY state
+    static constexpr TDuration ReadyStablePeriod = TDuration::Seconds(15);
+
     class TVSlotInfo : public TIndirectReferable<TVSlotInfo> {
     public:
         using Table = Schema::VSlot;
@@ -120,9 +123,6 @@ public:
     private:
         TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
-
-        // VDisk will be considered READY during this period after reporting its READY state
-        static constexpr TDuration ReadyStablePeriod = TDuration::Seconds(15);
 
     public:
         NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
@@ -2237,6 +2237,7 @@ public:
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
         NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
@@ -2306,6 +2307,9 @@ public:
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
+
+    static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
+        const TBlobStorageGroupInfo::TGroupVDisks& failed);
 };
 
 } //NBsController

@@ -57,6 +57,8 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
         case EKikimrTableKind::External:
         case EKikimrTableKind::Unspecified:
             return {};
+        case EKikimrTableKind::View:
+            YQL_ENSURE(false, "All views should have been rewritten at this stage.");
     }
 
     auto row = flatmap.Lambda().Args().Arg(0);
@@ -179,11 +181,11 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
-    if (!node.Maybe<TCoFlatMap>()) {
+    if (!node.Maybe<TCoFlatMapBase>()) {
         return node;
     }
 
-    auto flatmap = node.Cast<TCoFlatMap>();
+    auto flatmap = node.Cast<TCoFlatMapBase>();
 
     if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
         return node;
@@ -250,6 +252,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                 kqpCtx.Cluster,
                 mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name)
             : mainTableDesc;
+        YQL_ENSURE(node.Maybe<TCoFlatMap>(), "got OrderedFlatMap with disabled PredicateExtract20");
+        auto flatmap = node.Cast<TCoFlatMap>();
         if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx, indexName)) {
             return expr.Cast();
         }
@@ -374,34 +378,41 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     {
             auto buildLookup = [&] (TExprNode::TPtr keys, TMaybe<TExprBase>& result) {
                 if (indexName) {
-                    if (kqpCtx.IsDataQuery()) {
+                    if (kqpCtx.IsScanQuery()) {
+                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
+                            result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
+                                .Table(read.Table())
+                                .Columns(read.Columns())
+                                .LookupKeys(keys)
+                                .Index(indexName.Cast())
+                                .LookupKeys(keys)
+                                .Done();
+                        }
+                    } else {
                         result = Build<TKqlLookupIndex>(ctx, node.Pos())
                             .Table(read.Table())
                             .Columns(read.Columns())
                             .LookupKeys(keys)
                             .Index(indexName.Cast())
                             .Done();
-                    } else if (kqpCtx.IsScanQuery() && kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                        result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
+                    }
+                } else {
+                    if (kqpCtx.IsScanQuery()) {
+                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
+                            result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                                .Table(read.Table())
+                                .Columns(read.Columns())
+                                .LookupKeys(keys)
+                                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
+                                .Done();
+                        }
+                    } else {
+                        result = Build<TKqlLookupTable>(ctx, node.Pos())
                             .Table(read.Table())
                             .Columns(read.Columns())
                             .LookupKeys(keys)
-                            .Index(indexName.Cast())
-                            .LookupKeys(keys)
                             .Done();
                     }
-                } else if (kqpCtx.IsDataQuery()) {
-                    result = Build<TKqlLookupTable>(ctx, node.Pos())
-                        .Table(read.Table())
-                        .Columns(read.Columns())
-                        .LookupKeys(keys)
-                        .Done();
-                } else if (kqpCtx.IsScanQuery() && kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                    result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                        .Table(read.Table())
-                        .Columns(read.Columns())
-                        .LookupKeys(keys)
-                        .Done();
                 }
             };
 
@@ -492,10 +503,17 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
     *input = readMatch->BuildProcessNodes(*input, ctx);
 
-    return Build<TCoFlatMap>(ctx, node.Pos())
-        .Input(*input)
-        .Lambda(residualLambda)
-        .Done();
+    if (node.Maybe<TCoFlatMap>()) {
+        return Build<TCoFlatMap>(ctx, node.Pos())
+            .Input(*input)
+            .Lambda(residualLambda)
+            .Done();
+    } else {
+        return Build<TCoOrderedFlatMap>(ctx, node.Pos())
+            .Input(*input)
+            .Lambda(residualLambda)
+            .Done();    
+    }
 }
 
 } // namespace NKikimr::NKqp::NOpt

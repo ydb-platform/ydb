@@ -229,7 +229,7 @@ void TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSc
 }
 
 NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
-        const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
+        const ui32 /*nodeId*/, const NMetadata::IClassBehaviour::TPtr& /*manager*/, const IOperationsManager::TExternalModificationContext& context) const {
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
     auto ev = MakeHolder<TRequest>();

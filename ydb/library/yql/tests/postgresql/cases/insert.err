@@ -61,23 +61,15 @@ insert into inserttest (col1, col2, col3) values (DEFAULT, DEFAULT);
 <sql-statement>
 insert into inserttest (col1, col2, col3) values (1, 2);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
-    	insert into inserttest (col1, col2, col3) values (1, 2);
-	^
-        -stdin-:<main>:1:1: Error: values and target_columns sizes do not match
-        	insert into inserttest (col1, col2, col3) values (1, 2);
-	^
 <sql-statement>
 insert into inserttest (col1) values (1, 2);
 </sql-statement>
 -stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
     	insert into inserttest (col1) values (1, 2);
 	^
-        -stdin-:<main>:1:1: Error: values and target_columns sizes do not match
+        -stdin-:<main>:1:1: Error: values have 2 columns, INSERT INTO expects: 1
         	insert into inserttest (col1) values (1, 2);
 	^
 <sql-statement>
@@ -1185,12 +1177,7 @@ from hash_parted order by part;
 -- partitions
 \d+ list_parted
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:3:1: Error: ERROR:  syntax error at or near "\"
-
-    	\d+ list_parted
-	^
+Metacommand \d+ list_parted is not supported
 <sql-statement>
 -- cleanup
 drop table range_parted, list_parted;
@@ -2505,12 +2492,7 @@ copy donothingbrtrig_test from stdout;
 2	qux
 \.
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:2:1: Error: ERROR:  syntax error at or near "1"
-
-    	1	baz
-	^
+Metacommand \. is not supported
 <sql-statement>
 select tableoid::regclass, * from donothingbrtrig_test;
 </sql-statement>

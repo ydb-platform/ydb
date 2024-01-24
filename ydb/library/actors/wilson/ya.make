@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/opentelemetry-proto
     ydb/library/actors/core
     ydb/library/actors/protos
     ydb/library/actors/wilson/protos
@@ -22,4 +23,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    test_util
 )

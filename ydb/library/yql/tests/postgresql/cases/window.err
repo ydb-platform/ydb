@@ -25,25 +25,9 @@ INSERT INTO empsalary VALUES
 <sql-statement>
 SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: Sort, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
-    	SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
-        	SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM empsalary ORDER BY depname, salary;
-	^
 <sql-statement>
 SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
-    	SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
-        	SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
-	^
 <sql-statement>
 -- with GROUP BY
 SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
@@ -56,14 +40,6 @@ GROUP BY four, ten ORDER BY four, ten;
 <sql-statement>
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
-    	SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
-        	SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
-	^
 <sql-statement>
 SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
 </sql-statement>
@@ -301,14 +277,6 @@ SELECT sum(salary),
 	sum(sum(salary)) OVER (ORDER BY depname DESC)
 FROM empsalary GROUP BY depname;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow, At function: CalcOverWindow, At function: UnionAll, At function: Aggregate
-    	-- more than one window with GROUP BY
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _alias_empsalary.depname, but got: pgvarchar
-        	-- more than one window with GROUP BY
-	^
 <sql-statement>
 -- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
@@ -335,14 +303,6 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- mixture of agg/wfunc in the same window
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow
-    	-- mixture of agg/wfunc in the same window
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
-        	-- mixture of agg/wfunc in the same window
-	^
 <sql-statement>
 -- strict aggs
 SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
@@ -2919,14 +2879,6 @@ SELECT * FROM
    FROM empsalary) emp
 WHERE first_emp = 1 OR last_emp = 1;
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: CalcOverWindow, At function: OrderedMap, At function: CalcOverWindow
-    	SELECT * FROM
-	^
-        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: _yql_partition_key_0_0, but got: pgvarchar
-        	SELECT * FROM
-	^
 <sql-statement>
 -- cleanup
 DROP TABLE empsalary;
@@ -3294,72 +3246,49 @@ SELECT i,AVG(v::bigint) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED 
 SELECT i,AVG(v::int) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 </sql-statement>
-VERIFY failed (2023-12-12T19:41:50.094283+0300): Value is not boxed
+VERIFY failed (2024-01-19T19:50:47.838646+0300): Value is not boxed
   ydb/library/yql/public/udf/udf_value_inl.h:379
   AsBoxed(): requirement IsBoxed() failed
-BackTrace(void**, unsigned long)+29 (0x14087F6D)
-FormatBackTrace(IOutputStream*)+32 (0x14088440)
-PrintBackTrace()+17 (0x14088491)
-NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+995 (0x140CE743)
-NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+418 (0x140C18B2)
-NYql::NUdf::TUnboxedValuePod::AsBoxed() const+218 (0x152AF12A)
-NYql::PointerDatumFromPod(NYql::NUdf::TUnboxedValuePod const&)+29 (0x1B7A9E8D)
-NYql::TPgResolvedCall<true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+771 (0x1B7E5C33)
-NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+420 (0x1B7E50D4)
-??+0 (0x7F854D4FCC53)
-??+0 (0x7F854D4FC47C)
-??+0 (0x7F854D4FAE01)
-??+0 (0x1FD82FD2)
-NYql::NUdf::TBoxedValueAccessor::Fetch(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x178E67A4)
-NYql::NUdf::TUnboxedValuePod::Fetch(NYql::NUdf::TUnboxedValue&) const+228 (0x178E6624)
-NKikimr::NMiniKQL::TForwardListValue::TIterator::Next(NYql::NUdf::TUnboxedValue&)+36 (0x17B99974)
-NYql::NUdf::TBoxedValueAccessor::Next(NYql::NUdf::IBoxedValue&, NYql::NUdf::TUnboxedValue&)+244 (0x14EFDD24)
-NYql::NUdf::TUnboxedValuePod::Next(NYql::NUdf::TUnboxedValue&) const+228 (0x14EFD9F4)
-NYql::TYsonExecuteResOrPull::WriteValue(NYql::NUdf::TUnboxedValue const&, NKikimr::NMiniKQL::TType*)+436 (0x209F9A54)
-NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+2002 (0x1C34AE12)
-NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+1128 (0x1C31DEF8)
-??+0 (0x1AB7ECFE)
-??+0 (0x1AB82F89)
-??+0 (0x1AB82EE8)
-??+0 (0x1AB82E78)
-??+0 (0x1AB82E28)
-??+0 (0x1AB821BC)
-std::__y1::__function::__value_func<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()[abi:v15000](TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+93 (0x1AB92C9D)
-std::__y1::function<std::__y1::pair<NYql::IGraphTransformer::TStatus, NThreading::TFuture<std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)> > > (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&) const+56 (0x1AB91FE8)
-NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+811 (0x1AB91C6B)
-NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+64 (0x1AB7FF50)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
-??+0 (0x176F665C)
-??+0 (0x176EA0A6)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
-??+0 (0x1786F3EC)
-??+0 (0x17861728)
-??+0 (0x1786DCCC)
-??+0 (0x178619D7)
-??+0 (0x1786D98A)
-??+0 (0x178619D7)
-??+0 (0x17859F2E)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
-??+0 (0x15403098)
-??+0 (0x15402DC9)
-??+0 (0x153FF7D5)
-NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+100 (0x153FF174)
-NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+1222 (0x153FE226)
-NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+127 (0x153FEAAF)
-NYql::TProgram::AsyncTransformWithFallback(bool)+120 (0x16C17A78)
-??+0 (0x16C3EC1E)
-??+0 (0x16C3E797)
-??+0 (0x16C3E665)
-??+0 (0x16C3D140)
-??+0 (0x16C3D007)
-??+0 (0x16C15F8D)
-NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3760 (0x16C15C20)
-??+0 (0x16C12804)
-NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+301 (0x16C14CCD)
-Main(int, char**)+4924 (0x13F14D4C)
-main+273 (0x13F16831)
-??+0 (0x7F854D229D90)
-__libc_start_main+128 (0x7F854D229E40)
-??+0 (0x13EA0029)
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+524 (0x7F8407C)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+284 (0x7F7A38C)
+NYql::TPgResolvedCall<true>::DoCalculate(NKikimr::NMiniKQL::TComputationContext&) const+1098 (0xC88D5FA)
+NKikimr::NMiniKQL::TMutableComputationNode<NYql::TPgResolvedCall<true> >::GetValue(NKikimr::NMiniKQL::TComputationContext&) const+142 (0xC88CC7E)
+??+0 (0x7FFB2C51BC53)
+??+0 (0x7FFB2C51B47C)
+??+0 (0x7FFB2C519E01)
+NKikimr::NMiniKQL::TForwardListValue::TIterator::Next(NYql::NUdf::TUnboxedValue&)+39 (0xA4B6217)
+NYql::TYsonExecuteResOrPull::WriteValue(NYql::NUdf::TUnboxedValue const&, NKikimr::NMiniKQL::TType*)+224 (0xFA30D90)
+NYql::NFile::TYtFileGateway::ExecuteResult(NYql::NFile::TSession&, NYson::TYsonWriter&, NYql::NNodes::TExprBase, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&, TVector<TBasicString<char, std::__y1::char_traits<char> >, std::__y1::allocator<TBasicString<char, std::__y1::char_traits<char> > > > const&) const+2118 (0xD064E86)
+NYql::NFile::TYtFileGateway::ResOrPull(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, NYql::TExprContext&, NYql::IYtGateway::TResOrPullOptions&&)+861 (0xD04F70D)
+??+0 (0xC2474C9)
+??+0 (0xC24A6CA)
+NYql::TExecTransformerBase::CallbackTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1018 (0xC24EA6A)
+NYql::TAsyncCallbackTransformer<NYql::TExecTransformerBase>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+37 (0xC249E55)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
+??+0 (0xA16234D)
+??+0 (0xA1575AF)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
+??+0 (0xA24906F)
+??+0 (0xA24D9F0)
+??+0 (0xA248B55)
+??+0 (0xA24D88C)
+??+0 (0xA248B55)
+??+0 (0xA245668)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
+??+0 (0x8A3E332)
+??+0 (0x8A3D326)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+152 (0x8A3CB28)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+290 (0x8A3B5B2)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+66 (0x8A3BEA2)
+NYql::TProgram::AsyncTransformWithFallback(bool)+81 (0x997C591)
+??+0 (0x998F6D0)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+3039 (0x997A47F)
+??+0 (0x997747A)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+129 (0x9979861)
+Main(int, char**)+4464 (0x7E624E0)
+main+200 (0x7E64718)
+??+0 (0x7FFB2C229D90)
+__libc_start_main+128 (0x7FFB2C229E40)
+??+0 (0x7DF8029)
 pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
 ?? at ??:0:0

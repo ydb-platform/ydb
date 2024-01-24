@@ -125,7 +125,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(!stages.empty());
 
         TKqpPhyTxSettings txSettings;
-        txSettings.Type = EPhysicalTxType::Data;
+        YQL_ENSURE(QueryType != EKikimrQueryType::Scan);
+        txSettings.Type = GetPhyTxType(false);
         txSettings.WithEffects = true;
 
         auto tx = Build<TKqpPhysicalTx>(ctx, inputExpr->Pos())
@@ -745,7 +746,9 @@ private:
         YQL_CLOG(TRACE, ProviderKqp) << "[BuildTx] " << KqpExprToPrettyString(*result, ctx)
             << ", isPrecompute: " << isPrecompute;
 
-        auto& transformer = KqpCtx->IsDataQuery() ? *DataTxTransformer : *ScanTxTransformer;
+        auto& transformer = KqpCtx->IsScanQuery() ? *ScanTxTransformer : *DataTxTransformer;
+
+
         transformer.Rewind();
         BuildTxTransformer->Init(KqpCtx->QueryCtx->Type, isPrecompute);
         auto expr = result;

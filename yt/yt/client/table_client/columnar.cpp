@@ -184,11 +184,11 @@ void BuildBitmapFromRleImpl(
             }
 
         #define XX2(currentBoolValue) \
-             if (thresholdIndex - currentIndex >= 16) { \
-                 XX1(currentBoolValue, true) \
-             } else { \
-                 XX1(currentBoolValue, false) \
-             }
+            if (thresholdIndex - currentIndex >= 16) { \
+                XX1(currentBoolValue, true) \
+            } else { \
+                XX1(currentBoolValue, false) \
+            }
 
         ++currentRleIndex;
         thresholdIndex = currentRleIndex < std::ssize(rleIndexes)

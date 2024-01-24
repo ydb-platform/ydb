@@ -44,7 +44,7 @@ public:
         const TTableId fullTableId(self->GetPathOwnerId(), tableId);
         const ui64 localTableId = self->GetLocalTableId(fullTableId);
         if (localTableId == 0) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Unknown table id " << tableId, self->TabletID());
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Unknown table id " << tableId);
             return;
         }
         const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
@@ -88,9 +88,9 @@ public:
 
             writeTx->GetEngineHost()->UpdateRow(fullTableId, keyCells, commands);
         }
-        //TODO: Counters
-        // self->IncCounter(COUNTER_UPLOAD_ROWS, rowCount);
-        // self->IncCounter(COUNTER_UPLOAD_ROWS_BYTES, matrix.GetBuffer().size());
+        
+        self->IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
+        self->IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
 
         writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildCommited(self->TabletID(), writeOp->GetTxId()));
 
@@ -98,8 +98,7 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_ABORT_UNLESS(writeOp != nullptr);
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << DataShard.TabletID());
 
@@ -123,6 +122,22 @@ public:
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
+
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+
+        if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
+            // Immediate transactions may be reordered with schema changes and become invalid
+            Y_ABORT_UNLESS(!writeTx->Ready());
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
+            return EExecutionStatus::Executed;
+        }
+
+        if (writeTx->CheckCancelled()) {
+            writeOp->ReleaseTxData(txc, ctx);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
+            DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
+            return EExecutionStatus::Executed;
+        }
 
         try {
             DoExecute(&DataShard, writeOp, txc, ctx);
@@ -164,18 +179,13 @@ public:
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
         DataShard.EmitHeartbeats(ctx);
 
-        TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
-        Y_ABORT_UNLESS(writeOp != nullptr);
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
         const auto& status = writeOp->GetWriteResult()->Record.status();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Completed write operation for " << *op << " at " << DataShard.TabletID() << ", status " << status);
 
-        //TODO: Counters
-        // if (WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED || WriteResult->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
-        //     self->IncCounter(COUNTER_WRITE_SUCCESS);
-        // } else {
-        //     self->IncCounter(COUNTER_WRITE_ERROR);
-        // }
+        DataShard.IncCounter(writeOp->GetWriteResult()->Record.status() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED ?
+            COUNTER_WRITE_SUCCESS : COUNTER_WRITE_ERROR);
 
         ctx.Send(writeOp->GetEv()->Sender, writeOp->ReleaseWriteResult().release(), 0, writeOp->GetEv()->Cookie);
     }

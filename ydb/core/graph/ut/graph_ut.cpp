@@ -140,6 +140,8 @@ Y_UNIT_TEST_SUITE(Graph) {
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
         }
 
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
         {
             NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
             NKikimrGraph::TMetric* metric = event->Record.AddMetrics();

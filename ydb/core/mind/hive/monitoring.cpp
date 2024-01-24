@@ -294,7 +294,7 @@ public:
             out << "<td>" << Sprintf("%.9f", x.Weight) << "</td>";
             out << "<td>" << GetResourceValuesText(x) << "</td>";
             out << "<td>" << x.GetTabletAllowedMetricIds() << "</td>";
-            out << "<td><a href='../tablets?SsId=" << tabletId << "'><span class='glyphicon glyphicon-tasks' title='State Storage'/></a></td>";
+            out << "<td><a href='../tablets?SsId=" << tabletId.first << "'><span class='glyphicon glyphicon-tasks' title='State Storage'/></a></td>";
             out << "</tr>";
         }
         out << "</tbody></table>";
@@ -1309,8 +1309,6 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
-        ui64 nodes = 0;
-        ui64 tablets = 0;
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
         THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
@@ -1330,7 +1328,6 @@ public:
                     ++runningTablets;
                     ++tabletsByNodeByType[sl.NodeId][GetTabletType(pr.second.Type) + "s"];
                 }
-                ++tablets;
             }
             {
                 auto it = tabletTypesToChannels.find(pr.second.Type);
@@ -1339,14 +1336,10 @@ public:
                     tabletTypesToChannels.emplace(pr.second.Type, channels);
                 }
             }
-            ++tablets;
         }
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
                 ++aliveNodes;
-            }
-            if (!pr.second.IsUnknown()) {
-                ++nodes;
             }
         }
 
@@ -1424,7 +1417,8 @@ public:
             EBalancerType::Emergency,
             EBalancerType::SpreadNeighbours,
             EBalancerType::Scatter,
-            EBalancerType::Manual
+            EBalancerType::Manual,
+            EBalancerType::Storage,
         }) {
             int balancer = static_cast<int>(type);
             out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";
@@ -1495,6 +1489,9 @@ public:
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
         out << "</div>";
 
@@ -2423,6 +2420,10 @@ public:
         PassAway();
     }
 
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvDrainNodeResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(
             TStringBuilder() << "{\"status\":\"" << NKikimrProto::EReplyStatus_Name(result->Get()->Record.GetStatus()) << "\","
@@ -2505,6 +2506,32 @@ public:
     }
 };
 
+class TTxMonEvent_StorageRebalance : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TStorageBalancerSettings Settings;
+
+    TTxMonEvent_StorageRebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+        Settings.NumReassigns = FromStringWithDefault(ev->Get()->Cgi().Get("reassigns"), 1000);
+        Settings.MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), 1);
+        Settings.StoragePool = ev->Get()->Cgi().Get("pool");
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        Self->StartHiveStorageBalancer(Settings);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+    }
+};
+
 class TTxMonEvent_RebalanceFromScratch : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -2568,6 +2595,10 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
@@ -2744,6 +2775,10 @@ public:
         PassAway();
     }
 
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvInitMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
@@ -2821,6 +2856,10 @@ public:
         PassAway();
     }
 
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvQueryMigrationReply::TPtr& reply) {
         TStringBuilder output;
         NProtobufJson::TProto2JsonConfig config;
@@ -2888,6 +2927,10 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& result) {
@@ -2978,6 +3021,10 @@ public:
         PassAway();
     }
 
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
     void Handle(TEvHive::TEvStopTabletResult::TPtr& result) {
         Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << result->Get()->Record.AsJSON()));
         PassAway();
@@ -3054,6 +3101,10 @@ public:
 
     void Cleanup() override {
         PassAway();
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
     }
 
     void Handle(TEvHive::TEvResumeTabletResult::TPtr& result) {
@@ -3875,8 +3926,8 @@ public:
     using TKindMap = THashMap<TUnitKind, ui32, TUnitKindHash>;
 
     void GetUnitKinds(const TStorageGroupInfo& group, TKindMap& kinds) {
-        for (const auto& [tablet, channel] : group.Units) {
-            const auto& boundChannels(tablet->BoundChannels[channel]);
+        for (const auto& channel : group.Units) {
+            const auto& boundChannels(*channel.ChannelInfo);
             kinds[TUnitKind{boundChannels.GetIOPS(), boundChannels.GetThroughput(), boundChannels.GetSize()}]++;
         }
     }
@@ -3912,11 +3963,11 @@ public:
                         out << "<td style='text-align:right'>" << kind.ToString() << "</td>";
                         out << "<td style='text-align:right'>" << units << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", kind.IOPS * units) << "</td>";
-                        out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.MaximumIOPS) << "</td>";
+                        out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.MaximumResources.IOPS) << "</td>";
                         out << "<td style='text-align:right'>" << kind.Size * units << "</td>";
-                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumSize << "</td>";
+                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Size << "</td>";
                         out << "<td style='text-align:right'>" << kind.Throughput * units << "</td>";
-                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumThroughput << "</td>";
+                        out << "<td style='text-align:right'>" << prStorageGroup.second.MaximumResources.Throughput << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.StoragePool.GetOvercommit()) << "</td>";
                         out << "<td style='text-align:right'>" << Sprintf("%.2f", prStorageGroup.second.GetUsage()) << "</td>";
                         out << "</tr>";
@@ -3927,12 +3978,12 @@ public:
                     out << "<td>" << prStoragePool.second.Name << "</td>";
                     out << "<td style='text-align:right'>" << group.Id << "</td>";
                     out << "<td style='text-align:right'>" << group.Units.size() << "</td>";
-                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.AcquiredIOPS) << "</td>";
-                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.MaximumIOPS) << "</td>";
-                    out << "<td style='text-align:right'>" << group.AcquiredSize << "</td>";
-                    out << "<td style='text-align:right'>" << group.MaximumSize << "</td>";
-                    out << "<td style='text-align:right'>" << group.AcquiredThroughput << "</td>";
-                    out << "<td style='text-align:right'>" << group.MaximumThroughput << "</td>";
+                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.AcquiredResources.IOPS) << "</td>";
+                    out << "<td style='text-align:right'>" << Sprintf("%.2f", group.MaximumResources.IOPS) << "</td>";
+                    out << "<td style='text-align:right'>" << group.AcquiredResources.Size << "</td>";
+                    out << "<td style='text-align:right'>" << group.MaximumResources.Size << "</td>";
+                    out << "<td style='text-align:right'>" << group.AcquiredResources.Throughput << "</td>";
+                    out << "<td style='text-align:right'>" << group.MaximumResources.Throughput << "</td>";
                     out << "<td style='text-align:right'>" << group.GroupParameters.GetAllocatedSize() << "</td>";
                     out << "<td style='text-align:right'>" << group.GroupParameters.GetAvailableSize() << "</td>";
                     out << "<td style='text-align:right'>" << Sprintf("%.2f", group.StoragePool.GetOvercommit()) << "</td>";
@@ -3946,6 +3997,71 @@ public:
         out << "</div></div>";
     }
 };
+
+class TTxMonEvent_Subactors : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    TMaybe<TSubActorId> SubActorToStop;
+
+    TTxMonEvent_Subactors(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        SubActorToStop = TryFromString<TSubActorId>(Event->Cgi().Get("stop"));
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SUBACTORS; }
+
+    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
+        Y_UNUSED(txc);
+        if (SubActorToStop) {
+            Self->StopSubActor(*SubActorToStop);
+        }
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        Y_UNUSED(ctx);
+    }
+
+    void RenderHTMLPage(IOutputStream& out) {
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: right; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(2) { text-align: left; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(3) { text-align: left; }";
+        out << "table.simple-table2 tr:nth-child(1) > th:nth-child(4) { text-align: left; }";
+        out << "table.simple-table2 td { text-align: right; }";
+        out << "table.simple-table2 td:nth-child(2) { text-align: left; }";
+        out << "table.simple-table2 td:nth-child(3) { text-align: left; }";
+        out << "table.simple-table2 td:nth-child(4) { text-align: left; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        out << "<table class='table simple-table2'>";
+        out << "<thead>";
+        out << "<tr><th>Id</th><th>Description</th><th>Started at</th><th>Stop</th></tr>";
+        out << "</thead>";
+        out << "<tbody>";
+        for (const auto* subActor: Self->SubActors) {
+            out << "<tr>";
+            out << "<td>" << subActor->GetId() << "</td>";
+            out << "<td>" << subActor->GetDescription() << "</td>";
+            out << "<td>" << subActor->StartTime << "</td>";
+            out << "<td><a href = '?TabletID=" << Self->HiveId << "&page=Subactors&stop=" << subActor->GetId() << "'><span class='glyphicon glyphicon-remove-sign' title='Stop SubActor'></span></a></td>";
+            out << "</tr>";
+        }
+        out << "</tbody>";
+        out << "</table>";
+        out << "</body>";
+    }
+};
+
 
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
@@ -4071,6 +4187,12 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Storage") {
         return Execute(new TTxMonEvent_Storage(ev->Sender, ev, this), ctx);
+    }
+    if (page == "StorageRebalance") {
+        return Execute(new TTxMonEvent_StorageRebalance(ev->Sender, ev, this), ctx);
+    }
+    if (page == "Subactors") {
+        return Execute(new TTxMonEvent_Subactors(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

@@ -1018,6 +1018,5 @@ message TActivity {
 
         PERSQUEUE_ACCOUNT_WRITE_QUOTER = 626;
         PERSQUEUE_WRITE_QUOTER = 627;
-
     };
 };

@@ -17,7 +17,7 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(TEvKafka::TEvCreateTopicsResponse::EStatus, TString&)> sendResultCallback)
+            const std::function<void(EKafkaErrors, TString&)> sendResultCallback)
         : UserToken(userToken)
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
@@ -71,7 +71,7 @@ public:
     };
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
@@ -171,7 +171,7 @@ public:
 
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
         Y_UNUSED(result);
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     void SendResult(
@@ -181,7 +181,7 @@ public:
 
         Y_UNUSED(result);
         Y_UNUSED(message);
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     void SendResult(
@@ -189,7 +189,7 @@ public:
             const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
 
         Y_UNUSED(message);
-        processYdbStatusCode(status);
+        ProcessYdbStatusCode(status);
     };
 
     const Ydb::Operations::OperationParams& operation_params() const {
@@ -211,20 +211,11 @@ private:
     const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
     const TString TopicPath;
     const TString DatabaseName;
-    const std::function<void(TEvKafka::TEvCreateTopicsResponse::EStatus status, TString& message)> SendResultCallback;
+    const std::function<void(EKafkaErrors status, TString& message)> SendResultCallback;
     TString ReplyMessage;
 
-    void processYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
-        switch (status) {
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS:
-                SendResultCallback(TEvKafka::TEvCreateTopicsResponse::EStatus::OK, ReplyMessage);
-                break;
-            case Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST:
-                SendResultCallback(TEvKafka::TEvCreateTopicsResponse::EStatus::BAD_REQUEST, ReplyMessage);
-                break;
-            default:
-                SendResultCallback(TEvKafka::TEvCreateTopicsResponse::EStatus::ERROR, ReplyMessage);
-        }
+    void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status) {
+        SendResultCallback(ConvertErrorCode(status), ReplyMessage);
     }
 };
 
@@ -244,7 +235,7 @@ public:
             userToken,
             topicPath,
             databaseName,
-            [this](TEvKafka::TEvCreateTopicsResponse::EStatus status, TString& message) {
+            [this](EKafkaErrors status, TString& message) {
                 this->SendResult(status, message);
             })
         )
@@ -259,8 +250,8 @@ public:
 
     ~TCreateTopicActor() = default;
 
-    void SendResult(TEvKafka::TEvCreateTopicsResponse::EStatus status, TString& message) {
-        THolder<TEvKafka::TEvCreateTopicsResponse> response(new TEvKafka::TEvCreateTopicsResponse());
+    void SendResult(EKafkaErrors status, TString& message) {
+        THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
         response->TopicPath = TopicPath;
         response->Message = message;
@@ -377,10 +368,10 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
 
         if (topicName == "") {
-            auto result = MakeHolder<TEvKafka::TEvCreateTopicsResponse>();
-            result->Status = TEvKafka::TEvCreateTopicsResponse::EStatus::BAD_REQUEST;
+            auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+            result->Status = EKafkaErrors::INVALID_REQUEST;
             result->Message = "Empty topic name";
-            this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvCreateTopicsResponse>(result.Release());
+            this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());
             continue;
         }
 
@@ -394,10 +385,10 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 retention = std::stoul(config.Value.value());
                 return true;
             } catch(std::invalid_argument) {
-                auto result = MakeHolder<TEvKafka::TEvCreateTopicsResponse>();
-                result->Status = TEvKafka::TEvCreateTopicsResponse::EStatus::INVALID_CONFIG;
+                auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+                result->Status = EKafkaErrors::INVALID_CONFIG;
                 result->Message = "Provided retention value is not a number";
-                this->TopicNamesToResponses[topic.Name.value()] = TAutoPtr<TEvKafka::TEvCreateTopicsResponse>(result.Release());
+                this->TopicNamesToResponses[topic.Name.value()] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());
                 return false;
             }
         };
@@ -446,7 +437,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 };
 
-void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvCreateTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+void TKafkaCreateTopicsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
     auto eventPtr = ev->Release();
     KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->TopicPath << " response received." << std::to_string(eventPtr->Status));
     TopicNamesToResponses[eventPtr->TopicPath] = eventPtr;
@@ -489,22 +480,12 @@ void TKafkaCreateTopicsActor::Reply(const TActorContext& ctx) {
         if (DuplicateTopicNames.contains(topicName)) {
             setError(DUPLICATE_RESOURCE);
         } else {
-            switch (TopicNamesToResponses[topicName]->Status) {
-                case TEvKafka::TEvCreateTopicsResponse::OK:
-                    responseTopic.ErrorCode = NONE_ERROR;
-                    addConfigIfRequired(TopicNamesToRetentions[topicName].first, RETENTION_MS_CONFIG_NAME);
-                    addConfigIfRequired(TopicNamesToRetentions[topicName].second, RETENTION_BYTES_CONFIG_NAME);
-                    break;
-                case TEvKafka::TEvCreateTopicsResponse::BAD_REQUEST:
-                    setError(INVALID_REQUEST);
-                    break;
-                case TEvKafka::TEvCreateTopicsResponse::ERROR:
-                    setError(UNKNOWN_SERVER_ERROR);
-                    break;
-                case TEvKafka::TEvCreateTopicsResponse::INVALID_CONFIG:
-                    setError(INVALID_CONFIG);
-                    break;
-                }
+            auto status = TopicNamesToResponses[topicName]->Status;
+            if (status == EKafkaErrors::NONE_ERROR) {
+                addConfigIfRequired(TopicNamesToRetentions[topicName].first, RETENTION_MS_CONFIG_NAME);
+                addConfigIfRequired(TopicNamesToRetentions[topicName].second, RETENTION_BYTES_CONFIG_NAME);
+            }
+            setError(TopicNamesToResponses[topicName]->Status);
         } 
         response->Topics.push_back(responseTopic);
     }

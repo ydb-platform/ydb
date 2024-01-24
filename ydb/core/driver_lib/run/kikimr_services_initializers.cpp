@@ -370,8 +370,9 @@ static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId ser
     return false;
 }
 
-TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig)
+TBasicServicesInitializer::TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
+    , Factories(std::move(factories))
 {
 }
 
@@ -827,10 +828,20 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (Config.HasTracingConfig()) {
         const auto& tracing = Config.GetTracingConfig();
+        std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
+        if (tracing.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
+            grpcSigner = Factories->WilsonGrpcSignerFactory(tracing.GetAuthConfig());
+        }
+        auto wilsonUploader = NWilson::WilsonUploaderParams {
+            .Host = tracing.GetHost(),
+            .Port = static_cast<ui16>(tracing.GetPort()),
+            .RootCA = tracing.GetRootCA(),
+            .ServiceName = tracing.GetServiceName(),
+            .GrpcSigner = std::move(grpcSigner),
+        }.CreateUploader();
         setup->LocalServices.emplace_back(
             NWilson::MakeWilsonUploaderId(),
-            TActorSetupCmd(NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName()),
-            TMailboxType::ReadAsFilled, appData->BatchPoolId));
+            TActorSetupCmd(wilsonUploader, TMailboxType::ReadAsFilled, appData->BatchPoolId));
     }
 }
 
@@ -2666,7 +2677,7 @@ TDatabaseMetadataCacheInitializer::TDatabaseMetadataCacheInitializer(const TKiki
 void TDatabaseMetadataCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     setup->LocalServices.emplace_back(
         MakeDatabaseMetadataCacheId(NodeId),
-        TActorSetupCmd(CreateDatabaseMetadataCache(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
+        TActorSetupCmd(CreateDatabaseMetadataCache(appData->TenantName, appData->Counters), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
 TGraphServiceInitializer::TGraphServiceInitializer(const TKikimrRunConfig& runConfig)

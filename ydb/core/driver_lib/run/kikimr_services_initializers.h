@@ -49,8 +49,10 @@ class TBasicServicesInitializer : public IKikimrServicesInitializer {
 
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
+    std::shared_ptr<TModuleFactories> Factories;
+
 public:
-    TBasicServicesInitializer(const TKikimrRunConfig& runConfig);
+    TBasicServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

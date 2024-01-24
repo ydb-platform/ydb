@@ -817,7 +817,8 @@ void TCommandExplain::Config(TConfig& config) {
             EOutputFormat::Pretty,
             EOutputFormat::PrettyTable,
             EOutputFormat::JsonUnicode,
-            EOutputFormat::JsonBase64
+            EOutputFormat::JsonBase64,
+            EOutputFormat::JsonBase64Simplify
     });
 
     config.SetFreeArgsNum(0);

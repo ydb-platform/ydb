@@ -10,10 +10,9 @@ std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBat
         if (!columnInfo) {
             return {};
         } else if (!result) {
-            result = TBatchSerializationStat(*columnInfo);
-        } else {
-            result->Merge(*columnInfo);
+            result = TBatchSerializationStat();
         }
+        result->Merge(*columnInfo);
     }
     return result;
 }

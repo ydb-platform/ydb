@@ -34,7 +34,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     }
 
     bool IsGenericQuery() const {
-        return QueryCtx->Type == NYql::EKikimrQueryType::Query;
+        return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
     }
 };
 

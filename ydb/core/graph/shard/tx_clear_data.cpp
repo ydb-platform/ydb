@@ -1,6 +1,5 @@
 #include "shard_impl.h"
 #include "log.h"
-#include "schema.h"
 
 namespace NKikimr {
 namespace NGraph {

@@ -43,7 +43,6 @@ outputFile(LEXER,PARSER,TREE_PARSER, actionScope, actions,
 
 syntax = "proto3";
 option cc_enable_arenas = true;
-option optimize_for = CODE_SIZE;
 
 package @ANTLR_PACKAGE_NAME@;
 

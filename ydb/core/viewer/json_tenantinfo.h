@@ -667,9 +667,12 @@ public:
 
                 if (tenant.GetType() == NKikimrViewer::Serverless) {
                     tenant.SetStorageAllocatedSize(tenant.GetMetrics().GetStorage());
-                    tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
-                    tenant.ClearMemoryLimit();
-                    tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
+                    const bool noExclusiveNodes = tenantNodes.empty();
+                    if (noExclusiveNodes) {
+                        tenant.SetMemoryUsed(tenant.GetMetrics().GetMemory());
+                        tenant.ClearMemoryLimit();
+                        tenant.SetCoresUsed(static_cast<double>(tenant.GetMetrics().GetCPU()) / 1000000);
+                    }
                 }
 
                 if (Tablets) {

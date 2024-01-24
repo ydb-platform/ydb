@@ -21,7 +21,7 @@ void TBatchSizeLimiter::Add(const T& /*element*/)
 
 template <class... TLimiters>
 TCompositeBatchLimiter<TLimiters...>::TCompositeBatchLimiter(TLimiters... limiters)
-    : Limiters_(std::make_tuple(limiters...))
+    : Limiters_(std::tuple(limiters...))
 { }
 
 template <class... TLimiters>

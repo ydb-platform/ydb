@@ -64,7 +64,7 @@ namespace NClickHouse {
 
         void ExecuteQuery(TQuery query);
 
-        void Insert(const TString& table_name, const TBlock& block);
+        void Insert(const TString& table_name, const TBlock& block, const TString& query_id, const TString& deduplication_token);
 
         void Ping();
 
@@ -75,7 +75,7 @@ namespace NClickHouse {
 
         bool ReceivePacket(ui64* server_packet = nullptr);
 
-        void SendQuery(const TString& query);
+        void SendQuery(const TString& query, const TString& query_id, const TString& deduplication_token = "");
 
         void SendData(const TBlock& block);
 
@@ -183,7 +183,7 @@ namespace NClickHouse {
             RetryGuard([this]() { Ping(); });
         }
 
-        SendQuery(query.GetText());
+        SendQuery(query.GetText(), query.GetId());
 
         ui64 server_packet = 0;
         while (ReceivePacket(&server_packet)) {
@@ -195,7 +195,7 @@ namespace NClickHouse {
         }
     }
 
-    void TClient::TImpl::Insert(const TString& table_name, const TBlock& block) {
+    void TClient::TImpl::Insert(const TString& table_name, const TBlock& block, const TString& query_id, const TString& deduplication_token) {
         if (Options_.PingBeforeQuery) {
             RetryGuard([this]() { Ping(); });
         }
@@ -216,7 +216,7 @@ namespace NClickHouse {
             }
         }
 
-        SendQuery("INSERT INTO " + table_name + " ( " + fields_section + " ) VALUES");
+        SendQuery("INSERT INTO " + table_name + " ( " + fields_section + " ) VALUES", query_id, deduplication_token);
 
         ui64 server_packet(0);
         // Receive data packet.
@@ -536,9 +536,9 @@ namespace NClickHouse {
         return exception_received;
     }
 
-    void TClient::TImpl::SendQuery(const TString& query) {
+    void TClient::TImpl::SendQuery(const TString& query, const TString& query_id, const TString& deduplication_token) {
         TWireFormat::WriteUInt64(&Output_, ClientCodes::Query);
-        TWireFormat::WriteString(&Output_, TString());
+        TWireFormat::WriteString(&Output_, query_id);
 
         /// Client info.
         if (ServerInfo_.Revision >= DBMS_MIN_REVISION_WITH_CLIENT_INFO) {
@@ -567,11 +567,12 @@ namespace NClickHouse {
                 TWireFormat::WriteString(&Output_, info.QuotaKey);
         }
 
-        /// Per query settings.
-        //if (settings)
-        //    settings->serialize(*out);
-        //else
-        TWireFormat::WriteString(&Output_, TString());
+        if (!deduplication_token.empty()) {
+            static const TString insert_deduplication_token_setting_name = "insert_deduplication_token";
+            TWireFormat::WriteString(&Output_, insert_deduplication_token_setting_name);
+            TWireFormat::WriteString(&Output_, deduplication_token);
+        }
+        TWireFormat::WriteString(&Output_, TString()); // Empty string is a marker of end SETTINGS section
 
         TWireFormat::WriteUInt64(&Output_, Stages::Complete);
         TWireFormat::WriteUInt64(&Output_, Compression_);
@@ -744,16 +745,16 @@ namespace NClickHouse {
         Impl_->ExecuteQuery(query);
     }
 
-    void TClient::Select(const TString& query, TSelectCallback cb) {
-        Execute(TQuery(query).OnData(cb));
+    void TClient::Select(const TString& query, TSelectCallback cb, const TString& query_id) {
+        Execute(TQuery(query, query_id).OnData(cb));
     }
 
     void TClient::Select(const TQuery& query) {
         Execute(query);
     }
 
-    void TClient::Insert(const TString& table_name, const TBlock& block) {
-        Impl_->Insert(table_name, block);
+    void TClient::Insert(const TString& table_name, const TBlock& block, const TString& query_id, const TString& deduplication_token) {
+        Impl_->Insert(table_name, block, query_id, deduplication_token);
     }
 
     void TClient::Ping() {

@@ -45,7 +45,6 @@ namespace {
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
 constexpr TDuration DEADLINE_OFFSET = TDuration::Minutes(20);
 constexpr TDuration BRO_RUN_INTERVAL = TDuration::Minutes(60);
-constexpr ui64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
 
 TString SerializeIssues(const NYql::TIssues& issues) {
     NYql::TIssue root;
@@ -884,18 +883,26 @@ private:
 };
 
 class TForgetScriptExecutionOperationQueryActor : public TQueryBase {
+    static constexpr i64 MAX_NUMBER_ROWS_IN_BATCH = 100000;
+    static constexpr TDuration MINIMAL_DEADLINE_TIME = TDuration::Seconds(1);
+
     struct TResultSetDescription {
-        ui64 NumberRows;
+        i64 MaxRowId;
         i32 ResultSetId;
     };
 
 public:
-    TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database)
+    TForgetScriptExecutionOperationQueryActor(const TString& executionId, const TString& database, TInstant operationDeadline)
         : ExecutionId(executionId)
         , Database(database)
+        , Deadline(operationDeadline - MINIMAL_DEADLINE_TIME)
     {}
 
     void OnRunQuery() override {
+        if (!CheckDeadline()) {
+            return;
+        }
+
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::OnRunQuery
             DECLARE $database AS Text;
@@ -905,7 +912,7 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
-            SELECT result_set_id, COUNT(row_id) AS number_rows
+            SELECT result_set_id, MAX(row_id) AS max_row_id
             FROM `.metadata/result_sets`
             WHERE database = $database AND execution_id = $execution_id
             GROUP BY result_set_id;
@@ -944,19 +951,24 @@ public:
         while (result.TryNextRow()) {
             TMaybe<i32> resultSetId = result.ColumnParser("result_set_id").GetOptionalInt32();
             if (!resultSetId) {
-                continue;
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set id is not specified");
+                return;
             }
 
-            ui64 numberRows = result.ColumnParser("number_rows").GetUint64();
+            TMaybe<i64> maxRowId = result.ColumnParser("max_row_id").GetOptionalInt64();
+            if (!maxRowId) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row id is not specified");
+                return;
+            }
 
-            ResultSetsDescription.emplace_back(TResultSetDescription{numberRows, *resultSetId});
+            ResultSetsDescription.emplace_back(TResultSetDescription{*maxRowId, *resultSetId});
         }
 
         DeleteScriptResults();
     }
 
     void DeleteScriptResults() {
-        while (!ResultSetsDescription.empty() && ResultSetsDescription.back().NumberRows == 0) {
+        while (!ResultSetsDescription.empty() && ResultSetsDescription.back().MaxRowId < 0) {
             ResultSetsDescription.pop_back();
         }
 
@@ -965,22 +977,26 @@ public:
             return;
         }
 
+        if (!CheckDeadline()) {
+            return;
+        }
+
         TResultSetDescription& resultSet = ResultSetsDescription.back();
-        resultSet.NumberRows -= std::min(MAX_NUMBER_ROWS_IN_BATCH, resultSet.NumberRows);
+        resultSet.MaxRowId -= MAX_NUMBER_ROWS_IN_BATCH;
 
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
-            DECLARE $last_row_id AS Uint64;
+            DECLARE $max_row_id AS Int64;
 
             DELETE
             FROM `.metadata/result_sets`
             WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
-              AND row_id >= $last_row_id; 
+              AND row_id > $max_row_id; 
         )";
 
         NYdb::TParamsBuilder params;
@@ -994,8 +1010,8 @@ public:
             .AddParam("$result_set_id")
                 .Int32(resultSet.ResultSetId)
                 .Build()
-            .AddParam("$last_row_id")
-                .Uint64(resultSet.NumberRows)
+            .AddParam("$max_row_id")
+                .Int64(resultSet.MaxRowId)
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -1007,8 +1023,18 @@ public:
     }
 
 private:
+    bool CheckDeadline() {
+        if (TInstant::Now() >= Deadline) {
+            Finish(Ydb::StatusIds::TIMEOUT, "Forget script execution operation timeout");
+            return false;
+        }
+        return true;
+    }
+
+private:
     TString ExecutionId;
     TString Database;
+    TInstant Deadline;
     std::vector<TResultSetDescription> ResultSetsDescription;
 };
 
@@ -1049,7 +1075,7 @@ public:
             }
         }
 
-        Register(new TForgetScriptExecutionOperationQueryActor(ExecutionId, Request->Get()->Database));
+        Register(new TForgetScriptExecutionOperationQueryActor(ExecutionId, Request->Get()->Database, Request->Get()->Deadline));
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
@@ -1847,6 +1873,7 @@ private:
 };
 
 class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
+    static constexpr ui64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
     static constexpr ui64 PROGRAM_SIZE_LIMIT = 10_MB;
     static constexpr ui64 PROGRAM_BASE_SIZE = 1_MB;  // Depends on MAX_NUMBER_ROWS_IN_BATCH
 
@@ -2069,6 +2096,11 @@ public:
                 const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
 
                 if (!serializedRow) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is null");
+                    return;
+                }
+
+                if (serializedRow->Empty()) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
                     return;
                 }

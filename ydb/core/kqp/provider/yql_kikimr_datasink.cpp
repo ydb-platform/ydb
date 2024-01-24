@@ -346,6 +346,13 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleReturningList(TKiReturningList node, TExprContext& ctx) override {
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+
+        return TStatus::Ok;
+    }
+
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
@@ -600,6 +607,21 @@ public:
         return true;
     }
 
+    bool CheckIOOlap(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx) {
+        TKiDataSink dataSink(node->ChildPtr(1));
+        auto& tableDesc = SessionCtx->Tables().GetTable(TString{dataSink.Cluster()}, key.GetTablePath());
+        if (!tableDesc.Metadata || tableDesc.Metadata->Kind != EKikimrTableKind::Olap) {
+            return true;
+        }
+
+        if (mode != "replace" && mode != "drop" && mode != "drop_if_exists") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
+            return false;
+        }
+
+        return true;
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
@@ -621,19 +643,31 @@ public:
                     return resultNode;
                 }
 
+                if (!CheckIOOlap(key, node, mode, ctx)) {
+                    return nullptr;
+                }
+
                 if (!settings.ReturningList.IsValid()) {
                     settings.ReturningList = Build<TExprList>(ctx, node->Pos()).Done();
                 }
 
                 auto returningColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
-                auto returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
                 TVector<TExprBase> columnsToReturn;
                 for (const auto item : settings.ReturningList.Cast()) {
                     auto pgResultNode = item.Cast<TCoPgResultItem>();
                     const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
                     if (value.empty()) {
-                        returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("true").Done();
+                        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+
+                        auto dataSinkNode = node->Child(1);
+                        TKiDataSink dataSink(dataSinkNode);
+                        auto table = SessionCtx->Tables().EnsureTableExists(
+                            TString(dataSink.Cluster()),
+                            key.GetTablePath(), node->Pos(), ctx);
+
+                        returningColumns = BuildColumnsList(*table, node->Pos(), ctx, sysColumnsEnabled);
+
                         break;
                     } else {
                         auto atom = Build<TCoAtom>(ctx, node->Pos())
@@ -661,7 +695,6 @@ public:
                             .Filter(settings.Filter.Cast())
                             .Update(settings.Update.Cast())
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     } else {
@@ -676,7 +709,6 @@ public:
                             .Build()
                             .Settings(settings.Other)
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -701,7 +733,6 @@ public:
                             .Build()
                             .Settings(settings.Other)
                             .ReturningColumns(returningColumns)
-                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -714,7 +745,6 @@ public:
                         .Mode(mode)
                         .Settings(settings.Other)
                         .ReturningColumns(returningColumns)
-                        .ReturningStar(returningStar)
                         .Done()
                         .Ptr();
                 }
@@ -875,6 +905,7 @@ public:
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .ResetFeatures(settings.ResetFeatures)
                         .Done()
                         .Ptr();
                 } else if (mode == "dropObject" || mode == "dropObjectIfExists") {
@@ -1165,6 +1196,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiEffects>()) {
         return HandleEffects(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiReturningList>()) {
+        return HandleReturningList(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

@@ -276,6 +276,11 @@ private:
 
     void UnsafeWriteRaw(const void* buffer, size_t size)
     {
+        if (!buffer) {
+            YT_VERIFY(size == 0);
+            return;
+        }
+
         NSan::CheckMemIsInitialized(buffer, size);
 
         memcpy(Current_, buffer, size);

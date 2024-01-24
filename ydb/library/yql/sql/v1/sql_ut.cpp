@@ -2359,6 +2359,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
     }
 
+    Y_UNIT_TEST(AlterTableAddIndexWithIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ADD INDEX idx LOCAL WITH (a=b, c=d, e=f) ON (col)",
+            "<main>:1:40: Error: local: alternative is not implemented yet: 714:7: local_index\n");
+    }
+
     Y_UNIT_TEST(OptionalAliases) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT foo FROM (SELECT key foo FROM Input);").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT a.x FROM Input1 a JOIN Input2 b ON a.key = b.key;").IsOk());
@@ -5374,14 +5379,14 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 
 Y_UNIT_TEST_SUITE(ExternalDataSource) {
     Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5398,7 +5403,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithAuthServiceAccount) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
@@ -5407,7 +5412,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SERVICE_ACCOUNT_ID="sa",
                     SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5424,7 +5429,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithBasic) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5433,7 +5438,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5450,7 +5455,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithMdbBasic) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5461,7 +5466,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5478,7 +5483,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5488,7 +5493,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_REGION="ru-central-1"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5505,7 +5510,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithTablePrefix) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 pragma TablePathPrefix='/aba';
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -5513,7 +5518,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5530,14 +5535,14 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceIfNotExists) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE IF NOT EXISTS MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5553,48 +5558,72 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(AlterExternalDataSource) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+                USE plato;
+                ALTER EXTERNAL DATA SOURCE MyDataSource
+                    SET (SOURCE_TYPE = "ObjectStorage", Login = "Admin"),
+                    SET Location "bucket",
+                    RESET (Auth_Method, Service_Account_Id, Service_Account_Secret_Name);
+            )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"location" '"bucket") '('"login" '"Admin") '('"source_type" '"ObjectStorage"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"auth_method" '"service_account_id" '"service_account_secret_name")))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource;
-            )" , "<main>:3:56: Error: Unexpected token ';' : syntax error...\n\n");
+            )sql" , "<main>:3:56: Error: Unexpected token ';' : syntax error...\n\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-            )" , "<main>:5:33: Error: SOURCE_TYPE requires key\n");
+            )sql" , "<main>:5:33: Error: SOURCE_TYPE requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket"
                 );
-            )" , "<main>:5:30: Error: AUTH_METHOD requires key\n");
+            )sql" , "<main>:5:30: Error: AUTH_METHOD requires key\n");
 
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE1"
                 );
-            )" , "<main>:6:33: Error: Unknown AUTH_METHOD = NONE1\n");
+            )sql" , "<main>:6:33: Error: Unknown AUTH_METHOD = NONE1\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="SERVICE_ACCOUNT"
                 );
-            )" , "<main>:6:33: Error: SERVICE_ACCOUNT_ID requires key\n");
+            )sql" , "<main>:6:33: Error: SERVICE_ACCOUNT_ID requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
@@ -5602,9 +5631,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="s1"
                 );
-            )" , "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql" , "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
@@ -5612,9 +5641,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_SECRET_NAME="s1"
                 );
-            )" , "<main>:7:49: Error: SERVICE_ACCOUNT_ID requires key\n");
+            )sql" , "<main>:7:49: Error: SERVICE_ACCOUNT_ID requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5622,9 +5651,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AUTH_METHOD="BASIC",
                     LOGIN="admin"
                 );
-            )" , "<main>:7:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql" , "<main>:7:27: Error: PASSWORD_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5632,9 +5661,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AUTH_METHOD="BASIC",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )" , "<main>:7:42: Error: LOGIN requires key\n");
+            )sql" , "<main>:7:42: Error: LOGIN requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5644,9 +5673,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )" , "<main>:9:42: Error: SERVICE_ACCOUNT_ID requires key\n");
+            )sql" , "<main>:9:42: Error: SERVICE_ACCOUNT_ID requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5656,9 +5685,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOGIN="admin",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )" , "<main>:9:42: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+            )sql" , "<main>:9:42: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5668,9 +5697,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
                     PASSWORD_SECRET_NAME="secret_name"
                 );
-            )" , "<main>:9:42: Error: LOGIN requires key\n");
+            )sql" , "<main>:9:42: Error: LOGIN requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5680,9 +5709,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
                     LOGIN="admin"
                 );
-            )" , "<main>:9:27: Error: PASSWORD_SECRET_NAME requires key\n");
+            )sql" , "<main>:9:27: Error: PASSWORD_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5691,9 +5720,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_REGION="ru-central-1"
                 );
-            )" , "<main>:8:32: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
+            )sql" , "<main>:8:32: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5702,9 +5731,9 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
                     AWS_REGION="ru-central-1"
                 );
-            )" , "<main>:8:32: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
+            )sql" , "<main>:8:32: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="PostgreSQL",
@@ -5713,14 +5742,14 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name",
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name"
                 );
-            )" , "<main>:8:51: Error: AWS_REGION requires key\n");
+            )sql" , "<main>:8:51: Error: AWS_REGION requires key\n");
     }
 
     Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 DROP EXTERNAL DATA SOURCE MyDataSource;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5737,11 +5766,11 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 pragma TablePathPrefix='/aba';
                 DROP EXTERNAL DATA SOURCE MyDataSource;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5759,10 +5788,10 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     }
 
     Y_UNIT_TEST(DropExternalDataSourceIfExists) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 DROP EXTERNAL DATA SOURCE IF EXISTS MyDataSource;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5781,7 +5810,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
 
 Y_UNIT_TEST_SUITE(ExternalTable) {
     Y_UNIT_TEST(CreateExternalTable) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
             USE plato;
             CREATE EXTERNAL TABLE mytable (
                 a int
@@ -5789,7 +5818,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
                 DATA_SOURCE="/Root/mydatasource",
                 LOCATION="/folder1/*"
             );
-        )");
+        )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5806,7 +5835,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
     }
 
     Y_UNIT_TEST(CreateExternalTableWithTablePrefix) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
             USE plato;
             pragma TablePathPrefix='/aba';
             CREATE EXTERNAL TABLE mytable (
@@ -5815,7 +5844,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
                 DATA_SOURCE="mydatasource",
                 LOCATION="/folder1/*"
             );
-        )");
+        )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5833,7 +5862,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
     }
 
     Y_UNIT_TEST(CreateExternalTableObjectStorage) {
-        auto res = SqlToYql(R"(
+        auto res = SqlToYql(R"sql(
             USE plato;
             CREATE EXTERNAL TABLE mytable (
                 a int,
@@ -5855,12 +5884,12 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
                 `storage.location.template`="${year}/${month}",
                 PARTITONED_BY = "[year, month]"
             );
-        )");
+        )sql");
         UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableIfNotExists) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
             USE plato;
             CREATE EXTERNAL TABLE IF NOT EXISTS mytable (
                 a int
@@ -5868,7 +5897,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
                 DATA_SOURCE="/Root/mydatasource",
                 LOCATION="/folder1/*"
             );
-        )");
+        )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5884,38 +5913,87 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(AlterExternalTableAddColumn) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            ALTER EXTERNAL TABLE mytable
+                ADD COLUMN my_column int32,
+                RESET (LOCATION);
+        )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('actions '('('addColumns '('('"my_column" (AsOptionalType (DataType 'Int32))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location)))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('tableType 'externalTable))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AlterExternalTableDropColumn) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            USE plato;
+            ALTER EXTERNAL TABLE mytable
+                DROP COLUMN my_column,
+                SET (Location = "abc", Other_Prop = "42"),
+                SET x 'y';
+        )sql");
+        UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('actions '('('dropColumns '('"my_column")#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('setTableSettings '('('location (String '"abc")) '('other_prop (String '"42")) '('x (String '"y")))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('tableType 'externalTable))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalTableWithBadArguments) {
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable;
-            )" , "<main>:3:45: Error: Unexpected token ';' : syntax error...\n\n");
+            )sql" , "<main>:3:45: Error: Unexpected token ';' : syntax error...\n\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable (
                     a int
                 );
-            )" , "<main>:4:23: Error: DATA_SOURCE requires key\n");
+            )sql" , "<main>:4:23: Error: DATA_SOURCE requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable (
                     a int
                 ) WITH (
                     DATA_SOURCE="/Root/mydatasource"
                 );
-            )" , "<main>:6:33: Error: LOCATION requires key\n");
+            )sql" , "<main>:6:33: Error: LOCATION requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable (
                     a int
                 ) WITH (
                     LOCATION="/folder1/*"
                 );
-            )" , "<main>:6:30: Error: DATA_SOURCE requires key\n");
+            )sql" , "<main>:6:30: Error: DATA_SOURCE requires key\n");
 
-        ExpectFailWithError(R"(
+        ExpectFailWithError(R"sql(
                 USE plato;
                 CREATE EXTERNAL TABLE mytable (
                     a int,
@@ -5924,14 +6002,14 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
                     DATA_SOURCE="/Root/mydatasource",
                     LOCATION="/folder1/*"
                 );
-            )" , "<main>:8:30: Error: PRIMARY KEY is not supported for external table\n");
+            )sql" , "<main>:8:30: Error: PRIMARY KEY is not supported for external table\n");
     }
 
     Y_UNIT_TEST(DropExternalTable) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 DROP EXTERNAL TABLE MyExternalTable;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5947,11 +6025,11 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
     }
 
     Y_UNIT_TEST(DropExternalTableWithTablePrefix) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 pragma TablePathPrefix='/aba';
                 DROP EXTERNAL TABLE MyExternalTable;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -5968,10 +6046,10 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
     }
 
     Y_UNIT_TEST(DropExternalTableIfExists) {
-        NYql::TAstParseResult res = SqlToYql(R"(
+        NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
                 DROP EXTERNAL TABLE IF EXISTS MyExternalTable;
-            )");
+            )sql");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -6129,10 +6207,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
     Y_UNIT_TEST(CreateViewSimple) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
-                CREATE VIEW TheView WITH (security_invoker = true) AS SELECT 1;
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
             )"
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(CreateViewNoSecurityInvoker) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'AS' : syntax error");
+    }
+
+    Y_UNIT_TEST(CreateViewSecurityInvokerTurnedOff) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = FALSE) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "SECURITY_INVOKER option must be explicitly enabled");
     }
     
     Y_UNIT_TEST(CreateViewFromTable) {
@@ -6143,7 +6239,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
                     USE plato;
-                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                    CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                 path,
                 query
@@ -6171,14 +6267,14 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
                     USE plato;
-                    CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                    CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                 path,
                 query
             )
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
-        
+
         TString reconstructedQuery = ToString(Tokenize(query));
         TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
             if (word == "query_text") {
@@ -6208,6 +6304,50 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
             }
         };
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(CreateViewWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                PRAGMA TablePathPrefix='/PathPrefix';
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
+    Y_UNIT_TEST(DropViewWithTablePrefix) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                PRAGMA TablePathPrefix='/PathPrefix';
+                DROP VIEW TheView;
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
+            }
+        };
+
         TWordCountHive elementStat = { {"Write!"} };
         VerifyProgram(res, elementStat, verifyLine);
 

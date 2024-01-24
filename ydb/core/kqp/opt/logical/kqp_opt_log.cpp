@@ -28,8 +28,8 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushPredicateToReadTable));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushPredicateToReadTable));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
@@ -146,7 +146,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> JoinToIndexLookup(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx, Config);
+        TExprBase output = KqpJoinToIndexLookup(node, ctx, KqpCtx);
         DumpAppliedRule("JoinToIndexLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

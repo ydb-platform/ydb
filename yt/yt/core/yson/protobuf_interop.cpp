@@ -276,7 +276,7 @@ public:
         int fieldNumber,
         const TProtobufMessageBytesFieldConverter& converter)
     {
-        EmplaceOrCrash(MessageFieldConverterMap_, std::make_pair(descriptor, fieldNumber), converter);
+        EmplaceOrCrash(MessageFieldConverterMap_, std::pair(descriptor, fieldNumber), converter);
     }
 
     //! This method is called while reflecting types.
@@ -303,7 +303,7 @@ public:
         VERIFY_SPINLOCK_AFFINITY(Lock_);
 
         auto fieldNumber = descriptor->field(fieldIndex)->number();
-        auto it = MessageFieldConverterMap_.find(std::make_pair(descriptor, fieldNumber));
+        auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
         if (it == MessageFieldConverterMap_.end()) {
             return std::nullopt;
         } else {
@@ -1014,11 +1014,11 @@ protected:
                     data);
                 return;
             case EUtf8Check::ThrowOnFail:
-                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v, Value: %v)",
-                    YPathStack_.GetHumanReadablePath(),
-                    data)
+                THROW_ERROR_EXCEPTION("String field got non UTF-8 value (Path: %v)",
+                    YPathStack_.GetHumanReadablePath())
                     << TErrorAttribute("ypath", YPathStack_.GetPath())
-                    << TErrorAttribute("proto_field", fieldFullName);
+                    << TErrorAttribute("proto_field", fieldFullName)
+                    << TErrorAttribute("non_utf8_string", data);
         }
     }
 };

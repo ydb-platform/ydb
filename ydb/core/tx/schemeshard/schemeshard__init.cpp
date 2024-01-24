@@ -1535,6 +1535,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         domainInfo->SetServerlessComputeResourcesMode(
                             rowset.GetValue<Schema::SubDomains::ServerlessComputeResourcesMode>()
                         );
+                    } else if (Self->IsServerlessDomain(domainInfo) || Self->IsServerlessDomainGlobal(pathId, domainInfo)) {
+                        domainInfo->SetServerlessComputeResourcesMode(
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
+                        );
                     }
                 }
 
@@ -1602,6 +1606,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
                         alter->SetServerlessComputeResourcesMode(
                             rowset.GetValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()
+                        );
+                    } else if (Self->IsServerlessDomain(alter) || Self->IsServerlessDomainGlobal(pathId, alter)) {
+                        alter->SetServerlessComputeResourcesMode(
+                            NKikimrSubDomains::EServerlessComputeResourcesModeShared
                         );
                     }
 
@@ -3928,11 +3936,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_GRAPHSHARD_COUNT].Add(1);
                 break;
             default:
-                Y_FAIL_S("dont know how to interpret tablet type"
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType
                          << ", pathId: " << pathId
                          << ", shardId: " << shardIdx
                          << ", tabletId: " << tabletId);
+                break;
             }
         }
 

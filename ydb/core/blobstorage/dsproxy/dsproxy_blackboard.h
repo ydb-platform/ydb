@@ -108,9 +108,9 @@ struct TBlobState {
 };
 
 struct TDiskGetRequest {
-    const TLogoBlobID Id;
-    const ui32 Shift;
-    const ui32 Size;
+    TLogoBlobID Id;
+    ui32 Shift;
+    ui32 Size;
     ssize_t PartMapIndex = -1;
 
     TDiskGetRequest(const TLogoBlobID &id, const ui32 shift, const ui32 size)
@@ -127,7 +127,7 @@ struct TDiskPutRequest {
         ReasonInitial,
         ReasonAccelerate
     };
-    const TLogoBlobID Id;
+    TLogoBlobID Id;
     TRope Buffer;
     EPutReason Reason;
     bool IsHandoff;

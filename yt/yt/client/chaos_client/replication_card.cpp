@@ -33,7 +33,7 @@ void FormatProgressWithProjection(
     segments.end(),
     replicationProgressProjection.From,
     [] (const auto& lhs, const auto& rhs) {
-            return CompareRows(lhs, rhs.LowerKey) <= 0;
+        return CompareRows(lhs, rhs.LowerKey) <= 0;
     });
 
     bool comma = false;
@@ -60,7 +60,6 @@ void FormatProgressWithProjection(
 }
 
 } // namespace NDetail
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -537,7 +536,7 @@ std::optional<TTimestamp> FindReplicationProgressTimestampForKey(
         progress.Segments.end(),
         key,
         [&] (const auto& /*key*/, const auto& segment) {
-           return CompareValueRanges(key, segment.LowerKey.Elements()) < 0;
+            return CompareValueRanges(key, segment.LowerKey.Elements()) < 0;
         });
     YT_VERIFY(it > progress.Segments.begin());
 

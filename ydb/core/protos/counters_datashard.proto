@@ -132,6 +132,16 @@ enum ECumulativeCounters {
     COUNTER_CHANGE_EXCHANGE_REJECTED_APPLY = 99           [(CounterOpts) = {Name: "ChangeExchangeRejectedApply"}];
     COUNTER_CHANGE_RECORDS_SENT = 100                     [(CounterOpts) = {Name: "ChangeRecordsSent"}];
     COUNTER_CHANGE_RECORDS_FORGOTTEN = 101                [(CounterOpts) = {Name: "ChangeRecordsForgotten"}];
+    COUNTER_WRITE_REQUEST = 102                           [(CounterOpts) = {Name: "WriteRequests"}];
+    COUNTER_WRITE_IMMEDIATE = 103                         [(CounterOpts) = {Name: "WriteImmediate"}];
+    COUNTER_WRITE_COMPLETE = 104                          [(CounterOpts) = {Name: "WriteComplete"}];
+    COUNTER_WRITE_SUCCESS = 105                           [(CounterOpts) = {Name: "WriteSuccess"}];
+    COUNTER_WRITE_ERROR = 106                             [(CounterOpts) = {Name: "WriteError"}];   
+    COUNTER_WRITE_OVERLOADED = 107                        [(CounterOpts) = {Name: "WriteOverloaded"}];   
+    COUNTER_WRITE_OUT_OF_SPACE = 108                      [(CounterOpts) = {Name: "WriteOutOfSpace"}];
+    COUNTER_WRITE_CANCELLED = 109                         [(CounterOpts) = {Name: "WriteCancelled"}];
+    COUNTER_WRITE_ROWS = 110                              [(CounterOpts) = {Name: "WriteRows"}];
+    COUNTER_WRITE_BYTES = 111                             [(CounterOpts) = {Name: "WriteBytes"}];
 }
 
 enum EPercentileCounters {
@@ -381,6 +391,14 @@ enum EPercentileCounters {
         Ranges: { Value: 5        Name: "5"},
         Ranges: { Value: 10       Name: "10"},
     }];
+
+    COUNTER_WRITE_SUCCESS_COMPLETE_LATENCY = 20 [(CounterOpts) = {
+        Name: "WriteSuccessCompleteLatency"
+    }];
+
+    COUNTER_WRITE_EXEC_LATENCY = 21 [(CounterOpts) = {
+        Name: "WriteExecLatency"
+    }];    
 }
 
 enum ETxTypes {

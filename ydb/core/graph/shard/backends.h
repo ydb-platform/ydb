@@ -17,14 +17,24 @@ struct TMetricsData {
     std::unordered_map<TString, double> Values;
 };
 
-class TMemoryBackend {
+class TBaseBackend {
+public:
+    struct TMetricsValues {
+        std::vector<TInstant> Timestamps;
+        std::vector<std::vector<double>> Values;
+    };
+
+    static void NormalizeAndDownsample(TMetricsValues& values, size_t maxPoints);
+    static void FillResult(TMetricsValues& values, const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result);
+
+    std::unordered_map<TString, ui64> MetricsIndex; // mapping name -> id
+};
+
+class TMemoryBackend : public TBaseBackend {
 public:
     void StoreMetrics(TMetricsData&& data);
     void GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrGraph::TEvMetricsResult& result) const;
     void ClearData(TInstant cutline, TInstant& newStartTimestamp);
-
-    template<typename ValueType>
-    static std::vector<ValueType> Downsample(const std::vector<ValueType>& data, size_t maxPoints);
 
     TString GetLogPrefix() const;
 
@@ -41,11 +51,10 @@ public:
         }
     };
 
-    std::unordered_map<TString, size_t> MetricsIndex; // mapping name -> id
     std::deque<TMetricsRecord> MetricsValues;
 };
 
-class TLocalBackend {
+class TLocalBackend : public TBaseBackend {
 public:
     static constexpr ui64 MAX_ROWS_TO_DELETE = 1000;
 
@@ -54,8 +63,6 @@ public:
     bool ClearData(NTabletFlatExecutor::TTransactionContext& txc, TInstant cutline, TInstant& newStartTimestamp);
 
     TString GetLogPrefix() const;
-
-    std::unordered_map<TString, ui64> MetricsIndex; // mapping name -> id
 };
 
 } // NGraph

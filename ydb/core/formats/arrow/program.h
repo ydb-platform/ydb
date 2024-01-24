@@ -62,6 +62,10 @@ private:
     }
 
 public:
+    TString DebugString() const {
+        return TStringBuilder() << (GeneratedFlag ? "G:" : "") << ColumnName;
+    }
+
     static TColumnInfo Generated(const ui32 columnId, const std::string& columnName) {
         return TColumnInfo(columnId, columnName, true);
     }
@@ -125,6 +129,34 @@ public:
         : Column(column)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::BooleanScalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, i8 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::Int8Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, ui8 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::UInt8Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, i16 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::Int16Scalar>(value))
+        , FuncOpts(nullptr)
+    {}
+
+    explicit TAssign(const TColumnInfo& column, ui16 value)
+        : Column(column)
+        , Operation(EOperation::Constant)
+        , Constant(std::make_shared<arrow::UInt16Scalar>(value))
         , FuncOpts(nullptr)
     {}
 
@@ -205,6 +237,12 @@ public:
     const arrow::compute::FunctionOptions* GetOptions() const { return FuncOpts.get(); }
 
     IStepFunction<TAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
+    TString DebugString() const {
+        return TStringBuilder() <<
+            "{op=" << Operation << ";column=" << Column.DebugString() << ";" << (Constant ? "const=" + Constant->ToString() + ";" : "NO;")
+            << (KernelFunction ? ("kernel=" + KernelFunction->name() + ";") : "NO;")
+            << "}";
+    }
 private:
     const TColumnInfo Column;
     EOperation Operation{EOperation::Unspecified};
@@ -283,6 +321,27 @@ private:
     YDB_READONLY_DEF(std::vector<TColumnInfo>, Projection); // Step's result columns (remove others)
 public:
     using TDatumBatch = TDatumBatch;
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "assignes=[";
+        for (auto&& i : Assignes) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+        sb << "group_by_count = " << GroupBy.size() << "; ";
+        sb << "group_by_keys_count=" << GroupByKeys.size() << ";";
+
+        sb << "projections=[";
+        for (auto&& i : Projection) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+
+        sb << "}";
+        return sb;
+    }
 
     std::set<std::string> GetColumnsInUsage() const;
 
@@ -363,6 +422,15 @@ struct TProgram {
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
     std::shared_ptr<NArrow::TColumnFilter> ApplyEarlyFilter(std::shared_ptr<arrow::Table>& batch, const bool useFilter) const;
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[";
+        for (auto&& i : Steps) {
+            sb << i->DebugString() << ";";
+        }
+        sb << "]";
+        return sb;
+    }
 };
 
 inline arrow::Status ApplyProgram(

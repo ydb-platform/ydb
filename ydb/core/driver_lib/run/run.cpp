@@ -111,7 +111,6 @@
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
 #include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
@@ -261,7 +260,6 @@ public:
 
             appData->ChannelProfiles->Profiles.emplace_back();
             TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
-            ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
                 Y_ABORT_UNLESS(channel.HasErasureSpecies());
                 Y_ABORT_UNLESS(channel.HasPDiskCategory());
@@ -275,7 +273,6 @@ public:
 
                 const TString kind = channel.GetStoragePoolKind();
                 outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind));
-                ++channelIdx;
             }
         }
     }
@@ -565,8 +562,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["clickhouse_internal"] = &hasClickhouseInternal;
         TServiceCfg hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
-        TServiceCfg hasLongTx = false;
-        names["long_tx"] = &hasLongTx;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
         TServiceCfg hasImport = services.empty();
@@ -724,11 +719,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasScripting) {
             server.AddService(new NGRpcService::TGRpcYdbScriptingService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasScripting.IsRlAllowed()));
-        }
-
-        if (hasLongTx) {
-            server.AddService(new NGRpcService::TGRpcYdbLongTxService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasLongTx.IsRlAllowed()));
         }
 
         if (hasSchemeService) {
@@ -1375,7 +1365,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableBasicServices) {
-        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig));
+        sil->AddServiceInitializer(new TBasicServicesInitializer(runConfig, ModuleFactories));
     }
     if (serviceMask.EnableIcbService) {
         sil->AddServiceInitializer(new TImmediateControlBoardInitializer(runConfig));

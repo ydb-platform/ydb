@@ -26,7 +26,7 @@ void TProgressBar::AddProgress(size_t value) {
 
 TProgressBar::~TProgressBar() {
     if (!Finished) {
-        Cout << Endl;
+        Cerr << Endl;
     }
 }
 
@@ -62,12 +62,12 @@ void TProgressBar::Render()
     output += TString("█") * filledBarLen;
     output += TString("░") * (barLen - filledBarLen);
     output += outputEnd;
-    Cout << output;
+    Cerr << output;
     if (CurProgress == Capacity) {
-        Cout << "\n";
+        Cerr << "\n";
         Finished = true;
     }
-    Cout.Flush();
+    Cerr.Flush();
 }
 
 } // namespace NConsoleClient

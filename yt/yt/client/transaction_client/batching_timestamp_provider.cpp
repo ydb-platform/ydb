@@ -54,7 +54,7 @@ public:
         return Underlying_->GetLatestTimestamp();
     }
 
- private:
+private:
     const ITimestampProviderPtr Underlying_;
     const TDuration BatchPeriod_;
 

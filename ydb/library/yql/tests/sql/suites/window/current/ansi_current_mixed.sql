@@ -22,4 +22,4 @@ WINDOW w AS (
     ORDER BY key
     ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING
 )
-ORDER BY value, key;
+ORDER BY value, key, subkey;

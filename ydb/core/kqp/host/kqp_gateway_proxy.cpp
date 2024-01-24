@@ -1022,6 +1022,9 @@ public:
             NMetadata::NModifications::IOperationsManager::TExternalModificationContext context;
             context.SetDatabase(SessionCtx->GetDatabase());
             context.SetActorSystem(ActorSystem);
+            if (SessionCtx->GetUserToken()) {
+                context.SetUserToken(*SessionCtx->GetUserToken());
+            }
 
             auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);

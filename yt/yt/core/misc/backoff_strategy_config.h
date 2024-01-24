@@ -8,31 +8,29 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSerializableExponentialBackoffOptions
-    : public virtual NYTree::TYsonStruct
-    , public TExponentialBackoffOptions
+class TExponentialBackoffOptionsSerializer
+    : public NYTree::TExternalizedYsonStruct<TExponentialBackoffOptions>
 {
 public:
-    REGISTER_YSON_STRUCT(TSerializableExponentialBackoffOptions);
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TSerializableExponentialBackoffOptions)
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSerializableConstantBackoffOptions
-    : public virtual NYTree::TYsonStruct
-    , public TConstantBackoffOptions
+class TConstantBackoffOptionsSerializer
+    : public NYTree::TExternalizedYsonStruct<TConstantBackoffOptions>
 {
 public:
-    REGISTER_YSON_STRUCT(TSerializableConstantBackoffOptions);
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TSerializableConstantBackoffOptions)
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 

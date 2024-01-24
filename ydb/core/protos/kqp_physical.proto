@@ -344,11 +344,17 @@ message TKqpExternalSink {
     string AuthInfo = 4;
 }
 
+message TKqpInternalSink {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+}
+
 message TKqpSink {
     uint32 OutputIndex = 1;
 
     oneof Type {
         TKqpExternalSink ExternalSink = 2;
+        TKqpInternalSink InternalSink = 3;
     }
 }
 
@@ -372,6 +378,17 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+}
+
+message TKqpPhyMetadataOperation {
+    message TColumnValue {
+        string Column = 1;
+        Ydb.Value Value = 2;
+    }
+    repeated TColumnValue ColumnValues = 1;
+
+    optional bool SuccessOnNotExist = 2;
+    optional bool SuccessOnAlreadyExists = 3;
 }
 
 message TKqpSchemeOperation {
@@ -409,6 +426,10 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateView = 20;
         NKikimrSchemeOp.TModifyScheme AlterView = 21;
         NKikimrSchemeOp.TModifyScheme DropView = 22;
+        TKqpPhyMetadataOperation CreateObject = 23;
+        TKqpPhyMetadataOperation UpsertObject = 24;
+        TKqpPhyMetadataOperation AlterObject = 25;
+        TKqpPhyMetadataOperation DropObject = 26;
     }
 }
 

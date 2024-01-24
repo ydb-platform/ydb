@@ -6,9 +6,10 @@ package buildcfg
 
 import (
 	"fmt"
-	"internal/goexperiment"
 	"reflect"
 	"strings"
+
+	"internal/goexperiment"
 )
 
 // ExperimentFlags represents a set of GOEXPERIMENT flags relative to a baseline

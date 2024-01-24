@@ -40,6 +40,7 @@ public:
         virtual void Serialize(TEvWrite& evWrite) const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;
+        virtual const TString& GetData() const = 0;
     };
 
     class TFullSplitData {

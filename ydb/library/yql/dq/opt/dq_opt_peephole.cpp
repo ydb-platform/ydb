@@ -607,11 +607,10 @@ NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExp
 
     TVector<TExprBase> branches;
     branches.reserve(dqReplicate.Args().Count() - 1);
-
     auto inputIndex = NDq::BuildAtomList("0", dqReplicate.Pos(), ctx);
     for (size_t i = 1; i < dqReplicate.Args().Count(); ++i) {
         branches.emplace_back(inputIndex);
-        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Args().Get(i).Ref()));
+        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Arg(i).Ref()));
     }
 
     return Build<TCoSwitch>(ctx, dqReplicate.Pos())

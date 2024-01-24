@@ -23,7 +23,6 @@ CLUSTER_CONFIG = dict(
     erasure=Erasure.NONE,
     nodes=1,
     enable_metering=True,
-    disable_mvcc=True,
     additional_log_configs={
         'TX_PROXY': LogLevels.DEBUG,
         'KQP_PROXY': LogLevels.DEBUG,
@@ -48,7 +47,10 @@ CLUSTER_CONFIG = dict(
     },
     enforce_user_token_requirement=True,
     default_user_sid='user@builtin',
-    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes']
+    extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
+    datashard_config={
+        'keep_snapshot_timeout': 5000,
+    },
 )
 
 
@@ -508,7 +510,7 @@ def alter_database_serverless_compute_resources_mode(cluster, database_path, ser
     ydbcli_db_schema_exec(cluster, alter_proto)
 
 
-def test_discovery_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
     def list_endpoints(database):
         logger.debug("List endpoints of %s", database)
 
@@ -524,10 +526,10 @@ def test_discovery_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, 
 
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
-        ydb_serverless_db_with_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+        ydb_serverless_db_with_exclusive_nodes,
+        "EServerlessComputeResourcesModeShared"
     )
-    serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_nodes)
+    serverless_db_shared_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
     hostel_db_endpoints = list_endpoints(ydb_hostel_db)
 
     assert_that(hostel_db_endpoints, not_none())
@@ -536,23 +538,23 @@ def test_discovery_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, 
 
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
-        ydb_serverless_db_with_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+        ydb_serverless_db_with_exclusive_nodes,
+        "EServerlessComputeResourcesModeExclusive"
     )
-    serverless_db_dedicated_endpoints = list_endpoints(ydb_serverless_db_with_nodes)
+    serverless_db_exclusive_endpoints = list_endpoints(ydb_serverless_db_with_exclusive_nodes)
 
-    assert_that(serverless_db_dedicated_endpoints, not_none())
-    assert_that(serverless_db_dedicated_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
+    assert_that(serverless_db_exclusive_endpoints, not_none())
+    assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
 
 
-def test_create_table_using_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
-        ydb_serverless_db_with_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+        ydb_serverless_db_with_exclusive_nodes,
+        "EServerlessComputeResourcesModeExclusive"
     )
 
-    database = ydb_serverless_db_with_nodes
+    database = ydb_serverless_db_with_exclusive_nodes
     driver_config = ydb.DriverConfig(ydb_endpoint, database)
     driver = ydb.Driver(driver_config)
     driver.wait(120)
@@ -579,20 +581,20 @@ def test_create_table_using_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_wit
                 path
             )
 
-        table_path = os.path.join(dir_path, "create_table_with_dedicated_nodes_table")
+        table_path = os.path.join(dir_path, "create_table_with_exclusive_nodes_table")
         pool.retry_operation_sync(create_table, None, table_path)
         pool.retry_operation_sync(write_some_data, None, table_path)
         pool.retry_operation_sync(drop_table, None, table_path)
 
 
-def test_seamless_migration_to_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_with_nodes, ydb_endpoint, ydb_cluster):
+def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
-        ydb_serverless_db_with_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED"
+        ydb_serverless_db_with_exclusive_nodes,
+        "EServerlessComputeResourcesModeShared"
     )
 
-    database = ydb_serverless_db_with_nodes
+    database = ydb_serverless_db_with_exclusive_nodes
     driver_config = ydb.DriverConfig(ydb_endpoint, database)
     driver = ydb.Driver(driver_config)
     driver.wait(120)
@@ -613,8 +615,8 @@ def test_seamless_migration_to_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_
 
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
-        ydb_serverless_db_with_nodes,
-        "SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED"
+        ydb_serverless_db_with_exclusive_nodes,
+        "EServerlessComputeResourcesModeExclusive"
     )
 
     # Old session keeps work fine with old connections to shared nodes
@@ -628,7 +630,7 @@ def test_seamless_migration_to_dedicated_nodes(ydb_hostel_db, ydb_serverless_db_
     newDriver.wait(120)
     session._driver = newDriver
 
-    # Old session works fine with new connections to dedicated nodes
+    # Old session works fine with new connections to exclusive nodes
     session.transaction().execute(
         f"UPSERT INTO `{path}` (id) VALUES (7), (8), (9);",
         commit_tx=True

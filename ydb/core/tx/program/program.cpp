@@ -250,6 +250,14 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const NSsa::TColumnInfo& name, const
     switch (constant.GetValueCase()) {
         case TId::kBool:
             return TAssign(name, constant.GetBool());
+        case TId::kInt8:
+            return TAssign(name, i8(constant.GetInt8()));
+        case TId::kUint8:
+            return TAssign(name, ui8(constant.GetUint8()));
+        case TId::kInt16:
+            return TAssign(name, i16(constant.GetInt16()));
+        case TId::kUint16:
+            return TAssign(name, ui16(constant.GetUint16()));
         case TId::kInt32:
             return TAssign(name, constant.GetInt32());
         case TId::kUint32:
@@ -467,6 +475,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
             return false;
     }
 
+    ProgramProto = programProto;
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);

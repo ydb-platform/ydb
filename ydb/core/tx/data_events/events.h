@@ -2,6 +2,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
 
@@ -44,8 +45,7 @@ struct TDataEvents {
             Record.SetTxMode(txMode);
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, ui64 tableId, 
-            ui64 schemaVersion, const std::vector<ui32>& columnIds,
+        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -54,8 +54,9 @@ struct TDataEvents {
             operation->SetType(operationType);
             operation->SetPayloadFormat(payloadFormat);
             operation->SetPayloadIndex(payloadIndex);
-            operation->MutableTableId()->SetTableId(tableId);
-            operation->MutableTableId()->SetSchemaVersion(schemaVersion);
+            operation->MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
             operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
         }
 

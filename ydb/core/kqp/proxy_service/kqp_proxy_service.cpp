@@ -662,7 +662,7 @@ public:
             << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {

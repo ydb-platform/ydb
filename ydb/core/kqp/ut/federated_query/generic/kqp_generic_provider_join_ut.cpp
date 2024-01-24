@@ -63,9 +63,7 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
         }
 
         std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr = MakeKikimrRunnerWithConnector();
-
-        auto tableCLient = kikimr->GetTableClient();
-        auto session = tableCLient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr->GetQueryClient();
 
         // external tables to pg/ch
         {
@@ -104,7 +102,7 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
                 "ch_database"_a = GetChDatabase(),
                 "ch_user"_a = GetChUser(),
                 "ch_password"_a = GetChPassword());
-            auto result = session.ExecuteSchemeQuery(sql).GetValueSync();
+            auto result = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -116,7 +114,6 @@ Y_UNIT_TEST_SUITE(FederatedQueryJoin) {
             WHERE ch.key > 998
         )sql";
 
-        auto queryClient = kikimr->GetQueryClient();
         auto result = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

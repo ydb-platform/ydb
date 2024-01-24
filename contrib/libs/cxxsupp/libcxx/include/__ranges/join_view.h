@@ -6,6 +6,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
 #ifndef _LIBCPP___RANGES_JOIN_VIEW_H
 #define _LIBCPP___RANGES_JOIN_VIEW_H
 
@@ -25,6 +26,7 @@
 #include <__ranges/non_propagating_cache.h>
 #include <__ranges/range_adaptor.h>
 #include <__ranges/view_interface.h>
+#include <__type_traits/maybe_const.h>
 #include <__utility/forward.h>
 #include <optional>
 #include <type_traits>
@@ -35,7 +37,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#if _LIBCPP_STD_VER > 17
 
 namespace ranges {
   template<class>
@@ -363,7 +365,7 @@ inline namespace __cpo {
 } // namespace views
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_INCOMPLETE_RANGES)
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

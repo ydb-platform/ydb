@@ -9,6 +9,7 @@
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
+#include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/table_output.h>
@@ -440,7 +441,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
-       .ValueOrThrow();
+        .ValueOrThrow();
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }
@@ -782,13 +783,6 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("placeholder_values", &TThis::PlaceholderValues)
         .Optional();
-
-    registrar.ParameterWithUniversalAccessor<bool>(
-        "use_canonical_null_relations",
-        [] (TThis* command) -> auto& {
-            return command->Options.UseCanonicalNullRelations;
-        })
-        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -1049,6 +1043,7 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (ColumnNames) {
         TColumnFilter::TIndexes columnFilterIndexes;
+        columnFilterIndexes.reserve(ColumnNames->size());
         for (const auto& name : *ColumnNames) {
             auto optionalIndex = nameTable->FindId(name);
             if (!optionalIndex) {

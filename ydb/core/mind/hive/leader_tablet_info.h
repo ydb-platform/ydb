@@ -26,6 +26,29 @@ protected:
     static TString DEFAULT_STORAGE_POOL_NAME;
 
 public:
+    struct TChannel {
+        TTabletId TabletId;
+        ui32 ChannelId;
+        const TChannelBind* ChannelInfo;
+
+        double GetWeight(NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy metricToBalance) const {
+            Y_DEBUG_ABORT_UNLESS(ChannelInfo);
+            switch (metricToBalance) {
+                case NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_IOPS:
+                    return ChannelInfo->GetIOPS();
+                case NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT:
+                    return ChannelInfo->GetThroughput();
+                default:
+                case NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_SIZE:
+                    return ChannelInfo->GetSize();
+            }
+        }
+
+        bool operator==(const TChannel& other) const {
+            return TabletId == other.TabletId && ChannelId == other.ChannelId;
+        }
+    };
+
     TTabletId Id;
     ETabletState State;
     TTabletTypes::EType Type;
@@ -296,6 +319,14 @@ public:
 
     ui32 GetChannelCount() const {
         return BoundChannels.size();
+    }
+
+    TChannel GetChannel(ui32 channelId) const {
+        TChannel channel{.TabletId = Id, .ChannelId = channelId, .ChannelInfo = nullptr};
+        if (channelId < BoundChannels.size()) {
+            channel.ChannelInfo = &BoundChannels[channelId];
+        }
+        return channel;
     }
 
     void AcquireAllocationUnits();

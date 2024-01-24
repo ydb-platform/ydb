@@ -12,6 +12,11 @@
                         "Node Type": "Limit",
                         "Operators": [
                             {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 2
+                                    }
+                                ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
@@ -27,15 +32,26 @@
                                         "Node Type": "TopSort-Filter-TableFullScan",
                                         "Operators": [
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
                                                 "TopSortBy": ""
                                             },
                                             {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 2
+                                                    }
+                                                ],
                                                 "Name": "Filter",
                                                 "Predicate": "item.d > item.e And item.c <= item.d - 2 Or item.c >= item.d + 2"
                                             },
                                             {
+                                                "Inputs": [],
                                                 "Name": "TableFullScan",
                                                 "ReadColumns": [
                                                     "a",

@@ -34,10 +34,6 @@ namespace NTabletFlatExecutor {
 
         void Terminate(ETerminationReason reason, const TActorContext& ctx) noexcept;
 
-        NWilson::TSpan CreateExecutionSpan() noexcept {
-            return NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Execute");
-        }
-
         void StartEnqueuedSpan() noexcept {
             WaitingSpan = NWilson::TSpan(TWilsonTablet::Tablet, Self->TxSpan.GetTraceId(), "Tablet.Transaction.Enqueued");
         }

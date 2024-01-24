@@ -261,6 +261,17 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 });
                 break;
             }
+            case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE: {
+                auto channel = GetChannel(channelId);
+                auto filter = [&params](const TStorageGroupInfo& newGroup) -> bool {
+                    return newGroup.IsMatchesParameters(*params);
+                };
+                auto calculateUsageWithTablet = [&channel](const TStorageGroupInfo* newGroup) -> double {
+                    return newGroup->GetUsageForChannel(channel);
+                };
+                return storagePool->FindFreeAllocationUnit(filter, calculateUsageWithTablet);
+                break;
+            }
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_SPACE: {
                 NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy balanceStrategy = Hive.CurrentConfig.GetStorageBalanceStrategy();
                 Hive.CurrentConfig.SetStorageBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_SIZE);

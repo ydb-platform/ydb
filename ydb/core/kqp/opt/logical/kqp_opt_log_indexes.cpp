@@ -321,6 +321,7 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
             .Table(read.Table())
             .LookupKeys(readIndexTable.Ptr())
             .Columns(read.Columns())
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
     } else {
         return Build<TKqlLookupTable>(ctx, read.Pos())
@@ -346,7 +347,8 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
 }
 
 TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!kqpCtx.IsDataQuery()) {
+    if (kqpCtx.IsScanQuery()) {
+        // TODO: Enable index lookup for scan queries as we now support stream lookups.
         return node;
     }
 
@@ -364,6 +366,7 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
                     .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                     .LookupKeys(lookupIndex.LookupKeys())
                     .Columns(lookupIndex.Columns())
+                    .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                     .Done();
             }
 
@@ -381,12 +384,14 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
                 .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
                 .Columns(keyColumnsList)
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
 
             return Build<TKqlStreamLookupTable>(ctx, node.Pos())
                 .Table(lookupIndex.Table())
                 .LookupKeys(lookupIndexTable.Ptr())
                 .Columns(lookupIndex.Columns())
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
         }
 
@@ -423,6 +428,7 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
                 .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                 .LookupKeys(streamLookupIndex.LookupKeys())
                 .Columns(streamLookupIndex.Columns())
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
         }
 
@@ -432,12 +438,14 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())
             .Columns(keyColumnsList)
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
 
         return Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(streamLookupIndex.Table())
             .LookupKeys(lookupIndexTable.Ptr())
             .Columns(streamLookupIndex.Columns())
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
     }
 
@@ -499,7 +507,7 @@ bool KeySelectorAllMembers(const TCoLambda& lambda, const TSet<TString> & applyC
 }
 
 // Construct a new lambda with renamed attributes based on the mapping
-// If we see a complex expression in the key selector, we just pass it on into 
+// If we see a complex expression in the key selector, we just pass it on into
 // the new lambda
 TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const THashMap<TString,TString>& map) {
     // If its single member lambda body
@@ -533,7 +541,7 @@ TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const TH
                 .Done();
             members.push_back(member);
         }
-                            
+
         return Build<TCoLambda>(ctx, lambda.Pos())
                 .Args({arg})
                 .Body<TExprList>()
@@ -544,8 +552,8 @@ TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const TH
 }
 
 
-// If we have a top-sort over flatmap, we can push it throught is, so that the 
-// RewriteTopSortOverIndexRead rule can fire next. If the flatmap renames some of the sort 
+// If we have a top-sort over flatmap, we can push it throught is, so that the
+// RewriteTopSortOverIndexRead rule can fire next. If the flatmap renames some of the sort
 // attributes, we need to use the original names in the top-sort. When pushing TopSort below
 // FlatMap, we change FlatMap to OrderedFlatMap to preserve the order of its input.
 TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx) {

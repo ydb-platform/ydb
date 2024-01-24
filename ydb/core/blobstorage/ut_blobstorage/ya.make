@@ -24,6 +24,7 @@ SRCS(
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
+    mirror3dc.cpp
     mirror3of4.cpp
     monitoring.cpp
     recovery.cpp

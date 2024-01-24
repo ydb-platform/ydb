@@ -2,6 +2,8 @@
 
 #include "channel.h"
 
+#include <yt/yt/library/profiling/sensor.h>
+
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,10 +16,13 @@ struct IThrottlingChannel
 
 DEFINE_REFCOUNTED_TYPE(IThrottlingChannel)
 
+////////////////////////////////////////////////////////////////////////////////
+
 //! Constructs a channel that limits request rate to the underlying channel.
 IThrottlingChannelPtr CreateThrottlingChannel(
     TThrottlingChannelConfigPtr config,
-    IChannelPtr underlyingChannel);
+    IChannelPtr underlyingChannel,
+    NProfiling::TProfiler profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -356,7 +356,7 @@ i64 TCompositeMapService::GetSize() const
 
 IYPathServicePtr TCompositeMapService::FindItemService(TStringBuf key) const
 {
-   return Impl_->FindItemService(key);
+    return Impl_->FindItemService(key);
 }
 
 void TCompositeMapService::ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors)

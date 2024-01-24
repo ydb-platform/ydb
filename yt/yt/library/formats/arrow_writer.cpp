@@ -62,7 +62,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Null,
                 org::apache::arrow::flatbuf::CreateNull(*flatbufBuilder)
                     .Union());
@@ -75,7 +75,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
         case ESimpleLogicalValueType::Uint16:
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Int,
                 org::apache::arrow::flatbuf::CreateInt(
                     *flatbufBuilder,
@@ -84,7 +84,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Interval:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Int,
                 org::apache::arrow::flatbuf::CreateInt(
                     *flatbufBuilder,
@@ -93,7 +93,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Date:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Date,
                 org::apache::arrow::flatbuf::CreateDate(
                     *flatbufBuilder,
@@ -101,7 +101,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Datetime:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Date,
                 org::apache::arrow::flatbuf::CreateDate(
                     *flatbufBuilder,
@@ -109,7 +109,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Timestamp:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Timestamp,
                 org::apache::arrow::flatbuf::CreateTimestamp(
                     *flatbufBuilder,
@@ -117,7 +117,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Double:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_FloatingPoint,
                 org::apache::arrow::flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
@@ -125,7 +125,7 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Float:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_FloatingPoint,
                 org::apache::arrow::flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
@@ -133,20 +133,20 @@ std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> Seriali
                     .Union());
 
         case ESimpleLogicalValueType::Boolean:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Bool,
                 org::apache::arrow::flatbuf::CreateBool(*flatbufBuilder)
                     .Union());
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Binary,
                 org::apache::arrow::flatbuf::CreateBinary(*flatbufBuilder)
                     .Union());
 
         case ESimpleLogicalValueType::Utf8:
-            return std::make_tuple(
+            return std::tuple(
                 org::apache::arrow::flatbuf::Type_Utf8,
                 org::apache::arrow::flatbuf::CreateUtf8(*flatbufBuilder)
                     .Union());
@@ -593,7 +593,7 @@ void SerializeDatetimeColumn(
                     return values[index];
                 },
                 [&] (auto value) {
-                    if(value > maxAllowedValue) {
+                    if (value > maxAllowedValue) {
                         THROW_ERROR_EXCEPTION("Datetime value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, maxAllowedValue);
                     }
                     *currentOutput++ = value * 1000;
@@ -823,7 +823,7 @@ void SerializeColumn(
     if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (simpleType == ESimpleLogicalValueType::Interval) {
-         SerializeIntegerColumn(typedColumn, simpleType, context);
+        SerializeIntegerColumn(typedColumn, simpleType, context);
     }  else if (simpleType == ESimpleLogicalValueType::Date) {
         SerializeDateColumn(typedColumn, context);
     } else if (simpleType == ESimpleLogicalValueType::Datetime) {
@@ -872,7 +872,7 @@ auto SerializeRecordBatch(
 
     auto totalSize = context->CurrentBodyOffset;
 
-    return std::make_tuple(
+    return std::tuple(
         recordBatchOffset,
         totalSize,
         [context = std::move(context)] (TMutableRef dstRef) {
@@ -907,8 +907,10 @@ public:
         YT_VERIFY(tableSchemas.size() > 0);
 
         ColumnConverters_.resize(tableSchemas.size());
-        TableNumbers_ = tableSchemas.size();
+        TableCount_ = tableSchemas.size();
         ColumnSchemas_.resize(tableSchemas.size());
+        TableIdToIndex_.resize(tableSchemas.size());
+        IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
             for (const auto& columnSchema : tableSchemas[tableIndex]->Columns()) {
@@ -973,7 +975,7 @@ private:
 
         for (ssize_t rowIndex = 0; rowIndex < std::ssize(rows); rowIndex++) {
             i32 currentTableIndex = -1;
-            if(TableNumbers_ > 1) {
+            if (TableCount_ > 1) {
                 const auto& elems = rows[rowIndex].Elements();
                 for (ssize_t columnIndex = std::ssize(elems) - 1; columnIndex >= 0; --columnIndex) {
                     if (elems[columnIndex].Id == GetTableIndexColumnId()) {
@@ -984,7 +986,7 @@ private:
             } else {
                 currentTableIndex = 0;
             }
-            YT_VERIFY(currentTableIndex < TableNumbers_ && currentTableIndex >= 0);
+            YT_VERIFY(currentTableIndex < TableCount_ && currentTableIndex >= 0);
             if (tableIndex != currentTableIndex && rowIndex != 0) {
                 auto currentRows = rows.Slice(sameTableRangeBeginRowIndex, rowIndex);
                 WriteRowsForSingleTable(currentRows, tableIndex);
@@ -1005,7 +1007,7 @@ private:
             DoWrite(rowBatch->MaterializeRows());
         } else {
             YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
-            YT_VERIFY(TableNumbers_ == 1);
+            YT_VERIFY(TableCount_ == 1);
             Reset();
             RowCount_ = rowBatch->GetRowCount();
             PrepareColumns(columnarBatch->MaterializeColumns(), 0);
@@ -1033,7 +1035,7 @@ private:
     }
 
 private:
-    i32 TableNumbers_ = 0;
+    int TableCount_ = 0;
     bool IsFirstBatch_ = true;
     i64 PrevTableIndex_ = 0;
     i64 RowCount_ = 0;
@@ -1041,6 +1043,8 @@ private:
     std::vector<THashMap<int, TColumnSchema>> ColumnSchemas_;
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<NColumnConverters::TColumnConverters> ColumnConverters_;
+    std::vector<THashMap<int, int>> TableIdToIndex_;
+    std::vector<bool> IsFirstBatchForSpecificTable_;
 
     struct TMessage
     {
@@ -1075,15 +1079,34 @@ private:
 
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
-        TypedColumns_.reserve(batchColumns.Size());
+        if (!IsFirstBatchForSpecificTable_[tableIndex]) {
+            std::vector<bool> idExists(NameTable_->GetSize(), false);
+            for (const auto* column : batchColumns) {
+                if (IsColumnNeedsToAdd(column->Id)) {
+                    idExists[column->Id] = true;
+                }
+            }
+            int currentIndex = 0;
+            for (int columnId = 0; columnId < NameTable_->GetSize(); columnId++) {
+                if (idExists[columnId]) {
+                    TableIdToIndex_[tableIndex][columnId] = currentIndex;
+                    currentIndex++;
+                }
+            }
+            IsFirstBatchForSpecificTable_[tableIndex] = true;
+        }
+        TypedColumns_.resize(TableIdToIndex_[tableIndex].size());
         for (const auto* column : batchColumns) {
-            if(IsColumnNeedsToAdd(column->Id)) {
+            if (IsColumnNeedsToAdd(column->Id)) {
+                auto iterIndex = TableIdToIndex_[tableIndex].find(column->Id);
+                YT_VERIFY(iterIndex != TableIdToIndex_[tableIndex].end());
+
                 auto iterSchema = ColumnSchemas_[tableIndex].find(column->Id);
                 YT_VERIFY(iterSchema != ColumnSchemas_[tableIndex].end());
-                TypedColumns_.push_back(TTypedBatchColumn{
+                TypedColumns_[iterIndex->second] = TTypedBatchColumn{
                     column,
                     iterSchema->second.LogicalType()
-                });
+                };
             }
         }
     }
@@ -1178,7 +1201,7 @@ private:
 
         std::vector<flatbuffers::Offset<org::apache::arrow::flatbuf::KeyValue>> customMetadata;
 
-        if (TableNumbers_ > 1) {
+        if (TableCount_ > 1) {
             auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
                 flatbufBuilder,
                 flatbufBuilder.CreateString("TableId"),
@@ -1343,8 +1366,7 @@ private:
             if (message.FlatbufBuilder) {
                 auto metadataSize = message.FlatbufBuilder->GetSize();
 
-                auto metadataPtr = message.FlatbufBuilder->GetBufferPointer();
-
+                auto* metadataPtr = message.FlatbufBuilder->GetBufferPointer();
 
                 ui32 metadataAlignSize = AlignUp<i64>(metadataSize, ArrowAlignment);
 
@@ -1355,10 +1377,9 @@ private:
 
                 // Body
                 if (message.BodyWriter) {
-                    TString current(AlignUp<i64>(message.BodySize, ArrowAlignment), 0);
-                    // Double copying.
-                    message.BodyWriter(TMutableRef(current.begin(), current.begin() + message.BodySize));
-                    output->Write(current.data(), current.Size());
+                    auto bodyBuffer = output->RequestBuffer(AlignUp<i64>(message.BodySize, ArrowAlignment));
+                    message.BodyWriter(bodyBuffer.Slice(0, message.BodySize));
+                    std::fill(bodyBuffer.Begin() + message.BodySize, bodyBuffer.End(), 0);
                 } else {
                     YT_VERIFY(message.BodySize == 0);
                 }

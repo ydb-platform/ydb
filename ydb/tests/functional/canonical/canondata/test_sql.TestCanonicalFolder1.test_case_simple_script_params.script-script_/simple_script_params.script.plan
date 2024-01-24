@@ -15,6 +15,7 @@
                                 "PlanNodeId": 1,
                                 "Operators": [
                                     {
+                                        "Inputs": [],
                                         "Iterator": "[{value: $value}]",
                                         "Name": "Iterator"
                                     }

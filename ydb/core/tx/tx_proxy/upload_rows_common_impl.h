@@ -7,7 +7,7 @@
 #include <ydb/core/grpc_services/rpc_long_tx.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/io_formats/csv.h>
+#include <ydb/core/io_formats/arrow/csv_arrow.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
@@ -23,7 +23,6 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -169,7 +168,6 @@ private:
     TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
-    NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
     TUploadCounters UploadCounters;
 
 protected:
@@ -373,21 +371,6 @@ private:
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        for (const auto& index : entry.Indexes) {
-            switch (index.GetType()) {
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                if (AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
-                    continue;
-                } else {
-                    errorMessage = "Bulk upsert is not supported for tables with indexes";
-                    return false;
-                }
-            default:
-                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
-                return false;
-            }
-        }
-
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
@@ -519,6 +502,40 @@ private:
             }
         }
 
+        std::unordered_set<std::string_view> UpdatingValueColumns;
+        if (UpsertIfExists) {
+            for(const auto& name: ValueColumnNames) {
+                UpdatingValueColumns.emplace(name);
+            }
+        }
+
+        for (const auto& index : entry.Indexes) {
+            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+                AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
+                continue;
+            }
+
+            bool allowUpdate = UpsertIfExists;
+            for(auto& column : index.GetKeyColumnNames()) {
+                allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                if (!allowUpdate) {
+                    break;
+                }
+            }
+
+            for(auto& column : index.GetDataColumnNames()) {
+                allowUpdate &= (UpdatingValueColumns.find(column) == UpdatingValueColumns.end());
+                if (!allowUpdate) {
+                    break;
+                }
+            }
+
+            if (!allowUpdate) {
+                errorMessage = "Only async-indexed tables are supported by BulkUpsert";
+                return false;
+            }
+        }
+
         if (makeYqbSchema) {
             Id2Position.clear();
             YdbSchema.resize(KeyColumnTypes.size() + ValueColumnTypes.size());
@@ -545,6 +562,12 @@ private:
         if (!keyColumnsLeft.empty()) {
             errorMessage = Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str());
             return false;
+        }
+
+        if (!notNullColumnsLeft.empty() && UpsertIfExists) {
+            // columns are not specified but upsert is executed in update mode
+            // and we will not change these not null columns.
+            notNullColumnsLeft.clear();
         }
 
         if (!notNullColumnsLeft.empty()) {
@@ -1041,6 +1064,9 @@ private:
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
+                if (keyRange->TableId.SchemaVersion) {
+                    ev->Record.SetSchemaVersion(keyRange->TableId.SchemaVersion);
+                }
                 for (const auto& fd : KeyColumnPositions) {
                     ev->Record.MutableRowScheme()->AddKeyColumnIds(fd.ColId);
                 }

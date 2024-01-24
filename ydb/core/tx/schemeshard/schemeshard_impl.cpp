@@ -4271,6 +4271,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
+    EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6748,6 +6749,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
+    EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7052,7 +7054,18 @@ void TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(aggregated.DataSize);
         ++count;
     }
-    // TODO: add column tables
+    auto columnTablesPathIds = ColumnTables.GetAllPathIds();
+    for (const auto& pathId : columnTablesPathIds) {
+        const auto& tableInfo = ColumnTables.GetVerified(pathId);
+        const auto& aggregated = tableInfo->Stats.Aggregated;
+        auto* entry = record.AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
+    }
 
     TString stats;
     stats.clear();

@@ -48,7 +48,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchOperation)                        (200))
     ((InvalidOperationState)                  (201))
     ((TooManyOperations)                      (202))
-    ((NoSuchJob)                              (203))
+    ((NoSuchAllocation)                       (203))
     ((AgentRevoked)                           (204))
     ((OperationFailedOnJobRestart)            (210))
     ((OperationFailedWithInconsistentLocking) (211))
@@ -74,6 +74,8 @@ DEFINE_ENUM(ESchemaInferenceMode,
     (FromOutput)
 );
 
+// NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
+// If you change it, you must bump the controller agent tracker service protocol version!
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))

@@ -231,7 +231,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             tabletType = record.GetTabletType();
         }
 
-        ui32 tabletIdx = 0;
         for (const auto &tablet: OnlineTablets) {
             if (!isFilteringNeeded || tablet.second.TabletType == tabletType) {
                 auto *info = result->Record.AddTabletInfo();
@@ -239,7 +238,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 info->SetFollowerId(tablet.first.second);
                 info->SetTabletType(tablet.second.TabletType);
                 info->SetBootMode(tablet.second.BootMode);
-                ++tabletIdx;
             }
         }
 
@@ -1117,7 +1115,6 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             info.Attributes.emplace(std::make_pair(attr.GetKey(), attr.GetValue()));
         RunningTenants.emplace(std::make_pair(task.Info.TenantName, info));
         const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()));
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Tenant"));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateSetTenant(task.Info.TenantName));
         for (TTabletId hId : hiveIds) {
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,

@@ -11,8 +11,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/minikql/computation/llvm
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/computation/llvm14
+    ydb/library/yql/minikql/comp_nodes/llvm14
 )
 
 SRCS(

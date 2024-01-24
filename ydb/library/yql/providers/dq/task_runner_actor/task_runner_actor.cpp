@@ -121,7 +121,6 @@ private:
     }
 
     TOutputChannelReadResult ReadWithSpilling() {
-        int maxChunks = std::numeric_limits<int>::max();
         bool changed = false;
         bool isChanFinished = false;
         i64 remain = ToPopSize;
@@ -131,7 +130,6 @@ private:
         if (remain == 0) {
             // special case to WorkerActor
             remain = 5_MB;
-            maxChunks = 1;
         }
 
         auto spillingStorage = SpillingStorageInfo->SpillingStorage;
@@ -165,7 +163,6 @@ private:
             data = LoadSpilled(std::move(blob));
             remain -= data.Size();
             result.DataChunks.emplace_back(std::move(data));
-            --maxChunks;
             changed = true;
             hasData = true;
         }

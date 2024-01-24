@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -69,20 +69,13 @@ curl_socket_t curlx_sitosk(int i);
 
 #endif /* USE_WINSOCK */
 
-#if defined(WIN32)
+#if defined(_WIN32)
 
 ssize_t curlx_read(int fd, void *buf, size_t count);
 
 ssize_t curlx_write(int fd, const void *buf, size_t count);
 
-#ifndef BUILDING_WARNLESS_C
-#  undef  read
-#  define read(fd, buf, count)  curlx_read(fd, buf, count)
-#  undef  write
-#  define write(fd, buf, count) curlx_write(fd, buf, count)
-#endif
-
-#endif /* WIN32 */
+#endif /* _WIN32 */
 
 #if defined(__INTEL_COMPILER) && defined(__unix__)
 
@@ -99,3 +92,15 @@ unsigned short curlx_ntohs(unsigned short usnum);
 #endif /* __INTEL_COMPILER && __unix__ */
 
 #endif /* HEADER_CURL_WARNLESS_H */
+
+#ifndef HEADER_CURL_WARNLESS_H_REDEFS
+#define HEADER_CURL_WARNLESS_H_REDEFS
+
+#if defined(_WIN32)
+#undef  read
+#define read(fd, buf, count)  curlx_read(fd, buf, count)
+#undef  write
+#define write(fd, buf, count) curlx_write(fd, buf, count)
+#endif
+
+#endif /* HEADER_CURL_WARNLESS_H_REDEFS */

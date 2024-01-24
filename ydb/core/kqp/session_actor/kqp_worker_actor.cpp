@@ -1,12 +1,13 @@
 #include "kqp_worker_common.h"
+#include "kqp_query_stats.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
+#include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -187,7 +188,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
-            FederatedQuerySetup, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
+            FederatedQuerySetup, QueryState->RequestEv->GetUserToken(), AppData(ctx)->FunctionRegistry, !Settings.LongSession, false);
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -914,7 +915,7 @@ private:
                 TString text = ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
-                    NSysView::CollectQueryStats(ctx, stats, queryDuration, text,
+                    CollectQueryStats(ctx, stats, queryDuration, text,
                         userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);
                 }
                 break;

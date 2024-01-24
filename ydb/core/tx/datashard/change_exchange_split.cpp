@@ -1,11 +1,12 @@
 #include "change_exchange.h"
 #include "change_exchange_helpers.h"
-#include "change_sender_common_ops.h"
 #include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -155,7 +156,10 @@ private:
 
 }; // TCdcPartitionWorker
 
-class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHelpers {
+class TCdcWorker
+    : public TActorBootstrapped<TCdcWorker>
+    , private NSchemeCache::TSchemeCacheHelpers
+{
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()

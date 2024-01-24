@@ -138,8 +138,8 @@ cd ~/ydbwork
 cd ~/ydbwork/ydb
 ```
 ```
-git config user.name "Marco Polo"
-git config user.email "marco@ydb.tech"
+git config --global user.name "Marco Polo"
+git config --global user.email "marco@ydb.tech"
 ```
 
 ## Работа над изменением {#feature}
@@ -239,8 +239,6 @@ Pull Request может быть замержен после получения 
 ```
 # Предполагается, что ваша активная ветка является вашей веткой разработки
 gh repo sync your_github_login/ydb -s ydb-platform/ydb
-git checkout main
-git pull
-git checkout <your_dev_branch>
+git fetch origin main:main
 git rebase main
 ```

@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(5.3.0)
+VERSION(6.0.0)
 
-ORIGINAL_SOURCE(https://github.com/fastfloat/fast_float/archive/v5.3.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/fastfloat/fast_float/archive/v6.0.0.tar.gz)
 
 NO_COMPILER_WARNINGS()
 

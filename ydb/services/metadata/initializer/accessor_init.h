@@ -33,7 +33,7 @@ private:
     virtual void OnAlteringFinished() override;
 
     virtual void OnModificationFinished(const TString& modificationId) override;
-    virtual void OnModificationFailed(const TString& errorMessage, const TString& modificationId) override;
+    virtual void OnModificationFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage, const TString& modificationId) override;
 
     TDSAccessorInitialized(const NRequest::TConfig& config,
         const TString& componentId,

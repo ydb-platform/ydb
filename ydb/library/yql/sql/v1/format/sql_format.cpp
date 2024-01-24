@@ -6,7 +6,7 @@
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
-#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -700,8 +700,8 @@ private:
             case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
             case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
-            case TRule_sql_stmt_core::kAltSqlStmtCore30: // drop external data source
-            case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
+            case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
@@ -710,15 +710,15 @@ private:
                 }
                 break;
             }
-            case TRule_sql_stmt_core::kAltSqlStmtCore16: { // do
-                const auto& stmt = msg.GetAlt_sql_stmt_core16().GetRule_do_stmt1();
+            case TRule_sql_stmt_core::kAltSqlStmtCore17: { // do
+                const auto& stmt = msg.GetAlt_sql_stmt_core17().GetRule_do_stmt1();
                 if (stmt.GetBlock2().HasAlt1()) {
                     return true;
                 }
                 break;
             }
-            case TRule_sql_stmt_core::kAltSqlStmtCore18: // if
-            case TRule_sql_stmt_core::kAltSqlStmtCore19: // for
+            case TRule_sql_stmt_core::kAltSqlStmtCore19: // if
+            case TRule_sql_stmt_core::kAltSqlStmtCore20: // for
                 return false;
             default:
                 break;
@@ -1146,6 +1146,25 @@ private:
         VisitAllFields(TRule_alter_table_store_stmt::GetDescriptor(), msg);
     }
 
+    void VisitAlterExternalTable(const TRule_alter_external_table_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitKeyword(msg.GetToken1());
+        VisitKeyword(msg.GetToken2());
+        VisitKeyword(msg.GetToken3());
+        Visit(msg.GetRule_simple_table_ref4());
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_external_table_action5());
+        for (auto& b : msg.GetBlock6()) {
+            Visit(b.GetToken1());
+            NewLine();
+            Visit(b.GetRule_alter_external_table_action2());
+        }
+
+        PopCurrentIndent();
+    }
+
     void VisitDo(const TRule_do_stmt& msg) {
         PosFromToken(msg.GetToken1());
         NewLine();
@@ -1406,6 +1425,27 @@ private:
         PosFromToken(msg.GetToken1());
         NewLine();
         VisitAllFields(TRule_create_external_data_source_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterExternalDataSource(const TRule_alter_external_data_source_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitToken(msg.GetToken1());
+        VisitToken(msg.GetToken2());
+        VisitToken(msg.GetToken3());
+        VisitToken(msg.GetToken4());
+        Visit(msg.GetRule_object_ref5());
+
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_alter_external_data_source_action6());
+        for (const auto& action : msg.GetBlock7()) {
+            Visit(action.GetToken1()); // comma
+            NewLine();
+            Visit(action.GetRule_alter_external_data_source_action2());
+        }
+
+        PopCurrentIndent();
     }
 
     void VisitDropExternalDataSource(const TRule_drop_external_data_source_stmt& msg) {
@@ -2282,6 +2322,30 @@ private:
         PopCurrentIndent();
     }
 
+    void VisitWithTableSettingsExpr(const TRule_with_table_settings& msg) {
+        VisitKeyword(msg.GetToken1());
+        Visit(msg.GetToken2());
+
+        const bool needIndent = msg.Block4Size() > 0; // more then one setting
+        if (needIndent) {
+            NewLine();
+            PushCurrentIndent();
+            Visit(msg.GetRule_table_settings_entry3()); // first setting
+
+            for (const auto& entry : msg.GetBlock4()) {
+                Visit(entry.GetToken1()); // comma
+                NewLine();
+                Visit(entry.GetRule_table_settings_entry2()); // other settings
+            }
+            PopCurrentIndent();
+            NewLine();
+        } else {
+            Visit(msg.GetRule_table_settings_entry3());
+        }
+
+        Visit(msg.GetToken5());
+    }
+
     void VisitExpr(const TRule_expr& msg) {
         if (msg.HasAlt_expr2()) {
             Visit(msg.GetAlt_expr2());
@@ -2353,6 +2417,8 @@ private:
                 if (pushedIndent) {
                     PopCurrentIndent();
                 }
+
+                break;
             }
             case TRule_neq_subexpr_TBlock3::kAlt2:
                 Visit(b.GetAlt2());
@@ -2567,6 +2633,7 @@ TStaticData::TStaticData()
         {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
         {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
         {TRule_when_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWhenExpr)},
+        {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
 
         {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
         {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},
@@ -2596,6 +2663,7 @@ TStaticData::TStaticData()
         {TRule_import_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitImport)},
         {TRule_export_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExport)},
         {TRule_alter_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTable)},
+        {TRule_alter_external_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalTable)},
         {TRule_do_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDo)},
         {TRule_define_action_or_subquery_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAction)},
         {TRule_if_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIf)},
@@ -2611,6 +2679,7 @@ TStaticData::TStaticData()
         {TRule_alter_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterObject)},
         {TRule_drop_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropObject)},
         {TRule_create_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateExternalDataSource)},
+        {TRule_alter_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalDataSource)},
         {TRule_drop_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropExternalDataSource)},
         {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
         {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
@@ -2633,7 +2702,7 @@ TStaticData::TStaticData()
         {TRule_in_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInUnaryCasualSubexpr)},
         })
 {
-    // ensure that all statements has a visitor
+    // ensure that all statements have a visitor
     auto coreDescr = TRule_sql_stmt_core::GetDescriptor();
     for (int i = 0; i < coreDescr->field_count(); ++i) {
         const NProtoBuf::FieldDescriptor* fd = coreDescr->field(i);

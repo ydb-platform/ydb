@@ -835,3 +835,32 @@ Pear;15;33'''
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=50)
         assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("filename", [
+        ("date_null/as_default/multi_null.csv"),
+        ("date_null/parse_error/multi_null.csv")
+    ])
+    def test_string_not_null_multi(self, kikimr, s3, client, filename):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        client.create_storage_connection("hcpp", "fbucket")
+
+        sql = '''
+            SELECT
+                `put`, `a`, `t`
+            FROM
+                `hcpp`.`{name}`
+            WITH (FORMAT="csv_with_names",
+                csv_delimiter=",",
+                SCHEMA=(
+                `put` String NOT NULL,
+                `a` Utf8 NOT NULL,
+                `t` String NOT NULL
+                ))
+            LIMIT 10;
+            '''.format(name="/" + filename)
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        assert data.result.result_set.rows[0].items[0].null_flag_value == struct_pb2.NULL_VALUE, str(data.result.result_set)

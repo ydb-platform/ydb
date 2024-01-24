@@ -341,16 +341,16 @@ bool TYdbDump::ParseLine(TStringBuf line, const std::vector<std::pair<i32, NSche
 
         Y_ABORT_UNLESS(cell);
 
-        if (!CheckCellValue(*cell, pType)) {
-            strError = TStringBuilder() << "Value check error: '" << value << "'";
-            return false;
-        }
-        
         TString parseError;
         if (!MakeCell(*cell, value, pType, pool, parseError)) {
             strError = TStringBuilder() << "Value parse error: '" << value << "' " << parseError;
             return false;
         }
+
+        if (!CheckCellValue(*cell, pType)) {
+            strError = TStringBuilder() << "Value check error: '" << value << "'";
+            return false;
+        }        
 
         numBytes += cell->Size();
     }

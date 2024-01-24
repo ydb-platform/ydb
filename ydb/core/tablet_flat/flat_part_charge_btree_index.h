@@ -97,8 +97,8 @@ public:
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
-        const auto iterateLevel = [&](const auto& tryHandle) {
-            const TRowId levelRow1 = row1, levelRow2 = Max(row2, row1); // tryHandle may update them, copy for simplicity
+        const auto iterateLevel = [&](const auto& tryHandleChild) {
+            const TRowId levelRow1 = row1, levelRow2 = Max(row2, row1); // tryHandleChild may update them, copy for simplicity
             for (const auto &node : level) {
                 if (node.EndRowId <= levelRow1 || node.BeginRowId > levelRow2) {
                     continue;
@@ -115,7 +115,7 @@ public:
                     auto child = node.GetChild(pos);
                     TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
-                    ready &= tryHandle(TChildState(child, beginRowId, endRowId));
+                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
                 }
             }
         };

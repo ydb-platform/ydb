@@ -21,3 +21,4 @@ extern "C" {
     // copied from postgres/src/include/utils/builtins.h
     ui64 hex_encode(const char *src, size_t len, char *dst);
 }
+

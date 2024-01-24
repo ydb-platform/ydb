@@ -14,7 +14,7 @@ namespace {
     using TUnboxedValue = NKikimr::NUdf::TUnboxedValue;
     using TUnboxedValuePod = NKikimr::NUdf::TUnboxedValuePod;
 
-    ui8 GetAddressRangePrefix(const TIpAddressRange &range) {
+    ui8 GetAddressRangePrefix(const TIpAddressRange& range) {
         if (range.Contains(TIpv6Address(ui128(0), TIpv6Address::Ipv6)) && range.Contains(TIpv6Address(ui128(-1), TIpv6Address::Ipv6))) {
             return 0;
         }
@@ -49,7 +49,7 @@ namespace {
             return {a, b, c, d};
         }
 
-        std::pair<TRawIp4, TRawIp4> ApplyMask(const TRawIp4 &mask) const {
+        std::pair<TRawIp4, TRawIp4> ApplyMask(const TRawIp4& mask) const {
             return {{
                     ui8(a & mask.a),
                     ui8(b & mask.b),
@@ -67,7 +67,7 @@ namespace {
     struct TRawIp4Subnet {
         TRawIp4 base, mask;
 
-        static TRawIp4Subnet FromIpRange(const TIpAddressRange &range) {
+        static TRawIp4Subnet FromIpRange(const TIpAddressRange& range) {
             return {TRawIp4::FromIpAddress(*range.Begin()), TRawIp4::MaskFromPrefix(GetAddressRangePrefix(range))};
         }
 
@@ -112,7 +112,7 @@ namespace {
             };
         }
 
-        std::pair<TRawIp6, TRawIp6> ApplyMask(const TRawIp6 &mask) const {
+        std::pair<TRawIp6, TRawIp6> ApplyMask(const TRawIp6& mask) const {
             return { {
                     ui8(a1 & mask.a1),
                     ui8(a0 & mask.a0),
@@ -154,7 +154,7 @@ namespace {
     struct TRawIp6Subnet {
         TRawIp6 base, mask;
 
-        static TRawIp6Subnet FromIpRange(const TIpAddressRange &range) {
+        static TRawIp6Subnet FromIpRange(const TIpAddressRange& range) {
             return {TRawIp6::FromIpAddress(*range.Begin()), TRawIp6::MaskFromPrefix(GetAddressRangePrefix(range))};
         }
 

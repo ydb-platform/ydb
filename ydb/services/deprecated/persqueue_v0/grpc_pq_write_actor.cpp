@@ -483,8 +483,7 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
     }
 
     TPartitionWriterOpts opts;
-    opts.WithDeduplication(false)
-        .WithSourceId(SourceId);
+    opts.WithSourceId(SourceId);
     Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(ctx.SelfID, PartitionTabletId, Partition, opts));
     State = ES_WAIT_WRITER_INIT;
 

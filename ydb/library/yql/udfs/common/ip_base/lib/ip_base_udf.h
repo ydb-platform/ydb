@@ -231,9 +231,7 @@ namespace {
     }
 
     SIMPLE_STRICT_UDF(TSubnetFromString, TOptionalString(TAutoMapString)) {
-        TStringRef strRef = args[0].AsStringRef();
-        TString str(strRef.Data(), strRef.Data() + strRef.Size());
-        TIpAddressRange range = TIpAddressRange::FromCompactString(str);
+        TIpAddressRange range = TIpAddressRange::FromCompactString(args[0].AsStringRef());
         auto res = SerializeSubnet(range);
         return res ? valueBuilder->NewString(res) : TUnboxedValue(TUnboxedValuePod());
     }

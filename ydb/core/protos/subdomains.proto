@@ -88,6 +88,7 @@ message TDomainDescription {
     optional uint64 ShardsLimit = 9;
 
     optional TDomainKey ResourcesDomainKey = 10;
+    optional fixed64 SharedHive = 22;
     optional EServerlessComputeResourcesMode ServerlessComputeResourcesMode = 23;
 
     optional TDiskSpaceUsage DiskSpaceUsage = 11; // TODO: temp for SLYDB-95
@@ -103,7 +104,6 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
-    optional fixed64 SharedHive = 22;
 }
 
 message TSchemeQuotas {
@@ -116,7 +116,7 @@ message TSchemeQuota {
 }
 
 enum EServerlessComputeResourcesMode {
-    SERVERLESS_COMPUTE_RESOURCES_MODE_UNSPECIFIED = 0;
-    SERVERLESS_COMPUTE_RESOURCES_MODE_SHARED = 1;     // using nodes that serve resources domain
-    SERVERLESS_COMPUTE_RESOURCES_MODE_DEDICATED = 2;  // using nodes that serve self domain
+    EServerlessComputeResourcesModeUnspecified = 0;
+    EServerlessComputeResourcesModeShared = 1;     // Using nodes that serve shared resources domain
+    EServerlessComputeResourcesModeExclusive = 2;  // Using nodes that serve self domain
 }

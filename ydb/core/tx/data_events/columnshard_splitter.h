@@ -32,6 +32,10 @@ class TColumnShardShardsSplitter : public IShardsSplitter {
             return RowsCount;
         }
 
+        const TString& GetData() const override {
+            return Data;
+        }
+
         void Serialize(TEvWrite& evWrite) const override {
             evWrite.SetArrowData(SchemaData, Data);
         }

@@ -5433,9 +5433,9 @@
     ],
     "test_sql2yql.test[expr-list_uniq]": [
         {
-            "checksum": "338a9dbb192084a632be4c818c35e5de",
-            "size": 2475,
-            "uri": "https://{canondata_backend}/1942671/8a805853ca0d5d0c7345fb32bb7b7e99685344f7/resource.tar.gz#test_sql2yql.test_expr-list_uniq_/sql.yql"
+            "checksum": "6a127889a51c049741d6929c6bc5eb42",
+            "size": 2917,
+            "uri": "https://{canondata_backend}/1942415/e8321dbd67e4e735ba3677524d3260f401d7c3c6/resource.tar.gz#test_sql2yql.test_expr-list_uniq_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-literal_list_element]": [
@@ -16822,9 +16822,9 @@
     ],
     "test_sql2yql.test[window-row_number_no_part_multi_input]": [
         {
-            "checksum": "8c63c7895d84cf0acb8a8ece29c1ffbf",
-            "size": 4214,
-            "uri": "https://{canondata_backend}/1936947/659b615f15086142a8960946dabd06b519d43335/resource.tar.gz#test_sql2yql.test_window-row_number_no_part_multi_input_/sql.yql"
+            "checksum": "37dead667fdc8ff4665c1a7921960f6c",
+            "size": 5784,
+            "uri": "https://{canondata_backend}/1899731/7468937c6613e47ddb62951e5fc1e6a991d81281/resource.tar.gz#test_sql2yql.test_window-row_number_no_part_multi_input_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-row_number_to_map]": [
@@ -22800,9 +22800,9 @@
     ],
     "test_sql_format.test[expr-list_uniq]": [
         {
-            "checksum": "5c0e33f6414470dbe607fc1cb11bba4a",
-            "size": 283,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_expr-list_uniq_/formatted.sql"
+            "checksum": "74f6f47d443fa97917b2d52760056649",
+            "size": 375,
+            "uri": "https://{canondata_backend}/1942415/e8321dbd67e4e735ba3677524d3260f401d7c3c6/resource.tar.gz#test_sql_format.test_expr-list_uniq_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-literal_list_element]": [
@@ -31704,9 +31704,9 @@
     ],
     "test_sql_format.test[window-row_number_no_part_multi_input]": [
         {
-            "checksum": "633ff2b6c70ddfd23502fb7e388e9d23",
-            "size": 342,
-            "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_window-row_number_no_part_multi_input_/formatted.sql"
+            "checksum": "77bf4f69be98f4e4cd420577fbae7d80",
+            "size": 519,
+            "uri": "https://{canondata_backend}/1899731/7468937c6613e47ddb62951e5fc1e6a991d81281/resource.tar.gz#test_sql_format.test_window-row_number_no_part_multi_input_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-row_number_to_map]": [

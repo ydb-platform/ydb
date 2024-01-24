@@ -123,10 +123,9 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
 {
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
-        return false;
+    Y_UNUSED(config);
 
-    if (!config.FeatureFlags.GetEnableMvccSnapshotReads())
+    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())

@@ -1431,7 +1431,7 @@ public:
 
     template <class ResultContainer = TString>
     static ResultContainer GenerateBuffer(const TLogoBlobID& id) {
-        return GenDataForLZ4<ResultContainer>(id.BlobSize());
+        return FastGenDataForLZ4<ResultContainer>(id.BlobSize());
     }
 
     STRICT_STFUNC(StateFunc,

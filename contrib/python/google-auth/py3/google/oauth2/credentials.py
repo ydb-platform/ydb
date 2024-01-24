@@ -160,7 +160,11 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         # unpickling certain callables (lambda, functools.partial instances)
         # because they need to be importable.
         # Instead, the refresh_handler setter should be used to repopulate this.
-        del state_dict["_refresh_handler"]
+        if "_refresh_handler" in state_dict:
+            del state_dict["_refresh_handler"]
+
+        if "_refresh_worker" in state_dict:
+            del state_dict["_refresh_worker"]
         return state_dict
 
     def __setstate__(self, d):
@@ -183,6 +187,8 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         self._universe_domain = d.get("_universe_domain") or _DEFAULT_UNIVERSE_DOMAIN
         # The refresh_handler setter should be used to repopulate this.
         self._refresh_handler = None
+        self._refresh_worker = None
+        self._use_non_blocking_refresh = d.get("_use_non_blocking_refresh", False)
 
     @property
     def refresh_token(self):
@@ -302,15 +308,8 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             universe_domain=self._universe_domain,
         )
 
+    @_helpers.copy_docstring(credentials.CredentialsWithUniverseDomain)
     def with_universe_domain(self, universe_domain):
-        """Create a copy of the credential with the given universe domain.
-
-        Args:
-            universe_domain (str): The universe domain value.
-
-        Returns:
-            google.oauth2.credentials.Credentials: A new credentials instance.
-        """
 
         return self.__class__(
             self.token,

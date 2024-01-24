@@ -993,7 +993,6 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             rsCount == 0 &&
             engine.GetAffectedShardCount() > 1 &&
             ((TxFlags & NTxDataShard::TTxFlags::ForceOnline) == 0) &&
-            AppData(ctx)->FeatureFlags.GetEnableMvccSnapshotReads() &&
             !DatabaseName.empty());
 
     if (forceSnapshot) {

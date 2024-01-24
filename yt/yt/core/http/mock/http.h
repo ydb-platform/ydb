@@ -67,6 +67,7 @@ class TResponseMock
     MOCK_METHOD(EStatusCode, GetStatusCode, (), (override));
     MOCK_METHOD(THeadersPtr&, GetHeaders, (), (override));
     MOCK_METHOD(THeadersPtr&, GetTrailers, (), (override));
+    MOCK_METHOD(TFuture<TSharedRef>, Read, (), (override));
 
     THeadersPtr Headers;
     THeadersPtr Trailers;

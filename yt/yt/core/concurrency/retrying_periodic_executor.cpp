@@ -21,8 +21,8 @@ namespace NDetail {
 
 TRetryingInvocationTimePolicy::TRetryingInvocationTimePolicy(
     const TOptions& options)
-    : TDefaultInvocationTimePolicy(options.PeriodicOptions)
-    , Backoff_(options.BackoffOptions)
+    : TDefaultInvocationTimePolicy(options.Periodic)
+    , Backoff_(options.BackoffStrategy)
 { }
 
 void TRetryingInvocationTimePolicy::ProcessResult(TError result)
@@ -40,7 +40,7 @@ void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(const TOptions& newOptions)
 {
-    return ShouldKickstart(newOptions.PeriodicOptions, std::nullopt);
+    return ShouldKickstart(newOptions.Periodic, std::nullopt);
 }
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(
@@ -54,7 +54,7 @@ bool TRetryingInvocationTimePolicy::ShouldKickstart(
 
 void TRetryingInvocationTimePolicy::SetOptions(TOptions newOptions)
 {
-    SetOptions(newOptions.PeriodicOptions, newOptions.BackoffOptions);
+    SetOptions(newOptions.Periodic, newOptions.BackoffStrategy);
 }
 
 void TRetryingInvocationTimePolicy::SetOptions(

@@ -23,6 +23,7 @@ struct TSettings {
         DyNumberType = 1 << 13,
         ImplicitConversionToInt64 = 1 << 14, // Allow implicit conversions to 64-bits integers from other types of integers
         UnaryOperators = 1 << 15, // -, Abs, Size
+        DoNotCheckCompareArgumentsTypes = 1 << 16
     };
 
     explicit TSettings(NLog::EComponent logComponent)

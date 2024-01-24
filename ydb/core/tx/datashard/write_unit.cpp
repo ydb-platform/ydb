@@ -44,7 +44,7 @@ public:
         const TTableId fullTableId(self->GetPathOwnerId(), tableId);
         const ui64 localTableId = self->GetLocalTableId(fullTableId);
         if (localTableId == 0) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Unknown table id " << tableId, self->TabletID());
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Unknown table id " << tableId);
             return;
         }
         const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
@@ -122,6 +122,22 @@ public:
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
+
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+
+        if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
+            // Immediate transactions may be reordered with schema changes and become invalid
+            Y_ABORT_UNLESS(!writeTx->Ready());
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
+            return EExecutionStatus::Executed;
+        }
+
+        if (writeTx->CheckCancelled()) {
+            writeOp->ReleaseTxData(txc, ctx);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
+            DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
+            return EExecutionStatus::Executed;
+        }
 
         try {
             DoExecute(&DataShard, writeOp, txc, ctx);

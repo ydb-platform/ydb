@@ -43,6 +43,10 @@ public:
                     return ChannelInfo->GetSize();
             }
         }
+
+        bool operator==(const TChannel& other) const {
+            return TabletId == other.TabletId && ChannelId == other.ChannelId;
+        }
     };
 
     TTabletId Id;

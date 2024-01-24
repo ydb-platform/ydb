@@ -219,7 +219,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         };
     }
 
-    auto taskRunner = CreateKqpTaskRunner(execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };

@@ -896,7 +896,6 @@ namespace NKikimr {
         if (SUPPRESS_REBOOTS || GetEnv("FAST_UT")=="1")
             return;
 
-        ui32 runCount = 0;
         ui32 eventCountBeforeReboot = 0;
         if (selectedReboot != Max<ui32>()) {
             eventCountBeforeReboot = selectedReboot;
@@ -914,7 +913,6 @@ namespace NKikimr {
                 Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
 
             try {
-                ++runCount;
                 activeZone = false;
                 TTestActorRuntime::TEventFilter filter = filterFactory();
                 TPipeResetObserver pipeResetingObserver(eventCountBeforeReboot, activeZone, filter, tabletIds);
@@ -1447,8 +1445,12 @@ namespace NKikimr {
             
             const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
             NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
-            domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
-
+            if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
+                domainInfo.ServerlessComputeResourcesMode = ev->Get()->Record.GetServerlessComputeResourcesMode();
+            } else {
+                domainInfo.ServerlessComputeResourcesMode.Clear();
+            }
+            
             auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetOrigin(TabletID());

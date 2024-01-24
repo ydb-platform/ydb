@@ -75,6 +75,12 @@ class BaseTenant(abc.ABC):
             self.config_generator.yaml_config['query_service_config'] = {}
         return self.config_generator.yaml_config['query_service_config']
 
+    @property
+    def auth_config(self):
+        if 'auth_config' not in self.config_generator.yaml_config:
+            self.config_generator.yaml_config['auth_config'] = {}
+        return self.config_generator.yaml_config['auth_config']
+
     def enable_logging(self, component, level=LogLevels.TRACE):
         log_config = self.config_generator.yaml_config['log_config']
         if not isinstance(log_config['entry'], list):

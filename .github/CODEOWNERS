@@ -1,1 +1,2 @@
 /ydb/docs/ @ydb-platform/docs
+/ydb/library/yql/ @ydb-platform/yql

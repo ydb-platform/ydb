@@ -182,8 +182,7 @@ public:
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
-            (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot) &&
-            AppData()->FeatureFlags.GetEnableMvccSnapshotReads()
+            (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
 
         return forceSnapshot;
@@ -1272,6 +1271,11 @@ private:
                 LOG_N("Shard " << msg->TabletId << " lost pipe while waiting for reply"
                     << (msg->NotDelivered ? " (last message not delivered)" : ""));
 
+                if (ReadOnlyTx && msg->NotDelivered) {
+                    CancelProposal(msg->TabletId);
+                    return ReplyUnavailable(TStringBuilder() << "Could not deliver program to shard " << msg->TabletId);
+                }
+
                 return ReplyTxStateUnknown(msg->TabletId);
             }
 
@@ -1661,8 +1665,9 @@ private:
             }
         }
 
-        for (const auto& tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+        for (const auto &tableOp : stage.GetTableOps()) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
+                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
                 return true;
             }
         }
@@ -2201,13 +2206,13 @@ private:
             }
         }
 
-        const bool enableOptForTasks = !UnknownAffectedShardCount && !HasExternalSources;
+        const bool singlePartitionOptAllowed = !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
         const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, useDataQueryPool, localComputeTasks, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks, GetUserRequestContext());
+            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, useDataQueryPool, localComputeTasks, Request.MkqlMemoryLimit, AsyncIoFactory, singlePartitionOptAllowed, GetUserRequestContext());
 
         auto err = Planner->PlanExecution();
         if (err) {

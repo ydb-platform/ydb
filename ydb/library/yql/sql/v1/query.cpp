@@ -1036,10 +1036,14 @@ public:
                 settings = L(settings, Q(Y(Q("data_source_path"), Params.TableSettings.DataSourcePath)));
             }
             if (Params.TableSettings.Location) {
-                settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location)));
+                Y_ENSURE(Params.TableSettings.Location.IsSet(), "Can't reset LOCATION in create mode");
+                settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location.GetValueSet())));
             }
-            for (const auto& item: Params.TableSettings.ExternalSourceParameters) {
-                settings = L(settings, Q(Y(Q(to_lower(item.first.Name)), item.second)));
+            for (const auto& resetableParam: Params.TableSettings.ExternalSourceParameters) {
+                Y_ENSURE(resetableParam, "Empty parameter");
+                Y_ENSURE(resetableParam.IsSet(), "Can't reset " << resetableParam.GetValueReset().Name << " in create mode");
+                const auto& [id, value] = resetableParam.GetValueSet();
+                settings = L(settings, Q(Y(Q(to_lower(id.Name)), value)));
             }
             if (Params.TableSettings.CompactionPolicy) {
                 settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
@@ -1099,12 +1103,9 @@ public:
                     YQL_ENSURE(false, "Can't reset TTL settings");
                 }
             }
-            if (const auto& tiering = Params.TableSettings.Tiering) {
-                if (tiering.IsSet()) {
-                    settings = L(settings, Q(Y(Q("setTiering"), tiering.GetValueSet())));
-                } else {
-                    YQL_ENSURE(false, "Can't reset TIERING");
-                }
+            if (Params.TableSettings.Tiering) {
+                YQL_ENSURE(Params.TableSettings.Tiering.IsSet(), "Can't reset TIERING in create mode");
+                settings = L(settings, Q(Y(Q("setTiering"), Params.TableSettings.Tiering.GetValueSet())));
             }
             if (Params.TableSettings.StoreExternalBlobs) {
                 const auto& ref = Params.TableSettings.StoreExternalBlobs.GetRef();
@@ -1273,6 +1274,25 @@ public:
 
         if (Params.TableSettings.IsSet()) {
             auto settings = Y();
+            if (Params.TableSettings.DataSourcePath) {
+                settings = L(settings, Q(Y(Q("data_source_path"), Params.TableSettings.DataSourcePath)));
+            }
+            if (Params.TableSettings.Location) {
+                if (Params.TableSettings.Location.IsSet()) {
+                    settings = L(settings, Q(Y(Q("location"), Params.TableSettings.Location.GetValueSet())));
+                } else {
+                    settings = L(settings, Q(Y(Q("location"))));
+                }
+            }
+            for (const auto& resetableParam: Params.TableSettings.ExternalSourceParameters) {
+                Y_ENSURE(resetableParam, "Empty parameter");
+                if (resetableParam.IsSet()) {
+                    const auto& [id, value] = resetableParam.GetValueSet();
+                    settings = L(settings, Q(Y(Q(to_lower(id.Name)), value)));
+                } else {
+                    settings = L(settings, Q(Y(Q(to_lower(resetableParam.GetValueReset().Name)))));
+                }
+            }
             if (Params.TableSettings.CompactionPolicy) {
                 settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
             }
@@ -1379,8 +1399,15 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
         opts = L(opts, Q(Y(Q("actions"), Q(actions))));
 
-        if (Params.TableType == ETableType::TableStore) {
-            opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+        switch (Params.TableType) {
+            case ETableType::TableStore:
+                opts = L(opts, Q(Y(Q("tableType"), Q("tableStore"))));
+                break;
+            case ETableType::ExternalTable:
+                opts = L(opts, Q(Y(Q("tableType"), Q("externalTable"))));
+                break;
+            case ETableType::Table:
+                break;
         }
 
         Add("block", Q(Y(
@@ -2082,21 +2109,21 @@ private:
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, false, std::move(features), context);
+    return new TUpsertObject(pos, objectId, typeId, false, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, existingOk, std::move(features), context);
+    return new TCreateObject(pos, objectId, typeId, existingOk, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context)
+    std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
 {
-    return new TAlterObject(pos, secretId, typeId, false, std::move(features), context);
+    return new TAlterObject(pos, secretId, typeId, false, std::move(features), std::move(featuresToReset), context);
 }
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
 {
-    return new TDropObject(pos, secretId, typeId, missingOk, std::move(options), context);
+    return new TDropObject(pos, secretId, typeId, missingOk, std::move(options), std::set<TString>(), context);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {

@@ -914,6 +914,27 @@ void SafeMakeNonblocking(int fd)
     }
 }
 
+bool TrySetPipeCapacity(int fd, int capacity)
+{
+#ifdef _linux_
+    int res = fcntl(fd, F_SETPIPE_SZ, capacity);
+
+    return  res != -1;
+#else
+    Y_UNUSED(fd);
+    Y_UNUSED(capacity);
+    return true;
+#endif
+}
+
+void SafeSetPipeCapacity(int fd, int capacity)
+{
+    if (!TrySetPipeCapacity(fd, capacity)) {
+        THROW_ERROR_EXCEPTION("Failed to set capacity for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
 bool TrySetUid(int uid)
 {
 #ifdef _linux_

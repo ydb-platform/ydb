@@ -732,6 +732,12 @@ public:
         }
     }
 
+    TPerNodeInfo *GetNode(ui32 nodeId) {
+        const auto nodeIt = PerNodeInfo.find(nodeId);
+        Y_ABORT_UNLESS(nodeIt != PerNodeInfo.end());
+        return &nodeIt->second;
+    }
+
     TInstant GetClock() const { return Clock; }
     ui64 GetEventsProcessed() const { return EventsProcessed; }
 
@@ -768,12 +774,6 @@ private:
         }
         Y_ABORT_UNLESS(!recip || (recip.NodeId() == nodeId && !recip.IsService()));
         return recip;
-    }
-
-    TPerNodeInfo *GetNode(ui32 nodeId) {
-        const auto nodeIt = PerNodeInfo.find(nodeId);
-        Y_ABORT_UNLESS(nodeIt != PerNodeInfo.end());
-        return &nodeIt->second;
     }
 };
 

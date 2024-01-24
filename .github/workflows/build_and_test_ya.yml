@@ -60,16 +60,11 @@ jobs:
     name: Build and test ${{ inputs.build_preset }}
     runs-on: [ self-hosted, "${{ inputs.runner_label }}", "${{ inputs.runner_additional_label || inputs.runner_label }}"]
     steps:
-    - name: Checkout specific commit
+    - name: Checkout
       uses: actions/checkout@v3
-      if: inputs.commit_sha
       with:
         ref: ${{ inputs.commit_sha }}
 
-    - name: Checkout
-      uses: actions/checkout@v3
-      if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
-    
     - name: comment-build-start
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash

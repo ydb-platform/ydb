@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/getopt
+    library/cpp/string_utils/base64
     contrib/libs/fmt
     library/cpp/yson
     ydb/library/yql/sql/pg

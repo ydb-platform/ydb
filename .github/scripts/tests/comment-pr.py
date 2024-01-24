@@ -30,9 +30,10 @@ def main():
     with open(os.environ["GITHUB_EVENT_PATH"]) as fp:
         event = json.load(fp)
 
-    pr = gh.create_from_raw_data(PullRequest, event["pull_request"])
-
-    update_pr_comment_text(pr, build_preset, color, args.text.read().rstrip(), args.rewrite)
+    prnum = event.get("pull_request")
+    if not prnum is None:
+        pr = gh.create_from_raw_data(PullRequest, prnum)
+        update_pr_comment_text(pr, build_preset, color, args.text.read().rstrip(), args.rewrite)
 
 
 if __name__ == "__main__":

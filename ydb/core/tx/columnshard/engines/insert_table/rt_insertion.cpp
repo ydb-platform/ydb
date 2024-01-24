@@ -111,13 +111,22 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetInsertedByPathId(const 
     return result;
 }
 
-THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetDeprecatedInsertions(const TInstant timeBorder) const {
+THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetExpiredInsertions(const TInstant timeBorder, const ui64 limit) const {
+    if (timeBorder < MinInsertedTs) {
+        return {};
+    }
+
     THashSet<TWriteId> toAbort;
+    TInstant newMin = TInstant::Max();
     for (auto& [writeId, data] : Inserted) {
-        if (data.GetMeta().GetDirtyWriteTime() && data.GetMeta().GetDirtyWriteTime() < timeBorder) {
+        const TInstant dataInsertTs = data.GetMeta().GetDirtyWriteTime();
+        if (dataInsertTs < timeBorder && toAbort.size() < limit) {
             toAbort.insert(writeId);
+        } else {
+            newMin = Min(newMin, dataInsertTs);
         }
     }
+    MinInsertedTs = (toAbort.size() == Inserted.size()) ? TInstant::Zero() : newMin;
     return toAbort;
 }
 

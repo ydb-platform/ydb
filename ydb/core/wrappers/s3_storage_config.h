@@ -29,6 +29,7 @@ private:
     Aws::Client::ClientConfiguration Config;
     const Aws::Auth::AWSCredentials Credentials;
     YDB_READONLY(Aws::S3::Model::StorageClass, StorageClass, Aws::S3::Model::StorageClass::STANDARD);
+    YDB_READONLY(bool, UseVirtualAddressing, true);
 
     static Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings);

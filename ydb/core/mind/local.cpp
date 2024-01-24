@@ -231,7 +231,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             tabletType = record.GetTabletType();
         }
 
-        ui32 tabletIdx = 0;
         for (const auto &tablet: OnlineTablets) {
             if (!isFilteringNeeded || tablet.second.TabletType == tabletType) {
                 auto *info = result->Record.AddTabletInfo();
@@ -239,7 +238,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 info->SetFollowerId(tablet.first.second);
                 info->SetTabletType(tablet.second.TabletType);
                 info->SetBootMode(tablet.second.BootMode);
-                ++tabletIdx;
             }
         }
 

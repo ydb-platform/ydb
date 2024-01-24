@@ -1,104 +1,151 @@
+{%- set mainClassTargets = targets|selectattr("app_main_class") -%}
+{%- set publish = targets|selectattr('publish') -%}
+{%- set hasJunit5Test = targets|selectattr('junit5_test') -%}
+{%- set target0 = targets[0] -%}
+{%- set with_kotlin = target0.with_kotlin -%}
+{%- set kotlin_version = target0.kotlin_version -%}
 plugins {
-{% if targets|selectattr("app_main_class") -%}
+{%- if mainClassTargets %}
     `application`
-{% else -%}
+{%- else %}
     `java-library`
-{% endif -%}
-{% if targets|selectattr('publish') -%}
+{%- endif %}
+{%- if publish %}
     `maven-publish`
     `signing`
-{% endif -%}
-    kotlin("jvm") version "1.8.22"
-    kotlin("plugin.allopen") version "1.8.22"
+{%- endif -%}
+{%- if with_kotlin and kotlin_version %}
+    kotlin("jvm") version "{{ kotlin_version }}"
+{%-     if target0.with_kotlinc_plugin_allopen %}
+    kotlin("plugin.allopen") version "{{ kotlin_version }}"
+{%      endif -%}
+{%-     if target0.with_kotlinc_plugin_lombok %}
+    kotlin("plugin.lombok") version "{{ kotlin_version }}"
+{%      endif -%}
+{%-     if target0.with_kotlinc_plugin_noarg %}
+    kotlin("plugin.noarg") version "{{ kotlin_version }}"
+{%      endif -%}
+{%-     if target0.with_kotlinc_plugin_serialization %}
+    kotlin("plugin.serialization") version "{{ kotlin_version }}"
+{%      endif -%}
+{%- endif %}
 }
+{%- if target0.with_kotlinc_plugin_allopen %}
 
 allOpen {
     annotation("org.springframework.stereotype.Component")
 }
+{%  endif -%}
+{%- if with_kotlin %}
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain({%- if target0.required_jdk -%}{{ target0.required_jdk }}{%- else -%}17{%- endif -%})
 }
+{%  endif -%}
+{%- if publish %}
 
-{% if targets|selectattr('publish') -%}
-group = "{{ targets[0].publish_group }}"
-version = project.properties["version"]
+group = "{{ target0.publish_group }}"
+version = {% if target0.publish_version and target0.publish_version != "no" -%}"{{ target0.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
+{%  endif %}
 
-{% endif -%}
 repositories {
     mavenCentral()
 }
 
-configurations {
-    all {
-        exclude(group = "ch.qos.logback", module = "logback-classic")
-        exclude(group = "org.apache.logging.log4j", module = "log4j-to-slf4j")
-    }
-}
+val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
 
-{% if targets|selectattr("app_main_class") -%}
+{%  if mainClassTargets -%}
 application {
-{% for target in targets|selectattr("app_main_class") -%}
+{%- for target in mainClassTargets %}
     mainClass.set("{{ target.app_main_class }}")
-{% endfor -%}
+{%  endfor -%}
 }
 
-{% endif -%}
+{%  endif -%}
 java {
     withSourcesJar()
     withJavadocJar()
 }
 
-{% if target.jar_source_set is defined -%}
-{%     for source_set in target.jar_source_set -%}
-{%-        set srcdir, glob = source_set.split(':') -%}
-sourceSets.main.java.srcDirs += '{{ srcdir }}'
-{%     endfor -%}
-{% endif -%}
-
-dependencies {
-{% for target in targets -%}
-{%     if target.junit5_test -%}
-    testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
-
-    api("org.apache.commons:commons-math3:3.6.1")
-
-    api("com.google.guava:guava:31.0.1-jre")
-{%     endif -%}
-{%     for library in target.consumer -%}
-{%         set classpath = library.classpath -%}
-{%         if targets|selectattr("app_main_class") -%}
-{%             if library.excludes.consumer is defined %}
-    implementation({{ classpath }}) {
-{%                 for exclude in library.excludes.consumer -%}
-{%                     set classpath_parts = exclude.classpath.split(':') -%}
-        exclude group: '{{ classpath_parts[0] }}', module: '{{ classpath_parts[1] }}'
-{%                 endfor -%}
-    }
-{%             else -%}
-    implementation({{ classpath }})
-{%             endif -%}
-{%         elif target.isTest -%}
-    testImplementation({{ classpath }})
-{%         else -%}
-    api({{ classpath }})
-{%         endif -%}
-{%     endfor -%}
-{% endfor -%}
+configurations.api {
+    isTransitive = false
 }
 
-{% if targets|selectattr("junit5_test") -%}
-tasks.named<Test>("test") {
-    useJUnitPlatform()
+configurations.implementation {
+    isTransitive = false
 }
 
-{% endif -%}
+configurations.testImplementation {
+    isTransitive = false
+}
+
+{%  if hasTest -%}
+val testsJar by tasks.registering(Jar::class) {
+    dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
+    archiveClassifier.set("tests")
+    from(sourceSets["test"].output)
+}
+
+artifacts.add(configurations.create("testArtifacts").name, testsJar)
+
 tasks.test {
     testLogging {
         showStandardStreams = true
         events("passed", "skipped", "failed")
     }
 }
+
+{%  endif -%}
+
+{%  for target in targets -%}
+{%-     if target.jar_source_set is defined -%}
+{%-         for source_set in target.jar_source_set -%}
+{%-             set srcdir_glob = split(source_set, ':') -%}
+sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
+{%              endfor -%}
+{%-     endif -%}
+{%- endfor -%}
+
+dependencies {
+{%- for target in targets -%}
+{%-    for library in target.consumer if library.classpath -%}
+{%-        if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) -%}
+{%-            if target.isTest %}
+    testImplementation
+{%-            else %}
+    implementation
+{%-            endif -%}(files("$project_root/{{ library.jar }}"))
+{%-        else -%}
+{%-            if target.isTest %}
+{%-                if library.type != "contrib" and library.test2test %}
+    testImplementation(project(path = ":{{ library.test2test | replace("/", ":") }}", configuration = "testArtifacts"))
+{%-                else %}
+    testImplementation({{ library.classpath }})
+{%-                endif %}
+{%-            elif library.type != "contrib" %}
+    implementation({{ library.classpath }})
+{%-            else %}
+    api({{ library.classpath }})
+{%-            endif -%}
+{%-            if library.excludes.consumer is defined %} {
+{%                 for exclude in library.excludes.consumer if exclude.classpath -%}
+{%                     set classpath = exclude.classpath|replace('"','') -%}
+{%                     set classpath_parts = split(classpath, ':') -%}
+        exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
+{%                 endfor -%}
+    }
+{%-            endif -%}
+{%-         endif -%}
+{%-     endfor -%}
+{%- endfor %}
+}
+
+{% if hasJunit5Test -%}
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+
+{% endif -%}
 
 {% set runs = targets|selectattr("runs") -%}
 {% if runs -%}
@@ -146,15 +193,9 @@ tasks.build.dependsOn(
 {%     endfor -%}
 {% endif -%}
 
-val testsJar by tasks.registering(Jar::class) {
-    dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
-    archiveClassifier.set("tests")
-    from(sourceSets["test"].output)
-}
-
-artifacts.add(configurations.create("testOutput").name, testsJar)
-
 {% include "extra-tests.gradle.kts" ignore missing %}
-{% if targets|selectattr('publish') -%}
-{% include 'publish.gradle.kts' -%}
+{% if publish -%}
+{% include 'publish.gradle.kts' ignore missing -%}
 {% endif -%}
+
+{{ dump }}

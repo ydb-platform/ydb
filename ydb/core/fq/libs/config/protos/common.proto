@@ -27,4 +27,5 @@ message TCommonConfig {
     uint64 MaxTasksPerStage = 12;
     bool KeepInternalErrors = 13;
     bool UseNativeProtocolForClickHouse = 14;
+    bool DisableSslForGenericDataSources = 15;
 }

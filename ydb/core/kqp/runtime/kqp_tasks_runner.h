@@ -12,9 +12,6 @@ NYql::NDq::IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NYql::NDqProto::
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     TVector<NYql::NDq::IDqOutput::TPtr>&& outputs);
 
-TIntrusivePtr<NYql::NDq::IDqTaskRunner> CreateKqpTaskRunner(const NYql::NDq::TDqTaskRunnerContext& execCtx,
-    const NYql::NDq::TDqTaskRunnerSettings& settings, const NYql::NDq::TLogFunc& logFunc);
-
 
 class TKqpTasksRunner : public TSimpleRefCount<TKqpTasksRunner>, private TNonCopyable {
 public:

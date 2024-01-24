@@ -26,8 +26,6 @@ SRCS(
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
-    change_sender_common_ops.cpp
-    change_sender_monitoring.cpp
     check_commit_writes_tx_unit.cpp
     check_data_tx_unit.cpp
     check_distributed_erase_tx_unit.cpp
@@ -161,6 +159,7 @@ SRCS(
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h
+    key_validator.cpp
     load_and_wait_in_rs_unit.cpp
     load_tx_details_unit.cpp
     make_scan_snapshot_unit.cpp
@@ -206,7 +205,6 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
-GENERATE_ENUM_SERIALIZATION(change_record.h)
 GENERATE_ENUM_SERIALIZATION(datashard.h)
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
 GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
@@ -239,7 +237,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer

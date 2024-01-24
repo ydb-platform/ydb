@@ -606,6 +606,8 @@ protected:
 
                         Step = INFLIGTH_CHECK;
 
+                        [[fallthrough]];
+
                     case INFLIGTH_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
@@ -617,6 +619,8 @@ protected:
                         }
                         InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case HEADER_READ:
                         KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
@@ -648,6 +652,8 @@ protected:
                         }
 
                         Step = MESSAGE_READ;
+
+                        [[fallthrough]];
 
                     case MESSAGE_READ:
                         KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);

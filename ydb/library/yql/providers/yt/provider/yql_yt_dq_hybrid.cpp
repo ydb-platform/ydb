@@ -76,7 +76,12 @@ private:
         if (const auto& trans = operation.Maybe<TYtTransientOpBase>(); trans && trans.Cast().Input().Size() != 1U)
             return false;
 
-        return !HasSetting(*operation.Ref().Child(4U), EYtSettingType::NoDq);
+        return !HasSettingsExcept(*operation.Ref().Child(4U), DqOpSupportedSettings);
+    }
+
+    bool HasDescOrderOutput(const TYtOutputOpBase& operation) const {
+        TYqlRowSpecInfo outRowSpec(operation.Output().Item(0).RowSpec());
+        return outRowSpec.IsSorted() && outRowSpec.HasAuxColumns();
     }
 
     std::optional<std::array<ui64, 2U>> CanReadHybrid(const TYtSection& section) const {
@@ -129,10 +134,6 @@ private:
                 flow = node->IsCallable(TCoToFlow::CallableName()) && node->Head().IsCallable(TYtTableContent::CallableName());
                 return false;
             })) {
-                TExprNode::TListType flags;
-                flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOnError", TNodeFlags::Default));
-                flags.emplace_back(ctx.NewAtom(fill.Pos(), "FallbackOpYtFill", TNodeFlags::Default));
-
                 return Build<TYtTryFirst>(ctx, fill.Pos())
                     .First<TYtDqProcessWrite>()
                         .World(fill.World())
@@ -156,7 +157,7 @@ private:
                             .Build()
                             .ColumnHints().Build()
                         .Build()
-                        .Flags().Add(std::move(flags)).Build()
+                        .Flags().Add(GetHybridFlags(fill, ctx)).Build()
                     .Build()
                     .Second<TYtFill>()
                         .InitFrom(fill)
@@ -234,10 +235,6 @@ private:
         auto settings = NYql::AddSetting(sort.Settings().Ref(), EYtSettingType::NoDq, {}, ctx);
         auto operation = ctx.ChangeChild(sort.Ref(), TYtTransientOpBase::idx_Settings, std::move(settings));
 
-        TExprNode::TListType flags;
-        flags.emplace_back(ctx.NewAtom(sort.Pos(), "FallbackOnError", TNodeFlags::Default));
-        flags.emplace_back(ctx.NewAtom(sort.Pos(), "FallbackOpYtSort", TNodeFlags::Default));
-
         return Build<TYtTryFirst>(ctx, sort.Pos())
             .First<TYtDqProcessWrite>()
                 .World(std::move(newWorld))
@@ -261,7 +258,7 @@ private:
                     .Build()
                     .ColumnHints().Build()
                 .Build()
-                .Flags().Add(std::move(flags)).Build()
+                .Flags().Add(GetHybridFlags(sort, ctx)).Build()
             .Build()
             .Second(std::move(operation))
             .Done();
@@ -274,6 +271,10 @@ private:
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
                 if (const auto stat = CanReadHybrid(sort.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        if (HasDescOrderOutput(sort)) {
+                            PushStat("HybridSkipDescSort");
+                            return node;
+                        }
                         YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
                         PushStat("HybridTry");
                         PushHybridStat("Try", node.Raw()->Content());
@@ -289,12 +290,16 @@ private:
     }
 
     TMaybeNode<TExprBase> TryYtMergeByDq(TExprBase node, TExprContext& ctx) const {
-        if (const auto merge = node.Cast<TYtMerge>(); CanReplaceOnHybrid(merge) && !NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks)) {
+        if (const auto merge = node.Cast<TYtMerge>(); CanReplaceOnHybrid(merge)) {
             if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
                 const auto info = TYtTableBaseInfo::Parse(merge.Input().Item(0).Paths().Item(0).Table());
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
                 if (const auto stat = CanReadHybrid(merge.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        if (HasDescOrderOutput(merge)) {
+                            PushStat("HybridSkipDescSort");
+                            return node;
+                        }
                         YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
                         PushStat("HybridTry");
                         PushHybridStat("Try", node.Raw()->Content());
@@ -410,10 +415,6 @@ private:
                                 .Done();
                         }
 
-                        TExprNode::TListType flags;
-                        flags.emplace_back(ctx.NewAtom(map.Pos(), "FallbackOnError", TNodeFlags::Default));
-                        flags.emplace_back(ctx.NewAtom(map.Pos(), "FallbackOpYtMap", TNodeFlags::Default));
-
                         return Build<TYtTryFirst>(ctx, map.Pos())
                             .First<TYtDqProcessWrite>()
                                 .World(std::move(newWorld))
@@ -426,7 +427,7 @@ private:
                                         .Build()
                                     .ColumnHints().Build()
                                     .Build()
-                                .Flags().Add(std::move(flags)).Build()
+                                .Flags().Add(GetHybridFlags(map, ctx)).Build()
                                 .Build()
                             .Second<TYtMap>()
                                 .InitFrom(map)
@@ -581,10 +582,6 @@ private:
 
         auto reducer = ctx.NewLambda(reduce.Pos(), ctx.NewArguments(reduce.Pos(), {std::move(arg)}), std::move(body));
 
-        TExprNode::TListType flags;
-        flags.emplace_back(ctx.NewAtom(reduce.Pos(), "FallbackOnError", TNodeFlags::Default));
-        flags.emplace_back(ctx.NewAtom(reduce.Pos(), "FallbackOpYtReduce", TNodeFlags::Default));
-
         return Build<TYtTryFirst>(ctx, reduce.Pos())
             .template First<TYtDqProcessWrite>()
                 .World(std::move(newWorld))
@@ -614,7 +611,7 @@ private:
                     .Build()
                     .ColumnHints().Build()
                 .Build()
-                .Flags().Add(std::move(flags)).Build()
+                .Flags().Add(GetHybridFlags(reduce, ctx)).Build()
             .Build()
             .template Second<TYtOperation>()
                 .InitFrom(reduce)
@@ -680,6 +677,13 @@ private:
             State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
         }
     };
+
+    TExprNode::TListType GetHybridFlags(TExprBase node, TExprContext& ctx) const {
+        TExprNode::TListType flags;
+        flags.emplace_back(ctx.NewAtom(node.Pos(), "FallbackOnError", TNodeFlags::Default));
+        flags.emplace_back(ctx.NewAtom(node.Pos(), "FallbackOp" + TString(node.Raw()->Content()), TNodeFlags::Default));
+        return flags;
+    }
 
     const TYtState::TPtr State_;
     const THolder<IGraphTransformer> Finalizer_;

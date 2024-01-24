@@ -30,13 +30,17 @@ struct TEnvironmentSetup {
         Cleanup();
     }
 
+    std::unique_ptr<TTestActorSystem> MakeRuntime() {
+        auto domainsInfo = MakeIntrusive<TDomainsInfo>();
+        domainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", Domain).Release());
+        return std::make_unique<TTestActorSystem>(NodeCount, NLog::PRI_ERROR, domainsInfo);
+    }
+
     void Initialize() {
-        Runtime = std::make_unique<TTestActorSystem>(NodeCount);
+        Runtime = MakeRuntime();
         TimerActor = Runtime->Register(new TTimerActor, NodeId);
         SetupLogging();
         Runtime->Start();
-        auto *appData = Runtime->GetAppData();
-        appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", Domain).Release());
         if (LocationGenerator) {
             Runtime->SetupTabletRuntime(LocationGenerator);
         } else {

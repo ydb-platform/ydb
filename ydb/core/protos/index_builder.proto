@@ -12,6 +12,8 @@ option java_package = "ru.yandex.kikimr.proto";
 message TColumnBuildSetting {
     optional string ColumnName = 1;
     optional Ydb.TypedValue default_from_literal = 2;
+    optional bool NotNull = 3;
+    optional string Family = 4;
 }
 
 message TColumnBuildSettings {

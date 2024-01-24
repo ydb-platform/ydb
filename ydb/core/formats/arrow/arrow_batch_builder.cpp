@@ -112,7 +112,6 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBat
     }
     Y_ABORT_UNLESS((int)batchColumns.size() == Schema->num_fields());
     Y_ABORT_UNLESS((int)Builders.size() == Schema->num_fields());
-    ui32 cIdx = 0;
     std::vector<std::unique_ptr<arrow::ArrayBuilder>>::const_iterator currentBuilder = Builders.begin();
     for (auto&& c : batchColumns) {
         if (!c) {
@@ -131,7 +130,6 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBat
             }
         }
         ++currentBuilder;
-        ++cIdx;
     }
     RecordsCount += value->num_rows();
     return *this;

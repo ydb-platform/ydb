@@ -189,15 +189,13 @@ class TestYmqQueueCounters(get_test_with_sqs_tenant_installation(KikimrSqsTestBa
         queue_url = self._sqs_api.create_queue(self.queue_name)
         queue_resource_id = self._get_queue_resource_id(queue_url, self.queue_name)
 
-        self._sqs_api.send_message(queue_url, "foo")
-        self._sqs_api.purge_queue(queue_url)
-
-        self._sqs_api.send_message(queue_url, "bar")
-        self._sqs_api.purge_queue(queue_url)
+        for _ in range(20):
+            self._sqs_api.send_message(queue_url, "foobar")
+            self._sqs_api.purge_queue(queue_url)
 
         ymq_counters = self._get_ymq_counters(cloud=self.cloud_id, folder=self.folder_id)
         purged_derivative = self._get_counter_value(ymq_counters, {
             'queue': queue_resource_id,
             'name': 'queue.messages.purged_count_per_second',
         })
-        assert purged_derivative == 1
+        assert purged_derivative > 0

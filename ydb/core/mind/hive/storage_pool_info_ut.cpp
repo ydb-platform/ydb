@@ -94,9 +94,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;
             groupChannels[channel][groupId]++;
-            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
-            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
-            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
+            pool.GetStorageGroup(groupId).AcquiredResources.IOPS += unit1.GroupParameters.GetRequiredIOPS();
+            pool.GetStorageGroup(groupId).AcquiredResources.Throughput += unit1.GroupParameters.GetRequiredThroughput();
+            pool.GetStorageGroup(groupId).AcquiredResources.Size += unit1.GroupParameters.GetRequiredDataSize();
         }
 
         if (strategy != NKikimrConfig::THiveConfig::HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN) {
@@ -114,9 +114,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
                 ui32 groupId = found->GetGroupID();
                 groupUnits[groupId]++;
                 groupChannels[channel][groupId]++;
-                pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
-                pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
-                pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
+                pool.GetStorageGroup(groupId).AcquiredResources.IOPS += unit1.GroupParameters.GetRequiredIOPS();
+                pool.GetStorageGroup(groupId).AcquiredResources.Throughput += unit1.GroupParameters.GetRequiredThroughput();
+                pool.GetStorageGroup(groupId).AcquiredResources.Size += unit1.GroupParameters.GetRequiredDataSize();
             }
         }
 
@@ -183,9 +183,9 @@ Y_UNIT_TEST_SUITE(StoragePool) {
             UNIT_ASSERT(found);
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;
-            pool.GetStorageGroup(groupId).AcquiredIOPS += unit1.GroupParameters.GetRequiredIOPS();
-            pool.GetStorageGroup(groupId).AcquiredThroughput += unit1.GroupParameters.GetRequiredThroughput();
-            pool.GetStorageGroup(groupId).AcquiredSize += unit1.GroupParameters.GetRequiredDataSize();
+            pool.GetStorageGroup(groupId).AcquiredResources.IOPS += unit1.GroupParameters.GetRequiredIOPS();
+            pool.GetStorageGroup(groupId).AcquiredResources.Throughput += unit1.GroupParameters.GetRequiredThroughput();
+            pool.GetStorageGroup(groupId).AcquiredResources.Size += unit1.GroupParameters.GetRequiredDataSize();
         }
 
 #ifndef _NDEBUG

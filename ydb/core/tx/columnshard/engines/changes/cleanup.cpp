@@ -39,9 +39,7 @@ bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
             continue;
         }
-        for (auto& record : portionInfo.Records) {
-            context.DB.EraseColumn(portionInfo, record);
-        }
+        portionInfo.RemoveFromDatabase(context.DB);
     }
 
     return true;

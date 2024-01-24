@@ -45,6 +45,7 @@ protected:
     bool NextValue();
 
 private:
+    void CheckError() const;
     // Used to pass struct in lambdas. std::shared_ptr copying is thread-safe
     struct TInnerState {
         TInnerState(size_t inputsCount) : IsInputDone(inputsCount) {};

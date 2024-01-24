@@ -126,6 +126,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
             restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
+            restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
             case Ydb::Import::ImportFromS3Settings::HTTP:

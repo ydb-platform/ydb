@@ -81,6 +81,37 @@ INSERT INTO FLOAT4_TBL(f1) VALUES ('123            5');
 ERROR:  invalid input syntax for type real: "123            5"
 LINE 1: INSERT INTO FLOAT4_TBL(f1) VALUES ('123            5');
                                            ^
+-- special inputs
+SELECT 'NaN'::float4;
+ float4 
+--------
+    NaN
+(1 row)
+
+SELECT 'nan'::float4;
+ float4 
+--------
+    NaN
+(1 row)
+
+SELECT '   NAN  '::float4;
+ float4 
+--------
+    NaN
+(1 row)
+
+SELECT 'infinity'::float4;
+  float4  
+----------
+ Infinity
+(1 row)
+
+SELECT '          -INFINiTY   '::float4;
+  float4   
+-----------
+ -Infinity
+(1 row)
+
 -- bad special inputs
 SELECT 'N A N'::float4;
 ERROR:  invalid input syntax for type real: "N A N"
@@ -94,11 +125,60 @@ SELECT ' INFINITY    x'::float4;
 ERROR:  invalid input syntax for type real: " INFINITY    x"
 LINE 1: SELECT ' INFINITY    x'::float4;
                ^
+SELECT 'Infinity'::float4 + 100.0;
+ ?column? 
+----------
+ Infinity
+(1 row)
+
+SELECT 'Infinity'::float4 / 'Infinity'::float4;
+ ?column? 
+----------
+      NaN
+(1 row)
+
 SELECT '42'::float4 / 'Infinity'::float4;
  ?column? 
 ----------
         0
 (1 row)
+
+SELECT 'nan'::float4 / 'nan'::float4;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::float4 / '0'::float4;
+ ?column? 
+----------
+      NaN
+(1 row)
+
+SELECT 'nan'::numeric::float4;
+ float4 
+--------
+    NaN
+(1 row)
+
+SELECT * FROM FLOAT4_TBL;
+      f1       
+---------------
+             0
+        1004.3
+        -34.84
+ 1.2345679e+20
+ 1.2345679e-20
+(5 rows)
+
+SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 <> '1004.3';
+      f1       
+---------------
+             0
+        -34.84
+ 1.2345679e+20
+ 1.2345679e-20
+(4 rows)
 
 SELECT f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3';
    f1   
@@ -140,9 +220,66 @@ SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3';
  1.2345679e-20
 (4 rows)
 
+SELECT f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+      f1       |       x        
+---------------+----------------
+        1004.3 |         -10043
+ 1.2345679e+20 | -1.2345678e+21
+ 1.2345679e-20 | -1.2345678e-19
+(3 rows)
+
+SELECT f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+      f1       |       x       
+---------------+---------------
+        1004.3 |         994.3
+ 1.2345679e+20 | 1.2345679e+20
+ 1.2345679e-20 |           -10
+(3 rows)
+
+SELECT f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+      f1       |       x        
+---------------+----------------
+        1004.3 |        -100.43
+ 1.2345679e+20 | -1.2345679e+19
+ 1.2345679e-20 | -1.2345679e-21
+(3 rows)
+
+SELECT f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
+   WHERE f.f1 > '0.0';
+      f1       |       x       
+---------------+---------------
+        1004.3 |        1014.3
+ 1.2345679e+20 | 1.2345679e+20
+ 1.2345679e-20 |            10
+(3 rows)
+
 -- test divide by zero
 SELECT f.f1 / '0.0' from FLOAT4_TBL f;
 ERROR:  division by zero
+SELECT * FROM FLOAT4_TBL;
+      f1       
+---------------
+             0
+        1004.3
+        -34.84
+ 1.2345679e+20
+ 1.2345679e-20
+(5 rows)
+
+-- test the unary float4abs operator
+SELECT f.f1, @f.f1 AS abs_f1 FROM FLOAT4_TBL f;
+      f1       |    abs_f1     
+---------------+---------------
+             0 |             0
+        1004.3 |        1004.3
+        -34.84 |         34.84
+ 1.2345679e+20 | 1.2345679e+20
+ 1.2345679e-20 | 1.2345679e-20
+(5 rows)
+
 -- test edge-case coercions to integer
 SELECT '32767.4'::float4::int2;
  int2  

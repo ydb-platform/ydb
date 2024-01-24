@@ -322,16 +322,15 @@ public:
         }
 
         for (const auto& op : operations) {
-            const auto& table = [&]() -> const TString& {
-                auto tempTableInfoIt = TempTablesState->FindInfo(op.GetTable(), false);
-
-                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    return tempTableInfoIt->first + TempTablesState->SessionId;
-                }
-                return op.GetTable();
-            }();
-
             const auto newOp = TYdbOperation(op.GetOperation());
+
+            auto table = op.GetTable();
+            if (TempTablesState) {
+                auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+                    table = tempTableInfoIt->first + TempTablesState->SessionId;
+                }
+            }
 
             const auto info = tableInfoMap.FindPtr(table);
             if (!info) {

@@ -141,7 +141,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        bool newPartition,
-                       TVector<TTransaction> distrTxs)
+                       TVector<TTransaction> distrTxs, const TActorId& writeQuoterActorId)
     : Initializer(this)
     , TabletID(tabletId)
     , TabletGeneration(tabletGeneration)
@@ -179,6 +179,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui
     , DiskIsFull(false)
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
+    , WriteQuotaTrackerActor(writeQuoterActorId)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}

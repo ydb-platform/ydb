@@ -357,7 +357,7 @@ public:
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
-               TVector<TTransaction> distrTxs = {});
+               TVector<TTransaction> distrTxs = {}, const TActorId& writeQuoterActorId = {});
 
     void Bootstrap(const TActorContext& ctx);
 

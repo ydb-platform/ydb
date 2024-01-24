@@ -16,11 +16,11 @@ void TGRpcYdbLogStoreService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #endif
 #define ADD_REQUEST(NAME, CB) \
     MakeIntrusive<TGRpcRequest<LogStore::NAME##Request, LogStore::NAME##Response, TGRpcYdbLogStoreService>> \
-        (this, &Service_, CQ_, [this](NYdbGrpc::IRequestContextBase *ctx) {                                    \
+        (this, &Service_, CQ_, [this](NYdbGrpc::IRequestContextBase *ctx) {                                 \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
             ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                 new TGrpcRequestOperationCall<LogStore::NAME##Request, LogStore::NAME##Response>            \
-                    (ctx, &CB));                                                                            \
+                    (ctx, &CB, "LogStore." #NAME));                                                         \
         }, &Ydb::LogStore::V1::LogStoreService::AsyncService::Request ## NAME,                              \
         #NAME, logger, getCounterBlock("logstore", #NAME))->Run();
 

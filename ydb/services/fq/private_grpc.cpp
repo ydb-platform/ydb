@@ -41,11 +41,11 @@ void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
 #define ADD_REQUEST(NAME, CB)                                                                                  \
 MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Response, TGRpcFqPrivateTaskService, TSecurityTextFormatPrinter<Fq::Private::NAME##Request>, TSecurityTextFormatPrinter<Fq::Private::NAME##Response>>>(                                                                  \
     this, &Service_, CQ_,                                                                                      \
-    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
+    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                               \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
         ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
             new TGrpcRequestOperationCall<Fq::Private::NAME##Request, Fq::Private::NAME##Response>             \
-                (ctx, &CB));                                                                                   \
+                (ctx, &CB, "FqInternal." #NAME));                                                              \
     },                                                                                                         \
     &Fq::Private::V1::FqPrivateTaskService::AsyncService::Request##NAME,                                       \
     #NAME, logger, getCounterBlock("fq_internal", #NAME))                                                      \

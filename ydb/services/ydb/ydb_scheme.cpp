@@ -17,11 +17,12 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response, TGRpcYdbSchemeService>> \
         (this, &Service_, CQ_,                                                                                  \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                           \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                     new TGrpcRequestOperationCall<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response>      \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                       \
+                        (ctx, &CB, "Scheme." #NAME,                                                             \
+                            TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                    \
             }, &Ydb::Scheme::V1::SchemeService::AsyncService::Request ## NAME,                                  \
             #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
 

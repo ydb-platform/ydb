@@ -11,18 +11,22 @@ public:
     TTracingControl(TIntrusivePtr<TControlBoard>& icb, TIntrusivePtr<ITimeProvider> timeProvider,
             TIntrusivePtr<IRandomProvider>& randomProvider, TString controlDomain);
 
-    void SampleThrottle(NWilson::TTraceId& traceId) {
-        if (!traceId && Sampler.Sample()) {
-            traceId = NWilson::TTraceId::NewTraceId(15, 4095);
-        }
-        if (traceId && Throttler.Throttle()) {
-            traceId = {};
-        }
+    bool SampleThrottle() {
+        return Sampler.Sample() && !Throttler.Throttle();
+    }
+
+    bool ThrottleExternal() {
+        return ExternalThrottler.Throttle();
+    }
+
+    ui8 SampledVerbosity() const {
+        Y_ABORT("TODO");
     }
 
 private:
     TSampler Sampler;
     TThrottler Throttler;
+    TThrottler ExternalThrottler;
 };
 
 } // namespace NKikimr

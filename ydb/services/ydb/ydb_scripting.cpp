@@ -31,19 +31,19 @@ void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger
     ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
-                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Ru), nullptr, TAuditMode::Auditable}));
+                (ctx, &DoExecuteYqlScript, "Scripting.ExecuteYql", TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Ru), nullptr, TAuditMode::Auditable}));
     })
 
     ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
-                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Auditable}));
+                (ctx, &DoStreamExecuteYqlScript, "Scripting.StreamExecuteYql", TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Auditable}));
     })
 
     ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
-                (ctx, &DoExplainYqlScript, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+                (ctx, &DoExplainYqlScript, "Scripting.ExplainYql", TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 #undef ADD_REQUEST
 }

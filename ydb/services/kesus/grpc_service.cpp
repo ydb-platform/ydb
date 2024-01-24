@@ -620,7 +620,8 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
-                    (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr})); \
+                    (reqCtx, &CB, "Coordination." #NAME, \
+                        NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr})); \
         }, \
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
         "Coordination/" #NAME,             \
@@ -641,7 +642,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         &Ydb::Coordination::V1::CoordinationService::AsyncService::RequestSession,
         [this](TIntrusivePtr<TGRpcSessionActor::IContext> context) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, context->GetPeerName());
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context, "Coordination.Session"));
         },
         *ActorSystem_,
         "Coordination/Session",

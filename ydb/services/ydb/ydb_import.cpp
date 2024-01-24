@@ -19,7 +19,7 @@ void TGRpcYdbImportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::Import::IN, Ydb::Import::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
+                    (ctx, &CB, "Import." #NAME, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
         }, &Ydb::Import::V1::ImportService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("import", #NAME))->Run();
 

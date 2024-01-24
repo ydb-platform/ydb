@@ -17,12 +17,13 @@ void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, CB) \
     MakeIntrusive<TGRpcRequest<Cms::NAME##Request, Cms::NAME##Response, TGRpcCmsService>>          \
         (this, &Service_, CQ_,                                                                     \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                              \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                           \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                   \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                            \
                     new TGrpcRequestOperationCall<Cms::NAME##Request, Cms::NAME##Response>         \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));          \
-            }, &Cms::V1::CmsService::AsyncService::Request ## NAME,                             \
+                        (ctx, &CB, "Cms." #NAME,                                                   \
+                            TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));       \
+            }, &Cms::V1::CmsService::AsyncService::Request ## NAME,                                \
             #NAME, logger, getCounterBlock("cms", #NAME))->Run();
 
     ADD_REQUEST(CreateDatabase, DoCreateTenantRequest)

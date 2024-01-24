@@ -94,7 +94,7 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
                     new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));                     \
+                        (ctx, CB, "Discovery." #NAME, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));  \
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
@@ -114,12 +114,12 @@ using namespace std::placeholders;
 #define ADD_METHOD(NAME, METHOD) \
     MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcLocalDiscoveryService>>   \
         (this, &Service_, CQ_,                                                                                \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                      \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
                 TFuncCallback cb = std::bind(&TGRpcLocalDiscoveryService::METHOD, this, _1, _2);              \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
                     new TGrpcRequestFunctionCall<Discovery::NAME##Request, Discovery::NAME##Response>         \
-                        (ctx, cb, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));                      \
+                        (ctx, cb, "Discovery." #NAME, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));  \
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 

@@ -49,13 +49,14 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         this,                                                                                \
         &Service_,                                                                           \
         CQ,                                                                                  \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                         \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                      \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());               \
             ActorSystem->Send(GRpcRequestProxyId,                                            \
                 new NGRpcService::TGrpcRequestOperationCall<                                 \
                     Ydb::RateLimiter::Y_CAT(methodName, Request),                            \
                     Ydb::RateLimiter::Y_CAT(methodName, Response)>                           \
-                        (reqCtx, &cb, TRequestAuxSettings{TRateLimiterMode::rps, nullptr})); \
+                        (reqCtx, &cb, "RateLimiter." Y_STRINGIZE(methodName),                \
+                            TRequestAuxSettings{TRateLimiterMode::rps, nullptr}));           \
         },                                                                                   \
         &Ydb::RateLimiter::V1::RateLimiterService::AsyncService::Y_CAT(Request, methodName), \
         "RateLimiter/" Y_STRINGIZE(methodName),                                              \

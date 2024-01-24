@@ -69,7 +69,7 @@ void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr 
         #NAME, logger, getCounterBlock("pq_cluster_discovery", #NAME))->Run();
 
         ADD_REQUEST(DiscoverClusters, DiscoverClustersRequest, DiscoverClustersResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx, "PqClusterDiscovery.DiscoverClusters"));
         })
 #undef ADD_REQUEST
 

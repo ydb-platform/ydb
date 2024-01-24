@@ -1246,28 +1246,52 @@ message TImmediateControlsConfig {
     }
 
     message TTracingControls {
-        message TSamplingControls {
-            optional uint64 SamplingPPM = 1 [(ControlOptions) = {
-                Description: "Average amount of sampled requests per one million",
-                MinValue: 0,
-                MaxValue: 1000000,
-                DefaultValue: 0,
-            }];
-            optional uint64 MaxRatePerMinute = 2 [(ControlOptions) = {
-                Description: "Maximum amount of traced requests per minute",
-                MinValue: 0,
-                MaxValue: 1000,
-                DefaultValue: 10,
-            }];
-            optional uint64 MaxBurst = 3 [(ControlOptions) = {
-                Description: "Maximum burst of traced events",
-                MinValue: 0,
-                MaxValue: 1000, 
-                DefaultValue: 15,
-            }];
+        message TSamplingThrottingOptions {
+            message TThrottingOptions {
+                optional uint64 MaxRatePerMinute = 1 [(ControlOptions) = {
+                    Description: "Maximum amount of traced requests per minute",
+                    MinValue: 0,
+                    MaxValue: 1000,
+                    DefaultValue: 0,
+                }];
+                optional uint64 MaxBurst = 2 [(ControlOptions) = {
+                    Description: "Maximum burst of traced events",
+                    MinValue: 0,
+                    MaxValue: 1000, 
+                    DefaultValue: 0,
+                }];
+            }
+
+            message TSamplingOptions {
+                optional uint64 PPM = 1 [(ControlOptions) = {
+                    Description: "Average amount of sampled requests per one million",
+                    MinValue: 0,
+                    MaxValue: 1000000,
+                    DefaultValue: 0,
+                }];
+                optional uint64 Level = 2 [(ControlOptions) = {
+                    Description: "Tracing level of sampled requests",
+                    MinValue: 1,
+                    MaxValue: 15,
+                    DefaultValue: 15,
+                }];
+            }
+
+            optional TSamplingOptions Sampling = 1;
+            optional TThrottingOptions SampledThrottling = 2;
+            optional TThrottingOptions ExternalThrottling = 3;
         }
 
-        optional TSamplingControls KeyValue = 1;
+        message TKeyValue {
+            optional TSamplingThrottingOptions AcquireLock = 1;
+            optional TSamplingThrottingOptions ExecuteTransaction = 2;
+            optional TSamplingThrottingOptions Read = 3;
+            optional TSamplingThrottingOptions ReadRange = 4;
+            optional TSamplingThrottingOptions ListRange = 5;
+            optional TSamplingThrottingOptions GetStorageChannelStatus = 6;
+        }
+
+        optional TSamplingThrottingOptions KeyValue = 1;
     }
 
     optional TDataShardControls DataShardControls = 1;

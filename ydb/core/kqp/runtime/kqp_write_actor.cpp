@@ -82,7 +82,10 @@ public:
         , Counters(counters)
         , TypeEnv(args.TypeEnv)
         , TxId(args.TxId)
-        , TableId(Settings.GetTable().GetOwnerId(), Settings.GetTable().GetTableId())
+        , TableId(
+            Settings.GetTable().GetOwnerId(),
+            Settings.GetTable().GetTableId(),
+            Settings.GetTable().GetVersion())
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
@@ -183,7 +186,11 @@ private:
 
         YQL_ENSURE(SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        CA_LOG_D("Resolved TableId=" << TableId);
+        CA_LOG_D("Resolved TableId=" << TableId << " (" << SchemeEntry->TableId.PathId.ToString() << " " << SchemeEntry->TableId.SchemaVersion << ")");
+
+        if (SchemeEntry->TableId.SchemaVersion != TableId.SchemaVersion) {
+            RuntimeError(TStringBuilder() << "Schema was updated.", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+        }
 
         Prepare();
 

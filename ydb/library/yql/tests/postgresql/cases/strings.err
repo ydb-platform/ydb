@@ -260,11 +260,6 @@ RESET standard_conforming_strings;
 -- bytea
 SET bytea_output TO hex;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: bytea_output
-    	-- bytea
-	^
 <sql-statement>
 SELECT E'\\xDeAdBeEf'::bytea;
 </sql-statement>
@@ -325,11 +320,6 @@ SELECT E'De\\678dBeEf'::bytea;
 <sql-statement>
 SET bytea_output TO escape;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
-
-    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: bytea_output
-    	SET bytea_output TO escape;
-	^
 <sql-statement>
 SELECT E'\\xDeAdBeEf'::bytea;
 </sql-statement>

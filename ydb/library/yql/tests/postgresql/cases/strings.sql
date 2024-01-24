@@ -44,12 +44,18 @@ SELECT E'wrong: \U002FFFFF';
 SET standard_conforming_strings TO off;
 SELECT 'tricky' AS U&"\" UESCAPE '!';
 RESET standard_conforming_strings;
+-- bytea
+SET bytea_output TO hex;
 SELECT E'\\xDeAdBeEf'::bytea;
 SELECT E'\\x De Ad Be Ef '::bytea;
 SELECT E'\\xDeAdBeE'::bytea;
 SELECT E'\\xDeAdBeEx'::bytea;
 SELECT E'\\xDe00BeEf'::bytea;
 SELECT E'De\\678dBeEf'::bytea;
+SET bytea_output TO escape;
+SELECT E'\\xDeAdBeEf'::bytea;
+SELECT E'\\x De Ad Be Ef '::bytea;
+SELECT E'\\xDe00BeEf'::bytea;
 SELECT E'DeAdBeEf'::bytea;
 SELECT E'De\\123dBeEf'::bytea;
 SELECT CAST(name 'namefield' AS text) AS "text(name)";

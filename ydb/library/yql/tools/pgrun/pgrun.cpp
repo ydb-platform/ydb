@@ -1144,6 +1144,16 @@ int Main(int argc, char* argv[])
             }
         }
 
+        if (TString::npos != stmt.find("SET bytea_output TO hex")) {
+            byteaOutput = EByteaOutput::hex;
+            continue;
+        }
+
+        if (TString::npos != stmt.find("SET bytea_output TO escape")) {
+            byteaOutput = EByteaOutput::escape;
+            continue;
+        }
+
         google::protobuf::Arena arena;
         settings.Arena = &arena;
 

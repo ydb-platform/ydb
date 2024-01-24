@@ -360,7 +360,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         return result;
     }
 
-    TVector<TStringBuf> storePoolKinds(Reserve(ecps.size()));
+    TVector<TStringBuf> storePoolKinds(::Reserve(ecps.size()));
     for (const auto& ecp : ecps) {
         storePoolKinds.push_back(ecp.GetPoolKind());
     }

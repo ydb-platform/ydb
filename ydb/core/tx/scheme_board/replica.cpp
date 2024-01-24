@@ -179,7 +179,7 @@ public:
             }
 
             auto notify = BuildNotify();
-            TVector<const TActorId*> subscribers(Reserve(Subscribers.size()));
+            TVector<const TActorId*> subscribers(::Reserve(Subscribers.size()));
 
             for (auto& [subscriber, info] : Subscribers) {
                 if (!info.EnqueueVersion(notify.Get())) {

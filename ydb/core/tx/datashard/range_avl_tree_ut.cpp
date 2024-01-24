@@ -20,7 +20,7 @@ namespace {
 
 #if 0
     TVector<TCell> CreateKey(std::initializer_list<ui64> keys) {
-        TVector<TCell> cells(Reserve(keys.size()));
+        TVector<TCell> cells(::Reserve(keys.size()));
         for (ui64 key : keys) {
             cells.emplace_back(TCell::Make(key));
         }
@@ -29,7 +29,7 @@ namespace {
 #endif
 
     TVector<TCell> CreateKey(ui64 key) {
-        TVector<TCell> cells(Reserve(1));
+        TVector<TCell> cells(::Reserve(1));
         cells.emplace_back(TCell::Make(key));
         return cells;
     }

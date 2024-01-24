@@ -115,7 +115,7 @@ public:
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
-        , State(Reserve(Meta.LevelCount + 1))
+        , State(::Reserve(Meta.LevelCount + 1))
     {
         const static TCellsIterable EmptyKey(static_cast<const char*>(nullptr), TColumns());
         State.emplace_back(Meta, 0, GetEndRowId(), EmptyKey, EmptyKey);

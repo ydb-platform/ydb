@@ -174,7 +174,7 @@ public:
                     any->UnpackTo(&result);
                 }
 
-                TVector<TSchemeEntry> children(Reserve(result.children().size()));
+                TVector<TSchemeEntry> children(::Reserve(result.children().size()));
                 for (const auto& child : result.children()) {
                     children.emplace_back(child);
                 }

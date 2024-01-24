@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
         TPageMap<THolder<TPage>> map;
         map.resize(1024 * 1024);
 
-        TVector<ui32> pageIds(Reserve(map.size()));
+        TVector<ui32> pageIds(::Reserve(map.size()));
         for (ui32 pageId = 0; pageId < map.size(); ++pageId) {
             pageIds.push_back(pageId);
         }
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TPageMapTest) {
         TPageMap<TPage*> map;
         map.resize(1024 * 1024);
 
-        TVector<TPage> pages(Reserve(map.size()));
+        TVector<TPage> pages(::Reserve(map.size()));
         for (ui32 pageId = 0; pageId < map.size(); ++pageId) {
             pages.emplace_back(pageId);
         }

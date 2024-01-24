@@ -23,7 +23,7 @@ public:
     }
 
     TCachedTags Build() {
-        TVector<TTag> tags(Reserve(IndexTags.size() + DataTags.size()));
+        TVector<TTag> tags(::Reserve(IndexTags.size() + DataTags.size()));
 
         for (const auto tag : IndexTags) {
             tags.push_back(tag);
@@ -251,8 +251,8 @@ void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag,
 void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TUpdateOp> keyVals, TArrayRef<const TUpdateOp> dataVals)
 {
-    TVector<TRawTypeValue> key(Reserve(keyVals.size()));
-    TVector<TTag> keyTags(Reserve(keyVals.size()));
+    TVector<TRawTypeValue> key(::Reserve(keyVals.size()));
+    TVector<TTag> keyTags(::Reserve(keyVals.size()));
     for (const auto& v : keyVals) {
         key.push_back(v.Value);
         keyTags.push_back(v.Tag);

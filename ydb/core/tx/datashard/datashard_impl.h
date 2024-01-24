@@ -2062,7 +2062,7 @@ private:
         void ReturnLoan(ui64 ownerTabletId, const TVector<TLogoBlobID>& partMetaVec, const TActorContext& ctx) {
             TLoanReturnInfo& info = LoanReturns[ownerTabletId];
 
-            TVector<TLogoBlobID> partsToReturn(Reserve(partMetaVec.size()));
+            TVector<TLogoBlobID> partsToReturn(::Reserve(partMetaVec.size()));
             for (const auto& partMeta : partMetaVec) {
                 auto it = LoanOwners.find(partMeta);
                 if (it != LoanOwners.end()) {

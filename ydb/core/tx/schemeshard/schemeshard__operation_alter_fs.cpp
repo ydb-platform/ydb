@@ -525,7 +525,7 @@ bool TAlterFileStore::ProcessChannelProfiles(
     }
 
     const auto& ecps = alterEcps.empty() ? config.GetExplicitChannelProfiles() : alterEcps;
-    TVector<TStringBuf> partitionPoolKinds(Reserve(ecps.size()));
+    TVector<TStringBuf> partitionPoolKinds(::Reserve(ecps.size()));
     for (const auto& ecp : ecps) {
         partitionPoolKinds.push_back(ecp.GetPoolKind());
     }

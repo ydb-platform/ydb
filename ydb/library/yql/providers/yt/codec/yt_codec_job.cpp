@@ -31,7 +31,7 @@ TOutStreamsHolder::TOutStreamsHolder(const TVector<TFile>& outHandles) {
 }
 
 TVector<IOutputStream*> TOutStreamsHolder::GetVectorOfStreams() {
-    TVector<IOutputStream*> res(Reserve(Outputs.size()));
+    TVector<IOutputStream*> res(::Reserve(Outputs.size()));
     for (auto& s: Outputs) {
         res.push_back(&s);
     }

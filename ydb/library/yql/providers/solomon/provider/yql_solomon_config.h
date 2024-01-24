@@ -23,7 +23,7 @@ struct TSolomonConfiguration
     template <typename TProtoConfig>
     void Init(const TProtoConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)
     {
-        TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
+        TVector<TString> clusters(::Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
             ClusterConfigs[cluster.GetName()] = cluster;

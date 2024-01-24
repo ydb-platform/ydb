@@ -79,7 +79,7 @@ namespace {
         for (const auto& n: key)
             sz += n.Value().Size() + delimiter.Size();
 
-        TString name(Reserve(sz));
+        TString name(::Reserve(sz));
         for (const auto& n: key) {
             name += n.Value() + delimiter;
         }

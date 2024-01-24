@@ -518,7 +518,7 @@ TVector<TString> GetFileWriteResult(const TTypeEnvironment& env, const IFunction
 
     TVector<TStringStream> streams(spec.Outputs.size());
     {
-        TVector<IOutputStream*> out(Reserve(spec.Outputs.size()));
+        TVector<IOutputStream*> out(::Reserve(spec.Outputs.size()));
         std::transform(streams.begin(), streams.end(), std::back_inserter(out), [] (TStringStream& s) { return &s; });
         TMkqlWriterImpl writer(out, 0, 4_MB);
         writer.SetSpecs(spec);

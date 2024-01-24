@@ -31,7 +31,7 @@ TInstant ProtoTimestampToInstant(const NProtoBuf::Timestamp& timestamp) {
 }
 
 TVector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
-    TVector<TExportItemProgress> result(Reserve(proto.size()));
+    TVector<TExportItemProgress> result(::Reserve(proto.size()));
 
     for (const auto& protoItem : proto) {
         auto& item = result.emplace_back();

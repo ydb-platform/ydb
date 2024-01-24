@@ -327,7 +327,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 case TS3Upload::EStatus::Complete: {
                     Parts = std::move(upload->Parts);
 
-                    TVector<Aws::S3::Model::CompletedPart> parts(Reserve(Parts.size()));
+                    TVector<Aws::S3::Model::CompletedPart> parts(::Reserve(Parts.size()));
                     for (ui32 partIndex = 0; partIndex < Parts.size(); ++partIndex) {
                         parts.emplace_back(Aws::S3::Model::CompletedPart()
                             .WithPartNumber(partIndex + 1)

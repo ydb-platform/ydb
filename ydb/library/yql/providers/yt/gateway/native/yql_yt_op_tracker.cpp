@@ -196,7 +196,7 @@ void TOperationTracker::Tracker() {
             ops.reserve(RunningOperations_.size());
             ops.swap(RunningOperations_);
         }
-        decltype(RunningOperations_) activeOps(Reserve(ops.size()));
+        decltype(RunningOperations_) activeOps(::Reserve(ops.size()));
         for (auto& op: ops) {
             try {
                 if (op()) {

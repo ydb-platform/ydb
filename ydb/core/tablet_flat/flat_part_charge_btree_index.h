@@ -63,7 +63,7 @@ public:
             key2 = key1; // will not go further than key1
         }
 
-        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+        TVector<TNodeState> level(::Reserve(3)), nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
@@ -155,7 +155,7 @@ public:
         }
 
         // level contains nodes in reverse order
-        TVector<TNodeState> level(Reserve(3)), nextLevel(Reserve(3));
+        TVector<TNodeState> level(::Reserve(3)), nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 

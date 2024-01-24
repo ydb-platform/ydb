@@ -13,7 +13,7 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         << ": in# " << in.size()
         << ", tags# " << tags.size());
 
-    TVector<TCell> cells(Reserve(in.size()));
+    TVector<TCell> cells(::Reserve(in.size()));
     for (size_t i = 0; i < in.size(); ++i) {
         out.AddTags(tags.at(i));
         cells.emplace_back(in.at(i).AsRef());
@@ -29,7 +29,7 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         return;
     }
 
-    TVector<TCell> cells(Reserve(in.size()));
+    TVector<TCell> cells(::Reserve(in.size()));
     for (const auto& op : in) {
         Y_VERIFY_S(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw());
 
@@ -47,7 +47,7 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         << ": state# " << state.Size()
         << ", tags# " << tags.size());
 
-    TVector<TCell> cells(Reserve(state.Size()));
+    TVector<TCell> cells(::Reserve(state.Size()));
     for (TPos pos = 0; pos < state.Size(); ++pos) {
         out.AddTags(tags.at(pos));
         cells.emplace_back(state.Get(pos));

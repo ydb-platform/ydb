@@ -661,7 +661,7 @@ const TVector<TString>& TTableDescription::GetPrimaryKeyColumns() const {
 TVector<TColumn> TTableDescription::GetColumns() const {
     // Conversion to TColumn for API compatibility
     const auto& columns = Impl_->GetColumns();
-    TVector<TColumn> legacy(Reserve(columns.size()));
+    TVector<TColumn> legacy(::Reserve(columns.size()));
     for (const auto& column : columns) {
         legacy.emplace_back(column.Name, column.Type);
     }

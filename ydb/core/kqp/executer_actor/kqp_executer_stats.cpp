@@ -401,7 +401,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 
     UpdateAggr(ExtraStats.MutableComputeCpuTimeUs(), stats.GetCpuTimeUs());
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(::Reserve(stats.GetTasks().size()));
 
     for (auto& task : *stats.MutableTasks()) {
         ResultBytes += task.GetResultBytes();
@@ -547,7 +547,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
     TotalTasks += stats.GetTasks().size();
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(::Reserve(stats.GetTasks().size()));
 
     for (auto& task : *stats.MutableTasks()) {
         for (auto& table : task.GetTables()) {

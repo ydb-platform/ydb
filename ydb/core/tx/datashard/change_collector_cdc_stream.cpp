@@ -13,7 +13,7 @@ using namespace NTable;
 namespace {
 
     auto MakeKeyCells(TArrayRef<const TRawTypeValue> key) {
-        TVector<TCell> result(Reserve(key.size()));
+        TVector<TCell> result(::Reserve(key.size()));
 
         for (TPos pos = 0; pos < key.size(); ++pos) {
             result.emplace_back(key.at(pos).AsRef());
@@ -23,7 +23,7 @@ namespace {
     }
 
     auto MakeValueTags(const TMap<TTag, TUserTable::TUserColumn>& columns) {
-        TVector<TTag> result(Reserve(columns.size() - 1));
+        TVector<TTag> result(::Reserve(columns.size() - 1));
 
         for (const auto& [tag, column] : columns) {
             if (!column.IsKey) {
@@ -35,7 +35,7 @@ namespace {
     }
 
     auto MakeValueTypes(const TMap<TTag, TUserTable::TUserColumn>& columns) {
-        TVector<NScheme::TTypeInfo> result(Reserve(columns.size() - 1));
+        TVector<NScheme::TTypeInfo> result(::Reserve(columns.size() - 1));
 
         for (const auto& [_, column] : columns) {
             if (!column.IsKey) {
@@ -47,7 +47,7 @@ namespace {
     }
 
     auto MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TArrayRef<const NScheme::TTypeInfo> types) {
-        TVector<TUpdateOp> result(Reserve(cells.size()));
+        TVector<TUpdateOp> result(::Reserve(cells.size()));
 
         Y_ABORT_UNLESS(cells.size() == tags.size());
         Y_ABORT_UNLESS(cells.size() == types.size());

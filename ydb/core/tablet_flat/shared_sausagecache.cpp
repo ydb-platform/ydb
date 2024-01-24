@@ -1143,7 +1143,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (haveValidPages) {
-            TVector<ui32> dropped(Reserve(droppedPagesCount));
+            TVector<ui32> dropped(::Reserve(droppedPagesCount));
             for (const auto &kv : collection.PageMap) {
                 auto* page = kv.second.Get();
                 if (!page->Collection) {

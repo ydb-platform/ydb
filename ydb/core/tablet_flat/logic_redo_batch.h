@@ -28,7 +28,7 @@ namespace NRedo {
 
         TString Flush()
         {
-            TString out(Reserve(Bytes));
+            TString out(::Reserve(Bytes));
 
             for (const auto &x : Bodies)
                 out.append(x);

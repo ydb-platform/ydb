@@ -62,7 +62,7 @@ public:
         }
 
         const auto& entityPipes = entityIt->second;
-        TVector<TTabletId> tablets(Reserve(entityPipes.size()));
+        TVector<TTabletId> tablets(::Reserve(entityPipes.size()));
 
         for (const auto& [tabletId, _] : entityPipes) {
             tablets.push_back(tabletId);

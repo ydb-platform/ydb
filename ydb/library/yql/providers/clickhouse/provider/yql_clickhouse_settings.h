@@ -25,7 +25,7 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
         THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)
     {
-        TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
+        TVector<TString> clusters(::Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
         }

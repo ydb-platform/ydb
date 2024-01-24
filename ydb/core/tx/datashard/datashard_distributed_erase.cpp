@@ -611,7 +611,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         THashMap<TTableId, THashMap<ui64, TShardKeys>> keys; // table to shard to keys
-        TVector<TString> indexColumnValues(Reserve(record.KeyColumnsSize()));
+        TVector<TString> indexColumnValues(::Reserve(record.KeyColumnsSize()));
         for (ui32 i = 0; i < record.KeyColumnsSize(); ++i) {
             const auto& serializedKey = record.GetKeyColumns(i);
 
@@ -622,7 +622,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             for (const auto& [tableId, info] : TableInfos) {
-                TVector<TCell> cells(Reserve(info.GetKeyMap().size()));
+                TVector<TCell> cells(::Reserve(info.GetKeyMap().size()));
                 for (const auto& [_, id] : info.GetKeyMap()) {
                     if (!keyColumnIdToIdx.contains(id)) {
                         return BadRequest(TStringBuilder() << "Key column is absent"
@@ -646,7 +646,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     continue;
                 }
 
-                TVector<TCell> indexCells(Reserve(indexColumnIds.size()));
+                TVector<TCell> indexCells(::Reserve(indexColumnIds.size()));
                 for (const auto& id : indexColumnIds) {
                     Y_ABORT_UNLESS(keyColumnIdToIdx.contains(id));
                     indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);

@@ -89,8 +89,8 @@ struct TRowResultInfo {
         Y_ABORT_UNLESS(inRow.size() >= ItemInfos.size());
 
         // reorder columns
-        TVector<TCell> outRow(Reserve(ItemInfos.size()));
-        TVector<NScheme::TTypeInfo> outTypes(Reserve(ItemInfos.size()));
+        TVector<TCell> outRow(::Reserve(ItemInfos.size()));
+        TVector<NScheme::TTypeInfo> outTypes(::Reserve(ItemInfos.size()));
         for (ui32 i = 0; i < ItemInfos.size(); ++i) {
             ui32 colId = ItemInfos[i].ColumnId;
             outRow.emplace_back(std::move(inRow[colId]));

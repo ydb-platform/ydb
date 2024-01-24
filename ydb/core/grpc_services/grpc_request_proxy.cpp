@@ -91,7 +91,6 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Inside generic handle of " << typeid(TEvent).name() << ", traceId = " << requestBaseCtx->GetWilsonTraceId().GetHexTraceId());
             requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
@@ -100,7 +99,6 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Inside handle of list endpoints requests, traceId = " << requestBaseCtx->GetWilsonTraceId().GetHexTraceId());
             requestBaseCtx->LegacyFinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
@@ -109,7 +107,6 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Inside handle of proxy runtime event, traceId = " << requestBaseCtx->GetWilsonTraceId().GetHexTraceId());
             event->Release().Release()->Pass(*this);
         }
     }

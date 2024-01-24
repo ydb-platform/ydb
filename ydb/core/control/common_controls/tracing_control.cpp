@@ -20,12 +20,12 @@ TThrottler CreateThrottler(TIntrusivePtr<TControlBoard>& icb, TIntrusivePtr<ITim
     TControlWrapper maxRatePerMinute;
     TControlWrapper maxBurst;
 
-    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> kek = {{
+    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> controls = {{
         {maxRatePerMinute, "MaxRatePerMinute"},
         {maxBurst, "MaxBurst"},
     }};
     const auto& throttlingOptions = *NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TThrottlingOptions::descriptor();
-    for (auto& [control, fieldName] : kek) {
+    for (auto& [control, fieldName] : controls) {
         const auto& controlOptions = GetImmediateControlOptionsForField(throttlingOptions, TString(fieldName));
 
         control.Reset(controlOptions.GetDefaultValue(), controlOptions.GetMinValue(), controlOptions.GetMaxValue());
@@ -44,13 +44,13 @@ TTracingControl::TTracingControl(TIntrusivePtr<TControlBoard>& icb, TIntrusivePt
     ExternalThrottler = CreateThrottler(icb, timeProvider, controlDomain + ".ExternalThrottling");
 
     TControlWrapper samplingPPM;
-    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> kek = {{
+    const std::array<std::pair<TControlWrapper&, TStringBuf>, 2> controls = {{
         {samplingPPM, "PPM"},
         {SampledLevel, "Level"},
     }};
 
     const auto& samplingOptions = *NKikimrConfig::TImmediateControlsConfig::TTracingControls::TSamplingThrottlingOptions::TSamplingOptions::descriptor();
-    for (auto [control, name] : kek) {
+    for (auto [control, name] : controls) {
         const auto& controlOptions = GetImmediateControlOptionsForField(samplingOptions, TString(name));
         control.Reset(controlOptions.GetDefaultValue(), controlOptions.GetMinValue(), controlOptions.GetMaxValue());
         icb->RegisterSharedControl(control, controlDomain + ".Sampling." + name);

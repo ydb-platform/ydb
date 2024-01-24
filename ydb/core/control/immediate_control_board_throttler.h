@@ -20,7 +20,7 @@ public:
     bool Throttle() {
         auto maxRatePerMinute = static_cast<i64>(MaxRatePerMinute);
         auto maxBurst = static_cast<i64>(MaxBurst);
-        auto maxTotal = maxRatePerMinute + maxBurst;
+        auto maxTotal = maxBurst + 1;
         CurrentBurst = std::min(CurrentBurst, maxTotal);
         if (maxRatePerMinute == 0) {
             return true;

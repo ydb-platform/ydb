@@ -1251,13 +1251,13 @@ message TImmediateControlsConfig {
                 optional uint64 MaxRatePerMinute = 1 [(ControlOptions) = {
                     Description: "Maximum amount of traced requests per minute",
                     MinValue: 0,
-                    MaxValue: 1000,
+                    MaxValue: 300,
                     DefaultValue: 0,
                 }];
                 optional uint64 MaxBurst = 2 [(ControlOptions) = {
                     Description: "Maximum burst of traced events",
                     MinValue: 0,
-                    MaxValue: 1000, 
+                    MaxValue: 300, 
                     DefaultValue: 0,
                 }];
             }

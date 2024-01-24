@@ -44,10 +44,11 @@ bool operator < (const TJoinColumn& c1, const TJoinColumn& c2);
 }
 
 enum EJoinImplType {
-    DictJoin,
-    MapJoin,
-    GraceJoin
+    HashJoin,
+    LookupJoin
 };
+
+static const EJoinImplType AllJoinTypes[] = { HashJoin, LookupJoin };
 
 TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinImplType joinType);

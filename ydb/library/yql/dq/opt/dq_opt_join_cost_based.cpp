@@ -92,6 +92,66 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
     }
 }
 
+bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
+    std::shared_ptr<IBaseOptimizerNode> right, 
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinCondition) {
+
+    
+}
+
+bool IsJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left, 
+    std::shared_ptr<IBaseOptimizerNode> right, 
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+    EJoinImplType joinImpl) {
+
+        swtich(joinImpl) {
+            case EJoinImplType::LookupJoin:
+                return IsLookupJoinApplicable(left,right,joinConditions);
+            default:
+                return true;
+        }
+}
+
+std::shared_ptr<TJoinOptimizerNode> PickBestJoin(std::shared_ptr<IBaseOptimizerNode> left, 
+    std::shared_ptr<IBaseOptimizerNode> right, 
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& leftJoinConditions,
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& rightJoinConditions,
+    const std::shared_ptr<TOptimizerStatistics> leftStats,
+    const std::shared_ptr<TOptimizerStatistics> rightStats) {
+
+    auto res = std::shared_ptr<TJoinOptimizerNode>();
+
+    for ( auto joinType : AllJoinTypes ) {
+        auto p1 = IsJoinApplicable(left, right, leftJoinConditions, joinType) ? 
+            MakeJoin(left, right, leftJoinConditions, joinType ) :
+            std::shared_ptr<TJoinOptimizerNode>();
+        auto p2 = IsJoinApplicable(right, left, rightJoinConditions, joinType) ? 
+            MakeJoin(right, left, rightJoinConditions, joinType ) :
+            std::shared_ptr<TJoinOptimizerNode>();
+            
+        if (p1) {
+            if (res) {
+                if (p1->Cost < res->Cost) {
+                    res = p1;
+                }
+            } else {
+                res = p1;
+            }
+        }
+        if (p2) {
+            if (res) {
+                if (p2->Cost < res->Cost) {
+                    res = p2;
+                }
+            } else {
+                res = p2;
+            }
+        }
+    }
+
+    return res;
+}
+
 /**
  * Create a new join and compute its statistics and cost
 */

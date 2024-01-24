@@ -49,8 +49,13 @@ struct IBaseOptimizerNode {
 struct TRelOptimizerNode : public IBaseOptimizerNode {
     TString Label;
 
+    // Temporary solution to check if a LookupJoin is possible in KQP
+    TExprNode::TPtr Expr;
+
     TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) : 
         IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
+    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) : 
+        IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
     virtual ~TRelOptimizerNode() {}
 
     virtual TVector<TString> Labels();

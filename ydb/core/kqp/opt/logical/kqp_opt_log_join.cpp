@@ -859,6 +859,16 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
 } // anonymous namespace
 
+bool KqpLookupJoinIsApplicable(const NYql::NNodes::TExprBase& node, TVector<TString> joinColumns, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx) {
+    if (kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+        return false;
+    }
+
+    
+
+}
+
 TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     if ((kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) || !node.Maybe<TDqJoin>()) {

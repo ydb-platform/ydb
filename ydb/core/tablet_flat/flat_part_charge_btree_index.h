@@ -70,10 +70,10 @@ public:
 public:
     TResult Do(TCells key1, TCells key2, TRowId row1, TRowId row2, 
             const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept override {
-        bool ready = true;
+        Cerr << "Do " << " " << row1 << " " << row2 << Endl;
 
-        // false value means that row1, row2 are invalid and shouldn't be used
-        bool chargeGroups = true;
+        bool ready = true;
+        bool chargeGroups = true; // false value means that row1, row2 are invalid and shouldn't be used
 
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
@@ -98,7 +98,7 @@ public:
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
         const auto iterateLevel = [&](const auto& tryHandle) {
-            TRowId levelRow1 = row1, levelRow2 = Max(row2, row1); // tryHandle may update them, copy for simplicity
+            const TRowId levelRow1 = row1, levelRow2 = Max(row2, row1); // tryHandle may update them, copy for simplicity
             for (const auto &node : level) {
                 if (node.EndRowId <= levelRow1 || node.BeginRowId > levelRow2) {
                     continue;
@@ -128,15 +128,16 @@ public:
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key1PageId = node.GetShortChild(pos).PageId;
                         if (pos) {
-                            // move row1 to the first key >= key1
-                            row1 = Max(row1, node.GetShortChild(pos - 1).RowCount);
+                            row1 = Max(row1, node.GetShortChild(pos - 1).RowCount); // move row1 to the first key >= key1
                         }
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key2PageId = node.GetShortChild(pos).PageId;
-                        // move row2 to the first key > key2
-                        row2 = Min(row2, node.GetShortChild(pos).RowCount);
+                        row2 = Min(row2, node.GetShortChild(pos).RowCount); // move row2 to the first key > key2
+                        if (node.GetShortChild(pos).RowCount <= row1) {
+                            chargeGroups = false; // key2 is before current slice
+                        }
                     }
                     return true;
                 } else { // skip unloaded page rows
@@ -144,7 +145,11 @@ public:
                         row1 = Max(row1, child.EndRowId);
                     }
                     if (child.PageId == key2PageId) {
-                        row2 = Min(row2, child.BeginRowId);
+                        if (child.BeginRowId) {
+                            row2 = Min(row2, child.BeginRowId - 1);
+                        } else {
+                            chargeGroups = false;
+                        }
                     }
                     return false;
                 }
@@ -175,11 +180,11 @@ public:
                     return true;
                 } else { // skip unloaded page rows
                     if (child.PageId == key1PageId) {
-                        row1 = child.EndRowId;
+                        row1 = Max(row1, child.EndRowId);
                     }
                     if (child.PageId == key2PageId) {
                         if (child.BeginRowId) {
-                            row2 = child.BeginRowId - 1;
+                            row2 = Min(row2, child.BeginRowId - 1);
                         } else {
                             chargeGroups = false;
                         }
@@ -201,12 +206,8 @@ public:
             nextLevel.clear();
         }
 
-        if (!ready) {
-            // some index pages are missing, do not continue
-
-            // precharge groups using the latest row bounds
-            ready &= DoPrechargeGroups(chargeGroups, row1, row2);
-
+        if (!ready) { // some index pages are missing, do not continue
+            ready &= DoPrechargeGroups(chargeGroups, row1, row2); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -220,8 +221,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        // precharge groups using the latest row bounds
-        ready &= DoPrechargeGroups(chargeGroups, row1, row2);
+        ready &= DoPrechargeGroups(chargeGroups, row1, row2); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -345,8 +345,6 @@ private:
     }
 
     bool DoPrechargeGroup(TGroupId groupId, TRowId row1, TRowId row2) const noexcept {
-        Cerr << "Group " << groupId.Index << " " << row1 << " " << row2 << Endl;
-
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];

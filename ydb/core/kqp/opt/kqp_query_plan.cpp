@@ -707,8 +707,8 @@ private:
                             TStringBuilder rangeDesc;
                             rangeDesc << keyColumns[colId] << " "
                                 << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                                << (from[colId].HaveValue() ? from[colId].GetDataText() : "-∞") << ", "
-                                << (to[colId].HaveValue() ? to[colId].GetDataText() : "+∞")
+                                << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
+                                << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
                                 << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                             readInfo.ScanBy.push_back(rangeDesc);
@@ -1469,8 +1469,8 @@ private:
                         TStringBuilder rangeDesc;
                         rangeDesc << keyColumns[colId] << " "
                             << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                            << (from[colId].HaveValue() ? from[colId].GetDataText() : "-∞") << ", "
-                            << (to[colId].HaveValue() ? to[colId].GetDataText() : "+∞")
+                            << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
+                            << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
                             << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                         readInfo.ScanBy.push_back(rangeDesc);

@@ -333,17 +333,6 @@ public:
 
             const auto newOp = TYdbOperation(op.GetOperation());
 
-            auto newOp = TYdbOperation(op.GetOperation());
-            TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
-
-            if (TempTablesState) {
-                auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
-
-                if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = tempTableInfoIt->first + TempTablesState->SessionId;
-                }
-            }
-
             const auto info = tableInfoMap.FindPtr(table);
             if (!info) {
                 TString message = TStringBuilder()

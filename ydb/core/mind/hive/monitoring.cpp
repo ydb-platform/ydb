@@ -1242,6 +1242,147 @@ public:
     }
 };
 
+class TTxMonEvent_TabletAvailability : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    bool ChangeRequest = false;
+    TNodeId NodeId;
+    TNodeInfo* Node = nullptr;
+
+    TTxMonEvent_TabletAvailability(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), 0);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_AVAILABILITY; }
+
+    void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
+        out << "<head></head><body>";
+        out << "<script>$('.container > h2').html('Tablet availability on node " << NodeId << "');</script>";
+        if (Node == nullptr) {
+            out << "Node not found";
+            return;
+        }
+        out << "<div class='form-group'>";
+        out << "<div class='row' style='margin-bottom:10px;font-weight:bold'><div class='col-sm-3' style='text-align:right'>Tablet type</div><div class='col-sm-2'>Current max count</div><div class='col-sm-2'>Max count from Local</div><div class='col-sm-2'></div><div class='col-sm-2'></div></div>";
+        for (const auto& [tabletType, availability] : Node->TabletAvailability) {
+            ui32 typeId = tabletType;
+            ui64 currentMaxCount = availability.EffectiveMaxCount;
+            ui64 maxCountFromLocal = availability.FromLocal.GetMaxCount();
+            bool restrictionInEffect = currentMaxCount != maxCountFromLocal;
+            out << "<div class='row'>";
+            if (restrictionInEffect) {
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << typeId << "'>" << tabletType << ":</label></div>";
+            } else {
+                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << typeId << "' style='font-weight:normal'>" << tabletType << ":</label></div>";
+            }
+            out << "<div class='col-sm-2' style='padding-top:5px'><input id='val" << typeId << "' class='form-control' type='number' style='max-width:170px' min='0' max='" << maxCountFromLocal << "' value='"
+                << currentMaxCount << "' onkeydown='edit(this);' onchange='edit(this);'></div>";
+            out << "<div id='Local" << typeId << "' class='col-sm-2' style='padding-top:12px'>" << maxCountFromLocal << "</div>";
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='applyVal(this, \"" << typeId << "\");' disabled='true'>Apply</button></div>";
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << typeId << "\");' " << (restrictionInEffect ? "" : "disabled='true'") << ">Reset</button></div>";
+            out << "</div>";
+        }
+        out << "</div>";
+
+        out << R"___(
+               <script>
+               function edit(button) {
+                   $(button).parents('div').next().next().children('button').prop('disabled', false);
+               }
+
+               function applyVal(button, type) {
+                   var input = $('#val' + type);
+                   $.ajax({
+                       url: document.URL + '&changetype=' + type + '&maxcount=' + input.val(),
+                       success: function() {
+                         $(button).prop('disabled', true).removeClass('btn-danger');
+                         $(button).parent().next().children().prop('disabled', false);
+                         $(button).parent().parent().find('label').removeAttr('style');
+                       },
+                       error: function() { $(button).addClass('btn-danger'); }
+                   });
+               }
+
+               function resetVal(button, type) {
+                   var input = $('#val' + type);
+                   $.ajax({
+                       url: document.URL + '&resettype=' + type,
+                       success: function() {
+                         var v = $('#Local' + type).text();
+                         input.val(v);
+                         $(button).prop('disabled', true).removeClass('btn-danger');
+                         $(button).parent().parent().find('label').attr('style', 'font-weight:normal');
+                       },
+                       error: function() { $(button).addClass('btn-danger'); }
+                   });
+               }
+
+               </script>
+               )___";
+
+        out << "</body>";
+    }
+
+    static TTabletTypes::EType ParseTabletType(const TString& str) {
+        auto parsed = FromStringWithDefault<ui32>(str, TTabletTypes::TypeInvalid);
+        parsed = std::min<ui32>(parsed, TTabletTypes::TypeInvalid);
+        return TTabletTypes::EType(parsed);
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        Node = Self->FindNode(NodeId);
+        if (Node == nullptr) {
+            return true;
+        }
+        const auto& cgi = Event->Cgi();
+        auto changeType = ParseTabletType(cgi.Get("changetype"));
+        auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
+        auto resetType = ParseTabletType(cgi.Get("resettype"));
+        if (changeType != TTabletTypes::TypeInvalid && maxCount) {
+            ChangeRequest = true;
+            db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
+            Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
+            auto it = Node->TabletAvailability.find(changeType);
+            if (it != Node->TabletAvailability.end()) {
+                it->second.UpdateRestriction(*maxCount);
+            }
+        }
+        if (resetType != TTabletTypes::TypeInvalid) {
+            ChangeRequest = true;
+            db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, resetType).Delete();
+            Node->TabletAvailabilityRestrictions.erase(resetType);
+            auto it = Node->TabletAvailability.find(resetType);
+            if (it != Node->TabletAvailability.end()) {
+                it->second.RemoveRestriction();
+            }
+        }
+        if (ChangeRequest) {
+            Self->ObjectDistributions.RemoveNode(*Node);
+            Self->ObjectDistributions.AddNode(*Node);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (ChangeRequest) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
+        } else {
+            TStringStream str;
+            RenderHTMLPage(str, ctx);
+            ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        }
+    }
+
+};
+
+
+
 class TTxMonEvent_Landing : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -1444,22 +1585,23 @@ public:
                "<th rowspan='2' style='min-width:280px'>Name</th>"
                "<th rowspan='2' style='min-width:50px'>DC</th>"
                "<th rowspan='2' style='min-width:280px'>Domain</th>"
-               "<th rowspan='2' style='min-width:120px'>Uptime</th>"
+               "<th rowspan='2' style='min-width:100px'>Uptime</th>"
                "<th rowspan='2'>Unknown</th>"
                "<th rowspan='2'>Starting</th>"
                "<th rowspan='2'>Running</th>"
                "<th rowspan='2' style='min-width:160px'>Types</th>"
-               "<th rowspan='2' style='min-width:110px'>Usage</th>"
+               "<th rowspan='2' style='min-width:100px'>Usage</th>"
                "<th colspan='4' style='text-align:center'>Resources</td>"
                "<th rowspan='2' style='text-align:center'>Active</th>"
                "<th rowspan='2' style='text-align:center'>Freeze</th>"
                "<th rowspan='2' style='text-align:center'>Kick</th>"
-               "<th rowspan='2' style='text-align:center'>Drain</th></tr>"
+               "<th rowspan='2' style='text-align:center'>Drain</th>"
+               "<th rowspan='2' style='text-align:center'>Manage</th></tr>"
                "<tr>"
                "<th style='min-width:70px'>cnt</th>"
-               "<th style='min-width:100px'>cpu</th>"
-               "<th style='min-width:100px'>mem</th>"
-               "<th style='min-width:100px'>net</th></tr>"
+               "<th style='min-width:70px'>cpu</th>"
+               "<th style='min-width:70px'>mem</th>"
+               "<th style='min-width:70px'>net</th></tr>"
                "</thead>";
         out << "<tbody>";
         out << "<tr><td colspan=18 style='text-align:center'><button type='button' class='btn btn-info' onclick='updateData();' style='margin-top:30px;margin-bottom:30px'>View Nodes</button></td></tr>";
@@ -1995,6 +2137,7 @@ function onFreshDataLong(result) {
                         + '<td style="text-align:center"><span title="Toggle node freeze" onclick="toggleFreeze(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-play"></span></td>'
                         + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
                         + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
+                        + '<td style="text-align:center"><a href="?TabletID=' + hiveId + '&page=TabletAvailability&node=' + node.Id + '"><span title="Edit tablet availability"  style="cursor:pointer" class="glyphicon glyphicon-pencil"></span></a></td>'
                         + '</tr>').appendTo('#node_table > tbody').get(0);
                     nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
                     nodeElement.cells[2].innerHTML = node.DataCenter;
@@ -4208,6 +4351,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Subactors") {
         return Execute(new TTxMonEvent_Subactors(ev->Sender, ev, this), ctx);
+    }
+    if (page == "TabletAvailability") {
+        return Execute(new TTxMonEvent_TabletAvailability(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

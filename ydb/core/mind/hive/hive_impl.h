@@ -234,6 +234,7 @@ protected:
     friend class TTxRequestTabletOwners;
     friend class TTxUpdateTabletsObject;
     friend class TTxUpdateTabletGroups;
+    friend class TTxMonEvent_TabletAvailability;
 
     friend class TDeleteTabletActor;
 

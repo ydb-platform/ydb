@@ -33,6 +33,24 @@ protected:
     static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
+    struct TTabletAvailabilityInfo {
+        NKikimrLocal::TTabletAvailability FromLocal;
+        ui64 EffectiveMaxCount;
+
+        TTabletAvailabilityInfo(const NKikimrLocal::TTabletAvailability& availability) : FromLocal(availability)
+                                                                                       , EffectiveMaxCount(availability.GetMaxCount())
+        {
+        }
+
+        void UpdateRestriction(ui64 restriction) {
+            EffectiveMaxCount = std::min(FromLocal.GetMaxCount(), restriction);
+        }
+
+        void RemoveRestriction() {
+            EffectiveMaxCount = FromLocal.GetMaxCount();
+        }
+    };
+
     THive& Hive;
     TNodeId Id;
     TActorId Local;
@@ -53,7 +71,8 @@ public:
     TInstant StartTime;
     TNodeLocation Location;
     bool LocationAcquired;
-    std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, TTabletAvailabilityInfo> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, ui64> TabletAvailabilityRestrictions;
     TVector<TSubDomainKey> ServicedDomains;
     TVector<TSubDomainKey> LastSeenServicedDomains;
     TVector<TActorId> PipeServers;

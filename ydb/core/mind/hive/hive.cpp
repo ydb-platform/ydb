@@ -81,8 +81,8 @@ NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& nor
     return dominant;
 }
 
-TNodeFilter::TNodeFilter(const THive& hive) 
-    : Hive(hive) 
+TNodeFilter::TNodeFilter(const THive& hive)
+    : Hive(hive)
 {}
 
 TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {

@@ -299,6 +299,7 @@ struct TNodeFilter {
     TVector<TNodeId> AllowedNodes;
     TVector<TDataCenterId> AllowedDataCenters;
     TSubDomainKey ObjectDomain;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
     const THive& Hive;
 

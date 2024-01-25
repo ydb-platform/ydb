@@ -148,6 +148,11 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
+    auto it = TabletAvailability.find(filter.TabletType);
+    if (it == TabletAvailability.end() || it->second.EffectiveMaxCount == 0) {
+        return false;
+    }
+
     return true;
 }
 
@@ -202,7 +207,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet) const {
         return 0;
     }
 
-    return it->second.GetPriority();
+    return it->second.FromLocal.GetPriority();
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
@@ -262,7 +267,7 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
                 }
                 return false;
             } else {
-                maxCount = itTabletAvailability->second.GetMaxCount();
+                maxCount = itTabletAvailability->second.EffectiveMaxCount;
             }
         }
         if (maxCount == MAX_TABLET_COUNT_DEFAULT_VALUE) {

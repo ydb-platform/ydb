@@ -14,6 +14,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <library/cpp/yt/misc/enum_indexed_array.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +219,7 @@ DEFINE_ENUM(EMaintenanceComponent,
 );
 
 using TMaintenanceId = TGuid;
-using TMaintenanceCounts = TEnumIndexedVector<EMaintenanceType, int>;
+using TMaintenanceCounts = TEnumIndexedArray<EMaintenanceType, int>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

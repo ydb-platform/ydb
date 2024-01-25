@@ -242,10 +242,10 @@ BENCHMARK_REGISTER_F(TPartIndexSeekFixture, SeekKey)
 BENCHMARK_REGISTER_F(TPartIndexIteratorFixture, DoReads)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* groups: */ {0, 1},
-        /* history: */ {0, 1},
-        /* reverse: */ {0, 1},
-        /* ESeek: */ {1, 2, 3},
+        /* groups: */ {1},
+        /* history: */ {1},
+        /* reverse: */ {0},
+        /* ESeek: */ {1},
         /* items */ {1, 10, 100}})
     ->Unit(benchmark::kMicrosecond);
 

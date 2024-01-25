@@ -109,10 +109,6 @@ struct TReadSessionEvent {
             : FederatedPartitionSession(std::move(partitionSession))
             {}
 
-        // TFederatedPartitionSessionAccessor(NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db)
-        //     : FederatedPartitionSession(MakeIntrusive<TFederatedPartitionSession>(partitionSession, std::move(db)))
-        //     {}
-
         inline const TFederatedPartitionSession::TPtr GetFederatedPartitionSession() const {
             return FederatedPartitionSession;
         }
@@ -147,9 +143,6 @@ struct TReadSessionEvent {
 
     public:
         TDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent event, TFederatedPartitionSession::TPtr federatedPartitionSession);
-
-        // TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
-        //                    NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db);
 
         const NTopic::TPartitionSession::TPtr& GetPartitionSession() const override {
             ythrow yexception() << "GetPartitionSession method unavailable for federated objects, use GetFederatedPartitionSession instead";

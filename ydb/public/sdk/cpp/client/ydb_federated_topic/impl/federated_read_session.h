@@ -70,6 +70,10 @@ public:
                 FederatedPartitionSessions[psPtr.Get()] = MakeIntrusive<TFederatedPartitionSession>(psPtr, std::move(db), std::move(topicOriginDbInfo), std::move(topicOriginPath));
             }
             fps = FederatedPartitionSessions[psPtr.Get()];
+
+            if constexpr (std::is_same_v<TEvent, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>) {
+                FederatedPartitionSessions.erase(psPtr.Get());
+            }
         }
 
         return Federate(std::move(event), std::move(fps));

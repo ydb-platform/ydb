@@ -30,10 +30,20 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
 
-#define MAYBE_CONVERT_HANDLER(type, name) \
-    SubsessionSettings.EventHandlers_.name( \
-        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator) \
-    );
+    if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
+        SubsessionSettings.EventHandlers_.SimpleDataHandlers(
+            WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
+                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator),
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
+    }
+
+#define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
+    if (settings.FederatedEventHandlers_.name##_) {                                                             \
+        SubsessionSettings.EventHandlers_.name(                                                                 \
+            WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator)   \
+        );                                                                                                      \
+    }
 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler);
@@ -46,14 +56,6 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 #undef MAYBE_CONVERT_HANDLER
 
     SubsessionSettings.EventHandlers_.SessionClosedHandler(settings.FederatedEventHandlers_.SessionClosedHandler_);
-
-    if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
-        SubsessionSettings.EventHandlers_.SimpleDataHandlers(
-            WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
-                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator),
-            settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
-            settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
-    }
 
     return SubsessionSettings;
 }
@@ -143,6 +145,8 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     }
 
     if (databases.empty()) {
+        // TODO: investigate here, why empty list?
+        // Reason (and returned status) could be BAD_REQUEST or UNAVAILABLE.
         LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
         CloseImpl();
         return;

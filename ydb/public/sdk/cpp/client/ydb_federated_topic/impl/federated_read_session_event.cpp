@@ -1,24 +1,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
-namespace NYdb::NFederatedTopic {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helpers
-
-// std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
-//     if (dataReceivedEvent.HasCompressedMessages()) {
-//         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-//         return {msg.GetOffset(), msg.GetOffset() + 1};
-//     }
-//     const auto& msg = dataReceivedEvent.GetMessages()[index];
-//     return {msg.GetOffset(), msg.GetOffset() + 1};
-// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Printable specializations
-
-}
 
 namespace NYdb::NTopic {
 
@@ -134,7 +119,6 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
     ret << " }";
 }
 
-
 }
 
 namespace NYdb::NFederatedTopic {
@@ -156,24 +140,6 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
         }
     }
 }
-
-// TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(
-//     TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
-//     NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db)
-//     : NTopic::TReadSessionEvent::TPartitionSessionAccessor(partitionSession)
-//     , TFederatedPartitionSessionAccessor(partitionSession, db)
-//     , Messages(std::move(messages))
-//     , CompressedMessages(std::move(compressedMessages))
-// {
-//     for (size_t i = 0; i < GetMessagesCount(); ++i) {
-//         auto [from, to] = GetMessageOffsetRange(*this, i);
-//         if (OffsetRanges.empty() || OffsetRanges.back().second != from) {
-//             OffsetRanges.emplace_back(from, to);
-//         } else {
-//             OffsetRanges.back().second = to;
-//         }
-//     }
-// }
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {

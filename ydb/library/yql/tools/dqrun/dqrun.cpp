@@ -363,11 +363,6 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     program->Print(options.ExprOut, (options.ValidateOnly || options.LineageOnly) ? nullptr : options.TracePlan);
 
     Cout << "Getting results..." << Endl;
-    if (auto data = program->GetLineage()) {
-        TStringInput in(*data);
-        NYson::ReformatYsonStream(&in, options.LineageStream, NYson::EYsonFormat::Pretty);
-    }
-
     if (program->HasResults()) {
         NYson::TYsonWriter yson(options.ResultOut, options.ResultsFormat);
         yson.OnBeginList();

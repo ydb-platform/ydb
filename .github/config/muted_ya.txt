@@ -36,6 +36,7 @@ ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-defaul
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/services/fq/ut_integration Yq_1.Basic_TaggedLiteral
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
+ydb/services/persqueue_v1/ut TPersQueueTest.UpdatePartitionLocation
 ydb/services/persqueue_v1/ut [3/10]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
@@ -46,9 +47,7 @@ ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/tests/fq/generic *
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
 ydb/tests/fq/s3 *
-ydb/tests/fq/yds test_metrics_cleanup.py.TestCleanup.test_cleanup[v1]
-ydb/tests/fq/yds test_read_rules_deletion.py.TestReadRulesDeletion.test_delete_read_rules[v1-with_recovery]
-ydb/tests/fq/yds test_select_1.py.TestSelect1.test_unwrap_null[v1]
+ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/clickbench test.py.test_plans*

@@ -474,9 +474,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
-        // CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
         CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
-        // CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
     }
 
     Y_UNIT_TEST(NoNodes) {
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             tags.push_back(c.Tag);
         }
 
-        for (bool reverse : {false}) {
+        for (bool reverse : {false, true}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                     for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {

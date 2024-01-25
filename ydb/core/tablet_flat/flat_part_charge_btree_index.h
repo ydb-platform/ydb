@@ -47,9 +47,6 @@ public:
         , Env(env) 
     {    
         Y_UNUSED(includeHistory);
-        // if (includeHistory && Part->HistoricGroupsCount) {
-        //     HistoryIndex.emplace(Part, Env, TGroupId(0, true));
-        // }
 
         TDynBitMap seen;
         for (TTag tag : tags) {
@@ -57,10 +54,6 @@ public:
                 if (col->Group != 0 && !seen.Get(col->Group)) {
                     NPage::TGroupId groupId(col->Group);
                     Groups.push_back(groupId);
-                    // if (HistoryIndex) {
-                    //     NPage::TGroupId historyGroupId(col->Group, true);
-                    //     HistoryGroups.emplace_back(TPartIndexIt(Part, Env, historyGroupId), historyGroupId);
-                    // }
                     seen.Set(col->Group);
                 }
             }

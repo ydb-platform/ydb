@@ -71,7 +71,7 @@ namespace {
         }
     }
 
-    struct MakePartParams {
+    struct TMakePartParams {
         const ui32 Levels = Max<ui32>();
         const bool Groups = false;
         const bool History = false;
@@ -79,7 +79,7 @@ namespace {
         const ui32 Rows = 40;
     };
 
-    TPartEggs MakePart(MakePartParams params) {
+    TPartEggs MakePart(TMakePartParams params) {
         NPage::TConf conf;
         switch (params.Levels) {
         case 0:
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    void CheckPart(MakePartParams params) {
+    void CheckPart(TMakePartParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckPart(MakePartParams params) {
+    void CheckPart(TMakePartParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
@@ -646,7 +646,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
     }
 
-    void CheckPart(MakePartParams params) {
+    void CheckPart(TMakePartParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 

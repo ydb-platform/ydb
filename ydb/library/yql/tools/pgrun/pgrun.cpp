@@ -1071,6 +1071,7 @@ int Main(int argc, char* argv[])
     static const TString DefaultCluster{"plato"};
     clusterMapping[DefaultCluster] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     opts.AddHelpOption();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);

@@ -422,6 +422,7 @@ int RunMain(int argc, const char* argv[])
     IMetricsRegistryPtr metricsRegistry = CreateMetricsRegistry(GetSensorsGroupFor(NSensorComponent::kDq));
     clusterMapping["plato"] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     TString mountConfig;
     TString mestricsPusherConfig;
@@ -696,6 +697,7 @@ int RunMain(int argc, const char* argv[])
 
     THashMap<TString, TString> clusters;
     clusters["pg_catalog"] = PgProviderName;
+    clusters["information_schema"] = PgProviderName;
 
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPgDataProviderInitializer());

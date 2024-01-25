@@ -16,4 +16,4 @@ NNodes::TMaybeNode<NNodes::TExprBase> RewriteAsHoppingWindow(
     bool defaultWatermarksMode,
     bool asyncActor);
 
-} // namespace NYql::NDqs
+} // namespace NYql::NDq::NHopping

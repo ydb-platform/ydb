@@ -37,7 +37,7 @@ struct THoppingTraits {
     TVector<TString> MemberKeys;
     TVector<TString> FakeKeys;
 
-    explicit TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys, const TString& hoppingColumn) {
+    TKeysDescription(const TStructExprType& rowType, const TCoAtomList& keys, const TString& hoppingColumn) {
         for (const auto& key : keys) {
             if (key.StringValue() == hoppingColumn) {
                 FakeKeys.emplace_back(key.StringValue());
@@ -151,7 +151,7 @@ struct THoppingTraits {
     }
 };
 
-TString BuildColumnName(const TExprBase column) {
+TString BuildColumnName(const TExprBase& column) {
     if (const auto columnName = column.Maybe<TCoAtom>()) {
         return columnName.Cast().StringValue();
     }
@@ -791,4 +791,4 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
 }
 
 
-} // NYql::NDqs
+} // NYql::NDq::NHopping

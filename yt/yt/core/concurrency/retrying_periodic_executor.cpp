@@ -69,6 +69,9 @@ void TRetryingInvocationTimePolicy::SetOptions(
         CachedBackoffMultiplier_.store(
             backoffOptions->BackoffMultiplier,
             std::memory_order::relaxed);
+        CachedBackoffJitter_.store(
+            backoffOptions->BackoffJitter,
+            std::memory_order::relaxed);
 
         Backoff_.UpdateOptions(*backoffOptions);
     }
@@ -93,11 +96,15 @@ void TRetryingInvocationTimePolicy::Reset()
     Backoff_.Restart();
 }
 
-TDuration TRetryingInvocationTimePolicy::GetBackoffTimeEstimate() const
+std::tuple<TDuration, TDuration> TRetryingInvocationTimePolicy::GetBackoffInterval() const
 {
-    return
+    auto backoffMedian =
         CachedBackoffDuration_.load(std::memory_order::relaxed) *
         CachedBackoffMultiplier_.load(std::memory_order::relaxed);
+
+    auto backoffJitter = CachedBackoffJitter_.load(std::memory_order::relaxed);
+
+    return std::tuple(backoffMedian * (1 - backoffJitter), backoffMedian * (1 + backoffJitter));
 }
 
 bool TRetryingInvocationTimePolicy::IsInBackoffMode() const
@@ -149,9 +156,9 @@ TRetryingPeriodicExecutor::TRetryingPeriodicExecutor(
         backoffOptions)
 { }
 
-TDuration TRetryingPeriodicExecutor::GetBackoffTimeEstimate() const
+std::tuple<TDuration, TDuration> TRetryingPeriodicExecutor::GetBackoffInterval() const
 {
-    return TBase::GetBackoffTimeEstimate();
+    return TBase::GetBackoffInterval();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

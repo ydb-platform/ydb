@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mkql_builtins_impl_common.h"
-#include "mkql_builtins.h"
+#include <mkql_builtins.h>
 #include "mkql_builtins_codegen.h"
 
 namespace NKikimr {

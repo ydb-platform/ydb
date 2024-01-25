@@ -153,7 +153,6 @@ struct TAppData {
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
     TIntrusivePtr<NExternalSource::IExternalSourceFactory> ExternalSourceFactory;
-    
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 

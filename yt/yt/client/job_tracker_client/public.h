@@ -19,7 +19,7 @@ extern const TOperationId NullOperationId;
 ////////////////////////////////////////////////////////////////////////////////
 
 // NB: Please keep the range of values small as this type
-// is used as a key of TEnumIndexedVector.
+// is used as a key of TEnumIndexedArray.
 DEFINE_ENUM(EJobType,
     // Scheduler jobs
     ((Map)               (  1))
@@ -58,7 +58,7 @@ constexpr auto FirstMasterJobType = EJobType::ReplicateChunk;
 constexpr auto LastMasterJobType = EJobType::ReincarnateChunk;
 
 // NB: Please keep the range of values small as this type
-// is used as a key of TEnumIndexedVector.
+// is used as a key of TEnumIndexedArray.
 DEFINE_ENUM(EJobState,
     ((Waiting)    (0))
     ((Running)    (1))

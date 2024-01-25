@@ -101,7 +101,7 @@ private:
         std::atomic<TTosLevel> TosLevel = DefaultTosLevel;
     };
 
-    TEnumIndexedVector<EMultiplexingBand, TBandDescriptor> BandToDescriptor_;
+    TEnumIndexedArray<EMultiplexingBand, TBandDescriptor> BandToDescriptor_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

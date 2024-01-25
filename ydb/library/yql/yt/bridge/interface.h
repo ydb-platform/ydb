@@ -96,10 +96,8 @@ using TFuncBridgeRun = TBridgeQueryResult*(
     const char* impersonationUser,
     const char* queryText,
     const char* settings,
-    int settingsLength,
     const TBridgeQueryFile* files,
-    int fileCount,
-    int executeMode);
+    int fileCount);
 using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 using TFuncBridgeAbort = TBridgeAbortResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);

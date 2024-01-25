@@ -254,8 +254,7 @@ public:
         TString impersonationUser,
         TString queryText,
         TYsonString settings,
-        std::vector<TQueryFile> files,
-        int executeMode)
+        std::vector<TQueryFile> files)
     {
         auto program = ProgramFactory_->Create("-memory-", queryText);
         {
@@ -315,23 +314,7 @@ public:
         }
 
         NYql::TProgram::TStatus status = NYql::TProgram::TStatus::Error;
-
-        // NYT::NYqlClient::EExecuteMode (yt/yt/ytlib/yql_client/public.h)
-        switch (executeMode) {
-        case 0: // Validate.
-            status = program->Validate(impersonationUser, nullptr);
-            break;
-        case 1: // Optimize.
-            status = program->OptimizeWithConfig(impersonationUser, pipelineConfigurator);
-            break;
-        case 2: // Run.
-            status = program->RunWithConfig(impersonationUser, pipelineConfigurator);
-            break;
-        default: // Unknown.
-            return TQueryResult{
-                .YsonError = MessageToYtErrorYson(Format("Unknown execution mode: %v", executeMode)),
-            };
-        }
+        status = program->RunWithConfig(impersonationUser, pipelineConfigurator);
 
         if (status == NYql::TProgram::TStatus::Error) {
             return TQueryResult{
@@ -371,11 +354,10 @@ public:
         TString impersonationUser,
         TString queryText,
         TYsonString settings,
-        std::vector<TQueryFile> files,
-        int executeMode) noexcept override
+        std::vector<TQueryFile> files) noexcept override
     {
         try {
-            return GuardedRun(queryId, impersonationUser, queryText, settings, files, executeMode);
+            return GuardedRun(queryId, impersonationUser, queryText, settings, files);
         } catch (const std::exception& ex) {
             {
                 auto guard = WriterGuard(ProgressSpinLock);

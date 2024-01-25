@@ -74,7 +74,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         self->SysLocksTable().HasWriteLocks(fullTableId) ||
         self->GetVolatileTxManager().GetTxMap());
 
-    TDataShardUserDb userDb(*self, txc.DB, TStepOrder(0, 0), readVersion, writeVersion, TAppData::TimeProvider->Now());
+    NMiniKQL::TEngineHostCounters engineHostCounters;
+    TDataShardUserDb userDb(*self, txc.DB, TStepOrder(0, 0), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
     TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {

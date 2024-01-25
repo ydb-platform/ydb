@@ -41,6 +41,7 @@ public:
             const TStepOrder& stepTxId,
             const TRowVersion& readVersion,
             const TRowVersion& writeVersion,
+            NMiniKQL::TEngineHostCounters& counters, 
             TInstant now
     );
 
@@ -98,6 +99,9 @@ public:
     void AddWriteConflict(ui64 txId) const;
     void BreakWriteConflict(ui64 txId);
 
+    void ResetCounters();
+    const NMiniKQL::TEngineHostCounters& GetCounters() const;
+
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
@@ -129,6 +133,8 @@ private:
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
+
+    NMiniKQL::TEngineHostCounters& Counters;
 };
 
 } // namespace NKikimr::NDataShard

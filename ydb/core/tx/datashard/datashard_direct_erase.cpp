@@ -59,6 +59,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
     }
 
+    std::optional<NMiniKQL::TEngineHostCounters> engineHostCounters;
     std::optional<TDataShardUserDb> userDb;
     std::optional<TDataShardChangeGroupProvider> groupProvider;
 
@@ -69,7 +70,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             condition->Prepare(params.Txc->DB.GetRowScheme(localTableId), 0);
         }
 
-        userDb.emplace(*self, params.Txc->DB, TStepOrder(0, 0), params.ReadVersion, params.WriteVersion, TAppData::TimeProvider->Now());
+        engineHostCounters.emplace();
+        userDb.emplace(*self, params.Txc->DB, TStepOrder(0, 0), params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
         groupProvider.emplace(*self, params.Txc->DB);
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }

@@ -2,7 +2,7 @@
 
 namespace NKikimr::NDataShard {
 
-TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TStepOrder& stepTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, TInstant now)
+TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TStepOrder& stepTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
     , Db(db)
     , ChangeGroupProvider(self, db)
@@ -12,6 +12,7 @@ TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, cons
     , ReadVersion(readVersion)
     , WriteVersion(writeVersion)
     , Now(now)
+    , Counters(counters)
 {
 }
 
@@ -116,6 +117,12 @@ void TDataShardUserDb::UpdateRow(
     }
 
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
+
+    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+    ui64 valueBytes = std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
+
+    Counters.NUpdateRow++;
+    Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
 void TDataShardUserDb::UpdateRowInt(
@@ -668,6 +675,14 @@ bool TDataShardUserDb::NeedToReadBeforeWrite(const TTableId& tableId) {
     }
 
     return false;
+}
+
+void TDataShardUserDb::ResetCounters() {
+    Counters = {};
+}
+
+const NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() const {
+    return Counters;
 }
 
 } // namespace NKikimr::NDataShard

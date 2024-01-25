@@ -19,7 +19,7 @@ namespace NDataShard {
 
 TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
     : Ev(ev)
-    , UserDb(*self, txc.DB, stepTxId, readVersion, writeVersion, TAppData::TimeProvider->Now())
+    , UserDb(*self, txc.DB, stepTxId, readVersion, writeVersion, EngineHostCounters, TAppData::TimeProvider->Now())
     , KeyValidator(*self, txc.DB)
     , TabletId(self->TabletID())
     , Ctx(ctx)

@@ -166,6 +166,7 @@ private:
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
     TDataShardUserDb UserDb;
     TKeyValidator KeyValidator;
+    NMiniKQL::TEngineHostCounters EngineHostCounters;
 
     const ui64 TabletId;
     const TActorContext& Ctx;

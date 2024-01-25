@@ -45,7 +45,8 @@ public:
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
 
         if (eraseTx->HasDependents()) {
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetStepOrder(), readVersion, writeVersion, TAppData::TimeProvider->Now());
+            NMiniKQL::TEngineHostCounters engineHostCounters;
+            TDataShardUserDb userDb(DataShard, txc.DB, op->GetStepOrder(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 

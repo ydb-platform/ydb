@@ -207,7 +207,7 @@ public:
                 self->GetKeyAccessSampler()))
         , Self(self)
         , EngineBay(engineBay)
-        , UserDb(*self, db, stepTxId, TRowVersion::Min(), TRowVersion::Max(), now)        
+        , UserDb(*self, db, stepTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now)        
     {
     }
 
@@ -371,17 +371,12 @@ public:
         const NTable::TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTableId(tableId));
 
         TSmallVec<TRawTypeValue> key;
-        ui64 keyBytes = 0;
-        ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
+        ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
-        ui64 valueBytes = 0;
         TSmallVec<NTable::TUpdateOp> ops;
-        ConvertTableValues(Scheme, tableInfo, commands, ops, &valueBytes);
+        ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
         UserDb.UpdateRow(tableId, key, ops);
-
-        Counters.NUpdateRow++;
-        Counters.UpdateRowBytes += keyBytes + valueBytes;
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {

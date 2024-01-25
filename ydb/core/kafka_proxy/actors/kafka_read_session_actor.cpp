@@ -319,6 +319,7 @@ bool TKafkaReadSessionActor::CheckHeartbeatIsExpired() {
 bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics) {
     auto supportedProtocolFound = false;
     for (auto protocol: joinGroupRequestData->Protocols) {
+        KAFKA_LOG_D("JOIN_GROUP assign protocol supported by client: " << protocol.Name);
         if (protocol.Name == SUPPORTED_ASSIGN_STRATEGY) {
             FillTopicsFromJoinGroupMetadata(protocol.Metadata, topics);
             supportedProtocolFound = true;
@@ -339,7 +340,7 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
         THashSet<ui64> finalPartitionsToRead;
 
         TConsumerProtocolAssignment::TopicPartition topicPartition;
-        topicPartition.Topic = topicName;
+        topicPartition.Topic = OriginalTopicNames[topicName];
         for (auto part: partitions.ToLock) {
             finalPartitionsToRead.emplace(part);
         }
@@ -379,7 +380,9 @@ void TKafkaReadSessionActor::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metada
 
     for (auto topic: result.Topics) {
         if (topic.has_value()) {
-            topics.emplace(NormalizePath(Context->DatabasePath, topic.value()));
+            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
+            OriginalTopicNames[normalizedTopicName] = topic.value();
+            topics.emplace(normalizedTopicName);
             KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
         }
     }
@@ -536,9 +539,9 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
         return;
     }
 
-    const auto name = converterIter->second->GetInternalName();
+    const auto topicName = converterIter->second->GetInternalName();
 
-    auto topicInfoIt = TopicsInfo.find(name);
+    auto topicInfoIt = TopicsInfo.find(topicName);
     if (topicInfoIt == TopicsInfo.end() || (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
         KAFKA_LOG_I("ignored ev lock topic# " << record.GetTopic() 
                  << ", partition# " << record.GetPartition() 
@@ -549,7 +552,7 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
     TNewPartitionToLockInfo partitionToLock;
     partitionToLock.LockOn = ctx.Now() + LOCK_PARTITION_DELAY;
     partitionToLock.PartitionId = record.GetPartition();
-    NewPartitionsToLockOnTime[name].push_back(partitionToLock);
+    NewPartitionsToLockOnTime[topicName].push_back(partitionToLock);
 }
 
 void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {

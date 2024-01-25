@@ -113,11 +113,7 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropTable: {
-                auto modifyScheme = schemeOp.GetDropTable();
-                if (Temporary) {
-                    auto* dropTable = modifyScheme.MutableDrop();
-                    dropTable->SetName(dropTable->GetName() + SessionId);
-                }
+                const auto& modifyScheme = schemeOp.GetDropTable();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

@@ -30,16 +30,16 @@ struct NavigateEntryResult {
     std::optional<TString> QueryName;
 };
 
-NavigateEntryResult CreateNavigateEntry(const TString& cluster, const TString& path,
-        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
+NavigateEntryResult CreateNavigateEntry(const TString& path,
+    const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
     TNavigate::TEntry entry;
     TString currentPath = path;
     std::optional<TString> queryName = std::nullopt;
     if (tempTablesState) {
-        auto tempTablesIt = tempTablesState->TempTables.find(std::make_pair(cluster, currentPath));
-        if (tempTablesState->SessionId && tempTablesIt != tempTablesState->TempTables.end()) {
+        auto tempTablesInfoIt = tempTablesState->FindInfo(currentPath, false);
+        if (tempTablesInfoIt != tempTablesState->TempTables.end()) {
             queryName = currentPath;
-            currentPath = currentPath + *tempTablesState->SessionId;
+            currentPath = currentPath + tempTablesState->SessionId;
         }
     }
     entry.Path = SplitPath(currentPath);
@@ -50,10 +50,8 @@ NavigateEntryResult CreateNavigateEntry(const TString& cluster, const TString& p
     return {entry, currentPath, queryName};
 }
 
-NavigateEntryResult CreateNavigateEntry(const TString& cluster,
-        const std::pair<TIndexId, TString>& pair,
+NavigateEntryResult CreateNavigateEntry(const std::pair<TIndexId, TString>& pair,
         const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
-    Y_UNUSED(cluster);
     Y_UNUSED(tempTablesState);
 
     TNavigate::TEntry entry;
@@ -701,8 +699,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto externalEntryItem = CreateNavigateExternalEntry(id, settings.WithExternalDatasources_);
     Y_ABORT_UNLESS(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
-    auto resNavigate = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(cluster,
-        id, settings, TempTablesState);
+    auto resNavigate = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(id,
+        settings, TempTablesState);
     const auto entry = resNavigate.Entry;
     const auto queryName = resNavigate.QueryName;
     const auto externalEntry = settings.WithExternalDatasources_ ? std::optional<NavigateEntryResult>{} : externalEntryItem;

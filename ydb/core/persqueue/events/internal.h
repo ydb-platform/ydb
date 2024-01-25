@@ -186,6 +186,7 @@ struct TEvPQ {
         EvCheckPartitionStatusResponse,
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
+        EvGetWriteInfoError,
         EvEnd
     };
 
@@ -1029,45 +1030,32 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
-        struct TError {
-            TString Message;
-        };
-
-        struct TSuccess {
-            THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
-            std::deque<NPQ::TDataKey> BodyKeys;
-            TVector<NPQ::TClientBlob> Head;
-        };
-
-        TEvGetWriteInfoResponse(ui32 cookie, TString message) :
-            Cookie(cookie),
-            Result(TError{std::move(message)})
-        {
-        }
-
         TEvGetWriteInfoResponse(ui32 cookie,
                                 THashMap<TString, NPQ::TSeqNoRange> seqNo,
                                 std::deque<NPQ::TDataKey> bodyKeys,
                                 TVector<NPQ::TClientBlob> head) :
             Cookie(cookie),
-            Result(TSuccess{std::move(seqNo), std::move(bodyKeys), std::move(head)})
+            SeqNo(std::move(seqNo)),
+            BodyKeys(std::move(bodyKeys)),
+            Head(std::move(head))
         {
         }
 
-        bool IsSuccess() const {
-            return Result.index() == 1;
-        }
-
-        const TError& GetError() const {
-            return get<0>(Result);
-        }
-
-        const TSuccess& GetSuccess() const {
-            return get<1>(Result);
-        }
-
         ui32 Cookie; // ShadowPartitionId
-        std::variant<TError, TSuccess> Result;
+        THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
+        std::deque<NPQ::TDataKey> BodyKeys;
+        TVector<NPQ::TClientBlob> Head;
+    };
+
+    struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
+        ui32 Cookie; // ShadowPartitionId
+        TString Message;
+
+        TEvGetWriteInfoError(ui32 cookie, TString message) :
+            Cookie(cookie),
+            Message(std::move(message))
+        {
+        }
     };
 };
 

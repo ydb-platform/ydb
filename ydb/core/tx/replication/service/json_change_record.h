@@ -2,12 +2,14 @@
 
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
@@ -39,9 +41,13 @@ public:
 
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record) const;
 
+    TConstArrayRef<TCell> GetKey() const;
+
 private:
     NJson::TJsonValue JsonBody;
     TLightweightSchema::TCPtr Schema;
+
+    mutable TMaybe<TOwnedCellVec> Key;
 
 }; // TChangeRecord
 

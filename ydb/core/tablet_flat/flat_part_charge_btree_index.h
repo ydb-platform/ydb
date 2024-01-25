@@ -88,7 +88,7 @@ public:
             chargeGroups = false;
         }
 
-        TVector<TNodeState> level, nextLevel(Reserve(3));
+        TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
@@ -229,7 +229,7 @@ public:
             chargeGroups = false;
         }
 
-        TVector<TNodeState> level, nextLevel(Reserve(3));
+        TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
 
@@ -378,7 +378,7 @@ private:
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
-        TVector<TNodeState> level, nextLevel(Reserve(3));
+        TVector<TNodeState> level, nextLevel(::Reserve(3));
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             for (const auto &node : level) {

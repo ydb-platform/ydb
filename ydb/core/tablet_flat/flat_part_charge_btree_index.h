@@ -73,10 +73,8 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        Cerr << "Do " << " " << beginRowId << " " << endRowId << Endl;
-
         bool ready = true;
-        bool chargeGroups = true; // false value means that beginRowId, endRowId are invalid and shouldn't be used
+        bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
 
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
@@ -154,18 +152,16 @@ public:
         };
 
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
-            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+            if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) { // update beginRowId, endRowId
                     auto data = NPage::TDataPage(page);
                     if (child.PageId == key1PageId) {
                         TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults).Off();
-                        Cerr << "key1RowId " << key1RowId << Endl;
                         beginRowId = Max(beginRowId, key1RowId);
                     }
                     if (child.PageId == key2PageId) {
                         TRowId key2RowId = data.BaseRow() + data.LookupKey(key2, Scheme.Groups[0], ESeek::Upper, &keyDefaults).Off();
-                        Cerr << "key2RowId " << key2RowId << Endl;
                         endRowId = Min(endRowId, key2RowId);
                     }
                     return true;
@@ -218,10 +214,8 @@ public:
         endRowId++; // current interface accepts inclusive row1 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
         
-        Cerr << "DoReverse " << " " << beginRowId << " " << endRowId << Endl;
-
         bool ready = true;
-        bool chargeGroups = true; // false value means that beginRowId, endRowId are invalid and shouldn't be used
+        bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
         
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
@@ -272,18 +266,16 @@ public:
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key1PageId = node.GetShortChild(pos).PageId;
                         endRowId = Min(endRowId, node.GetShortChild(pos).RowCount); // move endRowId - 1 to the last key <= key1
-                        Cerr << "End " << endRowId << " " << node.GetShortChild(pos).RowCount << Endl;
-                        // ??? v
-                        if (pos && node.GetShortChild(pos - 1).RowCount >= endRowId) {
-                            chargeGroups = false; // key1 is after current slice
-                        }
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key2PageId = node.GetShortChild(pos).PageId;
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount - 1); // move beginRowId to the last key < key2
-                        }
+                            if (node.GetShortChild(pos - 1).RowCount >= endRowId) {
+                                chargeGroups = false; // key2 is after current slice
+                            }
+                        }                        
                     }
                     return true;
                 } else { // skip unloaded page rows
@@ -301,7 +293,7 @@ public:
         };
 
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
-            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+            if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) { // update beginRowId, endRowId
                     auto data = NPage::TDataPage(page);
@@ -309,7 +301,6 @@ public:
                         auto iter = data.LookupKeyReverse(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
                         if (iter) {
                             TRowId key1RowId = data.BaseRow() + iter.Off();
-                            Cerr << "key1RowId " << key1RowId << Endl;
                             endRowId = Min(endRowId, key1RowId + 1);
                         } else {
                             endRowId = Min(endRowId, child.BeginRowId);
@@ -319,7 +310,6 @@ public:
                         auto iter = data.LookupKeyReverse(key2, Scheme.Groups[0], ESeek::Upper, &keyDefaults);
                         if (iter) {
                             TRowId key2RowId = data.BaseRow() + iter.Off();
-                            Cerr << "key2RowId " << key2RowId << Endl;
                             beginRowId = Max(beginRowId, key2RowId + 1);
                         } else {
                             beginRowId = Max(beginRowId, child.BeginRowId);
@@ -372,7 +362,6 @@ public:
 
 private:
     bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId) const noexcept {
-        Cerr << "Groups " << chargeGroups << " " << beginRowId << " " << endRowId << Endl;
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {

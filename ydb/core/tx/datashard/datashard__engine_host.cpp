@@ -380,7 +380,6 @@ public:
 
         UserDb.UpdateRow(tableId, key, ops);
 
-        Settings.KeyAccessSampler->AddSample(tableId, row);
         Counters.NUpdateRow++;
         Counters.UpdateRowBytes += keyBytes + valueBytes;
     }

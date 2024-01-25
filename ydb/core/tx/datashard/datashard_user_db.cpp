@@ -114,6 +114,8 @@ void TDataShardUserDb::UpdateRow(
     } else {
         Self.GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells, Db);
     }
+
+    Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
 void TDataShardUserDb::UpdateRowInt(

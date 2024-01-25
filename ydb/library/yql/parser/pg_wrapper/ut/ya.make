@@ -26,9 +26,9 @@ PEERDIR(
     ydb/library/yql/minikql/arrow
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/parser/pg_catalog
-    ydb/library/yql/minikql/codegen/llvm
+    ydb/library/yql/minikql/codegen/llvm14
     library/cpp/resource
 )
 

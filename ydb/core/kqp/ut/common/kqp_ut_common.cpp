@@ -771,8 +771,6 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
 
-    ui32 profileIndex = 0;
-
     for (;;) {
         auto streamPart = it.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
@@ -789,8 +787,6 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTim
 
         auto resultSet = streamPart.ExtractPart();
         PrintResultSet(resultSet, writer);
-
-        profileIndex++;
     }
 
     writer.OnEndList();

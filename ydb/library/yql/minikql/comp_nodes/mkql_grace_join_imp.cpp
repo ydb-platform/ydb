@@ -298,8 +298,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         std::swap(JoinTable1, JoinTable2);
     }
 
-    ui64 tuplesFound = 0;
-
     std::vector<ui64, TMKQLAllocator<ui64, EMemorySubPool::Temporary>> joinSlots, spillSlots, slotToIdx;
     std::vector<ui32, TMKQLAllocator<ui32, EMemorySubPool::Temporary>> stringsOffsets1, stringsOffsets2;
     ui64 reservedSize = 6 * (DefaultTupleBytes * DefaultTuplesNum) / sizeof(ui64);
@@ -422,7 +420,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                 bool matchFound = false;
                 if (keysValSize <= slotSize && !JoinTable1->NumberOfKeyIColumns ) {
                     if (std::equal(it1 + keyIntOffset1, it1 + keysValSize, slotIt + keyIntOffset2)) {
-                        tuplesFound++;
                         matchFound = true;
                     }
                 }
@@ -432,7 +429,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                         ui64 stringsPos = *(slotIt + headerSize2);
                         ui64 stringsSize = *(it1 + headerSize1 - 1);
                         if (std::equal(it1 + headerSize1, it1 + headerSize1 + stringsSize, spillSlots.begin() + stringsPos)) {
-                            tuplesFound++;
                             matchFound = true;
                         }
                     }
@@ -482,7 +478,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     }
 
                     if (headerMatch && stringsMatch && iValuesMatch) {
-                        tuplesFound++;
                         matchFound = true;
                     }
 

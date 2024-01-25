@@ -192,18 +192,11 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
 
 ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 {
-    using EResult = NMiniKQL::IEngineFlat::EResult;
+    SetTxKeys(RecordOperation().GetColumnIds());
 
-    EResult result = EngineBay.Validate();
-    if (allowErrors) {
-        if (result != EResult::Ok) {
-            ErrStr = EngineBay.GetEngine()->GetErrors();
-            ErrCode = ConvertErrCode(result);
-            return 0;
-        }
-    } else {
-        Y_ABORT_UNLESS(result == EResult::Ok, "Engine errors: %s", EngineBay.GetEngine()->GetErrors().data());
-    }
+    bool isValid = ReValidateKeys();
+    Y_ABORT_UNLESS(allowErrors || isValid, "Validation errors: %s", ErrStr.data());
+
     return KeysCount();
 }
 
@@ -212,7 +205,7 @@ bool TValidatedWriteTx::ReValidateKeys()
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
 
-    auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+    auto [result, error] = GetKeyValidator().ValidateKeys();
     if (result != EResult::Ok) {
         ErrStr = std::move(error);
         ErrCode = ConvertErrCode(result);

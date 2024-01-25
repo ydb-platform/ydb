@@ -123,6 +123,22 @@ public:
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+
+        if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
+            // Immediate transactions may be reordered with schema changes and become invalid
+            Y_ABORT_UNLESS(!writeTx->Ready());
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
+            return EExecutionStatus::Executed;
+        }
+
+        if (writeTx->CheckCancelled()) {
+            writeOp->ReleaseTxData(txc, ctx);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
+            DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
+            return EExecutionStatus::Executed;
+        }
+
         try {
             DoExecute(&DataShard, writeOp, txc, ctx);
         } catch (const TNeedGlobalTxId&) {

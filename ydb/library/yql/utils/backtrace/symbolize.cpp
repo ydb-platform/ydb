@@ -1,7 +1,7 @@
 #include "backtrace.h"
 #include "symbolizer.h"
 
-#include "fake_llvm_symbolizer/fake_llvm_symbolizer.h"
+#include <library/cpp/dwarf_backtrace/backtrace.h>
 
 #include <util/string/split.h>
 #include <util/stream/str.h>
@@ -57,9 +57,18 @@ TString Symbolize(const TString& input, const THashMap<TString, TString>& mappin
 
     for (const auto& frame : frames) {
 #ifdef _linux_
-        llvm::object::SectionedAddress secAddr;
-        secAddr.Address = frame.Address - frame.Offset;
-        out << NYql::NBacktrace::SymbolizeAndDumpToString(frame.ModulePath, secAddr, frame.Offset) << Endl;
+        std::array<const void*, 1> addrs = { (const void*)frame.Address };
+        auto error = NDwarf::ResolveBacktraceLocked(addrs, [&](const NDwarf::TLineInfo& info) {
+            if (!info.FileName.Empty())
+                out << info.FileName << ":" << info.Line << ":" << info.Col << " ";
+            if (!info.FunctionName.Empty())
+                out << "in " << info.FunctionName << " ";
+            return NDwarf::EResolving::Continue;
+        });
+
+        if (error) {
+            out << "LibBacktrace failed: (" << error->Code << ") " << error->Message;
+        }
 #else
         out << "StackFrame: " << frame.ModulePath << " " << frame.Address << " " << frame.Offset << Endl;
 #endif

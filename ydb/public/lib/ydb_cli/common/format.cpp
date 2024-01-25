@@ -610,6 +610,21 @@ NJson::TJsonValue TQueryPlanPrinter::ReconstructQueryPlanRec(const NJson::TJsonV
             return result;
         }
 
+        if (plan.GetMapSafe().at("Node Type") == "TableLookup") {
+            NJson::TJsonValue newOps;
+            NJson::TJsonValue op;
+
+            op["Name"] = "TableLookup"; 
+            op["Columns"] = plan.GetMapSafe().at("Columns");
+            op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+            op["Table"] = plan.GetMapSafe().at("Table");
+
+            newOps.AppendValue(op);
+
+            result["Operators"] = newOps;
+            return result;
+        }
+
         for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
             if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
                 planInputs.AppendValue(ReconstructQueryPlanRec(p, 0, planIndex, precomputes, nodeCounter));

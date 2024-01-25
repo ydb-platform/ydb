@@ -17,9 +17,12 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/tx
     ydb/core/mind
-    ydb/library/yql/minikql/comp_nodes/llvm
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg
+    ydb/services/kesus
+    ydb/services/persqueue_cluster_discovery
+    ydb/services/ydb
 )
 
 ADDINCL(

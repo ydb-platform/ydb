@@ -35,12 +35,14 @@ SRCS(
     initialize.cc
     internal/check_op.cc
     internal/conditions.cc
+    internal/fnmatch.cc
     internal/globals.cc
     internal/log_format.cc
     internal/log_message.cc
     internal/log_sink_set.cc
     internal/nullguard.cc
     internal/proto.cc
+    internal/vlog_config.cc
     log_entry.cc
     log_sink.cc
 )

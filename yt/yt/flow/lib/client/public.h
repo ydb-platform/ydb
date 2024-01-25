@@ -27,6 +27,10 @@ DEFINE_ENUM(EPipelineState,
     ((Completed)      (6))
 );
 
+YT_DEFINE_ERROR_ENUM(
+    ((SpecVersionMismatch)    (3300))
+);
+
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
 
 ////////////////////////////////////////////////////////////////////////////////

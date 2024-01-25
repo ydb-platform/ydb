@@ -416,48 +416,56 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
-    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
-            for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
-                TTouchEnv bTreeEnv, flatEnv;
-                TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-                TCharge flat(&flatEnv, part, tags, true);
-
-                TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
-                DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
-            }
-        }
-    }
-
-    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-            for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                    for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
-                        TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
-                        TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
-
+    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ui32 itemsLimit : xrange(part.Stat.Rows + 1)) {
+                for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
+                    for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
 
-                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
-                        for (auto c : key1) {
-                            message << c.AsValue<ui32>() << " ";
-                        }
-                        message << ") (";
-                        for (auto c : key2) {
-                            message << c.AsValue<ui32>() << " ";
-                        }
-                        message << ")";
+                        TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
+                        DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        DoChargeRowId(flat, flatEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
+                    }
+                }
+            }
+        }
+    }
 
-                        bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
-                        bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
-                        
-                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
-                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
+    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ui32 itemsLimit : xrange(part.Stat.Rows + 1)) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                        for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                            for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                                TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+                                TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
+
+                                TTouchEnv bTreeEnv, flatEnv;
+                                TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
+                                TCharge flat(&flatEnv, part, tags, true);
+
+                                TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
+                                for (auto c : key1) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") (";
+                                for (auto c : key2) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") items " << itemsLimit;
+
+                                bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+                                bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+                                
+                                UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
+                            }
+                        }
                     }
                 }
             }
@@ -473,10 +481,10 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             tags.push_back(c.Tag);
         }
 
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {

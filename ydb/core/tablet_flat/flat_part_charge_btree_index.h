@@ -81,6 +81,10 @@ public:
             chargeGroups = false;
         }
 
+        if (!key1 && itemsLimit && endRowId - beginRowId - 1 > itemsLimit) {
+            endRowId = beginRowId + itemsLimit + 1;
+        }
+
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
@@ -220,6 +224,10 @@ public:
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
             chargeGroups = false;
+        }
+
+        if (!key1 && itemsLimit && endRowId - beginRowId - 1 > itemsLimit) {
+            beginRowId = endRowId - itemsLimit - 1;
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));

@@ -7,7 +7,7 @@ CREATE TEMPORARY TABLE empsalary (
     salary int,
     enroll_date date
 );
-INSERT INTO empsalary VALUES
+INSERT INTO empsalary (depname, empno, salary, enroll_date) VALUES
 ('develop', 10, 5200, '2007-08-01'),
 ('sales', 1, 5000, '2006-10-01'),
 ('personnel', 5, 3500, '2007-12-10'),
@@ -18,6 +18,23 @@ INSERT INTO empsalary VALUES
 ('sales', 3, 4800, '2007-08-01'),
 ('develop', 8, 6000, '2006-10-01'),
 ('develop', 11, 5200, '2007-08-15');
+-- identical windows with different names
+SELECT sum(salary) OVER w1, count(*) OVER w2
+FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+  sum  | count 
+-------+-------
+  3500 |     1
+  7400 |     2
+ 11600 |     3
+ 16100 |     4
+ 25700 |     6
+ 25700 |     6
+ 30700 |     7
+ 41100 |     9
+ 41100 |     9
+ 47100 |    10
+(10 rows)
+
 -- Test in_range for other numeric datatypes
 create temp table numerics(
     id int,

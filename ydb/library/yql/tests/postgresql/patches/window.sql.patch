@@ -1,0 +1,26 @@
+--- window.sql
++++ window.sql
+@@ -9,7 +9,7 @@ CREATE TEMPORARY TABLE empsalary (
+     enroll_date date
+ );
+ 
+-INSERT INTO empsalary VALUES
++INSERT INTO empsalary (depname, empno, salary, enroll_date) VALUES
+ ('develop', 10, 5200, '2007-08-01'),
+ ('sales', 1, 5000, '2006-10-01'),
+ ('personnel', 5, 3500, '2007-12-10'),
+@@ -1317,14 +1317,3 @@ SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
+ SELECT array_agg(i) OVER w
+   FROM generate_series(1,5) i
+ WINDOW w AS (ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW);
+-
+--- test mutator (fails when inlined if expressions are not mutated)
+-CREATE FUNCTION pg_temp.f(group_size BIGINT) RETURNS SETOF integer[]
+-AS $$
+-    SELECT array_agg(s) OVER w
+-      FROM generate_series(1,5) s
+-    WINDOW w AS (ORDER BY s ROWS BETWEEN CURRENT ROW AND GROUP_SIZE FOLLOWING)
+-$$ LANGUAGE SQL STABLE;
+-
+-EXPLAIN (costs off) SELECT * FROM pg_temp.f(2);
+-SELECT * FROM pg_temp.f(2);

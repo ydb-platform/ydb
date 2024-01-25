@@ -8,7 +8,7 @@
 || 4 | varchar | 24 | 15 (+13) | 62.5 | 19.01.2024 | YQL-17603 ||
 || 5 | text | 76 | 16 (+1) | 21.05 | 22.01.2024 | YQL-17605 ||
 || 6 | int2 | 49 | 47 | 95.92 | 29.09.2023 | YQL-17612 ||
-|| 7 | int4 | 70 | 70 | 100.0 | 29.09.2023 | ||
+|| 7 | int4 | 70 | 70 | 100.0 | 29.09.2023 | YQL-17663 ||
 || 8 | int8 | 142 | 113 (+65) | 79.58 | 22.01.2024 | YQL-17614 ||
 || 9 | oid | 27 | 27 (+6) | 100.0 | 22.01.2024 | YQL-17623 ||
 || 10 | float4 | 96 | 80 (+32) | 83.33 | 23.01.2024 | YQL-17586 ||
@@ -28,7 +28,7 @@
 || 24 | comments | 7 | 7 | 100.0 | 25.05.2023 |  ||
 || 25 | expressions | 63 | 14 | 22.22 | 25.10.2023 | ||
 || 26 | unicode | 13 | 4 | 30.77 | 10.08.2023 | ||
-|| 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | CREATE UNLOGGED TABLE, REINDEX, PREPARE ... SELECT, DEALLOCATE, \gexec, pg_class, pg_attribute, CREATE TABLE PARTITION OF ||
+|| 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | YQL-17664 ||
 || 28 | insert | 357 | 15 | 4.2 | 12.12.2023 | CREATE TEMP TABLE, ALTER TABLE, DROP TABLE, CREATE TYPE, CREATE RULE, \d+, DROP TYPE, create table...partition by range, create table ... partition of ..., tableoid::regclass, create or replace function, create operator, ||
 || 29 | create_misc | 76 | 3 | 3.95 | 29.09.2023 | ||
 || 30 | select | 88 | 9 | 10.23 | 12.12.2023 | порядок сортировки в виде  ORDER BY поле using > или <, а также NULLS FIRST/LAST; ANALYZE, переменные enable_seqscan, enable_bitmapscan, enable_sort,  whole-row Var referencing a subquery, подзапросы внутри values, INSERT INTO ... DEFAULT VALUES, Range sub select unsupported lateral, CREATE INDEX, DROP INDEX, explain (опции costs, analyze, timing, summary), SELECT 1 AS x ORDER BY x; CREATE FUNCTION, DROP FUNCTION, table inheritance, PARTITION BY ||
@@ -46,7 +46,7 @@
 || 42 | update | 288 | 22 | 7.64 | 12.12.2023 | :-переменные ||
 || 43 | delete | 10 | 0 | 0.0 | 25.05.2023 | YQL-17585 ||
 || 44 | dbsize | 24 | 24 | 100.0 | 10.08.2023 | ||
-|| 45 | window | 298 | 5 | 1.68 | 12.12.2023 | YQL-17592 ||
+|| 45 | window | 295 | 6 (+1) | 2.03 | 26.01.2024 | YQL-17592 ||
 || 46 | functional_deps | 40 | 7 (+1) | 17.5 | 19.01.2024 | ||
 || 47 | json | 454 | 114 | 25.11 | 19.01.2024 | ||
 || 48 | jsonb | 1017 | 381 | 37.46 | 19.01.2024 | ||

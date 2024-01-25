@@ -8,15 +8,15 @@
 || 4 | varchar | 24 | 15 (+13) | 62.5 | 19.01.2024 | YQL-17603 ||
 || 5 | text | 76 | 16 (+1) | 21.05 | 22.01.2024 | YQL-17605 ||
 || 6 | int2 | 49 | 47 | 95.92 | 29.09.2023 | YQL-17612 ||
-|| 7 | int4 | 70 | 70 | 100.0 | 29.09.2023 | ||
+|| 7 | int4 | 70 | 70 | 100.0 | 29.09.2023 | YQL-17663 ||
 || 8 | int8 | 142 | 113 (+65) | 79.58 | 22.01.2024 | YQL-17614 ||
 || 9 | oid | 27 | 27 (+6) | 100.0 | 22.01.2024 | YQL-17623 ||
-|| 10 | float4 | 96 | 80 (+14) | 83.33 | 23.01.2024 | YQL-17586 ||
+|| 10 | float4 | 96 | 80 (+32) | 83.33 | 23.01.2024 | YQL-17586 ||
 || 11 | float8 | 168 | 132 (+36) | 78.57 | 23.01.2024 | YQL-17628 ||
 || 12 | bit | 115 | 84 | 73.04 | 12.12.2023 | YQL-17634 ||
 || 13 | numeric | 915 | 721 (+6) | 78.8 | 23.01.2024 | YQL-17629 ||
 || 14 | uuid | 36 | 0 | 0.0 | 02.05.2023 | YQL-17636 ||
-|| 15 | strings | 390 | 76 (+45) | 19.49 | 23.01.2024 | YQL-17587 ||
+|| 15 | strings | 390 | 81 (+50) | 20.77 | 24.01.2024 | YQL-17587 ||
 || 16 | numerology | 24 | 8 | 33.33 | 26.07.2023 |  ||
 || 17 | date | 264 | 200 | 75.76 | 12.12.2023 | ||
 || 18 | time | 39 | 33 | 84.62 | 12.12.2023 | ||
@@ -28,7 +28,7 @@
 || 24 | comments | 7 | 7 | 100.0 | 25.05.2023 |  ||
 || 25 | expressions | 63 | 14 | 22.22 | 25.10.2023 | ||
 || 26 | unicode | 13 | 4 | 30.77 | 10.08.2023 | ||
-|| 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | CREATE UNLOGGED TABLE, REINDEX, PREPARE ... SELECT, DEALLOCATE, \gexec, pg_class, pg_attribute, CREATE TABLE PARTITION OF ||
+|| 27 | create_table | 368 | 43 | 11.68 | 12.12.2023 | YQL-17664 ||
 || 28 | insert | 357 | 15 | 4.2 | 12.12.2023 | CREATE TEMP TABLE, ALTER TABLE, DROP TABLE, CREATE TYPE, CREATE RULE, \d+, DROP TYPE, create table...partition by range, create table ... partition of ..., tableoid::regclass, create or replace function, create operator, ||
 || 29 | create_misc | 76 | 3 | 3.95 | 29.09.2023 | ||
 || 30 | select | 88 | 9 | 10.23 | 12.12.2023 | порядок сортировки в виде  ORDER BY поле using > или <, а также NULLS FIRST/LAST; ANALYZE, переменные enable_seqscan, enable_bitmapscan, enable_sort,  whole-row Var referencing a subquery, подзапросы внутри values, INSERT INTO ... DEFAULT VALUES, Range sub select unsupported lateral, CREATE INDEX, DROP INDEX, explain (опции costs, analyze, timing, summary), SELECT 1 AS x ORDER BY x; CREATE FUNCTION, DROP FUNCTION, table inheritance, PARTITION BY ||

@@ -11,7 +11,7 @@ template<typename TLeft, typename TRight, typename TOutput>
 struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TOutput left, TOutput right)
     {
@@ -32,7 +32,7 @@ template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralMod {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
 
-    static constexpr bool DefaultNulls = false;
+    static constexpr auto NullMode = TKernel::ENullMode::AlwaysNull;
 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {

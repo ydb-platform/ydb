@@ -7,7 +7,7 @@ namespace {
 
 template<typename TInput, typename TOutput>
 struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOutput>> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TInput val)
     {

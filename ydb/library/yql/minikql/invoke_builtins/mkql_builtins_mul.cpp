@@ -10,7 +10,7 @@ namespace {
 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft, TRight, TOutput>> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TOutput left, TOutput right)
     {

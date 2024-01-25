@@ -225,9 +225,7 @@ void SetPredictedDelaysForAllQueues(const THashMap<TVDiskID, ui32> &latencies) {
             }
         }
     }
-    ui64 changedCount = 0;
     for (auto &[vDiskId, latency] : latencies) {
-        changedCount++;
         TGroupQueues::TVDisk &vDisk = DSProxyEnv.GroupQueues->FailDomains[vDiskId.FailDomain].VDisks[vDiskId.VDisk];
         ui32 begin = NKikimrBlobStorage::EVDiskQueueId::Begin;
         ui32 end = NKikimrBlobStorage::EVDiskQueueId::End;

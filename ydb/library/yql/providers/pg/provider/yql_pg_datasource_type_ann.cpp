@@ -129,6 +129,12 @@ public:
             FillPgTimezoneNamesSchema(items, ctx);
         } else if (tableName == "pg_timezone_abbrevs") {
             FillPgTimezoneAbbrevsSchema(items, ctx);
+        } else if (tableName == "pg_namespace") {
+            FillPgNamespaceSchema(items, ctx);
+        } else if (tableName == "pg_description") {
+            FillPgDescriptionSchema(items, ctx);
+        } else if (tableName == "pg_am") {
+            FillPgAmSchema(items, ctx);
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;
@@ -233,6 +239,24 @@ private:
     void FillPgTimezoneAbbrevsSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
         AddColumn(items, ctx, "abbrev", "text");
         AddColumn(items, ctx, "is_dst", "bool");
+    }
+
+    void FillPgNamespaceSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "nspname", "name");
+        AddColumn(items, ctx, "oid", "oid");
+    }
+
+    void FillPgDescriptionSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "objoid", "oid");
+        AddColumn(items, ctx, "classoid", "oid");
+        AddColumn(items, ctx, "objsubid", "int4");
+        AddColumn(items, ctx, "description", "text");
+    }
+
+    void FillPgAmSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
+        AddColumn(items, ctx, "oid", "oid");
+        AddColumn(items, ctx, "amname", "name");
+        AddColumn(items, ctx, "amtype", "char");
     }
 
     void AddColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {

@@ -59,6 +59,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            // TX
             HFunc(TEvTxProcessing::TEvReadSet, Handle);
             HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
             HFunc(TEvPQTablet::TEvSendReadSet, Handle);

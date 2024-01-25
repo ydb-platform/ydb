@@ -929,20 +929,21 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
                 if (!!stageInfo.Meta.ColumnTableInfoPtr) {
                     std::shared_ptr<NSchemeShard::TOlapSchema> olapSchema = std::make_shared<NSchemeShard::TOlapSchema>();
                     olapSchema->ParseFromLocalDB(stageInfo.Meta.ColumnTableInfoPtr->Description.GetSchema());
-
-                    NOlap::TProgramContainer container;
-                    NOlap::TSchemaResolverColumnsOnly resolver(olapSchema);
-                    TString error;
-                    YQL_ENSURE(container.Init(resolver, *olapProgram, error), "" << error);
-                    auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
-                    if (data) {
-                        for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
-                            AFL_VERIFY(!!i.GetIndexMeta());
-                            i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
-                        }
-                        auto checker = data->GetCoverChecker();
-                        if (!!checker) {
-                            checker.SerializeToProto(*olapProgram->MutableIndexChecker());
+                    if (olapSchema->GetIndexes().GetIndexes().size()) {
+                        NOlap::TProgramContainer container;
+                        NOlap::TSchemaResolverColumnsOnly resolver(olapSchema);
+                        TString error;
+                        YQL_ENSURE(container.Init(resolver, *olapProgram, error), "" << error);
+                        auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
+                        if (data) {
+                            for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
+                                AFL_VERIFY(!!i.GetIndexMeta());
+                                i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
+                            }
+                            auto checker = data->GetCoverChecker();
+                            if (!!checker) {
+                                checker.SerializeToProto(*olapProgram->MutableIndexChecker());
+                            }
                         }
                     }
                 }

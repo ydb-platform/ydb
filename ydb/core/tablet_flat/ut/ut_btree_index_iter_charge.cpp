@@ -482,8 +482,6 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
         CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
     }
 

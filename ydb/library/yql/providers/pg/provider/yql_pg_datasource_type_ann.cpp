@@ -211,7 +211,7 @@ private:
 
     void FillPgInheritsSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
         AddColumn(items, ctx, "inhrelid", "oid");
-        AddColumn(items, ctx, "inhparent", "c");
+        AddColumn(items, ctx, "inhparent", "oid");
     }
 
     void FillPgStatActivitySchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {

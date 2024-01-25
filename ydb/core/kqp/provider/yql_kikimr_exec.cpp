@@ -934,10 +934,11 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
             bool existingOk = (maybeCreate.ExistingOk().Cast().Value() == "1");
+            bool isReplace = (maybeCreate.IsReplace().Cast().Value() == "1");
             switch (tableTypeItem) {
                 case ETableType::ExternalTable: {
                     future = Gateway->CreateExternalTable(cluster,
-                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk);
+                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk, isReplace);
                     break;
                 }
                 case ETableType::TableStore: {

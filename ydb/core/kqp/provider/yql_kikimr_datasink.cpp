@@ -261,7 +261,7 @@ private:
                     ? GetTableTypeFromString(settings.TableType.Cast())
                     : ETableType::Table; // v0 support
 
-                if (mode == "create" || mode == "create_if_not_exists") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     if (!settings.Columns) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                             << "No columns provided for create mode."));
@@ -757,7 +757,7 @@ public:
                     ? settings.TableType.Cast()
                     : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
                 auto mode = settings.Mode.Cast();
-                if (mode == "create" || mode == "create_if_not_exists") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     YQL_ENSURE(settings.Columns);
                     YQL_ENSURE(!settings.Columns.Cast().Empty());
 
@@ -779,6 +779,7 @@ public:
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
+                    auto isReplace = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
                     return Build<TKiCreateTable>(ctx, node->Pos())
@@ -795,9 +796,12 @@ public:
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
+                        .IsReplace<TCoAtom>()
+                            .Value(isReplace)
+                            .Build()
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
-                        .Build()
+                            .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
@@ -886,16 +890,19 @@ public:
                         .Features(settings.Features)
                         .Done()
                         .Ptr();
-                } else if (mode == "createObject" || mode == "createObjectIfNotExists") {
+                } else if (mode == "createObject" || mode == "createObjectIfNotExists" || mode == "createObjectOrReplace") {
                     return Build<TKiCreateObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
+                        .IsReplace<TCoAtom>()
+                            .Value(mode == "createObjectOrReplace")
+                            .Build()
                         .ExistingOk<TCoAtom>()
                             .Value(mode == "createObjectIfNotExists")
-                        .Build()
+                            .Build()
                         .Done()
                         .Ptr();
                 } else if (mode == "alterObject") {

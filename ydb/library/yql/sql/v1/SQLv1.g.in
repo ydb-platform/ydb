@@ -570,7 +570,7 @@ values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
 
-create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
+create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE (IF NOT EXISTS | OR REPLACE)? object_ref
     with_table_settings
 ;
 
@@ -623,7 +623,7 @@ object_features: object_feature | LPAREN object_feature (COMMA object_feature)* 
 
 object_type_ref: an_id_or_type;
 
-create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) (IF NOT EXISTS)? simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
+create_table_stmt: CREATE (TABLE | TABLESTORE | EXTERNAL TABLE) (IF NOT EXISTS | OR REPLACE)? simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* COMMA? RPAREN
     table_inherits?
     table_partition_by?
     with_table_settings?

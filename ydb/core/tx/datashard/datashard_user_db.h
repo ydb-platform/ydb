@@ -77,19 +77,18 @@ public:
     std::optional<ui64> GetCurrentChangeGroup() const override;
     ui64 GetChangeGroup() override;
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
 public:
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
+
     void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
     ui64 GetWriteTxId(const TTableId& tableId);
 
-    absl::flat_hash_set<ui64>& GetVolatileReadDependencies() {
-        return VolatileReadDependencies;
-    }
-
+    absl::flat_hash_set<ui64>& GetVolatileReadDependencies();
     TVector<ui64> GetVolatileCommitTxIds() const;
 
     NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId);
     NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId);
+
     void AddReadConflict(ui64 txId) const;
     void CheckReadConflict(const TRowVersion& rowVersion) const;
     void CheckReadDependency(ui64 txId);

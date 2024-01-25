@@ -535,6 +535,10 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
     }
 }
 
+absl::flat_hash_set<ui64>& TDataShardUserDb::GetVolatileReadDependencies() {
+    return VolatileReadDependencies;
+}
+
 TVector<ui64> TDataShardUserDb::GetVolatileCommitTxIds() const {
     TVector<ui64> commitTxIds;
 

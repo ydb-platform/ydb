@@ -1036,7 +1036,7 @@ struct TEvPQ {
         struct TSuccess {
             THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
             std::deque<NPQ::TDataKey> BodyKeys;
-            std::deque<NPQ::TBatch> Head;
+            TVector<NPQ::TClientBlob> Head;
         };
 
         TEvGetWriteInfoResponse(ui32 cookie, TString message) :
@@ -1048,7 +1048,7 @@ struct TEvPQ {
         TEvGetWriteInfoResponse(ui32 cookie,
                                 THashMap<TString, NPQ::TSeqNoRange> seqNo,
                                 std::deque<NPQ::TDataKey> bodyKeys,
-                                std::deque<NPQ::TBatch> head) :
+                                TVector<NPQ::TClientBlob> head) :
             Cookie(cookie),
             Result(TSuccess{std::move(seqNo), std::move(bodyKeys), std::move(head)})
         {

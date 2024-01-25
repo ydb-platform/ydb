@@ -171,6 +171,10 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = 10; break;
         case NUdf::EDataSlot::Decimal:
             res.Bytes = 16; break;
+        case NUdf::EDataSlot::DyNumber:
+            res.IsString = true; break;
+        case NUdf::EDataSlot::JsonDocument:
+            res.IsString = true; break;
         case NUdf::EDataSlot::String:
             res.IsString = true; break;
         case NUdf::EDataSlot::Utf8:

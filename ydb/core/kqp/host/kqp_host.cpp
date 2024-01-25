@@ -1516,9 +1516,11 @@ private:
         auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx, ActorSystem);
 
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
+
+        auto externalSourceFactory = NActors::TlsActivationContext ? AppData()->ExternalSourceFactory : nullptr;
         auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
-            AppData()->ExternalSourceFactory, IsInternalCall);
-        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx, AppData()->ExternalSourceFactory, queryExecutor);
+            externalSourceFactory, IsInternalCall);
+        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx, externalSourceFactory, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();
         FillSettings.RowsLimitPerWrite = SessionCtx->Config()._ResultRowsLimit.Get();

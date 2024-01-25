@@ -6,3 +6,5 @@ items:
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Системные таблицы БД
   href: ../troubleshooting/system_views_db.md
+- name: Terraform
+  href: terraform.md

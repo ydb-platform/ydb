@@ -218,7 +218,7 @@ private:
             HandleFlatMap(lineage, node);
         } else if (node.IsCallable("Aggregate")) {
             HandleAggregate(lineage, node);
-        } else if (node.IsCallable("Extend")) {
+        } else if (node.IsCallable({"Extend","OrderedExtend","Merge"})) {
             HandleExtend(lineage, node);
         } else if (node.IsCallable({"CalcOverWindow","CalcOverSessionWindow","CalcOverWindowGroup"})) {
             HandleWindow(lineage, node);

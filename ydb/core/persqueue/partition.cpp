@@ -870,7 +870,7 @@ void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
         return;
     }
 
-    if (UserActionAndTransactionEvents.size() > MAX_TXS) {
+    if (ImmediateTxCount >= MAX_TXS) {
         ReplyPropose(ctx,
                      event,
                      NKikimrPQ::TEvProposeTransactionResult::OVERLOADED);
@@ -1434,6 +1434,7 @@ void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConf
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
     UserActionAndTransactionEvents.emplace_back(std::move(tx));
+    ++ImmediateTxCount;
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
@@ -1449,6 +1450,7 @@ void TPartition::RemoveImmediateTx()
     Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TEvPersQueue::TEvProposeTransaction>());
 
     UserActionAndTransactionEvents.pop_front();
+    --ImmediateTxCount;
 }
 
 void TPartition::RemoveUserAct()

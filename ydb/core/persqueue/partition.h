@@ -651,6 +651,7 @@ private:
                      TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
                      TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;

@@ -950,6 +950,65 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
+{
+    const ui32 partition = 0;
+    const ui64 begin = 0;
+    const ui64 end = 2'000;
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+
+    CreateSession(client, session);
+
+    for (ui64 txId = 1; txId <= 1'002; ++txId) {
+        SendProposeTransactionRequest(partition,
+                                      txId - 1, txId, // range
+                                      client,
+                                      "topic-path",
+                                      true,
+                                      txId);
+    }
+
+    //
+    // the first command in the queue will start writing
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1}}}});
+
+    //
+    // messages from 2 to 1001 will be queued and the OVERLOADED error will be returned to the last one
+    //
+    WaitProposeTransactionResponse({.TxId=1'002, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
+
+    //
+    // the writing has ended
+    //
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    //
+    // the commands from the queue will be executed as one
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'001}}}});
+
+    //
+    // while the writing is in progress, another command has arrived
+    //
+    SendProposeTransactionRequest(partition,
+                                  1'001, 1'002, // range
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  1'003);
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    //
+    // it will be processed
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'002}}}});
+}
+
 Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 {
     const ui32 partition = 0;

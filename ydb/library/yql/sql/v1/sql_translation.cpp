@@ -53,6 +53,20 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
+TNodePtr BuildViewQueryAst(TContext& ctx, NSQLTranslation::ESqlMode mode, const TRule_select_stmt& query) {
+    TSqlSelect select(ctx, mode);
+    TPosition pos;
+    auto source = select.Build(query, pos);
+    if (!source) {
+        return nullptr;
+    }
+    return BuildSelectResult(pos,
+                             std::move(source),
+                             false,
+                             false,
+                             ctx.Scoped);
+}
+
 }
 
 namespace NSQLTranslationV1 {
@@ -4484,20 +4498,12 @@ bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
     const TString queryText = CollectTokens(query);
     features["query_text"] = {Ctx.Pos(), queryText};
 
-    {
-        TSqlSelect select(Ctx, Mode);
-        TPosition pos;
-        auto source = select.Build(query, pos);
-        if (!source) {
-            return false;
-        }
-        features["query_ast"] = {BuildSelectResult(pos,
-                                                   std::move(source),
-                                                   false,
-                                                   false,
-                                                   Ctx.Scoped), Ctx};
+    auto queryAst = BuildViewQueryAst(Ctx, Mode, query);
+    if (!queryAst) {
+        return false;
     }
 
+    features["query_ast"] = {std::move(queryAst), Ctx};
     return true;
 }
 

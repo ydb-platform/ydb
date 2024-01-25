@@ -6275,16 +6275,16 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         );
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
-        TString reconstructedQuery = ToString(Tokenize(query));
+        const TString reconstructedQuery = ToString(Tokenize(query));
         TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
             if (word == "query_text") {
                 UNIT_ASSERT_STRING_CONTAINS(line, reconstructedQuery);
             }
         };
-        TWordCountHive elementStat = { {"Write!"} };
+        TWordCountHive elementStat = { {"query_text"} };
         VerifyProgram(res, elementStat, verifyLine);
 
-        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["query_text"], 1);
     }
 
     Y_UNIT_TEST(DropView) {
@@ -6310,10 +6310,10 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
-    Y_UNIT_TEST(CreateViewWithTablePrefix) {
+    Y_UNIT_TEST(CreateViewWithTablePathPrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
-                PRAGMA TablePathPrefix='/PathPrefix';
+                PRAGMA TablePathPrefix = "PathPrefix";
                 CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
             )"
         );
@@ -6321,7 +6321,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write!") {
-                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "PathPrefix/TheView");
                 UNIT_ASSERT_STRING_CONTAINS(line, "createObject");
             }
         };
@@ -6332,10 +6332,10 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
-    Y_UNIT_TEST(DropViewWithTablePrefix) {
+    Y_UNIT_TEST(DropViewWithTablePathPrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
-                PRAGMA TablePathPrefix='/PathPrefix';
+                PRAGMA TablePathPrefix = "PathPrefix";
                 DROP VIEW TheView;
             )"
         );
@@ -6343,7 +6343,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, "/PathPrefix/TheView");
+                UNIT_ASSERT_STRING_CONTAINS(line, "PathPrefix/TheView");
                 UNIT_ASSERT_STRING_CONTAINS(line, "dropObject");
             }
         };

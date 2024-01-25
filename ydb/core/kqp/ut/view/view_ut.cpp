@@ -89,7 +89,7 @@ void InitializeTablesAndSecondaryViews(TSession& session) {
 
 }
 
-Y_UNIT_TEST_SUITE(TKQPViewTest) {
+Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
 
     Y_UNIT_TEST(CheckCreatedView) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));

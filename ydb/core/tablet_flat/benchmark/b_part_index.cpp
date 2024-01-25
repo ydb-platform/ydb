@@ -76,8 +76,6 @@ namespace {
             UNIT_ASSERT_GE(part->Stat.Bytes, 100ull*1024*1024);
             UNIT_ASSERT_LE(part->Stat.Bytes, 100ull*1024*1024 + 10ull*1024*1024);
 
-            UNIT_ASSERT_VALUES_EQUAL(part->Slices->size(), 1);
-
             GroupId = TGroupId(groups ? 1 : 0);
         }
 

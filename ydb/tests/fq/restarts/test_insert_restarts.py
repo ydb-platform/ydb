@@ -93,8 +93,8 @@ class TestS3(object):
             assert time.time() < deadline, f"Insert not finished for already {time.time() - start} seconds"
             time.sleep(0.001)
 
-        client.wait_query(query_id, statuses=[fq.QueryMeta.COMPLETED, fq.QueryMeta.ABORTED_BY_SYSTEM, fq.QueryMeta.FAILED], timeout=timeout)
         kikimr.compute_plane.wait_bootstrap()
+        client.wait_query(query_id, statuses=[fq.QueryMeta.COMPLETED, fq.QueryMeta.ABORTED_BY_SYSTEM, fq.QueryMeta.FAILED], timeout=timeout)
 
         final_number_rows = self.run_atomic_upload_check_query(client, bucket, "ibucket", "insert/", "csv_with_names")
         query = client.describe_query(query_id).result.query

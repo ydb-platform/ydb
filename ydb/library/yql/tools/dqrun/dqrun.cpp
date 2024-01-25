@@ -106,6 +106,9 @@ struct TRunOptions {
     TString User;
     TMaybe<TString> BindingsFile;
     NYson::EYsonFormat ResultsFormat;
+    bool ValidateOnly = false;
+    bool LineageOnly = false;
+    IOutputStream* LineageStream = nullptr;
     bool OptimizeOnly = false;
     bool PeepholeOnly = false;
     bool TraceOpt = false;
@@ -334,7 +337,14 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     }
 
     TProgram::TStatus status = TProgram::TStatus::Error;
-    if (options.OptimizeOnly) {
+    if (options.ValidateOnly) {
+        Cout << "Validate program..." << Endl;
+        status = program->Validate(options.User);
+    } else if (options.LineageOnly) {
+        Cout << "Calculate lineage..." << Endl;
+        auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
+        status = program->LineageWithConfig(options.User, config);
+    } else if (options.OptimizeOnly) {
         Cout << "Optimize program..." << Endl;
         auto config = TOptPipelineConfigurator(program, options.PrintPlan, options.TracePlan);
         status = program->OptimizeWithConfig(options.User, config);
@@ -350,9 +360,14 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         }
         return 1;
     }
-    program->Print(options.ExprOut, options.TracePlan);
+    program->Print(options.ExprOut, (options.ValidateOnly || options.LineageOnly) ? nullptr : options.TracePlan);
 
     Cout << "Getting results..." << Endl;
+    if (auto data = program->GetLineage()) {
+        TStringInput in(*data);
+        NYson::ReformatYsonStream(&in, options.LineageStream, NYson::EYsonFormat::Pretty);
+    }
+
     if (program->HasResults()) {
         NYson::TYsonWriter yson(options.ResultOut, options.ResultsFormat);
         yson.OnBeginList();
@@ -361,6 +376,13 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
             yson.OnRaw(result);
         }
         yson.OnEndList();
+    }
+
+    if (options.LineageStream) {
+        if (auto st = program->GetLineage()) {
+            TStringInput in(*st);
+            NYson::ReformatYsonStream(&in, options.LineageStream, NYson::EYsonFormat::Pretty);
+        }
     }
 
     if (options.StatisticsStream) {
@@ -463,6 +485,14 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found"
                                    " in given directory")
         .StoreResult(&udfsDir);
+    opts.AddLongOption("validate", "validate expression")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.ValidateOnly);
+    opts.AddLongOption("lineage", "lineage expression")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.LineageOnly);
     opts.AddLongOption('O', "optimize", "optimize expression")
         .Optional()
         .NoArgument()
@@ -909,6 +939,10 @@ int RunMain(int argc, const char* argv[])
         } else {
             runOptions.StatisticsStream = &Cerr;
         }
+    }
+
+    if (runOptions.LineageOnly) {
+        runOptions.LineageStream = &Cout;
     }
 
     int result = RunProgram(std::move(program), runOptions, clusters);

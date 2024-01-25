@@ -207,8 +207,8 @@ bool TValidatedWriteTx::ReValidateKeys()
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-
-    auto [result, error] = GetKeyValidator().ValidateKeys();
+    TKeyValidator::TValidateOptions options(UserDb);
+    auto [result, error] = GetKeyValidator().ValidateKeys(options);
     if (result != EResult::Ok) {
         ErrStr = std::move(error);
         ErrCode = ConvertErrCode(result);

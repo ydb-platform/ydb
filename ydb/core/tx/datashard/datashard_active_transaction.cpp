@@ -228,7 +228,8 @@ bool TValidatedDataTx::ReValidateKeys()
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+        TKeyValidator::TValidateOptions options(EngineBay.GetUserDb());
+        auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
             ErrCode = ConvertErrCode(result);

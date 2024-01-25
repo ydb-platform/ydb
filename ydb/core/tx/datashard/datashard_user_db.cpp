@@ -685,6 +685,10 @@ void TDataShardUserDb::ResetCounters() {
     Counters = {};
 }
 
+NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() {
+    return Counters;
+}
+
 const NMiniKQL::TEngineHostCounters& TDataShardUserDb::GetCounters() const {
     return Counters;
 }

@@ -305,29 +305,8 @@ public:
     }
 
     bool IsValidKey(TKeyDesc& key) const override {
-        if (TSysTables::IsSystemTable(key.TableId))
-            return DataShardSysTable(key.TableId).IsValidKey(key);
-
-        ui64 localTableId = Self->GetLocalTableId(key.TableId);
-        Y_ABORT_UNLESS(localTableId != 0, "Unexpected IsValidKey for an unknown table");
-
-        if (UserDb.GetLockTxId()) {
-            // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
-            if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
-                (!Self->GetEnableLockedWrites() || !UserDb.GetIsImmediateTx() || !UserDb.GetIsRepeatableSnapshot() || !UserDb.GetLockNodeId()))
-            {
-                key.Status = TKeyDesc::EStatus::OperationNotSupported;
-                return false;
-            }
-        } else if (UserDb.GetIsRepeatableSnapshot()) {
-            // Prevent updates/erases in repeatable mvcc txs
-            if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
-                key.Status = TKeyDesc::EStatus::OperationNotSupported;
-                return false;
-            }
-        }
-
-        return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
+        TKeyValidator::TValidateOptions options(UserDb);
+        return GetKeyValidator().IsValidKey(key, options);
     }
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -463,32 +442,12 @@ public:
         return UserDb.GetReadTxObserver(tableId);
     }
 
-    void AddReadConflict(ui64 txId) const {
-        UserDb.AddReadConflict(txId);
-    }
-
-    void CheckReadConflict(const TRowVersion& rowVersion) const {
-        UserDb.CheckReadConflict(rowVersion);
-    }
-
-    void CheckReadDependency(ui64 txId) const {
-        UserDb.CheckReadDependency(txId);
-    }
-
     bool NeedToReadBeforeWrite(const TTableId& tableId) const override {
         return UserDb.NeedToReadBeforeWrite(tableId);
     }
 
     void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
         UserDb.CheckWriteConflicts(tableId, keyCells);
-    }
-
-    void AddWriteConflict(ui64 txId) const {
-        UserDb.AddWriteConflict(txId);
-    }
-
-    void BreakWriteConflict(ui64 txId) {
-        UserDb.BreakWriteConflict(txId);
     }
 
 private:
@@ -552,7 +511,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
             "Shard %" << tabletId << ", txid %" << txId << ": " << message);
     };
 
-    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, *EngineHost, GetUserDb());
+    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
     ComputeCtx->Database = &txc.DB;
 
     KqpAlloc = MakeHolder<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
@@ -561,7 +520,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
 
     auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
     kqpApplyCtx->Host = EngineHost.Get();
-    kqpApplyCtx->ShardTableStats = &ComputeCtx->GetDatashardCounters();
+    kqpApplyCtx->ShardTableStats = &EngineHostCounters;
     kqpApplyCtx->Env = KqpTypeEnv.Get();
 
     KqpApplyCtx.Reset(kqpApplyCtx.Release());

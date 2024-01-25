@@ -99,6 +99,7 @@ public:
     void BreakWriteConflict(ui64 txId);
 
     void ResetCounters();
+    NMiniKQL::TEngineHostCounters& GetCounters();
     const NMiniKQL::TEngineHostCounters& GetCounters() const;
 
 private:

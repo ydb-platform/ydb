@@ -23,7 +23,7 @@ using TKqpTableStats = TEngineHostCounters;
 
 class TKqpDatashardComputeContext : public TKqpComputeContextBase {
 public:
-    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHost& engineHost, NDataShard::TDataShardUserDb& userDb);
+    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, NDataShard::TDataShardUserDb& userDb, bool disableByKeyFilter);
 
     ui64 GetLocalTableId(const TTableId& tableId) const;
     TString GetTablePath(const TTableId& tableId) const;
@@ -49,9 +49,7 @@ public:
     TRowVersion GetReadVersion() const;
 
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
-    TEngineHostCounters& GetDatashardCounters() { return EngineHost.GetCounters(); }
-
-    std::pair<IEngineFlat::EResult, TString> ValidateKeys(const IEngineFlat::TValidationInfo& validationInfo);
+    TEngineHostCounters& GetDatashardCounters();
 
     bool IsTabletNotReady() const { return TabletNotReady; }
 
@@ -108,8 +106,8 @@ public:
 private:
     NDataShard::TDataShard* Shard;
     std::unordered_map<ui64, TEngineHostCounters> TaskCounters;
-    TEngineHost& EngineHost;
     NDataShard::TDataShardUserDb& UserDb;
+    bool DisableByKeyFilter;
     bool PersistentChannels = false;
     bool TabletNotReady = false;
     bool InconsistentReads = false;

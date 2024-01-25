@@ -1,7 +1,7 @@
 #include "key_validator.h"
 #include "datashard_impl.h"
 #include "range_ops.h"
-
+#include "datashard_user_db.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -65,7 +65,34 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
     Info.SetLoaded();
 }
 
-bool TKeyValidator::IsValidKey(TKeyDesc& key) const {
+TKeyValidator::TValidateOptions::TValidateOptions(const TDataShardUserDb& userDb)
+    : LockTxId(userDb.GetLockTxId())
+    , LockNodeId(userDb.GetLockNodeId())
+    , IsRepeatableSnapshot(userDb.GetIsRepeatableSnapshot())
+    , IsImmediateTx(userDb.GetIsImmediateTx())
+{
+}
+
+bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const {
+    if (TSysTables::IsSystemTable(key.TableId))
+        return true;
+
+    if (opt.LockTxId) {
+        // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
+        if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
+            (!Self.GetEnableLockedWrites() || !opt.IsImmediateTx || !opt.IsRepeatableSnapshot || !opt.LockNodeId))
+        {
+            key.Status = TKeyDesc::EStatus::OperationNotSupported;
+            return false;
+        }
+    } else if (opt.IsRepeatableSnapshot) {
+        // Prevent updates/erases in repeatable mvcc txs
+        if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
+            key.Status = TKeyDesc::EStatus::OperationNotSupported;
+            return false;
+        }
+    }
+
     ui64 localTableId = Self.GetLocalTableId(key.TableId);
     return NMiniKQL::IsValidKey(Db.GetScheme(), localTableId, key);
 }
@@ -84,13 +111,13 @@ ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
     }
 }
 
-std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys() const {
+std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys(const TValidateOptions& options) const {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     for (const auto& validKey : Info.Keys) {
         TKeyDesc* key = validKey.Key.get();
 
-        bool valid = IsValidKey(*key);
+        bool valid = IsValidKey(*key, options);
 
         if (valid) {
             auto curSchemaVersion = GetTableSchemaVersion(key->TableId);

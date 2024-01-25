@@ -11,6 +11,11 @@ SRCS(
     parser.h
     type_desc.h
     utils.h
+    utils.cpp
+)
+
+ADDINCL(
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 
 PEERDIR(

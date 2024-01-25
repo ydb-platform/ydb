@@ -1,3 +1,5 @@
+#include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
+
 #include "mkql_type_ops.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -6,7 +8,6 @@
 #include <util/stream/str.h>
 
 extern "C" {
-#include <postgres.h>
 #include <datatype/timestamp.h>
 #include <utils/datetime.h>
 }

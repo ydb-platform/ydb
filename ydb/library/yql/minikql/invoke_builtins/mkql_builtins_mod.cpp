@@ -63,7 +63,7 @@ struct TIntegralMod {
         const auto result = PHINode::Create(type, 2, "result", done);
         result->addIncoming(zero, block);
 
-        if (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
+        if constexpr (std::is_signed<TOutput>() && sizeof(TOutput) <= sizeof(TLeft)) {
             const auto min = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lv, ConstantInt::get(lv->getType(), Min<TOutput>()), "min", block);
             const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, rv, ConstantInt::get(rv->getType(), -1), "one", block);
             const auto two = BinaryOperator::CreateAnd(min, one, "two", block);
@@ -93,7 +93,7 @@ void RegisterMod(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterMod(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod, TMod>>(TKernelFamily::ENullMode::AlwaysNull);
+    kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod, TMod>>();
 }
 
 } // namespace NMiniKQL

@@ -7,6 +7,8 @@ namespace {
 
 template<typename TInput, typename TOutput>
 struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOutput>> {
+    static constexpr bool DefaultNulls = true;
+
     static TOutput Do(TInput val)
     {
         return -val;

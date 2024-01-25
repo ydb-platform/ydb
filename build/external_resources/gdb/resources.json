@@ -7,10 +7,10 @@
             "uri": "sbr:2319130389"
         },
         "linux-x86_64": {
-            "uri": "sbr:5709310220"
+            "uri": "sbr:5720181629"
         },
         "linux-aarch64": {
-            "uri": "sbr:5709435327"
+            "uri": "sbr:5720688825"
         }
     },
     "platform_replacements": {},

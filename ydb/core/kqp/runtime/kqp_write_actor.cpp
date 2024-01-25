@@ -20,7 +20,7 @@
 
 namespace {
     struct TWriteActorBackoffSettings {
-        TDuration StartRetryDelay = TDuration::MilliSeconds(100);
+        TDuration StartRetryDelay = TDuration::MilliSeconds(150);
         TDuration MaxRetryDelay = TDuration::Seconds(5);
         double UnsertaintyRatio = 0.5;
         double Multiplier = 2.0;
@@ -410,6 +410,7 @@ private:
     }
 
     void PassAway() override {
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpWriteActor>::PassAway();
     }
 

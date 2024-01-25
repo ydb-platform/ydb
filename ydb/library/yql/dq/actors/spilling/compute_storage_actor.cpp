@@ -16,6 +16,8 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
+std::atomic_int SpillerBlobId = 0;
+
 namespace {
 
 #define LOG_D(s) \
@@ -51,10 +53,13 @@ public:
     }
 
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
+        std::lock_guard lock(Mutex_);
         FailOnError();
         CreateSpiller();
 
         ui64 size = blob.size();
+        ui64 NextBlobId = SpillerBlobId++;
+
 
         SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
@@ -67,6 +72,7 @@ public:
     }
 
     std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
+        std::lock_guard lock(Mutex_);
         FailOnError();
         CreateSpiller();
 
@@ -80,6 +86,7 @@ public:
     }
 
     std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
+        std::lock_guard lock(Mutex_);
         FailOnError();
         CreateSpiller();
 
@@ -94,6 +101,7 @@ public:
     }
 
     NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
+        std::lock_guard lock(Mutex_);
         FailOnError();
         CreateSpiller();
 
@@ -136,6 +144,7 @@ private:
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
+        std::lock_guard lock(Mutex_);
         auto& msg = *ev->Get();
         LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
 
@@ -163,6 +172,7 @@ private:
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
+        std::lock_guard lock(Mutex_);
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
@@ -222,9 +232,11 @@ private:
 
     TMaybe<TString> Error_;
 
-    IDqComputeStorageActor::TKey NextBlobId = 0;
+    // IDqComputeStorageActor::TKey NextBlobId = 0;
 
     bool IsCreated = false;
+
+    std::mutex Mutex_;
 
 };
 

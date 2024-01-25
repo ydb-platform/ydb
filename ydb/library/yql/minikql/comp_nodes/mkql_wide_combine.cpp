@@ -390,13 +390,19 @@ private:
         MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        //AsyncWriteOperation.Subscribe() //TODO YQL-16988
+        // AsyncWriteOperation->Subscribe(this->DoCalculate) //TODO YQL-16988
+        /*AsyncWriteOperation->Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
+        });*/
         return EFetchResult::Yield;
     }
     EFetchResult AsyncRead() {
         MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
+        /*AsyncReadOperation->Subscribe([](){
+            std::cout << "hello world" << std::endl;
+        });*/
         //AsyncReadOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
@@ -533,11 +539,9 @@ private:
         if (AsyncReadOperation) {
             MKQL_ENSURE(AsyncReadOperation->HasValue(), "Internal logic error");
             if (RecoverState) {
-                SpilledBuckets[0].InitialState->AsyncReadCompleted(
-                        AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
+                SpilledBuckets[0].InitialState->AsyncReadCompleted(AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
             } else {
-                SpilledBuckets[0].Data->AsyncReadCompleted(
-                        AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
+                SpilledBuckets[0].Data->AsyncReadCompleted(AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
             }
             AsyncWriteOperation = std::nullopt;
         }

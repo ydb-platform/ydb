@@ -166,12 +166,14 @@ private:
             }
 
             res = TaskRunner->Run();
+
             if (ERunStatus::PendingInput == res){
                 //very poor man waiting for spiller async operation completion
                 Schedule(TDuration::MilliSeconds(1), new TEvContinueRun(THashSet<ui32>(ev->Get()->InputChannels), ev->Get()->MemLimit));
             }
+                 //very poor man waiting for spiller async operation completion
+                
         }
-
         for (auto& channelId : inputMap) {
             inputChannelFreeSpace[channelId] = TaskRunner->GetInputChannel(channelId)->GetFreeSpace();
         }

@@ -19,7 +19,6 @@ NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
 
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
-
     Response->ClusterId = "ydb-cluster";
     Response->ControllerId = 1;
 
@@ -37,7 +36,6 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     }
     
     Become(&TKafkaMetadataActor::StateWork);
-
     RespondIfRequired(ctx);
 }
 

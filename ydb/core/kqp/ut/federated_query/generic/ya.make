@@ -48,6 +48,9 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+    TAG(
+        ya:docker_compose
+    )
 ENDIF()
 
 YQL_LAST_ABI_VERSION()

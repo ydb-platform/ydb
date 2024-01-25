@@ -1,5 +1,5 @@
-#include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 #include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
 
 extern "C" {
 #include <utils/builtins.h>

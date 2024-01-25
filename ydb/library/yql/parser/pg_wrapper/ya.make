@@ -71,6 +71,7 @@ PEERDIR(
     ydb/library/yql/minikql/arrow
     ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/codec
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf

@@ -496,6 +496,10 @@ TString GetPostgresServerVersionStr() {
     return "pg_sql_dummy";
 }
 
+} // namespace NKikimr::NPg
+
+namespace NYql {
+
 ui64 HexEncode(const char *src, size_t len, char *dst) {
     Y_UNUSED(src);
     Y_UNUSED(len);
@@ -504,4 +508,4 @@ ui64 HexEncode(const char *src, size_t len, char *dst) {
     throw yexception() << "HexEncode in pg_dummy does nothing";
 }
 
-} // namespace NKikimr::NPg
+} // NYql

@@ -876,6 +876,10 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     if (update->IsSnapshot) // do nothing over snapshot after initial one
         return;
 
+    // Protect against recursive transactions in callbacks
+    Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
+    ActiveTransaction = true;
+
     TString schemeUpdate;
     TString dataUpdate;
     TStackVec<TString> partSwitches;
@@ -940,6 +944,11 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         if (schemeUpdate) {
             ReadResourceProfile();
             ReflectSchemeSettings();
+            Owner->OnFollowerSchemaUpdated();
+        }
+
+        if (dataUpdate) {
+            Owner->OnFollowerDataUpdated();
         }
     }
 
@@ -1000,14 +1009,20 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     } else if (update->NeedFollowerGcAck) {
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), Step0));
     }
+
+    ActiveTransaction = false;
 }
 
 void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
     const TString aux = NPageCollection::TSlicer::Lz4()->Decode(auxBody);
     TProtoBox<NKikimrExecutorFlat::TFollowerAux> proto(aux);
 
-    if (proto.HasUserAuxUpdate())
+    if (proto.HasUserAuxUpdate()) {
+        Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
+        ActiveTransaction = true;
         Owner->OnLeaderUserAuxUpdate(std::move(proto.GetUserAuxUpdate()));
+        ActiveTransaction = false;
+    }
 }
 
 void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,

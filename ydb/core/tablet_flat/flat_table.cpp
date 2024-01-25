@@ -830,6 +830,7 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemG
     }
 
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
+    TableObserver.OnUpdate(rop, key, ops, rowVersion);
 }
 
 void TTable::AddTxRef(ui64 txId)
@@ -863,6 +864,8 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
     } else {
         Y_DEBUG_ABORT_UNLESS(TxRefs[txId] > 0);
     }
+
+    TableObserver.OnUpdateTx(rop, key, ops, txId);
 }
 
 void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
@@ -1336,6 +1339,11 @@ TCompactionStats TTable::GetCompactionStats() const
     stats.PartCount = Flatten.size() + ColdParts.size();
 
     return stats;
+}
+
+void TTable::SetTableObserver(ITableObserverPtr ptr) noexcept
+{
+    TableObserver = std::move(ptr);
 }
 
 void TPartStats::Add(const TPartView& partView)

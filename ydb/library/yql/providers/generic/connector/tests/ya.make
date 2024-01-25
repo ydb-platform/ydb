@@ -1,3 +1,8 @@
+OWNER(
+    vitalyisaev
+    g:yq
+)
+
 PY3TEST()
 
 STYLE_PYTHON()
@@ -35,6 +40,9 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+    TAG(
+        ya:docker_compose
+    )
 ENDIF()
 
 TEST_SRCS(

@@ -21,6 +21,7 @@ IF (AUTOCHECK)
 
 ENDIF()
 
+ENV(COMPOSE_PROJECT_NAME=tests-fq-generic)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)

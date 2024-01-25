@@ -28,6 +28,7 @@ ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests sole*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
+ydb/library/yql/tests/sql/dq_file/part6 test.py.test[bigdate-input_date32-default.txt-Results]
 ydb/library/yql/tests/sql/dq_file/part16 *
 ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-default.txt-Analyze]
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead

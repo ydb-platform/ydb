@@ -12,7 +12,7 @@ extern "C" {
 
 ssize_t BridgeGetAbiVersion()
 {
-    return 2; // EYqlPluginAbiVersion
+    return 1; // EYqlPluginAbiVersion::AbortQuery
 }
 
 TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOptions)
@@ -74,10 +74,8 @@ TBridgeQueryResult* BridgeRun(
     const char* impersonationUser,
     const char* queryText,
     const char* settings,
-    int settingsLength,
     const TBridgeQueryFile* bridgeFiles,
-    int bridgeFileCount,
-    int executeMode)
+    int bridgeFileCount)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
@@ -98,9 +96,8 @@ TBridgeQueryResult* BridgeRun(
         NYT::TGuid::FromString(queryId),
         TString(impersonationUser),
         TString(queryText),
-        settings ? TYsonString(TString(settings, settingsLength)) : EmptyMap,
-        files,
-        executeMode);
+        settings ? TYsonString(TString(settings)) : EmptyMap,
+        files);
     FillString(bridgeResult->YsonResult, bridgeResult->YsonResultLength, result.YsonResult);
     FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
     FillString(bridgeResult->Statistics, bridgeResult->StatisticsLength, result.Statistics);

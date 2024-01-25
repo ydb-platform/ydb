@@ -30,6 +30,7 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_PROJECT_NAME=library-yql-providers-generic-connector-tests)
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 

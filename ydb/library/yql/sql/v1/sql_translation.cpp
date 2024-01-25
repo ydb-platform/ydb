@@ -53,6 +53,14 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
+void AddContextToViewQueryText(TContext& ctx, TString& queryText) {
+    if (const auto pathPrefix = ctx.GetPrefixPath("", TDeferredAtom()); !pathPrefix.Empty()) {
+        queryText = TStringBuilder()
+                        << "PRAGMA TablePathPrefix = \"" << pathPrefix << "\";\n"
+                        << queryText;
+    }
+}
+
 TNodePtr BuildViewQueryAst(TContext& ctx, NSQLTranslation::ESqlMode mode, const TRule_select_stmt& query) {
     TSqlSelect select(ctx, mode);
     TPosition pos;
@@ -4495,7 +4503,8 @@ bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& feature
 
 bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
                                      const TRule_select_stmt& query) {
-    const TString queryText = CollectTokens(query);
+    TString queryText = CollectTokens(query);
+    AddContextToViewQueryText(Ctx, queryText);
     features["query_text"] = {Ctx.Pos(), queryText};
 
     auto queryAst = BuildViewQueryAst(Ctx, Mode, query);

@@ -3,5 +3,5 @@ SELECT
 FROM (
     SELECT
         *
-    FROM `/Root/series`
+    FROM series
 );

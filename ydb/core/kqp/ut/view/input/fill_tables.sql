@@ -1,4 +1,4 @@
-REPLACE INTO `/Root/series` (
+REPLACE INTO series (
     series_id,
     title,
     release_date,
@@ -8,7 +8,7 @@ VALUES
     (1, "IT Crowd", Date("2006-02-03"), "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."),
     (2, "Silicon Valley", Date("2014-04-06"), "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.");
 
-REPLACE INTO `/Root/seasons` (
+REPLACE INTO seasons (
     series_id,
     season_id,
     title,
@@ -26,7 +26,7 @@ VALUES
     (2, 4, "Season 4", Date("2017-04-23"), Date("2017-06-25")),
     (2, 5, "Season 5", Date("2018-03-25"), Date("2018-05-13"));
 
-REPLACE INTO `/Root/episodes` (
+REPLACE INTO episodes (
     series_id,
     season_id,
     episode_id,

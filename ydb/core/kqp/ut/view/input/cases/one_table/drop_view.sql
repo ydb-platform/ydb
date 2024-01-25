@@ -1,1 +1,1 @@
-DROP VIEW `/Root/read_from_one_table`;
+DROP VIEW read_from_one_table;

@@ -1,3 +1,3 @@
 SELECT
     *
-FROM `/Root/read_from_scalar`;
+FROM read_from_scalar;

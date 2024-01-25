@@ -1,3 +1,3 @@
 SELECT
     *
-FROM `/Root/read_from_one_table`;
+FROM read_from_one_table;

@@ -87,6 +87,12 @@ void InitializeTablesAndSecondaryViews(TSession& session) {
     ExecuteDataModificationQuery(session, ReadWholeFile(inputFolder + "/fill_tables.sql"));
 }
 
+TString AddContextToViewQueryText(const TString& query, const TString& pathPrefix) {
+    return TStringBuilder()
+               << "PRAGMA TablePathPrefix = \"" << pathPrefix << "\";\n"
+               << query;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
@@ -109,17 +115,17 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ExecuteDataDefinitionQuery(session, creationQuery);
 
         const auto viewDescription = GetViewDescription(runtime, path);
-        UNIT_ASSERT_EQUAL(viewDescription.GetQueryText(), queryInView);
+        UNIT_ASSERT_STRINGS_EQUAL(viewDescription.GetQueryText(), AddContextToViewQueryText(queryInView, "/Root"));
     }
 
     Y_UNIT_TEST(CreateViewDisabledFeatureFlag) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+                CREATE VIEW {} WITH (security_invoker = true) AS SELECT 1;
             )",
             path
         );
@@ -135,7 +141,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
         constexpr const char* queryInView = R"(
             SELECT "foo" / "bar"
         )";
@@ -144,7 +150,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         UNIT_ASSERT_C(parsedAst.IsOk(), parsedAst.Issues.ToString());
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
             )",
             path,
             queryInView
@@ -189,11 +195,11 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
         constexpr const char* queryInView = "SELECT 1";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
             )",
             path,
             queryInView
@@ -212,11 +218,11 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
         constexpr const char* queryInView = "SELECT 1";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
             )",
             path,
             queryInView
@@ -224,7 +230,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ExecuteDataDefinitionQuery(session, creationQuery);
 
         const TString dropQuery = std::format(R"(
-                DROP VIEW `{}`;
+                DROP VIEW {};
             )",
             path
         );
@@ -236,10 +242,10 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+                CREATE VIEW {} WITH (security_invoker = true) AS SELECT 1;
             )",
             path
         );
@@ -247,7 +253,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ExecuteDataDefinitionQuery(session, creationQuery);
 
         const TString dropQuery = std::format(R"(
-                DROP VIEW `{}`;
+                DROP VIEW {};
             )",
             path
         );
@@ -262,11 +268,11 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
         constexpr const char* queryInView = "SELECT 1";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
             )",
             path,
             queryInView
@@ -274,7 +280,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ExecuteDataDefinitionQuery(session, creationQuery);
 
         const TString dropQuery = std::format(R"(
-                DROP VIEW `{}`;
+                DROP VIEW {};
             )",
             path
         );
@@ -294,16 +300,16 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         EnableViewsFeatureFlag(kikimr);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* viewName = "/Root/TheView";
-        constexpr const char* testTable = "/Root/Test";
+        constexpr const char* viewName = "TheView";
+        constexpr const char* testTable = "Test";
         const auto innerQuery = std::format(R"(
-                SELECT * FROM `{}`
+                SELECT * FROM {}
             )",
             testTable
         );
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS {};
+                CREATE VIEW {} WITH (security_invoker = true) AS {};
             )",
             viewName,
             innerQuery
@@ -317,7 +323,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
             )
         );
         const auto selectFromViewResults = ExecuteDataModificationQuery(session, std::format(R"(
-                    SELECT * FROM `{}`;
+                    SELECT * FROM {};
                 )",
                 viewName
             )
@@ -329,10 +335,10 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
-        constexpr const char* path = "/Root/TheView";
+        constexpr const char* path = "TheView";
 
         const TString creationQuery = std::format(R"(
-                CREATE VIEW `{}` WITH (security_invoker = true) AS SELECT 1;
+                CREATE VIEW {} WITH (security_invoker = true) AS SELECT 1;
             )",
             path
         );
@@ -340,7 +346,7 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
         ExecuteDataDefinitionQuery(session, creationQuery);
 
         const TString selectQuery = std::format(R"(
-                SELECT * FROM `{}`;
+                SELECT * FROM {};
             )",
             path
         );

@@ -1,1 +1,1 @@
-DROP VIEW `/Root/read_from_two_tables`;
+DROP VIEW read_from_two_tables;

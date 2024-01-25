@@ -1,9 +1,9 @@
-CREATE VIEW `/Root/read_from_multiple_views` WITH (security_invoker = TRUE) AS
+CREATE VIEW read_from_multiple_views WITH (security_invoker = TRUE) AS
     SELECT
         series.title AS series_title,
         seasons.title AS seasons_title
-    FROM `/Root/view_series`
+    FROM view_series
         AS series
-    JOIN `/Root/view_seasons`
+    JOIN view_seasons
         AS seasons
     ON series.series_id == seasons.series_id;

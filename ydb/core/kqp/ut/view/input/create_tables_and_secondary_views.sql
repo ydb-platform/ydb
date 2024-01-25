@@ -1,4 +1,4 @@
-CREATE TABLE `/Root/series` (
+CREATE TABLE series (
     series_id Uint64,
     title Utf8,
     series_info Utf8,
@@ -6,7 +6,7 @@ CREATE TABLE `/Root/series` (
     PRIMARY KEY (series_id)
 );
 
-CREATE TABLE `/Root/seasons` (
+CREATE TABLE seasons (
     series_id Uint64,
     season_id Uint64,
     title Utf8,
@@ -15,7 +15,7 @@ CREATE TABLE `/Root/seasons` (
     PRIMARY KEY (series_id, season_id)
 );
 
-CREATE TABLE `/Root/episodes` (
+CREATE TABLE episodes (
     series_id Uint64,
     season_id Uint64,
     episode_id Uint64,
@@ -24,17 +24,17 @@ CREATE TABLE `/Root/episodes` (
     PRIMARY KEY (series_id, season_id, episode_id)
 );
 
-CREATE VIEW `/Root/view_series` WITH (security_invoker = TRUE) AS
+CREATE VIEW view_series WITH (security_invoker = TRUE) AS
     SELECT
         *
-    FROM `/Root/series`;
+    FROM series;
 
-CREATE VIEW `/Root/view_seasons` WITH (security_invoker = TRUE) AS
+CREATE VIEW view_seasons WITH (security_invoker = TRUE) AS
     SELECT
         *
-    FROM `/Root/seasons`;
+    FROM seasons;
 
-CREATE VIEW `/Root/view_episodes` WITH (security_invoker = TRUE) AS
+CREATE VIEW view_episodes WITH (security_invoker = TRUE) AS
     SELECT
         *
-    FROM `/Root/episodes`;
+    FROM episodes;

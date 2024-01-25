@@ -40,6 +40,12 @@ TString ToString(const TParsedTokenList& tokens) {
     return reconstructedQuery;
 }
 
+TString AddContextToViewQueryText(const TString& query, const TString& pathPrefix) {
+    return TStringBuilder()
+               << std::format(R"(PRAGMA TablePathPrefix = \"{}\";\n)", pathPrefix.c_str())
+               << query;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(AnsiMode) {
@@ -6276,6 +6282,37 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         const TString reconstructedQuery = ToString(Tokenize(query));
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "query_text") {
+                UNIT_ASSERT_STRING_CONTAINS(line, reconstructedQuery);
+            }
+        };
+        TWordCountHive elementStat = { {"query_text"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["query_text"], 1);
+    }
+
+    Y_UNIT_TEST(PragmaTablePathPrefixIsSaved) {
+        constexpr const char* path = "TheView";
+        constexpr const char* pathPrefix = "PathPrefix";
+        constexpr const char* query = R"(
+            SELECT * FROM SomeTable
+        )";
+
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                    USE plato;
+                    PRAGMA TablePathPrefix = "{}";
+                    CREATE VIEW {} WITH (security_invoker = TRUE) AS {};
+                )",
+                pathPrefix,
+                path,
+                query
+            )
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        const TString reconstructedQuery = AddContextToViewQueryText(ToString(Tokenize(query)), pathPrefix);
         TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
             if (word == "query_text") {
                 UNIT_ASSERT_STRING_CONTAINS(line, reconstructedQuery);

@@ -1,1 +1,1 @@
-DROP VIEW `/Root/read_from_scalar`;
+DROP VIEW read_from_scalar;

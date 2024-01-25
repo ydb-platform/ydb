@@ -97,6 +97,32 @@ TTableSnapshotContext::~TTableSnapshotContext() = default;
 
 using namespace NResourceBroker;
 
+class TExecutor::TActiveTransactionZone {
+public:
+    explicit TActiveTransactionZone(TExecutor* self) noexcept
+        : Self(self)
+    {
+        Y_DEBUG_ABORT_UNLESS(!Self->ActiveTransaction);
+        Self->ActiveTransaction = true;
+        Active = true;
+    }
+
+    ~TActiveTransactionZone() noexcept {
+        Done();
+    }
+
+    void Done() noexcept {
+        if (Active) {
+            Self->ActiveTransaction = false;
+            Active = false;
+        }
+    }
+
+private:
+    TExecutor* Self;
+    bool Active = false;
+};
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -877,8 +903,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         return;
 
     // Protect against recursive transactions in callbacks
-    Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
 
     TString schemeUpdate;
     TString dataUpdate;
@@ -1009,8 +1034,6 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     } else if (update->NeedFollowerGcAck) {
         Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), Step0));
     }
-
-    ActiveTransaction = false;
 }
 
 void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
@@ -1018,10 +1041,8 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
     TProtoBox<NKikimrExecutorFlat::TFollowerAux> proto(aux);
 
     if (proto.HasUserAuxUpdate()) {
-        Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
-        ActiveTransaction = true;
+        TActiveTransactionZone activeTransaction(this);
         Owner->OnLeaderUserAuxUpdate(std::move(proto.GetUserAuxUpdate()));
-        ActiveTransaction = false;
     }
 }
 
@@ -1659,9 +1680,7 @@ void TExecutor::Enqueue(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
-    Y_DEBUG_ABORT_UNLESS(!ActiveTransaction);
-
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
     ++seat->Retries;
 
     THPTimer cpuTimer;
@@ -1751,7 +1770,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     }
     PrivatePageCache->ResetTouchesAndToLoad(false);
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
     PlanTransactionActivation();
 }
 
@@ -2828,7 +2847,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     Y_ABORT_UNLESS(msg->Generation == Generation());
     const ui32 step = msg->Step;
 
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
 
     GcLogic->OnCommitLog(step, msg->ConfirmedOnSend, ctx);
     CommitManager->Confirm(step);
@@ -2922,7 +2941,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         std::move(msg->GroupWrittenOps),
         ctx);
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
     PlanTransactionActivation();
 
     MaybeRelaxRejectProbability();
@@ -3251,7 +3270,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         return Broken();
     }
 
-    ActiveTransaction = true;
+    TActiveTransactionZone activeTransaction(this);
 
     const ui64 snapStamp = msg->Params->Edge.TxStamp ? msg->Params->Edge.TxStamp
         : MakeGenStepPair(Generation(), msg->Step);
@@ -3484,7 +3503,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     Owner->CompactionComplete(tableId, OwnerCtx());
     MaybeRelaxRejectProbability();
 
-    ActiveTransaction = false;
+    activeTransaction.Done();
 
     if (LogicSnap->MayFlush(false)) {
         MakeLogSnapshot();

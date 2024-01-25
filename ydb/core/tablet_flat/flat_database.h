@@ -58,7 +58,7 @@ public:
     TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
     ~TDatabase();
 
-    void SetTableObserver(ui32 table, ITableObserverPtr ptr) noexcept;
+    void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept;
 
     /* Returns durable monotonic change number for table or entire database
         on default (table = Max<ui32>()). Serial is incremented for each

@@ -323,7 +323,7 @@ public:
 
     TCompactionStats GetCompactionStats() const;
 
-    void SetTableObserver(ITableObserverPtr ptr) noexcept;
+    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept;
 
 private:
     TMemTable& MemTable();
@@ -359,7 +359,7 @@ private:
     absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
-    ITableObserverPtr TableObserver;
+    TIntrusivePtr<ITableObserver> TableObserver;
 
 private:
     struct TRollbackRemoveTxRef {

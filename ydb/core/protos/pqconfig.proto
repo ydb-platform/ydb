@@ -997,12 +997,13 @@ message TTransaction {
 };
 
 message TTabletTxInfo {
+    message TTxWriteInfo {
+        optional uint64 WriteId = 1;
+        optional uint32 PartitionId = 2;
+        optional uint32 ShadowPartitionId = 3;
+    };
+
     optional uint64 LastStep = 2;
     optional uint64 LastTxId = 3;
-}
-
-message TTabletTxWrites {
-    repeated uint64 WriteIds = 1;
-    repeated uint32 PartitionIds = 2;
-    repeated uint32 ShadowPartitionIds = 3;
+    repeated TTxWriteInfo TxWrites = 4;
 }

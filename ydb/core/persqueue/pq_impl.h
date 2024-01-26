@@ -203,7 +203,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
     static constexpr const char * KeyTxInfo() { return "_txinfo"; }
-    static constexpr const char * KeyTxWrites() { return "_txwrites"; }
 
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
@@ -330,7 +329,6 @@ private:
                          TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
     void ProcessGetOwnershipQueue();
-    void AddCmdWriteTabletTxWrites(NKikimrClient::TKeyValueRequest& request);
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
 
@@ -456,8 +454,8 @@ private:
     void InitPlanStep(const NKikimrPQ::TTabletTxInfo& info = {});
     void SavePlanStep(NKikimrPQ::TTabletTxInfo& info);
 
-    void InitTxWrites(const NKikimrPQ::TTabletTxWrites& info, const TActorContext& ctx);
-    void SaveTxWrites(NKikimrPQ::TTabletTxWrites& info);
+    void InitTxWrites(const NKikimrPQ::TTabletTxInfo& info, const TActorContext& ctx);
+    void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
 
     void HandleShadowPartition(const ui64 responseCookie,
                                const NKikimrClient::TPersQueuePartitionRequest& req,

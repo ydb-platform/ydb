@@ -782,7 +782,7 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
 {
     bool ok =
         (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) &&
-        (resp.ReadResultSize() == 4) &&
+        (resp.ReadResultSize() == 3) &&
         (resp.HasSetExecutorFastLogPolicyResult()) &&
         (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
     if (!ok) {
@@ -794,7 +794,7 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
 
     ReadTxInfo(resp.GetReadResult(2), ctx);
     ReadConfig(resp.GetReadResult(0), resp.GetReadRangeResult(0), ctx);
-    ReadTxWrites(resp.GetReadResult(3), ctx);
+    ReadTxWrites(resp.GetReadResult(2), ctx);
     ReadState(resp.GetReadResult(1), ctx);
 }
 
@@ -856,7 +856,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
     case NKikimrProto::OK: {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " has a tx writes info");
 
-        NKikimrPQ::TTabletTxWrites info;
+        NKikimrPQ::TTabletTxInfo info;
         Y_ABORT_UNLESS(info.ParseFromString(read.GetValue()));
 
         InitTxWrites(info, ctx);
@@ -897,18 +897,16 @@ void TPersQueue::CreateShadowPartitionActor(ui32 shadowPartitionId,
                                                         ctx));
 }
 
-void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxWrites& info,
+void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
                               const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(info.WriteIdsSize() == info.PartitionIdsSize());
-    Y_ABORT_UNLESS(info.WriteIdsSize() == info.ShadowPartitionIdsSize());
-
     TxWrites.clear();
 
-    for (size_t i = 0; i != info.WriteIdsSize(); ++i) {
-        ui64 writeId = info.GetWriteIds(i);
-        ui32 partitionId = info.GetPartitionIds(i);
-        ui32 shadowPartitionId = info.GetShadowPartitionIds(i);
+    for (size_t i = 0; i != info.TxWritesSize(); ++i) {
+        auto& txWrite = info.GetTxWrites(i);
+        ui64 writeId = txWrite.GetWriteId();
+        ui32 partitionId = txWrite.GetPartitionId();
+        ui32 shadowPartitionId = txWrite.GetShadowPartitionId();
 
         TxWrites[writeId].Partitions[partitionId] = shadowPartitionId;
 
@@ -2896,7 +2894,6 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
     request->Record.AddCmdRead()->SetKey(KeyConfig());
     request->Record.AddCmdRead()->SetKey(KeyState());
     request->Record.AddCmdRead()->SetKey(KeyTxInfo());
-    request->Record.AddCmdRead()->SetKey(KeyTxWrites());
 
     auto cmd = request->Record.AddCmdReadRange();
     cmd->MutableRange()->SetFrom(GetTxKey(Min<ui64>()));
@@ -3277,10 +3274,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
     ProcessConfigTx(ctx, request.Get());
-    AddCmdWriteTabletTxWrites(request->Record);
 
     ProcessGetOwnershipQueue();
-    AddCmdWriteTabletTxWrites(request->Record);
 
     WriteTxsInProgress = true;
 
@@ -3490,6 +3485,7 @@ void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& reques
 {
     NKikimrPQ::TTabletTxInfo info;
     SavePlanStep(info);
+    SaveTxWrites(info);
 
     TString value;
     Y_ABORT_UNLESS(info.SerializeToString(&value));
@@ -3499,32 +3495,20 @@ void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& reques
     command->SetValue(value);
 }
 
-void TPersQueue::AddCmdWriteTabletTxWrites(NKikimrClient::TKeyValueRequest& request)
-{
-    NKikimrPQ::TTabletTxWrites info;
-    SaveTxWrites(info);
-
-    TString value;
-    Y_ABORT_UNLESS(info.SerializeToString(&value));
-
-    auto command = request.AddCmdWrite();
-    command->SetKey(KeyTxWrites());
-    command->SetValue(value);
-}
-
 void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 {
     info.SetLastStep(LastStep);
     info.SetLastTxId(LastTxId);
 }
 
-void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxWrites& info)
+void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
     for (auto& [writeId, write] : TxWrites) {
         for (auto [partitionId, shadowPartitionId] : write.Partitions) {
-            info.MutableWriteIds()->Add(writeId);
-            info.MutablePartitionIds()->Add(partitionId);
-            info.MutableShadowPartitionIds()->Add(shadowPartitionId);
+            auto* txWrite = info.MutableTxWrites()->Add();
+            txWrite->SetWriteId(writeId);
+            txWrite->SetPartitionId(partitionId);
+            txWrite->SetShadowPartitionId(shadowPartitionId);
         }
     }
 }

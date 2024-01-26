@@ -27,10 +27,9 @@ struct TPeriodicExecutorOptions
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TRetryingPeriodicExecutorOptions
-{
-    TPeriodicExecutorOptions Periodic;
-    TExponentialBackoffOptions BackoffStrategy;
-};
+    : public TPeriodicExecutorOptions
+    , public TExponentialBackoffOptions
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +38,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct
+    : public virtual NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TPeriodicExecutorOptions, TPeriodicExecutorOptionsSerializer);
@@ -50,10 +49,15 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRetryingPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct
+    : public TPeriodicExecutorOptionsSerializer
+    , public ::NYT::NDetail::TExponentialBackoffOptionsSerializer
 {
 public:
-    REGISTER_EXTERNALIZED_YSON_STRUCT(TRetryingPeriodicExecutorOptions, TRetryingPeriodicExecutorOptionsSerializer);
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
+        TRetryingPeriodicExecutorOptions,
+        TRetryingPeriodicExecutorOptionsSerializer,
+        (TPeriodicExecutorOptionsSerializer)
+        (::NYT::NDetail::TExponentialBackoffOptionsSerializer));
 
     static void Register(TRegistrar registrar);
 };

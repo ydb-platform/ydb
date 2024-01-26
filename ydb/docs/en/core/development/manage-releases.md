@@ -1,0 +1,74 @@
+# Manage YDB releases
+
+There are two products based on the source code from the YDB repository, which have the independent release cycles:
+
+- [YDB server](#server)
+- [YDB command-line interface (CLI)](#cli)
+
+## YDB server release cycle {#server}
+
+### Release numbers and schedule {#server-versioning}
+
+YDB server major version comprise of two numbers separated by a dot character. First number is two digits specifiying the year, and the second is the release ordinal number within that year. For instance, `23.3` is the 3rd major release for the year 2023.
+
+As part of the YDB server development lifecycle, multiple minor versions can be released, concatenating its ordinal number to the major version after a dot. So, a full version number for YDB server looks like `23.3.5`, where `23.3` is the major version, and `5` is the minor.
+
+YDB server release schedule includes 4 major releases for each year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. Number of minor releases is not fixed, and may vary from one major to another.
+
+### Compatibility {#server-compatibility}
+
+YDB maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable.
+
+Given the above compatibility target, major releases go in pairs, with odd numbers adding new functionality switched off by feature flags, and even numbers enabling that functionality.
+
+For instance, release `23.1` comes with new functionality switched off, and can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, it can be further upgraded to `23.2` to leverage new functionality.
+
+### Release branches and tags {#server-branches-tags}
+
+Release cycle for an odd major release starts by branching from trunk (`main`) by a member of a [YDB Release team](https://github.com/orgs/ydb-platform/teams/release). Since that moment, we freeze the feature set, working on its stabilization.
+
+Release branch name starts with the characters `stable-`, followed with the major version with dots replaced by dashes (for instance, `stable-23-4`).
+
+Release cycle for an even major release starts by branching from the preceding odd major version branch.
+
+All major version releases, both odd and even, go through the testing cycle producing number of minor versions. Each minor version is fixed by tagging a relevant release branch with the full version number. So, there can be tags `24.1.1`, `24.1.2` etc. on the `stable-24-1` branch. As soon as a minor version proves its quality, we consider it as stable, and register a Release on GitHub linked to its tag.
+
+There can be more that one stable release for a major version.
+
+### Testing {#server-testing}
+
+Release testing is iterative. Each iteration starts by assigning a tag to a commit on the release branch, specifying a minor version to be tested. For instance, the minor version tag `23.3.5` marks a 5th testing iteration for the major release `23.3`.
+
+A tag can be considered as either 'candidate' or 'stable'. Initially, a first tag is assigned to the release branch right after its creation, and this tag is considered as 'candidate'.
+
+During a testing iteration, code from release branches undergo the extensive testing including deployment on the UAT/prestable and production environments of the principal users. To perform such testing, YDB code from a GitHub release tag is imported into the corporate context of a principal user, following its policies and standards. Then it's built, deployed to the necessary environments, and tested.
+
+{% include [corp_release_testing.md](_includes/corp_release_testing.md) %}
+
+Based on a list of problems, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) decides if the minor release can be promoted to stable, or a new testing iteration must be started over a new minor release tag. In fact, as soon as a critical problem is discovered during testing, the developers fix it in trunk, and merge changes to the release branch right away. So, by the time when testing finishes, if there are some commits on top of a current tag on a release branch, there will be a new tag and a new testing iteration.
+
+### Stable release {#server-stable}
+
+If testing iteration proves the quality of a minor release, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the release notes, and publishes the release on the GitHub [Releases](https://github.com/ydb-platform/ydb/releases) page, therefore declaring it as stable.
+
+{% include [corp_release_stable.md](_includes/corp_release_stable.md) %}
+
+## YDB CLI (Command-Line Interface) release cycle {#cli}
+
+### Release numbers and schedule {#cli-versioning}
+
+YDB CLI version comprise of three numbers separated by a dot character. First number is a major version (currently `2`), second is the minor, and the third is a patch number. For instance, `2.8.0` is the 2nd major, 8th minor, without patches.
+
+There's no schedule for the YDB CLI minor releases, a new release comes as soon as we have some new valuable functionality. Initially, every new minor release has `0` as a patch number. If there are critical bugs found in that version, or some minor part of functionality did not catch it as planned, we can release a patch, incrementing only the patch number, like it was for `2.1.1`.
+
+In general, release cycle for YDB CLI is much simpler and shorter than for the server, producing more frequent releases.
+
+### Release tags {#cli-tags}
+
+Tags for YDB CLI are assigned on the trunk (`main`) branch by a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) after running tests for some revision. To distinguish from the YDB server tags, YDB CLI tags have characters `CLI_` preceding the version number, for instance [CLI_2.8.0](https://github.com/ydb-platform/ydb/tree/CLI_2.8.0).
+
+{% include [corp_cli_tags.md](_includes/corp_cli_tags.md) %}
+
+### Stable release {#cli-stable}
+
+To declare a YDB CLI tag as stable, a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the release notes, and publishes the release on the GitHub [Releases](https://github.com/ydb-platform/ydb/releases) page.

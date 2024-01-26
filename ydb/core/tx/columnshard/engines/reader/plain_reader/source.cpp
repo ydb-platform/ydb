@@ -121,6 +121,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSourc
     }
 
     if (!readAction->GetExpectedBlobsSize()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         return false;
     }
 
@@ -136,6 +137,7 @@ void TPortionDataSource::DoAbort() {
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
+//    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
     for (auto&& i : Portion->GetIndexes()) {
         if (!indexIds.contains(i.GetIndexId())) {
             continue;

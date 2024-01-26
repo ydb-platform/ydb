@@ -26,6 +26,11 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
     if (!object) {
         return false;
     }
+    auto conclusion = IndexMeta->CheckModificationCompatibility(object);
+    if (conclusion.IsFail()) {
+        errors.AddError("cannot modify index: " + conclusion.GetErrorMessage());
+        return false;
+    }
     IndexMeta = NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>(object);
     return true;
 }

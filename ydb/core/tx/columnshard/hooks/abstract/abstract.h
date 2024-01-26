@@ -82,7 +82,7 @@ public:
     bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         return DoOnStartCompaction(changes);
     }
-    virtual void OnIndexSelectProcessed(const bool /*result*/) {
+    virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;

@@ -37,4 +37,20 @@ TIndexByColumns::TIndexByColumns(const ui32 indexId, const std::set<ui32>& colum
     Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
 }
 
+NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {
+    const auto* bMeta = dynamic_cast<const TIndexByColumns*>(&newMeta);
+    if (!bMeta) {
+        return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+    }
+    if (bMeta->ColumnIds.size() != ColumnIds.size()) {
+        return TConclusionStatus::Fail("columns count is different");
+    }
+    for (auto&& i : bMeta->ColumnIds) {
+        if (!ColumnIds.contains(i)) {
+            return TConclusionStatus::Fail("columns set is different or column was recreated in database");
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

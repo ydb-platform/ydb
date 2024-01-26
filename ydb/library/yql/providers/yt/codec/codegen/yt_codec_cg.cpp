@@ -236,6 +236,7 @@ public:
             break;
         }
 
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             const auto data = CastInst::Create(Instruction::Trunc, elem, Type::getInt32Ty(context), "data", Block_);
             const auto ext = CastInst::Create(Instruction::SExt, data, Type::getInt64Ty(context), "ext", Block_);
@@ -633,6 +634,7 @@ private:
             CallInst::Create(module.getFunction("ReadUint16"), { buf, velemPtr }, "", Block_);
             break;
         }
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id: {
             CallInst::Create(module.getFunction("ReadInt32"), { buf, velemPtr }, "", Block_);
             break;
@@ -787,6 +789,7 @@ private:
             case NUdf::TDataType<i16>::Id:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);

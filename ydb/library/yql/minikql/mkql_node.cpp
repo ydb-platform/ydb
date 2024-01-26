@@ -631,6 +631,7 @@ bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
         case NUdf::TDataType<NUdf::TDate>::Id:
         case NUdf::TDataType<ui16>::Id:   return self.Get<ui16>() == that.Get<ui16>();
         case NUdf::TDataType<i16>::Id:    return self.Get<i16>() == that.Get<i16>();
+        case NUdf::TDataType<NUdf::TDate32>::Id:
         case NUdf::TDataType<i32>::Id:    return self.Get<i32>() == that.Get<i32>();
         case NUdf::TDataType<NUdf::TDatetime>::Id:
         case NUdf::TDataType<ui32>::Id:   return self.Get<ui32>() == that.Get<ui32>();

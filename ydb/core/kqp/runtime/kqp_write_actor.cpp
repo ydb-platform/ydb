@@ -357,6 +357,15 @@ private:
         ++inFlightBatch.SendAttempts;
     }
 
+    void RetryShard(const ui64 shardId) {
+        if (!InFlightBatches.contains(shardId) && InFlightBatches.at(shardId).empty()) {
+            return;
+        }
+        auto& inFlightBatch = InFlightBatches.at(shardId).front();
+        inFlightBatch.TxId = 0;
+        RequestNewTxId();
+    }
+
     void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
         if (!InFlightBatches.contains(ev->Get()->ShardId)) {
             return;
@@ -368,7 +377,7 @@ private:
             return;
         }
 
-        SendRequestShard(ev->Get()->ShardId);
+        RetryShard(ev->Get()->ShardId);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -376,7 +385,7 @@ private:
         if (!InFlightBatches.contains(ev->Get()->TabletId)) {
             return;
         }
-        SendRequestShard(ev->Get()->TabletId);
+        RetryShard(ev->Get()->TabletId);
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {

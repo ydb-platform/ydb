@@ -206,6 +206,12 @@ protected:
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
+        Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
+                    __LOCATION__,
+                    NKikimr::TAlignedPagePoolCounters(),
+                    FunctionRegistry->SupportsSizedAllocators(),
+                    false
+        );
         InitMonCounters(taskCounters);
         InitializeTask();
         if (ownMemoryQuota) {
@@ -626,8 +632,8 @@ protected:
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
         CA_LOG_E(InternalErrorLogString(statusCode, issues));
         if (TaskRunner) {
-            TaskRunner->GetAllocatorPtr()->InvalidateMemInfo();
-            TaskRunner->GetAllocatorPtr()->DisableStrictAllocationCheck();
+            TaskRunner->GetAllocator().InvalidateMemInfo();
+            TaskRunner->GetAllocator().DisableStrictAllocationCheck();
         }
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
@@ -1365,6 +1371,10 @@ protected:
         }
     }
 
+protected:
+    NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() {
+        return *Alloc.get();
+    }
 private:
     virtual const TDqMemoryQuota::TProfileStats* GetMemoryProfileStats() const {
         Y_ABORT_UNLESS(MemoryQuota);
@@ -1586,7 +1596,7 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .TaskCounters = TaskCounters,
-                        .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
+                        .Alloc = TaskRunner ? Alloc : nullptr,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),
@@ -1619,7 +1629,7 @@ protected:
                             .TypeEnv = typeEnv,
                             .HolderFactory = holderFactory,
                             .ProgramBuilder = *transform.ProgramBuilder,
-                            .Alloc = TaskRunner->GetAllocatorPtr(),
+                            .Alloc = Alloc,
                             .TraceId = ComputeActorSpan.GetTraceId()
                         });
                 } catch (const std::exception& ex) {
@@ -2222,7 +2232,8 @@ protected:
 
         LastSendStatsTime = now;
     }
-
+private:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc; //must be declared on top to be destroyed after all the rest
 protected:
     const NActors::TActorId ExecuterId;
     const TTxId TxId;

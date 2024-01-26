@@ -192,6 +192,7 @@ public:
     TTaskRunnerActor(
         ITaskRunnerActor::ICallbacks* parent,
         const NTaskRunnerProxy::IProxyFactory::TPtr& factory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
         const ITaskRunnerInvoker::TPtr& invoker,
         const TTxId& txId,
         ui64 taskId,
@@ -201,6 +202,7 @@ public:
         , TraceId(TStringBuilder() << txId)
         , TaskId(taskId)
         , Factory(factory)
+        , FuncRegistry(funcRegistry)
         , Invoker(invoker)
         , Local(Invoker->IsLocal())
         , Settings(MakeIntrusive<TDqConfiguration>())
@@ -596,7 +598,15 @@ private:
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
-            TaskRunner = Factory->GetOld(settings, TraceId);
+            YQL_ENSURE(!Alloc);
+            YQL_ENSURE(FuncRegistry);
+            Alloc = std::make_unique<NKikimr::NMiniKQL::TScopedAlloc>(
+                    __LOCATION__,
+                    NKikimr::TAlignedPagePoolCounters(),
+                    FuncRegistry->SupportsSizedAllocators(),
+                    false
+            );
+            TaskRunner = Factory->GetOld(*Alloc.get(), settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
             Send(replyTo, TEvDq::TEvAbortExecution::InternalError(message), 0, cookie);
@@ -721,11 +731,13 @@ private:
         return spillingStorageInfo;
     }
 
+    std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
     const TString TraceId;
     const ui64 TaskId;
     NTaskRunnerProxy::IProxyFactory::TPtr Factory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
@@ -746,9 +758,11 @@ public:
     TTaskRunnerActorFactory(
         const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
         const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
         TWorkerRuntimeData* runtimeData)
         : ProxyFactory(proxyFactory)
         , InvokerFactory(invokerFactory)
+        , FuncRegistry(funcRegistry)
         , RuntimeData(runtimeData)
     { }
 
@@ -759,7 +773,7 @@ public:
         THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
-        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);
+        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, FuncRegistry, InvokerFactory->Create(), txId, taskId, RuntimeData);
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)
@@ -769,15 +783,17 @@ public:
 private:
     NTaskRunnerProxy::IProxyFactory::TPtr ProxyFactory;
     NDqs::ITaskRunnerInvokerFactory::TPtr InvokerFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TWorkerRuntimeData* RuntimeData;
 };
 
 ITaskRunnerActorFactory::TPtr CreateTaskRunnerActorFactory(
     const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
     const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
     TWorkerRuntimeData* runtimeData)
 {
-    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory, runtimeData));
+    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory, funcRegistry, runtimeData));
 }
 
 } // namespace NTaskRunnerActor

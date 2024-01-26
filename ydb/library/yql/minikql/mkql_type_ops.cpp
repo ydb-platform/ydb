@@ -161,6 +161,7 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
 }
 
 bool IsLeapYear(i32 year) {
+    Y_ASSERT(year != 0);
     if (Y_UNLIKELY(year < 0)) {
         ++year;
     }

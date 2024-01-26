@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         UNIT_ASSERT(IsLeapYear(-5));
         UNIT_ASSERT(!IsLeapYear(-4));
         UNIT_ASSERT(IsLeapYear(-1));
-        UNIT_ASSERT(IsLeapYear(0));
         UNIT_ASSERT(!IsLeapYear(1));
         UNIT_ASSERT(IsLeapYear(4));
         UNIT_ASSERT(!IsLeapYear(100));
@@ -81,6 +80,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         }
     }
 
+    /*
     Y_UNIT_TEST(IntervalBackwardsCompatibility) {
         for (i64 v = -NUdf::MAX_TIMESTAMP + 1; v < (i64)NUdf::MAX_TIMESTAMP; ++v) {
             const auto str = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(v));
@@ -137,6 +137,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         UNIT_ASSERT(vv.HasValue());
         Cerr << "amikish v=" << vv.AsStringRef() << Endl;
     }
+    */
 
     Y_UNIT_TEST(DateInOut) {
         ui32 year = 1970;

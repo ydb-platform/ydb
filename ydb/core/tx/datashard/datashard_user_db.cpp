@@ -44,50 +44,23 @@ NTable::EReady TDataShardUserDb::SelectRow(
     return SelectRow(tableId, key, tags, row, stats, readVersion);
 }
 
+ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
+    return std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+};
+
+ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
+    return std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
+};
+
 void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
-    UpdateRowInt(NTable::ERowOp::Upsert, tableId, key, ops);
-
-    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
-    ui64 valueBytes = std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
-
-    Counters.NUpdateRow++;
-    Counters.UpdateRowBytes += keyBytes + valueBytes;
-}
-
-void TDataShardUserDb::EraseRow(
-    const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key)
-{
-    UpdateRowInt(NTable::ERowOp::Erase, tableId, key, {});
-
-    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
-
-    Counters.NEraseRow++;
-    Counters.EraseRowBytes += keyBytes + 8;
-}
-
-void TDataShardUserDb::UpdateRowInt(
-    NTable::ERowOp rowOp,
-    const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops) {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    TSmallVec<TCell> keyCells = ConvertTableKeys(key);
-
-    CheckWriteConflicts(tableId, keyCells);
-
-    if (LockTxId) {
-        Self.SysLocksTable().SetWriteLock(tableId, keyCells);
-    } else {
-        Self.SysLocksTable().BreakLocks(tableId, keyCells);
-    }
-    Self.SetTableUpdateTime(tableId, Now);
+    ui64 valueBytes;
 
     // apply special columns if declared
     TUserTable::TSpecialUpdate specUpdates = Self.SpecialUpdates(Db, tableId);
@@ -127,29 +100,54 @@ void TDataShardUserDb::UpdateRowInt(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
+        UpdateRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
 
-        UpdateRowInDb(rowOp, tableId, localTableId, key, extendedOps);
+        valueBytes = CalculateValueBytes(extendedOps);
     } else {
-        UpdateRowInDb(rowOp, tableId, localTableId, key, ops);
+        UpdateRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+
+        valueBytes = CalculateValueBytes(ops);
     }
 
-    if (VolatileTxId) {
-        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, VolatileTxId, Db);
-    } else if (LockTxId) {
-        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, LockTxId, Db);
-    } else {
-        Self.GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells, Db);
-    }
+    ui64 keyBytes = CalculateKeyBytes(key);
 
-    Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
+    Counters.NUpdateRow++;
+    Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
-void TDataShardUserDb::UpdateRowInDb(
+void TDataShardUserDb::EraseRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
+    UpdateRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
+
+    ui64 keyBytes = CalculateKeyBytes(key);
+    
+    Counters.NEraseRow++;
+    Counters.EraseRowBytes += keyBytes + 8;
+}
+
+void TDataShardUserDb::UpdateRowInt(
     NTable::ERowOp rowOp,
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops) {
+    const TArrayRef<const NIceDb::TUpdateOp> ops) 
+{
+    TSmallVec<TCell> keyCells = ConvertTableKeys(key);
+
+    CheckWriteConflicts(tableId, keyCells);
+
+    if (LockTxId) {
+        Self.SysLocksTable().SetWriteLock(tableId, keyCells);
+    } else {
+        Self.SysLocksTable().BreakLocks(tableId, keyCells);
+    }
+    Self.SetTableUpdateTime(tableId, Now);
+
     auto* collector = GetChangeCollector(tableId);
 
     const ui64 writeTxId = GetWriteTxId(tableId);
@@ -164,6 +162,16 @@ void TDataShardUserDb::UpdateRowInDb(
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
     }
+
+    if (VolatileTxId) {
+        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, VolatileTxId, Db);
+    } else if (LockTxId) {
+        Self.GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells, LockTxId, Db);
+    } else {
+        Self.GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells, Db);
+    }
+
+    Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
 TSmallVec<TCell> TDataShardUserDb::ConvertTableKeys(const TArrayRef<const TRawTypeValue> key)

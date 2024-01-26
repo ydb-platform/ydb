@@ -4224,6 +4224,10 @@ TString TExecutor::CheckBorrowConsistency() {
             [&](const TIntrusiveConstPtr<NTable::TColdPart>& part) {
                 knownBundles.insert(part->Label);
             });
+        Database->EnumerateTableTxStatusParts(tableId,
+            [&](const TIntrusiveConstPtr<NTable::TTxStatusPart>& part) {
+                knownBundles.insert(part->Label);
+            });
     }
     return BorrowLogic->DebugCheckBorrowConsistency(knownBundles);
 }

@@ -87,6 +87,7 @@ static __thread bool NeedCanonizeFp = false;
 
 struct TMainContext {
     MemoryContextData Data;
+    MemoryContextData ErrorData;
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
     MemoryContext PrevCacheMemoryContext = nullptr;
@@ -3864,6 +3865,11 @@ void* PgInitializeMainContext() {
         &MkqlMethods,
         nullptr,
         "mkql");
+    MemoryContextCreate((MemoryContext)&ctx->ErrorData,
+        T_AllocSetContext,
+        &MkqlMethods,
+        nullptr,
+        "mkql-err");
     ctx->StartTimestamp = GetCurrentTimestamp();
     return ctx;
 }
@@ -3881,7 +3887,8 @@ void PgAcquireThreadContext(void* ctx) {
         main->PrevCacheMemoryContext = CacheMemoryContext;
         SaveRecordCacheState(&main->PrevRecordCacheState);
         LoadRecordCacheState(&main->CurrentRecordCacheState);
-        CurrentMemoryContext = ErrorContext = CacheMemoryContext = (MemoryContext)&main->Data;
+        CurrentMemoryContext = CacheMemoryContext = (MemoryContext)&main->Data;
+        ErrorContext = (MemoryContext)&main->ErrorData;
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;

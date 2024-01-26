@@ -2285,6 +2285,10 @@ public:
 
         auto [sink, key] = ParseWriteRangeVar(value->relation);
 
+        if (!sink || !key) {
+            return nullptr;
+        }
+
         std::vector<TAstNode*> options;
         options.push_back(QL(QA("pg_delete"), select));
         options.push_back(QL(QA("mode"), QA("delete")));

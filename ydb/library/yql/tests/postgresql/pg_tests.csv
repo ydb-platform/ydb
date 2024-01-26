@@ -11,7 +11,7 @@ create_misc,76,3,3.95
 create_table,368,43,11.68
 date,264,200,75.76
 dbsize,24,24,100.0
-delete,10,0,0.0
+delete,10,5,50.0
 expressions,63,14,22.22
 float4,96,82,85.42
 float8,168,140,83.33

@@ -48,6 +48,7 @@ message TAuthConfig {
     optional string LdapAuthenticationDomain = 75 [default = "ldap"];
     optional bool UseAccessServiceApiKey = 76 [default = false]; // Use IAM ApiKey
     optional string AsSignatureExpireTime = 77 [default = "1m"];
+    optional bool UseBuiltinDomain = 78 [default = true];
 }
 
 message TUserRegistryConfig {

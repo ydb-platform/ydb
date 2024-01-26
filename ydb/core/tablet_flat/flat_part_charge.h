@@ -419,7 +419,7 @@ namespace NTable {
             const auto& scheme = Part->Scheme->HistoryGroup;
             Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
 
-            // Directly use the histroy key defaults with correct sort order
+            // Directly use the history key defaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
             auto first = index->LookupKey(startKey, scheme, ESeek::Lower, keyDefaults);

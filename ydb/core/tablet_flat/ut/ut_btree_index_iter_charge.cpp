@@ -621,30 +621,31 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         for (bool reverse : {false, true}) {
-            for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
-                            TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
-                            TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
+            for (ui32 itemsLimit : xrange<ui32>(0, part.Stat.Rows + 1)) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                        for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                            for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                                TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+                                TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
 
-                            TTouchEnv bTreeEnv, flatEnv;
-                            
-                            TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
-                            for (auto c : key1) {
-                                message << c.AsValue<ui32>() << " ";
+                                TTouchEnv bTreeEnv, flatEnv;
+                                
+                                TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
+                                for (auto c : key1) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") (";
+                                for (auto c : key2) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") items " << itemsLimit;
+
+                                Charge(btreeRun, tags, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
+                                Charge(flatRun, tags, flatEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
+
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                             }
-                            message << ") (";
-                            for (auto c : key2) {
-                                message << c.AsValue<ui32>() << " ";
-                            }
-                            message << ")";
-
-                            // TODO: limits
-                            Charge(btreeRun, tags, bTreeEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
-                            Charge(flatRun, tags, flatEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
-
-                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                         }
                     }
                 }

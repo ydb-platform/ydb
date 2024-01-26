@@ -41,6 +41,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
     );
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target);
+IActor* CreateKqpTempTablesManager(
+    TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database);
 
 }  // namespace NKikimr::NKqp

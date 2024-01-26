@@ -49,6 +49,9 @@ public:
     }
 
     std::shared_ptr<arrow::RecordBatch> GetBatch() const {
+        if (!Table) {
+            return nullptr;
+        }
         return NArrow::ToBatch(Table, true);
     }
 

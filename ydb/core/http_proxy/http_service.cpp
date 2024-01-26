@@ -67,6 +67,7 @@ namespace NKikimr::NHttpProxy {
         const auto& config = Config.GetHttpConfig();
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> ev =
             MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(config.GetPort());
+        ev->MaxRecycledRequestsCount = 0;
         ev->Secure = config.GetSecure();
         ev->CertificateFile = config.GetCert();
         ev->PrivateKeyFile = config.GetKey();

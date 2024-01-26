@@ -225,9 +225,7 @@ void SetPredictedDelaysForAllQueues(const THashMap<TVDiskID, ui32> &latencies) {
             }
         }
     }
-    ui64 changedCount = 0;
     for (auto &[vDiskId, latency] : latencies) {
-        changedCount++;
         TGroupQueues::TVDisk &vDisk = DSProxyEnv.GroupQueues->FailDomains[vDiskId.FailDomain].VDisks[vDiskId.VDisk];
         ui32 begin = NKikimrBlobStorage::EVDiskQueueId::Begin;
         ui32 end = NKikimrBlobStorage::EVDiskQueueId::End;
@@ -644,92 +642,6 @@ Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
     testState.GrabEventPtr<TEvRequestEnd>();
 }
 
-void MakeTestGivenBlock42GetRecoverMultiPutStatuses(NKikimrProto::EReplyStatus expectedStatus,
-        const TVector<NKikimrProto::EReplyStatus> &statuses = {}) {
-    Y_UNUSED(expectedStatus);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
-    TTestBasicRuntime runtime(1, false);
-    Setup(runtime, type);
-
-    constexpr ui64 blobCount = 2;
-    TVector<TLogoBlobID> blobIds = {
-        TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
-        TLogoBlobID(72075186224047637, 1, 2194, 1, 142, 12288)
-    };
-    Y_ABORT_UNLESS(blobIds.size() == blobCount);
-    Y_ABORT_UNLESS(statuses.empty() || statuses.size() == blobCount);
-
-    TVector<TBlobTestSet::TBlob> blobs;
-    for (const auto& id : blobIds) {
-        TStringBuilder builder;
-        for (size_t i = 0; i < id.BlobSize(); ++i) {
-            builder << 'a';
-        }
-        blobs.emplace_back(id, builder);
-    }
-
-    TTestState testState(runtime, type, DSProxyEnv.Info);
-
-    TGroupMock &groupMock = testState.GetGroupMock();
-    testState.PutBlobsToGroupMock(blobs);
-    groupMock.Wipe(3);
-    groupMock.Wipe(4);
-
-    TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest(blobIds, true);
-    runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, true).release());
-
-    testState.HandleVGetsWithMock(type.BlobSubgroupSize());
-
-    if (statuses.empty()) {
-        groupMock.SetError(3, expectedStatus);
-        groupMock.SetError(4, expectedStatus);
-    } else {
-        TMap<TPartLocation, NKikimrProto::EReplyStatus> specialStatuses;
-        for (ui64 idx = 0; idx < blobIds.size(); ++idx) {
-            for (ui64 part = 3; part <= 4; ++part) {
-                TLogoBlobID partBlobId(blobIds[idx], part - 2 * idx);
-                TPartLocation id = testState.PrimaryVDiskForBlobPart(partBlobId);
-                specialStatuses[id] = statuses[idx];
-            }
-        }
-        groupMock.SetSpecialStatuses(specialStatuses);
-    }
-
-    testState.HandleVMultiPutsWithMock(3);
-
-    TAutoPtr<IEventHandle> handle;
-    auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
-    UNIT_ASSERT(getResult);
-    UNIT_ASSERT(getResult->Status == expectedStatus);
-}
-
-Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPutStatuses) {
-    constexpr ui64 statusCount = 3;
-    NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
-        NKikimrProto::OK,
-        NKikimrProto::BLOCKED,
-        NKikimrProto::DEADLINE
-    };
-    Y_ABORT_UNLESS(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
-    for (ui64 idx = 0; idx < statusCount; ++idx) {
-        MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx]);
-    }
-}
-
-Y_UNIT_TEST(TestGivenBlock42GetRecoverMultiPut2ItemsStatuses) {
-    constexpr ui64 statusCount = 3;
-    NKikimrProto::EReplyStatus maybeStatuses[statusCount] = {
-        NKikimrProto::OK,
-        NKikimrProto::BLOCKED,
-        NKikimrProto::DEADLINE
-    };
-    Y_ABORT_UNLESS(maybeStatuses[statusCount - 1] == NKikimrProto::DEADLINE);
-    for (ui64 idx = 1; idx < statusCount; ++idx) {
-        MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx], {maybeStatuses[idx], maybeStatuses[0]});
-        MakeTestGivenBlock42GetRecoverMultiPutStatuses(maybeStatuses[idx], {maybeStatuses[0], maybeStatuses[idx]});
-    }
-}
-
 Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
     TBlobStorageGroupType type = {TErasureType::ErasureMirror3dc};
     TTestBasicRuntime runtime(1, false);
@@ -741,7 +653,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
 
 
     TEvBlobStorage::TEvGet::TPtr ev = testState.CreateGetRequest({blobId}, false);
-    TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog, false).release());
+    TActorId getActorId = runtime.Register(DSProxyEnv.CreateGetRequestActor(ev, NKikimrBlobStorage::TabletLog).release());
     runtime.EnableScheduleForActor(getActorId);
 
     testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();

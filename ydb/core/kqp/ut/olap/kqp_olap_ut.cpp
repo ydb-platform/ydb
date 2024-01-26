@@ -762,15 +762,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
-
         TLocalHelper(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
         auto client = kikimr.GetTableClient();
-
-        // EnableDebugLogging(kikimr);
 
         {
             TStreamExecScanQuerySettings settings;
@@ -872,8 +868,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
-
         TLocalHelper(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
@@ -901,8 +895,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -932,8 +924,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -1091,8 +1081,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
-
         auto client = kikimr.GetTableClient();
 
         TLocalHelper(kikimr).CreateTestOlapTable();
@@ -1122,8 +1110,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
@@ -1175,13 +1161,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
-
         TLocalHelper(kikimr).CreateTestOlapTable();
 
         auto tableClient = kikimr.GetTableClient();
-
-        // EnableDebugLogging(kikimr);
 
         {
             auto it = tableClient.StreamExecuteScanQuery(R"(
@@ -1198,8 +1180,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[0u;]])");
         }
 
-        // EnableDebugLogging(kikimr);
-
         {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
@@ -1209,8 +1189,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         }
-
-        // EnableDebugLogging(kikimr);
 
         {
             auto it = tableClient.StreamExecuteScanQuery(R"(
@@ -1240,6 +1218,111 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
             CompareYson(result, R"([[23000u;]])");
+        }
+    }
+
+    Y_UNIT_TEST(Indexes) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER, 
+                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.1}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER, 
+                    FEATURES=`{"column_names" : ["resource_id", "uid"], "false_positive_probability" : 0.2}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[230000u;]])");
+        }
+        AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
+        TInstant start = Now();
+        ui32 compactionsStart = csController->GetCompactions().Val();
+        while (Now() - start < TDuration::Seconds(10)) {
+            if (compactionsStart != csController->GetCompactions().Val()) {
+                compactionsStart = csController->GetCompactions().Val();
+                start = Now();
+            }
+            Cerr << "WAIT_COMPACTION: " << csController->GetCompactions().Val() << Endl;
+            Sleep(TDuration::Seconds(1));
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                WHERE  resource_id = '3000008' AND level = 3 AND uid = 'uid_100000008'
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[1u;]])");
+            AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
+            AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+        }
+
+        {
+            const i64 before = csController->GetIndexesSkippingOnSelect().Val();
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            AFL_VERIFY(before != csController->GetIndexesSkippingOnSelect().Val());
+            Cout << result << Endl;
+            CompareYson(result, R"([[0u;]])");
+            AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
         }
     }
 
@@ -1427,7 +1510,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
-//        EnableDebugLogging(kikimr);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -1919,7 +2001,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -1964,7 +2045,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2011,7 +2091,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2056,7 +2135,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2101,7 +2179,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2289,7 +2366,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        //EnableDebugLogging(kikimr);
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2383,7 +2459,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-//        EnableDebugLogging(kikimr);
         TClickHelper(kikimr).CreateClickBenchTable();
         auto tableClient = kikimr.GetTableClient();
 
@@ -2422,7 +2497,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-//        EnableDebugLogging(runtime);
 
         TClickHelper(*server).CreateClickBenchTable();
 
@@ -3416,8 +3490,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 1000);
         }
 
-        // EnableDebugLogging(kikimr);
-
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
             SELECT PathId, Kind, TabletId, Sum(Rows) as Rows
@@ -3461,8 +3533,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
         }
-
-        // EnableDebugLogging(kikimr);
 
         auto tableClient = kikimr.GetTableClient();
         {
@@ -3918,8 +3988,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
 
-        // EnableDebugLogging(kikimr);
-
         auto tableClient = kikimr.GetTableClient();
 
         {
@@ -4067,8 +4135,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (ui64 i = 0; i < 10; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
         }
-
-        // EnableDebugLogging(kikimr);
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -4470,8 +4536,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        //EnableDebugLogging(kikimr);
-
         auto tableClient = kikimr.GetTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
@@ -4668,7 +4732,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TClient client(serverSettings);
 
         auto& runtime = *server->GetRuntime();
-        EnableDebugLogging(&runtime);
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);

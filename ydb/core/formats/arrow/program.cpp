@@ -20,7 +20,7 @@ enum class AggFunctionId {
     AGG_MAX = 4,
     AGG_SUM = 5,
 };
-struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
+struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
     struct Assign {
         AggFunctionId function = AggFunctionId::AGG_UNSPECIFIED;
         std::string result_column;
@@ -43,6 +43,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/yql/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NSsa {
 
@@ -605,6 +606,32 @@ IStepFunction<TAssign>::TPtr TAssign::GetFunction(arrow::compute::ExecContext* c
     return std::make_shared<TSimpleFunction>(ctx);
 }
 
+TString TAssign::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Operation != EOperation::Unspecified) {
+        sb << "op=" << Operation << ";";
+    }
+    if (YqlOperationId) {
+        sb << "yql_op=" << (NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId << ";";
+    }
+    if (Arguments.size()) {
+        sb << "arguments=[";
+        for (auto&& i : Arguments) {
+            sb << i.DebugString() << ";";
+        }
+        sb << "];";
+    }
+    if (Constant) {
+        sb << "const=" << Constant->ToString() << ";";
+    }
+    if (KernelFunction) {
+        sb << "kernel=" << KernelFunction->name() << ";";
+    }
+    sb << "column=" << Column.DebugString() << ";";
+    sb << "}";
+    return sb;
+}
 
 IStepFunction<TAggregateAssign>::TPtr TAggregateAssign::GetFunction(arrow::compute::ExecContext* ctx) const {
     if (KernelFunction) {

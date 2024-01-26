@@ -156,13 +156,7 @@ public:
 
     virtual bool HasDataInPathId(const ui64 pathId) const override {
         auto g = GetGranuleOptional(pathId);
-        if (!g) {
-            return false;
-        }
-        if (g->GetPortions().size()) {
-            return false;
-        }
-        return true;
+        return g && g->GetPortions().size();
     }
 
     bool IsGranuleExists(const ui64 pathId) const {

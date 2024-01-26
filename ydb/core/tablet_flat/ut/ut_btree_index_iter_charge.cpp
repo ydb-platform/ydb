@@ -25,10 +25,7 @@ namespace {
             return nullptr;
         }
 
-        void LoadTouched(bool clearLoaded) {
-            if (clearLoaded) {
-                Loaded.clear();
-            }
+        void LoadTouched() {
             for (const auto &g : Touched) {
                 Loaded[g.first].insert(g.second.begin(), g.second.end());
             }
@@ -63,28 +60,48 @@ namespace {
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
             if (allowFirstLastPageDifference) {
-                for (auto additionalPageId : {IndexTools::GetFirstPageId(part), IndexTools::GetLastPageId(part)}) {
+                for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages, message);
             }
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
+                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
         }
     }
 
-    TPartEggs MakePart(bool slices, ui32 levels) {
+    struct TMakePartParams {
+        const ui32 Levels = Max<ui32>();
+        const bool Groups = false;
+        const bool History = false;
+        const bool Slices = false;
+        const ui32 Rows = 40;
+    };
+
+    TPartEggs MakePart(TMakePartParams params) {
         NPage::TConf conf;
-        switch (levels) {
+        switch (params.Levels) {
         case 0:
+            if (params.Groups) {
+                conf.Group(3).PageRows = 1;
+            }
             break;
         case 1:
-            conf.Group(0).PageRows = 2;
-            break;
         case 3:
             conf.Group(0).PageRows = 2;
-            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            if (params.Groups) {
+                for (auto i : xrange(1, 4)) {
+                    conf.Group(i).PageRows = 1;
+                }
+            }
+            if (params.Levels == 3) {
+                conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+                if (params.Groups) {
+                    conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 2;
+                    conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
+                }
+            }
             break;
         default:
             Y_Fail("Unknown levels");
@@ -95,6 +112,9 @@ namespace {
         lay
             .Col(0, 0,  NScheme::NTypeIds::Uint32)
             .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 1 : 0, 2,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 2 : 0, 3,  NScheme::NTypeIds::Uint64)
+            .Col(params.Groups ? 3 : 0, 4,  NScheme::NTypeIds::String)
             .Key({0, 1});
 
         conf.WriteBTreeIndex = true;
@@ -104,14 +124,14 @@ namespace {
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
         for (ui32 i : xrange(0u, 40u)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7]));
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
         }
 
         TPartEggs eggs = cook.Finish();
 
         const auto part = *eggs.Lone();
 
-        if (slices) {
+        if (params.Slices) {
             TSlices slices;
             auto partSlices = (TSlices*)part.Slices.Get();
 
@@ -148,20 +168,24 @@ namespace {
             }
         }
 
-        if (slices) {
+        if (params.Slices) {
             UNIT_ASSERT_GT(part.Slices->size(), 1);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
         }
-        Cerr << "Slices" << Endl;
-        for (const auto &slice : *part.Slices) {
-            Cerr << " | ";
-            slice.Describe(Cerr);
-            Cerr << Endl;
-        }
+
+        Cerr << "Slices";
+        part.Slices->Describe(Cerr);
+        Cerr << Endl;
         Cerr << DumpPart(part, 3) << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, levels);
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
+        if (params.Groups) {
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount, 1);
+        }
 
         return eggs;
     }
@@ -185,7 +209,7 @@ namespace {
             if (auto ready = action(); ready != EReady::Page) {
                 return ready;
             }
-            env.LoadTouched(false);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -338,8 +362,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
         }
     }
 
-    void CheckPart(ui32 levels) {
-        TPartEggs eggs = MakePart(false, levels);
+    void CheckPart(TMakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         CheckSeekRowId(part);
@@ -349,15 +373,15 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     Y_UNIT_TEST(NoNodes) {
-        CheckPart(0);
+        CheckPart({.Levels = 0});
     }
 
     Y_UNIT_TEST(OneNode) {
-        CheckPart(1);
+        CheckPart({.Levels = 1});
     }
 
     Y_UNIT_TEST(FewNodes) {
-        CheckPart(3);
+        CheckPart({.Levels = 3});
     }
 }
 
@@ -366,12 +390,12 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
         while (true) {
             bool ready = reverse
-                ? charge.DoReverse(row1, row2, keyDefaults, itemsLimit, bytesLimit)
+                ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
             if (ready) {
                 return;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -386,15 +410,15 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             if (result.Ready) {
                 return result.Overshot;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
     }
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows)) {
+        for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
+            for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                 TCharge flat(&flatEnv, part, tags, true);
@@ -432,7 +456,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
                         
-                        UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
                     }
                 }
@@ -440,8 +464,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void CheckPart(ui32 levels) {
-        TPartEggs eggs = MakePart(false, levels);
+    void CheckPart(TMakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         auto tags = TVector<TTag>();
@@ -456,15 +480,27 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     Y_UNIT_TEST(NoNodes) {
-        CheckPart(0);
+        CheckPart({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups) {
+        CheckPart({.Levels = 0, .Groups = true});
     }
 
     Y_UNIT_TEST(OneNode) {
-        CheckPart(1);
+        CheckPart({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups) {
+        CheckPart({.Levels = 1, .Groups = true});
     }
 
     Y_UNIT_TEST(FewNodes) {
-        CheckPart(3);
+        CheckPart({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups) {
+        CheckPart({.Levels = 3, .Groups = true});
     }
 }
 
@@ -496,7 +532,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             if (result) {
                 return;
             }
-            env.LoadTouched(true);
+            env.LoadTouched();
             UNIT_ASSERT_C(failsAllowed--, "Too many fails " + message);
         }
         Y_UNREACHABLE();
@@ -610,32 +646,52 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
     }
 
-    void CheckPart(bool slices, ui32 levels) {
-        TPartEggs eggs = MakePart(slices, levels);
+    void CheckPart(TMakePartParams params) {
+        TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
 
         CheckIterate(eggs);
         CheckCharge(eggs);
     }
 
-    Y_UNIT_TEST(NoNodes_SingleSlice) {
-        CheckPart(false, 0);
+    Y_UNIT_TEST(NoNodes) {
+        CheckPart({.Levels = 0});
     }
 
-    Y_UNIT_TEST(OneNode_SingleSlice) {
-        CheckPart(false, 1);
+    Y_UNIT_TEST(NoNodes_Groups) {
+        CheckPart({.Levels = 0, .Groups = true});
     }
 
-    Y_UNIT_TEST(OneNode_ManySlices) {
-        CheckPart(true, 1);
+    Y_UNIT_TEST(OneNode) {
+        CheckPart({.Levels = 1});
     }
 
-    Y_UNIT_TEST(FewNodes_SingleSlice) {
-        CheckPart(false, 3);
+    Y_UNIT_TEST(OneNode_Groups) {
+        CheckPart({.Levels = 1, .Groups = true});
     }
 
-    Y_UNIT_TEST(FewNodes_ManySlices) {
-        CheckPart(true, 3);
+    Y_UNIT_TEST(OneNode_Slices) {
+        CheckPart({.Levels = 1, .Slices = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_Slices) {
+        CheckPart({.Levels = 1, .Groups = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes) {
+        CheckPart({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups) {
+        CheckPart({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Slices) {
+        CheckPart({.Levels = 3, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_Slices) {
+        CheckPart({.Levels = 3, .Groups = true, .Slices = true});
     }
 }
 

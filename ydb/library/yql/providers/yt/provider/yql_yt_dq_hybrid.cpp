@@ -79,6 +79,11 @@ private:
         return !HasSettingsExcept(*operation.Ref().Child(4U), DqOpSupportedSettings);
     }
 
+    bool HasDescOrderOutput(const TYtOutputOpBase& operation) const {
+        TYqlRowSpecInfo outRowSpec(operation.Output().Item(0).RowSpec());
+        return outRowSpec.IsSorted() && outRowSpec.HasAuxColumns();
+    }
+
     std::optional<std::array<ui64, 2U>> CanReadHybrid(const TYtSection& section) const {
         if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings))
             return std::nullopt;
@@ -266,6 +271,10 @@ private:
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
                 if (const auto stat = CanReadHybrid(sort.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        if (HasDescOrderOutput(sort)) {
+                            PushStat("HybridSkipDescSort");
+                            return node;
+                        }
                         YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
                         PushStat("HybridTry");
                         PushHybridStat("Try", node.Raw()->Content());
@@ -287,6 +296,10 @@ private:
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
                 if (const auto stat = CanReadHybrid(merge.Input().Item(0))) {
                     if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        if (HasDescOrderOutput(merge)) {
+                            PushStat("HybridSkipDescSort");
+                            return node;
+                        }
                         YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
                         PushStat("HybridTry");
                         PushHybridStat("Try", node.Raw()->Content());

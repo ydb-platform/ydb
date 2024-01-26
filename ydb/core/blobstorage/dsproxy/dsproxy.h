@@ -405,8 +405,7 @@ public:
 
     void SendToQueues(TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> &vGets, bool timeStatsEnabled) {
         for (auto& request : vGets) {
-            Y_ABORT_UNLESS(request->Record.HasCookie());
-            ui64 messageCookie = request->Record.GetCookie();
+            const ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
             request->Record.MutableTimestamps()->SetSentByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
@@ -442,7 +441,6 @@ public:
     template <typename TEvent>
     void SendToQueues(TDeque<std::unique_ptr<TEvent>> &events, bool timeStatsEnabled) {
         for (auto& request : events) {
-            Y_ABORT_UNLESS(request->Record.HasCookie());
             ui64 messageCookie = request->Record.GetCookie();
             CountEvent(*request);
             const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
@@ -650,8 +648,7 @@ IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupIn
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
     ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
-    TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-    bool isVMultiPutMode);
+    TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters);
 
 IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,

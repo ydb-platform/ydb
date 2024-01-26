@@ -674,6 +674,7 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
     }
 
     const auto kernel = ctx.AddYqlKernelBinaryFunc(op, *leftColumn.Type, *rightColumn.Type, type);
+    cmpFunc->SetYqlOperationId((ui32)op);
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
     cmpFunc->SetKernelIdx(kernel.first);
     cmpFunc->AddArguments()->SetId(leftColumn.Id);
@@ -706,8 +707,10 @@ const TTypedColumn BuildLogicalProgram(const TExprNode::TChildrenType& args, con
         const auto idx = ctx.GetKernelRequestBuilder().AddBinaryOp(function, block, block, block);
         logicalFunc->SetKernelIdx(idx);
         logicalFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        logicalFunc->SetYqlOperationId((ui32)function);
     } else {
         logicalFunc->SetFunctionType(function);
+        logicalFunc->SetId((ui32)function);
     }
 
     return {logicalOp->GetColumn().GetId(), block};

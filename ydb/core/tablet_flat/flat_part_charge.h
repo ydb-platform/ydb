@@ -438,7 +438,7 @@ namespace NTable {
                 ready &= bool(page);
 
                 if (!HistoryGroups) {
-                    // don't need to caclulate prechargedFirstRowId/prechargedLastRowId
+                    // don't need to calculate prechargedFirstRowId/prechargedLastRowId
                     continue;
                 }
 

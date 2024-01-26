@@ -124,7 +124,7 @@ public:
                             beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
                         }
                         // simulate the worst case when we skip key1 page
-                        ApplyItemsLimit(Max(beginRowId, node.GetShortChild(pos).RowCount), endRowId, itemsLimit, overshot);
+                        ApplyItemsLimit(node.GetShortChild(pos).RowCount, endRowId, itemsLimit, overshot);
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -137,6 +137,14 @@ public:
                     return true;
                 } else { // skip unloaded page rows
                     if (child.PageId == key1PageId) {
+                        if (itemsLimit) {
+                            if (itemsLimit > child.EndRowId - child.BeginRowId) {
+                                itemsLimit -= child.EndRowId - child.BeginRowId;
+                                ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
+                            } else {
+                                chargeGroups = false;
+                            }
+                        }
                         beginRowId = Max(beginRowId, child.EndRowId);
                     }
                     if (child.PageId == key2PageId) {
@@ -166,6 +174,14 @@ public:
                     return true;
                 } else { // skip unloaded page rows
                     if (child.PageId == key1PageId) {
+                        if (itemsLimit) {
+                            if (itemsLimit > child.EndRowId - child.BeginRowId) {
+                                itemsLimit -= child.EndRowId - child.BeginRowId;
+                                ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
+                            } else {
+                                chargeGroups = false;
+                            }
+                        }
                         beginRowId = Max(beginRowId, child.EndRowId);
                     }
                     if (child.PageId == key2PageId) {
@@ -174,6 +190,9 @@ public:
                     return false;
                 }
             } else {
+                if (child.PageId == key1PageId) {
+                    ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
+                }
                 return HasDataPage(child.PageId, { });
             }
         };

@@ -2544,8 +2544,7 @@ void TPersQueue::HandleShadowPartition(const ui64 responseCookie,
     } else if (req.CmdWriteSize()) {
         HandleWriteRequestForShadowPartition(responseCookie, req, ctx);
     } else {
-        PQ_LOG_ERROR_AND_DIE("CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
-        return;
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
     }
 }
 

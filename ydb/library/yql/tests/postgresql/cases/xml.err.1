@@ -875,10 +875,16 @@ CREATE VIEW xmlview9 AS SELECT xmlserialize(content 'good' as text);
 SELECT table_name, view_definition FROM information_schema.views
   WHERE table_name LIKE 'xmlview%' ORDER BY 1;
 </sql-statement>
--stdin-:<main>: Error: Parse Sql
+-stdin-:<main>: Error: Type annotation
 
-    -stdin-:<main>:1:41: Error: Unknown cluster: information_schema
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
     	SELECT table_name, view_definition FROM information_schema.views
+	^
+        -stdin-:<main>:1:41: Error: At function: PgReadTable!
+        	SELECT table_name, view_definition FROM information_schema.views
+	                                        ^
+            -stdin-:<main>:1:41: Error: Unsupported table: views
+            	SELECT table_name, view_definition FROM information_schema.views
 	                                        ^
 <sql-statement>
 -- Text XPath expressions evaluation

@@ -12,6 +12,8 @@ SELECT '10e400'::float8;
 SELECT '-10e400'::float8;
 SELECT '10e-400'::float8;
 SELECT '-10e-400'::float8;
+-- test smallest normalized input
+SELECT float8send('2.2250738585072014E-308'::float8);
 -- bad input
 INSERT INTO FLOAT8_TBL(f1) VALUES ('');
 INSERT INTO FLOAT8_TBL(f1) VALUES ('     ');

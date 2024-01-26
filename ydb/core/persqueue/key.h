@@ -57,15 +57,15 @@ public:
         MarkUserDeprecated = 'u'
     };
 
-    TKeyPrefix(EType type, const ui32 partition)
+    TKeyPrefix(EType type, const TPartitionId& partition)
         : Partition(partition)
     {
         Resize(UnmarkedSize());
         *PtrType() = type;
-        memcpy(PtrPartition(),  Sprintf("%.10" PRIu32, partition).data(), 10);
+        memcpy(PtrPartition(),  Sprintf("%.10" PRIu32, Partition.InternalPartitionId).data(), 10);
     }
 
-    TKeyPrefix(EType type, const ui32 partition, EMark mark)
+    TKeyPrefix(EType type, const TPartitionId& partition, EMark mark)
         : TKeyPrefix(type, partition)
     {
         Resize(MarkedSize());
@@ -73,7 +73,7 @@ public:
     }
 
     TKeyPrefix()
-        : TKeyPrefix(TypeNone, 0)
+        : TKeyPrefix(TypeNone, TPartitionId(0))
     {}
 
     virtual ~TKeyPrefix()
@@ -96,15 +96,16 @@ public:
         return EType(*PtrType());
     }
 
-    ui32 GetPartition() const { return Partition; }
+    const TPartitionId& GetPartition() const { return Partition; }
 
 protected:
     static constexpr ui32 UnmarkedSize() { return 1 + 10; }
 
     void ParsePartition()
     {
-        Partition = FromString<ui32>(TStringBuf{PtrPartition(), 10});
+        Partition.InternalPartitionId = FromString<ui32>(TStringBuf{PtrPartition(), 10});
     }
+
 private:
     char* PtrType() { return Data(); }
     char* PtrMark() { return Data() + UnmarkedSize(); }
@@ -114,7 +115,7 @@ private:
     const char* PtrMark() const { return Data() + UnmarkedSize(); }
     const char* PtrPartition() const { return Data() + 1; }
 
-    ui32 Partition;
+    TPartitionId Partition;
 };
 
 // {char type; ui32 partiton; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
@@ -127,7 +128,7 @@ private:
 class TKey : public TKeyPrefix
 {
 public:
-    TKey(EType type, const ui32 partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const bool isHead = false)
+    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const bool isHead = false)
         : TKeyPrefix(type, partition)
         , Offset(offset)
         , Count(count)
@@ -165,7 +166,7 @@ public:
     }
 
     TKey()
-        : TKey(TypeNone, 0, 0, 0, 0, 0)
+        : TKey(TypeNone, TPartitionId(0), 0, 0, 0, 0)
     {}
 
     virtual ~TKey()

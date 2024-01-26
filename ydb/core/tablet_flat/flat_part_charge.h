@@ -104,11 +104,10 @@ namespace NTable {
                 }
             }
 
-            auto result = DoPrecharge(key1, key2, key1Page, key2Page, first, last, 
+            bool ready = DoPrecharge(key1, key2, key1Page, key2Page, first, last, 
                 startRow, endRow, keyDefaults, itemsLimit, bytesLimit);
-            result.Overshot &= overshot;
 
-            return result;
+            return { ready, overshot };
         }
 
         TResult DoReverse(const TCells key1, const TCells key2, TRowId row1, TRowId row2, 
@@ -196,17 +195,18 @@ namespace NTable {
          *
          * If @param key1Page specified, @param first should be the same.
          */
-        TResult DoPrecharge(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
+        bool DoPrecharge(const TCells key1, const TCells key2, const TIter key1Page, const TIter key2Page,
                 const TIter first, const TIter last, TRowId startRowId, TRowId endRowId,
                 const TKeyCellDefaults &keyDefaults, ui64 itemsLimit, ui64 bytesLimit) const noexcept
         {
             bool ready = true;
-            ui64 items = 0;
-            ui64 bytes = 0;
 
             if (first) {
                 Y_DEBUG_ABORT_UNLESS(first <= last);
                 Y_DEBUG_ABORT_UNLESS(!key1Page || key1Page == first);
+
+                ui64 items = 0;
+                ui64 bytes = 0;
 
                 TRowId prechargedFirstRowId, prechargedLastRowId;
                 bool needExactBounds = Groups || HistoryIndex;
@@ -235,16 +235,6 @@ namespace NTable {
                             prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
                         }
                     }
-                    if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) { // regardless of key2 we already have touched some current page rows
-                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
-                        if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
-                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
-                        }
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
-                        }
-                        items += prechargeCurrentLastRowId - prechargeCurrentFirstRowId + 1;
-                    }
                     if (key2Page && key2Page <= current) {
                         if (key2Page == current) {
                             if (needExactBounds && page) {
@@ -261,14 +251,24 @@ namespace NTable {
                             prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
                         }
                     }
+                    if (itemsLimit && prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
+                        if (prechargeCurrentLastRowId - prechargeCurrentFirstRowId > left) {
+                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId + left;
+                        }
+                    }
 
                     if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
+                        if (!items) {
+                            prechargedFirstRowId = prechargeCurrentFirstRowId;
+                        }
                         prechargedLastRowId = prechargeCurrentLastRowId;
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroup(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
                             }
                         }
+                        items += prechargeCurrentLastRowId - prechargeCurrentFirstRowId + 1;
                     }
                 }
 
@@ -277,7 +277,7 @@ namespace NTable {
                 }
             }
 
-            return {ready, !LimitExceeded(items, itemsLimit) && !LimitExceeded(bytes, bytesLimit)};
+            return ready;
         }
 
         /**
@@ -419,7 +419,7 @@ namespace NTable {
             const auto& scheme = Part->Scheme->HistoryGroup;
             Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
 
-            // Directly use the history key defaults with correct sort order
+            // Directly use the histroy key defaults with correct sort order
             const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
             auto first = index->LookupKey(startKey, scheme, ESeek::Lower, keyDefaults);
@@ -438,7 +438,7 @@ namespace NTable {
                 ready &= bool(page);
 
                 if (!HistoryGroups) {
-                    // don't need to calculate prechargedFirstRowId/prechargedLastRowId
+                    // don't need to caclulate prechargedFirstRowId/prechargedLastRowId
                     continue;
                 }
 

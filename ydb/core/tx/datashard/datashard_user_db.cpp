@@ -2,11 +2,11 @@
 
 namespace NKikimr::NDataShard {
 
-TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, const TStepOrder& stepTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
+TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& readVersion, const TRowVersion& writeVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
     , Db(db)
     , ChangeGroupProvider(self, db)
-    , StepTxId(stepTxId)
+    , GlobalTxId(globalTxId)
     , LockTxId(0)
     , LockNodeId(0)
     , ReadVersion(readVersion)
@@ -225,7 +225,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {
                 if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
-                    SetVolatileTxId(StepTxId.TxId);
+                    SetVolatileTxId(GlobalTxId);
                 }
             }
         });
@@ -481,7 +481,7 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
             if (!VolatileTxId) {
-                SetVolatileTxId(StepTxId.TxId);
+                SetVolatileTxId(GlobalTxId);
             }
             VolatileCommitOrdered = true;
             VolatileDependencies.clear();
@@ -525,7 +525,7 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
                 // it into a real volatile transaction, it works as usual in
                 // every sense, only persistent commit order is affected by
                 // a dependency below.
-                SetVolatileTxId(StepTxId.TxId);
+                SetVolatileTxId(GlobalTxId);
             }
             VolatileDependencies.insert(info->TxId);
         }

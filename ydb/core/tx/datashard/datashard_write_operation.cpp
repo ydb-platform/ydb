@@ -17,13 +17,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
+TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev)
     : Ev(ev)
-    , UserDb(*self, txc.DB, stepTxId, readVersion, writeVersion, EngineHostCounters, TAppData::TimeProvider->Now())
+    , UserDb(*self, txc.DB, globalTxId, readVersion, writeVersion, EngineHostCounters, TAppData::TimeProvider->Now())
     , KeyValidator(*self, txc.DB)
     , TabletId(self->TabletID())
     , Ctx(ctx)
-    , StepTxId(stepTxId)
     , ReceivedAt(receivedAt)
     , TxSize(0)
     , ErrCode(NKikimrTxDataShard::TError::OK)
@@ -42,7 +41,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    LOG_TRACE_S(Ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << StepTxId << " at " << TabletId << ", record: " << GetRecord().ShortDebugString());
+    LOG_TRACE_S(Ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << GetRecord().ShortDebugString());
 
     if (!ParseRecord(self->TableInfos))
         return;
@@ -320,7 +319,7 @@ TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self, TTransac
     if (!WriteTx) {
         Y_ABORT_UNLESS(Ev);
         auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, ctx, GetStepOrder(), GetReceivedAt(), readVersion, writeVersion, Ev);
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, txc, ctx, GetGlobalTxId(), GetReceivedAt(), readVersion, writeVersion, Ev);
     }
     return WriteTx;
 }

@@ -75,7 +75,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         self->GetVolatileTxManager().GetTxMap());
 
     NMiniKQL::TEngineHostCounters engineHostCounters;
-    TDataShardUserDb userDb(*self, txc.DB, TStepOrder(0, 0), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+    TDataShardUserDb userDb(*self, txc.DB, globalTxId, readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
     TDataShardChangeGroupProvider groupProvider(*self, txc.DB);
 
     if (CollectChanges) {

@@ -46,7 +46,7 @@ public:
 
         if (eraseTx->HasDependents()) {
             NMiniKQL::TEngineHostCounters engineHostCounters;
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetStepOrder(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 

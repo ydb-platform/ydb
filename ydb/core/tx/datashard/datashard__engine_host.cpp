@@ -199,7 +199,7 @@ class TDataShardEngineHost final
     , public IDataShardChangeGroupProvider
 {
 public:
-    TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, const TStepOrder& stepTxId, TEngineHostCounters& counters, TInstant now)
+    TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, ui64 globalTxId, TEngineHostCounters& counters, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()),
@@ -207,7 +207,7 @@ public:
                 self->GetKeyAccessSampler()))
         , Self(self)
         , EngineBay(engineBay)
-        , UserDb(*self, db, stepTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now)        
+        , UserDb(*self, db, globalTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now)        
     {
     }
 
@@ -479,10 +479,11 @@ private:
 //
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
-    : KeyValidator(*self, txc.DB)
+    : StepTxId(stepTxId)
+    , KeyValidator(*self, txc.DB)
 {
     auto now = TAppData::TimeProvider->Now();
-    EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId, EngineHostCounters, now);
+    EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
@@ -668,11 +669,7 @@ bool TEngineBay::GetVolatileCommitOrdered() const {
 IEngineFlat * TEngineBay::GetEngine() {
     if (!Engine) {
         Engine = CreateEngineFlat(*EngineSettings);
-        
-        Y_ABORT_UNLESS(EngineHost);
-        auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
-
-        Engine->SetStepTxId(host->GetUserDb().GetStepTxId().ToPair());
+        Engine->SetStepTxId(StepTxId.ToPair());
     }
 
     return Engine.Get();

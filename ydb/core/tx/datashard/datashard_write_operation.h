@@ -19,7 +19,7 @@ class TValidatedWriteTx: TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
+    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
     ~TValidatedWriteTx();
 
     static constexpr ui64 MaxReorderTxKeys() {
@@ -173,7 +173,6 @@ private:
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 
-    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);

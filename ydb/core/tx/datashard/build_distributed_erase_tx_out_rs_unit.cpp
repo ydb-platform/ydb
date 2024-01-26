@@ -106,7 +106,7 @@ public:
         auto now = TAppData::TimeProvider->Now();
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
         NMiniKQL::TEngineHostCounters engineHostCounters;
-        TDataShardUserDb userDb(DataShard, txc.DB, op->GetStepOrder(), readVersion, writeVersion, engineHostCounters, now);
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, now);
         bool pageFault = false;
 
         TDynBitMap confirmedRows;

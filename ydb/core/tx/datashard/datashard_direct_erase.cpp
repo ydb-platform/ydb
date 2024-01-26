@@ -71,7 +71,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         engineHostCounters.emplace();
-        userDb.emplace(*self, params.Txc->DB, TStepOrder(0, 0), params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
+        userDb.emplace(*self, params.Txc->DB, params.GlobalTxId, params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
         groupProvider.emplace(*self, params.Txc->DB);
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
     }

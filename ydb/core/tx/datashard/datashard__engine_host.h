@@ -120,6 +120,7 @@ public:
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
 
 private:
+    TStepOrder StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
     THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
     THolder<NMiniKQL::IEngineFlat> Engine;

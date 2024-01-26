@@ -38,7 +38,7 @@ public:
     TDataShardUserDb(
             TDataShard& self,
             NTable::TDatabase& db,
-            const TStepOrder& stepTxId,
+            ui64 globalTxId,
             const TRowVersion& readVersion,
             const TRowVersion& writeVersion,
             NMiniKQL::TEngineHostCounters& counters, 
@@ -112,8 +112,8 @@ private:
     NTable::TDatabase& Db;
 
     TDataShardChangeGroupProvider ChangeGroupProvider;
-    
-    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
+
+    YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_ACCESSOR_DEF(ui64, LockTxId);
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);

@@ -2631,9 +2631,6 @@ private:
     TControlWrapper DataTxProfileBufferThresholdMs;
     TControlWrapper DataTxProfileBufferSize;
 
-    TControlWrapper ReadColumnsScanEnabled;
-    TControlWrapper ReadColumnsScanInUserPool;
-
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
 

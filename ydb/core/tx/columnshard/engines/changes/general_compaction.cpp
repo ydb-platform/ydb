@@ -181,6 +181,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstruc
             for (auto&& p : columnChunks) {
                 portionColumns.emplace(p.first, p.second[i].GetChunks());
             }
+            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
             batchSlices.emplace_back(portionColumns, schemaDetails, context.Counters.SplitterCounters, GetSplitSettings());
         }
         TSimilarSlicer slicer(GetSplitSettings().GetExpectedPortionSize());

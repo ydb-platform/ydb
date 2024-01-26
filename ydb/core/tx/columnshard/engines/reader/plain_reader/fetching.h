@@ -27,7 +27,9 @@ public:
         AFL_VERIFY(nextStep);
         NextStep = nextStep;
         nextStep->Index = Index + 1;
-        nextStep->BranchName = BranchName;
+        if (!nextStep->BranchName) {
+            nextStep->BranchName = BranchName;
+        }
         return nextStep;
     }
 
@@ -99,22 +101,66 @@ public:
     }
 };
 
+class TFakeStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+public:
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& /*source*/, const std::shared_ptr<IFetchingStep>& /*step*/) const override {
+        return true;
+    }
+
+    TFakeStep()
+        : TBase("FAKE")
+    {
+
+    }
+};
+
+class TApplyIndexStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const NIndexes::TIndexCheckerContainer IndexChecker;
+protected:
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+public:
+    TApplyIndexStep(const NIndexes::TIndexCheckerContainer& indexChecker)
+        : TBase("APPLY_INDEX")
+        , IndexChecker(indexChecker)
+    {
+
+    }
+};
+
 class TBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     std::shared_ptr<TColumnsSet> Columns;
+    std::shared_ptr<TIndexesSet> Indexes;
 protected:
     virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const override;
     virtual ui64 PredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
-        return TStringBuilder() << "columns=" << Columns->DebugString() << ";";
+        TStringBuilder sb;
+        if (Columns) {
+            sb << "columns=" << Columns->DebugString() << ";";
+        } else {
+            sb << "indexes=" << Indexes->DebugString() << ";";
+        }
+        return sb;
     }
 public:
     TBlobsFetchingStep(const std::shared_ptr<TColumnsSet>& columns, const TString& nameBranch = "")
         : TBase("FETCHING", nameBranch)
-        , Columns(columns)
-    {
+        , Columns(columns) {
         AFL_VERIFY(Columns);
+        AFL_VERIFY(Columns->GetColumnsCount());
+    }
+
+    TBlobsFetchingStep(const std::shared_ptr<TIndexesSet>& indexes, const TString& nameBranch = "")
+        : TBase("FETCHING", nameBranch)
+        , Indexes(indexes) {
+        AFL_VERIFY(Indexes);
+        AFL_VERIFY(Indexes->GetIndexesCount());
     }
 };
 

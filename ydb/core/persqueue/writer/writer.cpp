@@ -1,3 +1,4 @@
+#include "common.h"
 #include "source_id_encoding.h"
 #include "util/generic/fwd.h"
 #include "writer.h"
@@ -127,27 +128,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         FillHeader(*ev->Record.MutablePartitionRequest(), std::forward<Args>(args)...);
 
         return ev;
-    }
-
-    static bool BasicCheck(const NKikimrClient::TResponse& response, TString& error, bool mustHaveResponse = true) {
-        if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            error = TStringBuilder() << "Status is not ok"
-                << ": status# " << static_cast<ui32>(response.GetStatus());
-            return false;
-        }
-
-        if (response.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-            error = TStringBuilder() << "Error code is not ok"
-                << ": code# " << static_cast<ui32>(response.GetErrorCode());
-            return false;
-        }
-
-        if (mustHaveResponse && !response.HasPartitionResponse()) {
-            error = "Absent partition response";
-            return false;
-        }
-
-        return true;
     }
 
     static NKikimrClient::TResponse MakeResponse(ui64 cookie) {
@@ -324,6 +304,10 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         const auto& response = record.GetPartitionResponse();
         if (!response.HasCmdGetOwnershipResult()) {
             return InitResult("Absent Ownership result", std::move(record));
+        }
+
+        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
+            return InitResult("Partition is inactive", std::move(record));
         }
 
         OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();

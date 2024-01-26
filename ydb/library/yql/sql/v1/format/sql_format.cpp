@@ -2417,6 +2417,8 @@ private:
                 if (pushedIndent) {
                     PopCurrentIndent();
                 }
+
+                break;
             }
             case TRule_neq_subexpr_TBlock3::kAlt2:
                 Visit(b.GetAlt2());

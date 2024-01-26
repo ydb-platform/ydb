@@ -146,6 +146,8 @@ namespace NTest {
     TString DumpPart(const TPartStore&, ui32 depth = 10) noexcept;
 
     namespace IndexTools {
+        using TGroupId = NPage::TGroupId;
+
         inline size_t CountMainPages(const TPartStore& part) {
             size_t result = 0;
 
@@ -188,16 +190,16 @@ namespace NTest {
             return index.GetRecord();
         }
 
-        inline TPageId GetFirstPageId(const TPartStore& part) {
+        inline TPageId GetFirstPageId(const TPartStore& part, TGroupId groupId) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartIndexIt index(&part, &env, groupId);
             index.Seek(0);
             return index.GetPageId();
         }
 
-        inline TPageId GetLastPageId(const TPartStore& part) {
+        inline TPageId GetLastPageId(const TPartStore& part, TGroupId groupId) {
             TTestEnv env;
-            TPartIndexIt index(&part, &env, { });
+            TPartIndexIt index(&part, &env, groupId);
             index.Seek(index.GetEndRowId() - 1);
             return index.GetPageId();
         }

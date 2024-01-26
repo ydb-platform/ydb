@@ -1,5 +1,5 @@
 #include "abstract.h"
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 
 namespace NKikimr::NKqp {
 

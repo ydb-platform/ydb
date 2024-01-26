@@ -222,7 +222,7 @@ struct TBlobDepotTestEnvironment {
         {
             auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
             cmd->SetName("vg");
-            cmd->SetHiveId(envPtr->Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+            cmd->SetHiveId(envPtr->Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
             cmd->SetStoragePoolName(virtualPool);
             auto *prof = cmd->AddChannelProfiles();
             prof->SetStoragePoolName(envPtr->StoragePoolName);

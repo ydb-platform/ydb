@@ -269,6 +269,8 @@ namespace NYql {
             switch (dataSourceKind) {
                 case NYql::NConnector::NApi::CLICKHOUSE:
                     break;
+                case NYql::NConnector::NApi::YDB:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
                     // for backward compability set schema "public" by default
                     // TODO: simplify during https://st.yandex-team.ru/YQ-2494
@@ -324,7 +326,7 @@ namespace NYql {
                         dbNameTarget = "postgres";
                         break;
                     default:
-                        ythrow yexception() << "Unexpected data source kind: '"
+                        ythrow yexception() << "You must provide database name explicitly for data source kind: '"
                                             << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
                 }
             } // else take database name from table path

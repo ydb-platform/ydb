@@ -1031,9 +1031,9 @@ struct TEvPQ {
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
         TEvGetWriteInfoResponse(ui32 cookie,
-                                THashMap<TString, NPQ::TSeqNoRange> seqNo,
-                                std::deque<NPQ::TDataKey> bodyKeys,
-                                TVector<NPQ::TClientBlob> head) :
+                                THashMap<TString, NPQ::TSeqNoRange>&& seqNo,
+                                std::deque<NPQ::TDataKey>&& bodyKeys,
+                                TVector<NPQ::TClientBlob>&& head) :
             Cookie(cookie),
             SeqNo(std::move(seqNo)),
             BodyKeys(std::move(bodyKeys)),

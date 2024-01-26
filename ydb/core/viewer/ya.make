@@ -271,6 +271,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/server
     ydb/core/graph/api
+    ydb/core/graph/protos
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check

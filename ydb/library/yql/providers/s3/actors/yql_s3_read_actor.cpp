@@ -396,6 +396,8 @@ public:
     void Bootstrap() {
         if (UseRuntimeListing) {
             Schedule(PoisonTimeout, new TEvents::TEvPoison());
+            LOG_I("TS3FileQueueActor", "Sleeping");
+            Sleep(TDuration::Seconds(1));
         }
         if (Directories.empty()) {
             LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list");
@@ -595,7 +597,11 @@ public:
     }
     
     void Handle(TEvents::TEvPoison::TPtr& ev) {
-        if (UseRuntimeListing) {
+        LOG_D("TS3FileQueueActor", "Handling poison from " << ev->Sender << ", already recieved from " << FinishedConsumers.size() << " ReadActors");
+        if (ev->Sender == TActorId()) {
+            LOG_D("TS3FileQueueActor", "PoisonTimeout reached");
+            PassAway();
+        } else if (UseRuntimeListing) {
             FinishedConsumers.insert(ev->Sender);
             if (FinishedConsumers.size() >= ConsumersCount) {
                 PassAway();
@@ -810,7 +816,7 @@ private:
     const ES3PatternType PatternType;
     
     static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
-    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(5);
+    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {

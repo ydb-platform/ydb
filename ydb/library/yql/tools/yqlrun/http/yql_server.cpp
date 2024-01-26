@@ -141,7 +141,8 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(const THolder<TGate
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) },
         { "plato_rtmr", TString(RtmrProviderName) },
-        { "pg_catalog", TString(PgProviderName) }
+        { "pg_catalog", TString(PgProviderName) },
+        { "information_schema", TString(PgProviderName) },
     };
 
     NSQLTranslation::TTranslationSettings settings;

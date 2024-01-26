@@ -400,6 +400,7 @@ int Main(int argc, const char *argv[])
     THashSet<TString> sqlFlags;
     clusterMapping["plato"] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
     ui32 progsConcurrentCount = 0;
     TString paramsFile;
     ui16 syntaxVersion;

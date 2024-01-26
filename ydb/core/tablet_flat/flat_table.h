@@ -13,6 +13,7 @@
 #include "flat_table_stats.h"
 #include "flat_table_subset.h"
 #include "flat_table_misc.h"
+#include "flat_table_observer.h"
 #include "flat_sausage_solid.h"
 #include "util_basics.h"
 
@@ -322,7 +323,7 @@ public:
 
     TCompactionStats GetCompactionStats() const;
 
-    void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept;
+    void SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept;
 
 private:
     TMemTable& MemTable();
@@ -358,6 +359,7 @@ private:
     absl::flat_hash_set<ui64> CheckTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
+    TIntrusivePtr<ITableObserver> TableObserver;
 
 private:
     struct TRollbackRemoveTxRef {

@@ -825,7 +825,7 @@ TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
                     result.resize(expectedSize);
                     result[0] = '\\';
                     result[1] = 'x';
-                    const auto cnt = hex_encode(rawValue.data(), rawValue.size(), result.begin() + 2);
+                    const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
 
                     Y_ASSERT(cnt + 2 == expectedSize);
 
@@ -1071,6 +1071,7 @@ int Main(int argc, char* argv[])
     static const TString DefaultCluster{"plato"};
     clusterMapping[DefaultCluster] = YtProviderName;
     clusterMapping["pg_catalog"] = PgProviderName;
+    clusterMapping["information_schema"] = PgProviderName;
 
     opts.AddHelpOption();
     opts.AddLongOption("datadir", "directory for tables").StoreResult<TString>(&rawDataDir);

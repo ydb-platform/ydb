@@ -120,13 +120,6 @@ struct TMessage {
     #undef DEFINE_CHECKER_GETTER
 };
 
-struct TDataKey {
-    TKey Key;
-    ui32 Size;
-    TInstant Timestamp;
-    ui64 CumulativeSize;
-};
-
 
 } // namespace NKikimr::NPQ
 

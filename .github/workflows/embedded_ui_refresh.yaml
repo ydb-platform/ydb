@@ -47,7 +47,7 @@ jobs:
           mv -vf $TEMP_ASSET_DIR/$ASSET_NAME/* $TARGET_DIR
 
           # List of files in the target directory.
-          NEW_RESOURCES=$(find $TARGET_DIR -type f | grep -v '.map' | sort)
+          NEW_RESOURCES=$(find $TARGET_DIR -type f | sort)
 
           # Current indentation of the start pointer line.
           INDENTATION=$(grep -e "$START_POINTER" $YA_MAKE_FILE | perl -lane 's/^(\s+)(.*)+$/$1/e; print')

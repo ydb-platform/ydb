@@ -1,5 +1,3 @@
-### Установка и настройка Terraform { #terraform-install }
-
 Установите и настройте Terraform следуя инструкциям: [Установка и настройка Terraform](https://cloud.yandex.ru/ru/docs/ydb/terraform/install#terraform-install-on-dif-os), [Получение данных для аутентификации](https://cloud.yandex.ru/ru/docs/ydb/terraform/credentials). [Скачайте](https://github.com/ydb-platform/ydb-terraform/) Terraform проект на локальную машину.
 
 Проект состоит из трех основных файлов:

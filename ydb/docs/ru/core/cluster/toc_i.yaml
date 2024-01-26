@@ -19,6 +19,8 @@ items:
       href: ../administration/grafana-dashboards.md
     - name: Справочник метрик
       href: ../reference/observability/metrics/index.md
+    - name: Трассировка
+      include: { mode: link, path: ../administration/tracing/toc_i.yaml }
 - name: Обновление
   href: ../administration/upgrade.md
 - name: Изменение конфигурации актор-системы

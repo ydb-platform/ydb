@@ -372,6 +372,14 @@ private:
         PassAway();
     }
 
+    void FillPreparedQuery(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType) {
+        auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
+            preparingQuery.release(), AppData()->FunctionRegistry);
+        preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
+        KqpCompileResult->PreparedQuery = preparedQueryHolder;
+        KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
+    }
+
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
@@ -403,16 +411,10 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            {
-                auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-                    kqpResult.PreparingQuery.release(), AppData()->FunctionRegistry);
-                preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
-                KqpCompileResult->PreparedQuery = preparedQueryHolder;
-                KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
+            FillPreparedQuery(std::move(kqpResult.PreparingQuery), queryType);
 
-                if (AstResult) {
-                    KqpCompileResult->Ast = AstResult->Ast;
-                }
+            if (AstResult) {
+                KqpCompileResult->Ast = AstResult->Ast;
             }
 
             auto now = TInstant::Now();
@@ -423,6 +425,10 @@ private:
                 << ", self: " << ctx.SelfID
                 << ", duration: " << duration);
         } else {
+            if (kqpResult.PreparingQuery) {
+                FillPreparedQuery(std::move(kqpResult.PreparingQuery), queryType);
+            }
+
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID
                 << ", status: " << Ydb::StatusIds_StatusCode_Name(status)

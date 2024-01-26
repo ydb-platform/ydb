@@ -323,6 +323,7 @@ public:
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion)
         : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
         , QueryCtx(queryCtx)
+        , ExprCtx(exprCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
 
@@ -342,8 +343,18 @@ public:
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
     }
 
+    void FillPartialResult(TResult& prepareResult) const override {
+        YQL_ENSURE(QueryCtx->PrepareOnly);
+
+        if (auto exprRoot = GetExprRoot()) {
+            prepareResult.PreparingQuery = std::move(QueryCtx->PreparingQuery);
+            prepareResult.PreparingQuery->MutablePhysicalQuery()->SetQueryAst(KqpExprToPrettyString(*GetExprRoot(), ExprCtx));
+        }
+    }
+
 private:
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+    NYql::TExprContext& ExprCtx;
     TString QueryText;
     TMaybe<TSqlVersion> SqlVersion;
 };

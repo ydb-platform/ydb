@@ -34,7 +34,9 @@ public:
         YQL_ENSURE(HasResult());
 
         if (Status.GetValue() == NYql::IGraphTransformer::TStatus::Error) {
-            return NYql::NCommon::ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues());
+            TResult result = NYql::NCommon::ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues());
+            FillPartialResult(result);
+            return result;
         }
 
         YQL_ENSURE(Status.GetValue() == NYql::IGraphTransformer::TStatus::Ok);
@@ -82,6 +84,8 @@ public:
 
 protected:
     virtual void FillResult(TResult& result) const = 0;
+
+    virtual void FillPartialResult(TResult&) const {}
 
     NYql::TExprNode::TPtr GetExprRoot() const { return ExprRoot; }
     NYql::TExprContext& GetExprContext() const { return ExprCtx; }

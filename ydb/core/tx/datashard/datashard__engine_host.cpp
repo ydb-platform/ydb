@@ -368,25 +368,18 @@ public:
             return;
         }
 
-        CheckWriteConflicts(tableId, row);
+        const NTable::TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTableId(tableId));
 
-        if (UserDb.GetLockTxId()) {
-            Self->SysLocksTable().SetWriteLock(tableId, row);
-        } else {
-            Self->SysLocksTable().BreakLocks(tableId, row);
-        }
+        TSmallVec<TRawTypeValue> key;
+        ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
-        Self->SetTableUpdateTime(tableId, UserDb.GetNow());
-        TEngineHost::EraseRow(tableId, row);
-
-        if (UserDb.GetVolatileTxId()) {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, UserDb.GetVolatileTxId(), Db);
-        } else if (UserDb.GetLockTxId()) {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).AddUncommittedWrite(row, UserDb.GetLockTxId(), Db);
-        } else {
-            Self->GetConflictsCache().GetTableCache(LocalTableId(tableId)).RemoveUncommittedWrites(row, Db);
-        }
+        UserDb.EraseRow(tableId, key);
     }
+
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override
+    {
+        UserDb.EraseRow(tableId, key);
+    }    
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
@@ -444,10 +437,6 @@ public:
 
     bool NeedToReadBeforeWrite(const TTableId& tableId) const override {
         return UserDb.NeedToReadBeforeWrite(tableId);
-    }
-
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
-        UserDb.CheckWriteConflicts(tableId, keyCells);
     }
 
 private:

@@ -47,9 +47,34 @@ NTable::EReady TDataShardUserDb::SelectRow(
 void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops
-)
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
+    UpdateRowInt(NTable::ERowOp::Upsert, tableId, key, ops);
+
+    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+    ui64 valueBytes = std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
+
+    Counters.NUpdateRow++;
+    Counters.UpdateRowBytes += keyBytes + valueBytes;
+}
+
+void TDataShardUserDb::EraseRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key)
+{
+    UpdateRowInt(NTable::ERowOp::Erase, tableId, key, {});
+
+    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
+
+    Counters.NEraseRow++;
+    Counters.EraseRowBytes += keyBytes + 8;
+}
+
+void TDataShardUserDb::UpdateRowInt(
+    NTable::ERowOp rowOp,
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops) {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
@@ -103,9 +128,9 @@ void TDataShardUserDb::UpdateRow(
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
 
-        UpdateRowInt(tableId, localTableId, key, extendedOps);
+        UpdateRowInDb(rowOp, tableId, localTableId, key, extendedOps);
     } else {
-        UpdateRowInt(tableId, localTableId, key, ops);
+        UpdateRowInDb(rowOp, tableId, localTableId, key, ops);
     }
 
     if (VolatileTxId) {
@@ -117,34 +142,27 @@ void TDataShardUserDb::UpdateRow(
     }
 
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
-
-    ui64 keyBytes = std::accumulate(key.begin(), key.end(), 0, [](ui64 bytes, const TRawTypeValue& value) { return bytes + value.IsEmpty() ? 1 : value.Size(); });
-    ui64 valueBytes = std::accumulate(ops.begin(), ops.end(), 0, [](ui64 bytes, const NIceDb::TUpdateOp& op) { return bytes + op.Value.IsEmpty() ? 1 : op.Value.Size(); });
-
-    Counters.NUpdateRow++;
-    Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
-void TDataShardUserDb::UpdateRowInt(
+void TDataShardUserDb::UpdateRowInDb(
+    NTable::ERowOp rowOp,
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops
-)
-{
+    const TArrayRef<const NIceDb::TUpdateOp> ops) {
     auto* collector = GetChangeCollector(tableId);
 
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
-        if (collector && !collector->OnUpdate(tableId, localTableId, NTable::ERowOp::Upsert, key, ops, WriteVersion))
+        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, WriteVersion))
             throw TNotReadyTabletException();
 
-        Db.Update(localTableId, NTable::ERowOp::Upsert, key, ops, WriteVersion);
+        Db.Update(localTableId, rowOp, key, ops, WriteVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTableId, NTable::ERowOp::Upsert, key, ops, writeTxId))
+        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId))
             throw TNotReadyTabletException();
 
-        Db.UpdateTx(localTableId, NTable::ERowOp::Upsert, key, ops, writeTxId);
+        Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
     }
 }
 

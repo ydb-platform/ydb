@@ -916,7 +916,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 ResponseQT->Increment(response.MicroSeconds());
                 IssueWriteIfPossible(ctx);
 
-                if (ConfirmedBlobIds.size() == 1 && !InitialAllocation.IsEmpty()) {
+                if (ConfirmedBlobIds.size() == 1 && InitialAllocation.IsEmpty()) {
                     if (NextReadTimestamp == TMonotonic()) {
                         NextReadTimestamp = TActivationContext::Monotonic();
                     }

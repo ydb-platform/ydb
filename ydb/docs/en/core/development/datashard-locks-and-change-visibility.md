@@ -92,7 +92,11 @@ When KQP needs to commit previously uncommitted changes, it proposes a transacti
 
 To support distributed transactions all shards that validate locks must be included in [SendingShards](https://github.com/ydb-platform/ydb/blob/d31477e5ed13679dd3b409b100623cc81a5e0964/ydb/core/protos/data_events.proto#L20), and all shards that have side-effects must be included in [ReceivingShards](https://github.com/ydb-platform/ydb/blob/d31477e5ed13679dd3b409b100623cc81a5e0964/ydb/core/protos/data_events.proto#L21). During validation sending shards will generate persistent ReadSets and send them to all receiving shards, and receiving shards will wait for all expected ReadSets before executing the transaction. When transaction is executed with all successful validation results it will commit the lock by calling [KqpCommitLocks](https://github.com/ydb-platform/ydb/blob/d31477e5ed13679dd3b409b100623cc81a5e0964/ydb/core/tx/datashard/execute_kqp_data_tx_unit.cpp#L228). Otherwise, transaction body will not be executed, and lock is erased with all uncommitted changes rolled back by calling [KqpEraseLocks](https://github.com/ydb-platform/ydb/blob/d31477e5ed13679dd3b409b100623cc81a5e0964/ydb/core/tx/datashard/execute_kqp_data_tx_unit.cpp#L190), and it cannot be retried later on commit failure.
 
+{% note info %}
+
 Note that all uncommitted changes with the same `LockTxId` must be included in a commit transaction, and transaction must never try to partially commit. For example, when a transaction involves multiple writes, and one of those writes fails with an error, it would not be correct to skip the failed write and partially commit. Shards might merge later and non-matching transaction status would lead to consistency anomalies.
+
+{% endnote %}
 
 The commit transaction may also have additional side-effects, which are atomically executed after the lock is committed. KQP will try to accumulate side-effects in memory until the same table is read in the same transaction, or until transaction commits, to reduce latency and fuse side-effects with commit as much as possible. When it is possible to accumulate all side-effects in memory, no uncommitted changes are persisted, and only read locks are optionally acquired.
 

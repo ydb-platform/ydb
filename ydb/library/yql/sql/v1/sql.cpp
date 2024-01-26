@@ -27,10 +27,40 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
     return nullptr;
 }
 
+TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast, TContext& ctx) {
+    TSqlQuery query(ctx, ctx.Settings.Mode, true);
+    TNodePtr node(query.Build(ast));
+    try {
+        if (node && node->Init(ctx, nullptr)) {
+            return node->Translate(ctx);
+        }
+    } catch (const NProtoAST::TTooManyErrors&) {
+        // do not add error issue, no room for it
+    }
+
+    return nullptr;
+}
+
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
         TContext& ctx) {
     YQL_ENSURE(!ctx.Issues.Size());
     res.Root = SqlASTToYql(protoAst, ctx);
+    res.Pool = std::move(ctx.Pool);
+    if (!res.Root) {
+        if (ctx.Issues.Size()) {
+            ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
+        } else {
+            ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
+            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" <<
+                ", please send this request over bug report into YQL interface or write on yql@ maillist";
+        }
+    } else {
+        ctx.WarnUnusedHints();
+    }
+}
+
+void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast, TContext& ctx) {
+    res.Root = SqlASTsToYqls(ast, ctx);
     res.Pool = std::move(ctx.Pool);
     if (!res.Root) {
         if (ctx.Issues.Size()) {
@@ -74,6 +104,74 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
+    } else {
+        ctx.IncrementMonCounter("sql_errors", "AstError");
+    }
+    if (warningRules) {
+        *warningRules = ctx.WarningPolicy.GetRules();
+        ctx.WarningPolicy.Clear();
+    }
+    return res;
+}
+
+bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
+    return subquery == TRule_sql_stmt_core::kAltSqlStmtCore1 || // pragma
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore3 ||    // named nodes
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore6 ||    // use
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore12 ||   // declare
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore13 ||   // import
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore14 ||   // export
+        subquery == TRule_sql_stmt_core::kAltSqlStmtCore17;     // define action or subquery
+}
+
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
+{
+    TVector<TAstParseResult> res;
+    const TString queryName = "query";
+    TIssues issues;
+
+    NSQLTranslation::TSQLHints hints;
+    auto lexer = MakeLexer(settings.AnsiLexer);
+    YQL_ENSURE(lexer);
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, issues, settings.MaxErrors)) {
+        return res;
+    }
+
+    TContext ctx(settings, hints, issues);
+    NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
+
+    google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
+    if (astProto) {
+        auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
+        const auto& query = ast.GetRule_sql_query();
+        if (!settings.PerStatement) {
+            res.emplace_back();
+            SqlASTToYqlImpl(res.back(), *astProto, ctx);
+            return res;
+        }
+        if (query.Alt_case() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1) {
+            std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;
+            std::vector<::NSQLv1Generated::TRule_sql_stmt_core> result;
+            const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
+            if (NeedUseForAllStatements(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
+                commonStates.push_back(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+            } else {
+                TContext ctx(settings, hints, issues);
+                res.emplace_back();
+                SqlASTsToYqlsImpl(res.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
+            }
+            for (auto block: statements.GetBlock3()) {
+                if (NeedUseForAllStatements(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
+                    commonStates.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+                    continue;
+                }
+                TContext ctx(settings, hints, issues);
+                res.emplace_back();
+                result = commonStates;
+                result.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+                SqlASTsToYqlsImpl(res.back(), result, ctx);
+            }
+        }
     } else {
         ctx.IncrementMonCounter("sql_errors", "AstError");
     }

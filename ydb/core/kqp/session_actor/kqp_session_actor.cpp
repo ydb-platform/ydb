@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -79,7 +80,7 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
 #define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
+#define LOG_D(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 
 void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQueryResponse& resp) {
@@ -513,6 +514,19 @@ public:
         OnSuccessCompileRequest();
     }
 
+    void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
+        QueryState->SaveAndCheckParseResult(ev->Get());
+        CompileStatement();
+    }
+
+    void CompileStatement() {
+        auto request = QueryState->BuildCompileRequest(CompilationCookie);
+        LOG_D("Sending CompileQuery request");
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
+            QueryState->KqpSessionSpan.GetTraceId());
+    }
+
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
             QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
@@ -698,6 +712,9 @@ public:
                 AppData()->TimeProvider, AppData()->RandomProvider, Config->EnableKqpImmediateEffects);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+            Ydb::Table::TransactionSettings settings;
+            settings.mutable_serializable_read_write();
+            BeginTx(settings);
         }
 
         return true;
@@ -969,6 +986,7 @@ public:
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
         if (tx) {
+            QueryState->PrepareStatementTransaction(tx->GetType());
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
@@ -1623,7 +1641,16 @@ public:
 
         QueryResponse = std::move(resEv);
 
-        Cleanup();
+        ProcessNextStatement();
+    }
+
+    void ProcessNextStatement() {
+        if (QueryState->FinishedStatements()) {
+            Cleanup();
+            return;
+        }
+        QueryState->PrepareNextStatement();
+        CompileStatement();
     }
 
     void ReplyQueryCompileError() {
@@ -2108,6 +2135,7 @@ public:
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
+                hFunc(TEvKqp::TEvParseResponse, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
 

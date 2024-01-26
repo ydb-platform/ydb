@@ -56,7 +56,7 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
 NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, bool sqlAutoCommit,
         const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, TMaybe<ui16>& sqlVersion, TString cluster,
         TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
-        NYql::TExprContext& ctx, bool isEnablePgConstsToParams) {
+        NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool perStatement) {
     NSQLTranslation::TTranslationSettings settings{};
 
     if (usePgParser) {
@@ -145,6 +145,8 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(NYql::EKikimrQueryT
         }
     }
 
+    settings.PerStatement = perStatement;
+
     return settings;
 }
 
@@ -197,6 +199,56 @@ TQueryAst ParseQuery(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::
     }
     auto astRes = ParseQuery(queryType, usePgParser, queryText, queryParameters, isSql, sqlAutoCommit, sqlVersion, deprecatedSQL, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams);
     return TQueryAst(std::make_shared<NYql::TAstParseResult>(std::move(astRes)), sqlVersion, deprecatedSQL);
+}
+
+TVector<TQueryAst> SqlToAstStatements(NYql::EKikimrQueryType queryType, const TMaybe<bool>& usePgParser, const TString& queryText,
+        std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters, bool sqlAutoCommit,
+        TMaybe<ui16>& sqlVersion, TString cluster, TString kqpTablePathPrefix,
+        ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources,
+        NYql::TExprContext& ctx, bool isEnablePgConstsToParams, bool isSql, bool perStatement) {
+
+    TVector<TQueryAst> result;
+    NYql::TAstParseResult astRes;
+    if (isSql) {
+        auto settings = GetTranslationSettings(queryType, usePgParser, sqlAutoCommit, queryText, queryParameters, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, perStatement);
+        ui16 actualSyntaxVersion = 0;
+        auto astStatements = NSQLTranslation::SqlToAstStatements(queryText, settings, nullptr, &actualSyntaxVersion);
+        sqlVersion = actualSyntaxVersion;
+        for (auto&& ast : astStatements) {
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(ast)), sqlVersion, (actualSyntaxVersion == 0)});
+        }
+        return result;
+    } else {
+        sqlVersion = {};
+        return {{std::make_shared<NYql::TAstParseResult>(NYql::ParseAst(queryText)), sqlVersion, true}};
+    }
+}
+
+TVector<TQueryAst> SqlToAstStatements(NYql::EKikimrQueryType queryType, const TMaybe<Ydb::Query::Syntax>& syntax, const TString& queryText, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameters,
+        TString cluster, TString kqpTablePathPrefix, ui16 kqpYqlSyntaxVersion, NSQLTranslation::EBindingsMode bindingsMode, bool isEnableExternalDataSources, bool isEnablePgConstsToParams, bool isSql,
+        bool perStatement) {
+    TMaybe<ui16> sqlVersion;
+    TMaybe<bool> usePgParser;
+    if (syntax)
+        switch (*syntax) {
+            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                usePgParser = false;
+                break;
+            case Ydb::Query::Syntax::SYNTAX_PG:
+                usePgParser = true;
+                break;
+            default:
+                break;
+        }
+
+    NYql::TExprContext ctx;
+    bool sqlAutoCommit;
+    if (queryType == NYql::EKikimrQueryType::YqlScript || queryType == NYql::EKikimrQueryType::YqlScriptStreaming) {
+            sqlAutoCommit = true;
+    } else {
+        sqlAutoCommit = false;
+    }
+    return SqlToAstStatements(queryType, usePgParser, queryText, queryParameters, sqlAutoCommit, sqlVersion, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, ctx, isEnablePgConstsToParams, isSql, perStatement);
 }
 
 } // namespace NKqp

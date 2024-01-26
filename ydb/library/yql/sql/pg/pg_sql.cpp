@@ -152,7 +152,7 @@ std::shared_ptr<List> ListMake1(void* cell) {
 
 #define CAST_NODE(nodeType, nodeptr) CastNode<nodeType>(nodeptr, T_##nodeType)
 #define CAST_NODE_EXT(nodeType, tag, nodeptr) CastNode<nodeType>(nodeptr, tag)
-#define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, i))
+#define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, index))
 #define LIST_CAST_EXT_NTH(nodeType, tag, list, index) CAST_NODE_EXT(nodeType, tag, list_nth(list, i))
 
 const Node* ListNodeNth(const List* list, int index) {
@@ -327,11 +327,23 @@ public:
         }
     }
 
+    void OnResult(const List* raw, int StatementId) {
+        if (!Settings.PerStatement) {
+            return OnResult(raw);
+        }
+
+        AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
+        AstParseResult.Root = ParseResult(raw, StatementId);
+        if (!AutoParamValues.empty()) {
+            AstParseResult.PgAutoParamValues = std::move(AutoParamValues);
+        }
+    }
+
     void OnError(const TIssue& issue) {
         AstParseResult.Issues.AddIssue(issue);
     }
 
-    TAstNode* ParseResult(const List* raw) {
+    TAstNode* ParseResult(const List* raw, const TMaybe<int>& statementId = Nothing()) {
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
@@ -343,9 +355,15 @@ public:
         ui32 dqEnginePgmPos = Statements.size();
         Statements.push_back(configSource);
 
-        for (int i = 0; i < ListLength(raw); ++i) {
-            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+        if (statementId) {
+            if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, *statementId))) {
                 return nullptr;
+            }
+        } else {
+            for (int i = 0; i < ListLength(raw); ++i) {
+                if (!ParseRawStmt(LIST_CAST_NTH(RawStmt, raw, i))) {
+                    return nullptr;
+                }
             }
         }
 
@@ -4470,7 +4488,24 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     NYql::TAstParseResult result;
     TConverter converter(result, settings, query);
     NYql::PGParse(query, converter);
-    return result;
+    return std::move(result);
+}
+
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+    TVector<NYql::TAstParseResult> results;
+    size_t currentStatementId = 0;
+    bool finished;
+    List* raw = NYql::PGGetStatements(query);
+    if (!raw) {
+        return {};
+    }
+    for (int statementId = 0; statementId < ListLength(raw); ++statementId) {
+        NYql::TAstParseResult result;
+        TConverter converter(result, settings, query);
+        converter.OnResult(raw, statementId);
+        results.push_back(std::move(result));
+    }
+    return results;
 }
 
 }  // NSQLTranslationPG

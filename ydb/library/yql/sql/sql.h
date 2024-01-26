@@ -21,5 +21,7 @@ namespace NSQLTranslation {
         const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
     ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
     NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
+    TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
+        NYql::TWarningRules* warningRules = nullptr, ui16* actualSyntaxVersion = nullptr);
 
 }  // namespace NSQLTranslationV0

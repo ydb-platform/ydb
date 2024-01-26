@@ -13,6 +13,12 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     return result;
 }
 
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+    Y_UNUSED(query);
+    Y_UNUSED(settings);
+    return {};
+}
+
 }  // NSQLTranslationPG
 
 namespace NYql {

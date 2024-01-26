@@ -11,5 +11,6 @@ struct TTranslationSettings;
 namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings);
+TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings);
 
 } // NSQLTranslationPG

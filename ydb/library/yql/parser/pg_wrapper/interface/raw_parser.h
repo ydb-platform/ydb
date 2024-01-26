@@ -19,4 +19,6 @@ TString PrintPGTree(const List* raw);
 
 void PGParse(const TString& input, IPGParseEvents& events);
 
+List* PGGetStatements(const TString& input);
+
 }

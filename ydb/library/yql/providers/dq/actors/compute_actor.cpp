@@ -26,6 +26,7 @@ IActor* CreateComputeActor(
     NDqProto::EDqStatsMode statsMode,
     bool enableSpilling)
 {
+    Y_ABORT_UNLESS(computeActorType == "async");
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
     // light == heavy since we allow extra allocation
@@ -63,31 +64,18 @@ IActor* CreateComputeActor(
         return factory->Get(task, statsMode, {});
     };
 
-    if (computeActorType.empty() || computeActorType == "old" || computeActorType == "sync") {
-        return NYql::NDq::CreateDqComputeActor(
-            executerId,
-            operationId,
-            task,
-            options.AsyncIoFactory,
-            options.FunctionRegistry,
-            computeRuntimeSettings,
-            memoryLimits,
-            taskRunnerFactory,
-            taskCounters);
-    } else {
-        return NYql::NDq::CreateDqAsyncComputeActor(
-            executerId,
-            operationId,
-            task,
-            options.AsyncIoFactory,
-            options.FunctionRegistry,
-            computeRuntimeSettings,
-            memoryLimits,
-            taskRunnerActorFactory,
-            taskCounters,
-            options.QuoterServiceActorId,
-            options.ComputeActorOwnsCounters);
-    }
+    return NYql::NDq::CreateDqAsyncComputeActor(
+        executerId,
+        operationId,
+        task,
+        options.AsyncIoFactory,
+        options.FunctionRegistry,
+        computeRuntimeSettings,
+        memoryLimits,
+        taskRunnerActorFactory,
+        taskCounters,
+        options.QuoterServiceActorId,
+        options.ComputeActorOwnsCounters);
 }
 
 } /* namespace NYql */

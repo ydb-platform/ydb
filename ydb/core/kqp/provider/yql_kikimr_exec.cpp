@@ -953,7 +953,8 @@ public:
                 }
                 case ETableType::Table:
                 case ETableType::Unknown: {
-                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true, existingOk);
+                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true, existingOk)
+                        : Gateway->CreateTable(table.Metadata, true, existingOk);
                     break;
                 }
             }

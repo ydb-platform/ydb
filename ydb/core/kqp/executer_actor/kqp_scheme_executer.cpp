@@ -197,6 +197,36 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateColumnTable: {
+                const auto& modifyScheme = schemeOp.GetCreateColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterColumnTable: {
+                const auto& modifyScheme = schemeOp.GetAlterColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateTableStore: {
+                const auto& modifyScheme = schemeOp.GetCreateTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTableStore: {
+                const auto& modifyScheme = schemeOp.GetAlterTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTableStore: {
+                const auto& modifyScheme = schemeOp.GetDropTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

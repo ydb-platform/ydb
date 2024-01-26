@@ -671,6 +671,128 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1);
     }
 
+    Y_UNIT_TEST(DdlColumnTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        enum EEx {
+            Empty,
+            IfExists,
+            IfNotExists,
+        };
+
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
+            const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                CREATE TABLE {if_not_exists} TestDdl_{name_suffix} (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (
+                    STORE = COLUMN
+                );)sql",
+                "if_not_exists"_a = ifNotExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
+            const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString sql = fmt::format(R"sql(
+                DROP TABLE {if_exists} TestDdl_{name_suffix};
+                )sql",
+                "if_exists"_a = ifExistsStatement,
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkUpsert = [&](int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                UPSERT INTO TestDdl_{name_suffix} (Key, Value) VALUES (1, "One");
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        auto checkExists = [&](bool expectSuccess, int nameSuffix) {
+            const TString sql = fmt::format(R"sql(
+                SELECT * FROM TestDdl_{name_suffix};
+                )sql",
+                "name_suffix"_a = nameSuffix
+            );
+            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            }
+        };
+
+        // usual create
+        checkCreate(true, EEx::Empty, 0);
+        checkUpsert(0);
+        checkExists(true, 0);
+
+        // create already existing table
+        checkCreate(false, EEx::Empty, 0); // already exists
+        checkCreate(true, EEx::IfNotExists, 0);
+        checkExists(true, 0);
+
+        // usual drop
+        checkDrop(true, EEx::Empty, 0);
+        checkExists(false, 0);
+        checkDrop(false, EEx::Empty, 0); // no such table
+
+        // drop if exists
+        checkDrop(true, EEx::IfExists, 0);
+        checkExists(false, 0);
+
+        // failed attempt to drop nonexisting table
+        checkDrop(false, EEx::Empty, 0);
+
+        // create with if not exists
+        checkCreate(true, EEx::IfNotExists, 1); // real creation
+        checkUpsert(1);
+        checkExists(true, 1);
+        checkCreate(true, EEx::IfNotExists, 1);
+
+        // drop if exists
+        checkDrop(true, EEx::IfExists, 1); // real drop
+        checkExists(false, 1);
+        checkDrop(true, EEx::IfExists, 1);
+    }
+
     Y_UNIT_TEST(DdlUser) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);

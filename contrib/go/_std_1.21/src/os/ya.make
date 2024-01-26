@@ -29,8 +29,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64)
 		rawconn.go
 		readfrom_linux.go
 		removeall_at.go
-		rlimit.go
-		rlimit_stub.go
 		stat.go
 		stat_linux.go
 		stat_unix.go
@@ -71,8 +69,6 @@ ELSEIF (OS_LINUX AND ARCH_ARM64)
 		rawconn.go
 		readfrom_linux.go
 		removeall_at.go
-		rlimit.go
-		rlimit_stub.go
 		stat.go
 		stat_linux.go
 		stat_unix.go
@@ -113,8 +109,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64)
 		rawconn.go
 		readfrom_linux.go
 		removeall_at.go
-		rlimit.go
-		rlimit_stub.go
 		stat.go
 		stat_linux.go
 		stat_unix.go
@@ -154,8 +148,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		rawconn.go
 		readfrom_stub.go
 		removeall_at.go
-		rlimit.go
-		rlimit_darwin.go
 		stat.go
 		stat_darwin.go
 		stat_unix.go
@@ -195,8 +187,6 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		rawconn.go
 		readfrom_stub.go
 		removeall_at.go
-		rlimit.go
-		rlimit_darwin.go
 		stat.go
 		stat_darwin.go
 		stat_unix.go
@@ -236,8 +226,6 @@ ELSEIF (OS_DARWIN AND ARCH_AARCH64)
 		rawconn.go
 		readfrom_stub.go
 		removeall_at.go
-		rlimit.go
-		rlimit_darwin.go
 		stat.go
 		stat_darwin.go
 		stat_unix.go

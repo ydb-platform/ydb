@@ -88,6 +88,9 @@ namespace NTi {
     class TIntervalType;
     using TIntervalTypePtr = TIntrusiveConstPtr<TIntervalType>;
 
+    class TDate32Type;
+    using TDate32TypePtr = TIntrusiveConstPtr<TDate32Type>;
+
     class TDecimalType;
     using TDecimalTypePtr = TIntrusiveConstPtr<TDecimalType>;
 

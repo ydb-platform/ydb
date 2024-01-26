@@ -247,6 +247,9 @@ namespace NTi::NIo {
                     case ETypeName::Date:
                         type = TDateType::InstanceRaw();
                         break;
+                    case ETypeName::Date32:
+                        type = TDate32Type::InstanceRaw();
+                        break;
                     case ETypeName::Datetime:
                         type = TDatetimeType::InstanceRaw();
                         break;
@@ -683,6 +686,9 @@ namespace NTi::NIo {
             [&consumer](const TDateType*) {
                 consumer.OnScalarString("date");
             },
+            [&consumer](const TDate32Type*) {
+                consumer.OnScalarString("date32");
+            },
             [&consumer](const TDatetimeType*) {
                 consumer.OnScalarString("datetime");
             },
@@ -941,6 +947,9 @@ namespace NTi::NIo {
             [&consumer](const TDateType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Date);
             },
+            [&consumer](const TDate32Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Date32);
+            },
             [&consumer](const TDatetimeType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Datetime);
             },
@@ -1133,6 +1142,7 @@ namespace NTi::NIo {
                 [](const TStringType*) -> TStringBuf { return "string"; },
                 [](const TUtf8Type*) -> TStringBuf { return "utf8"; },
                 [](const TDateType*) -> TStringBuf { return "uint16"; },
+                [](const TDate32Type*) -> TStringBuf { return "int32"; },
                 [](const TDatetimeType*) -> TStringBuf { return "uint32"; },
                 [](const TTimestampType*) -> TStringBuf { return "uint64"; },
                 [](const TTzDateType*) -> TStringBuf { return "string"; },

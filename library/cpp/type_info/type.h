@@ -131,6 +131,10 @@ namespace NTi {
         inline TDateTypePtr AsDate() const noexcept;
         inline const TDateType* AsDateRaw() const noexcept;
 
+        inline bool IsDate32() const noexcept;
+        inline TDate32TypePtr AsDate32() const noexcept;
+        inline const TDate32Type* AsDate32Raw() const noexcept;
+
         inline bool IsDatetime() const noexcept;
         inline TDatetimeTypePtr AsDatetime() const noexcept;
         inline const TDatetimeType* AsDatetimeRaw() const noexcept;
@@ -925,6 +929,30 @@ namespace NTi {
 
     protected:
         const TDateType* Clone(ITypeFactoryInternal& factory) const noexcept;
+        void Drop(ITypeFactoryInternal& factory) noexcept;
+    };
+
+    /// An absolute point in time in range `[TODO, TODO]`, precision up to days.
+    class TDate32Type final: public TPrimitiveType {
+        friend class TType;
+        friend class ITypeFactoryInternal;
+        friend class ITypeFactory;
+        friend class IPoolTypeFactory;
+
+    public:
+        TDate32TypePtr AsPtr() const noexcept {
+            return const_cast<TDate32Type*>(this);
+        }
+
+    private:
+        explicit TDate32Type();
+
+    public:
+        static TDate32TypePtr Instance();
+        static const TDate32Type* InstanceRaw();
+
+    protected:
+        const TDate32Type* Clone(ITypeFactoryInternal& factory) const noexcept;
         void Drop(ITypeFactoryInternal& factory) noexcept;
     };
 
@@ -1910,6 +1938,19 @@ namespace NTi {
         return static_cast<const TDateType*>(this);
     }
 
+    bool TType::IsDate32() const noexcept {
+        return TypeName_ == ETypeName::Date32;
+    }
+
+    TDate32TypePtr TType::AsDate32() const noexcept {
+        return AsDate32Raw()->AsPtr();
+    }
+
+    const TDate32Type* TType::AsDate32Raw() const noexcept {
+        Y_ABORT_UNLESS(IsDate32());
+        return static_cast<const TDate32Type*>(this);
+    }
+
     bool TType::IsDatetime() const noexcept {
         return TypeName_ == ETypeName::Datetime;
     }
@@ -2166,6 +2207,8 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsUtf8());
             case ETypeName::Date:
                 return std::forward<V>(visitor)(this->AsDate());
+            case ETypeName::Date32:
+                return std::forward<V>(visitor)(this->AsDate32());
             case ETypeName::Datetime:
                 return std::forward<V>(visitor)(this->AsDatetime());
             case ETypeName::Timestamp:
@@ -2240,6 +2283,8 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsUtf8Raw());
             case ETypeName::Date:
                 return std::forward<V>(visitor)(this->AsDateRaw());
+            case ETypeName::Date32:
+                return std::forward<V>(visitor)(this->AsDate32Raw());
             case ETypeName::Datetime:
                 return std::forward<V>(visitor)(this->AsDatetimeRaw());
             case ETypeName::Timestamp:
@@ -2314,6 +2359,8 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsUtf8());
             case EPrimitiveTypeName::Date:
                 return std::forward<V>(visitor)(this->AsDate());
+            case EPrimitiveTypeName::Date32:
+                return std::forward<V>(visitor)(this->AsDate32());
             case EPrimitiveTypeName::Datetime:
                 return std::forward<V>(visitor)(this->AsDatetime());
             case EPrimitiveTypeName::Timestamp:
@@ -2370,6 +2417,8 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsUtf8Raw());
             case EPrimitiveTypeName::Date:
                 return std::forward<V>(visitor)(this->AsDateRaw());
+            case EPrimitiveTypeName::Date32:
+                return std::forward<V>(visitor)(this->AsDate32Raw());
             case EPrimitiveTypeName::Datetime:
                 return std::forward<V>(visitor)(this->AsDatetimeRaw());
             case EPrimitiveTypeName::Timestamp:

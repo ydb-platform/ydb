@@ -133,8 +133,16 @@ namespace NTi {
         return TDateType::Instance();
     }
 
+    TDate32TypePtr ITypeFactory::Date32() {
+        return TDate32Type::Instance();
+    }
+
     const TDateType* IPoolTypeFactory::DateRaw() {
         return TDateType::InstanceRaw();
+    }
+
+    const TDate32Type* IPoolTypeFactory::Date32Raw() {
+        return TDate32Type::InstanceRaw();
     }
 
     TDatetimeTypePtr ITypeFactory::Datetime() {

@@ -596,6 +596,9 @@ namespace NTi {
         /// Create a new `Date` type. See `NTi::TDateType` for more info.
         TDateTypePtr Date();
 
+        /// Create a new `Date32` type. See `NTi::TDate32Type` for more info.
+        TDate32TypePtr Date32();
+
         /// Create a new `Datetime` type. See `NTi::TDatetimeType` for more info.
         TDatetimeTypePtr Datetime();
 
@@ -771,6 +774,10 @@ namespace NTi {
         /// Create a new `Date` type. See `NTi::TDateType` for more info.
         /// The returned object will live for as long as this factory lives.
         const TDateType* DateRaw();
+
+        /// Create a new `Date32` type. See `NTi::TDate32Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TDate32Type* Date32Raw();
 
         /// Create a new `Datetime` type. See `NTi::TDatetimeType` for more info.
         /// The returned object will live for as long as this factory lives.

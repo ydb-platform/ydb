@@ -80,6 +80,10 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
         nativeYtTypeFlags |= NTCF_DATE;
         yqlType = "Interval";
     }
+    else if (ytType == "date32") {
+        nativeYtTypeFlags |= NTCF_DATE;
+        yqlType = "Date32";
+    }
     else if (ytType == "yson") { // V3
         yqlType = "Yson";
     }
@@ -690,13 +694,7 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
     } else if (yqlType == TStringBuf("Date")) {
         ytType = (nativeYtTypeFlags & NTCF_DATE) ? NYT::VT_DATE : NYT::VT_UINT16;
     } else if (yqlType == TStringBuf("Date32")) {
-        ytType = NYT::VT_INT32; // TODO later support nativeYtTypeFlags
-    } else if (yqlType == TStringBuf("Datetime64")) {
-        ytType = NYT::VT_INT64; // TODO later support nativeYtTypeFlags
-    } else if (yqlType == TStringBuf("Timestamp64")) {
-        ytType = NYT::VT_INT64; // TODO later support nativeYtTypeFlags
-    } else if (yqlType == TStringBuf("Interval64")) {
-        ytType = NYT::VT_INT64; // TODO later support nativeYtTypeFlags
+        ytType = (nativeYtTypeFlags & NTCF_DATE) ? NYT::VT_DATE32 : NYT::VT_INT32;
     } else if (yqlType == TStringBuf("Uint8")) {
         ytType = NYT::VT_UINT8;
     } else if (yqlType == TStringBuf("Float")) {

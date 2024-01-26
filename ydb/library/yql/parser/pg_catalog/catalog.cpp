@@ -1400,8 +1400,114 @@ struct TCatalog {
             "lo_truncate64",
             "lo_close",
             "lo_unlink"
+        }),
+        StaticTables({
+            {"pg_catalog", "pg_type"},
+            {"pg_catalog", "pg_database"},
+            {"pg_catalog", "pg_tablespace"},
+            {"pg_catalog", "pg_shdescription"},
+            {"pg_catalog", "pg_trigger"},
+            {"pg_catalog", "pg_locks"},
+            {"pg_catalog", "pg_stat_gssapi"},
+            {"pg_catalog", "pg_inherits"},
+            {"pg_catalog", "pg_stat_activity"},
+            {"pg_catalog", "pg_timezone_names"},
+            {"pg_catalog", "pg_timezone_abbrevs"},
+            {"pg_catalog", "pg_tables"},
+            {"pg_catalog", "pg_description"},
+            {"pg_catalog", "pg_am"},
+            {"pg_catalog", "pg_namespace"},
+            {"information_schema", "tables"},
+            {"information_schema", "columns"},
+        }),
+        AllStaticColumns({
+            {"pg_catalog", "pg_type", "oid", "oid"},
+            {"pg_catalog", "pg_type", "typname", "name"},
+            {"pg_catalog", "pg_type", "typinput", "regproc"},
+            {"pg_catalog", "pg_type", "typnamespace", "oid"},
+            {"pg_catalog", "pg_type", "typtype", "char"},
+
+            {"pg_catalog", "pg_database", "oid", "oid"},
+            {"pg_catalog", "pg_database", "datname", "name"},
+            {"pg_catalog", "pg_database", "encoding", "int4"},
+            {"pg_catalog", "pg_database", "datallowconn", "bool"},
+            {"pg_catalog", "pg_database", "datistemplate", "bool"},
+            {"pg_catalog", "pg_database", "datdba", "oid"},
+
+            {"pg_catalog", "pg_tablespace", "oid", "oid"},
+            {"pg_catalog", "pg_tablespace", "spcname", "name"},
+
+            {"pg_catalog", "pg_shdescription", "objoid", "oid"},
+            {"pg_catalog", "pg_shdescription", "classoid", "oid"},
+            {"pg_catalog", "pg_shdescription", "description", "text"},
+
+            {"pg_catalog", "pg_trigger", "tgrelid", "oid"},
+            {"pg_catalog", "pg_trigger", "tgenabled", "char"},
+
+            {"pg_catalog", "pg_locks", "transactionid", "xid"},
+
+            {"pg_catalog", "pg_stat_gssapi", "encrypted", "bool"},
+            {"pg_catalog", "pg_stat_gssapi", "gss_authenticated", "bool"},
+            {"pg_catalog", "pg_stat_gssapi", "pid", "int4"},
+
+            {"pg_catalog", "pg_inherits", "inhrelid", "oid"},
+            {"pg_catalog", "pg_inherits", "inhparent", "oid"},
+
+            {"pg_catalog", "pg_stat_activity", "application_name", "text"},
+            {"pg_catalog", "pg_stat_activity", "backend_start", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "backend_type", "text"},
+            {"pg_catalog", "pg_stat_activity", "client_addr", "inet"},
+            {"pg_catalog", "pg_stat_activity", "datname", "name"},
+            {"pg_catalog", "pg_stat_activity", "pid", "int4"},
+            {"pg_catalog", "pg_stat_activity", "query", "text"},
+            {"pg_catalog", "pg_stat_activity", "query_start", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "state", "text"},
+            {"pg_catalog", "pg_stat_activity", "state_change", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "usename", "name"},
+            {"pg_catalog", "pg_stat_activity", "wait_event", "text"},
+            {"pg_catalog", "pg_stat_activity", "wait_event_type", "text"},
+            {"pg_catalog", "pg_stat_activity", "xact_start", "timestamptz"},
+
+            {"pg_catalog", "pg_timezone_names", "name", "text"},
+            {"pg_catalog", "pg_timezone_names", "is_dst", "bool"},
+
+            {"pg_catalog", "pg_timezone_abbrevs", "abbrev", "text"},
+            {"pg_catalog", "pg_timezone_abbrevs", "is_dst", "bool"},
+
+            {"pg_catalog", "pg_tables", "schemaname", "name"},
+            {"pg_catalog", "pg_tables", "tablename", "name"},
+
+            {"pg_catalog", "pg_description", "objoid", "oid"},
+            {"pg_catalog", "pg_description", "classoid", "oid"},
+            {"pg_catalog", "pg_description", "objsubid", "int4"},
+            {"pg_catalog", "pg_description", "description", "text"},
+
+            {"pg_catalog", "pg_am", "oid", "oid"},
+            {"pg_catalog", "pg_am", "amname", "name"},
+            {"pg_catalog", "pg_am", "amtype", "char"},
+
+            {"pg_catalog", "pg_namespace", "nspname", "name"},
+            {"pg_catalog", "pg_namespace", "oid", "oid"},
+
+            {"information_schema", "tables", "table_schema", "name"},
+            {"information_schema", "tables", "table_name", "name"},
+
+            {"information_schema", "columns", "table_schema", "name"},
+            {"information_schema", "columns", "table_name", "name"},
+            {"information_schema", "columns", "column_name", "name"},
+            {"information_schema", "columns", "udt_name", "name"},
         })
     {
+        for (const auto& t : StaticTables) {
+            StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+        }
+
+        for (const auto& c: AllStaticColumns) {
+            auto tablePtr = StaticColumns.FindPtr(TTableInfo(c.Schema, c.TableName));
+            Y_ENSURE(tablePtr);
+            tablePtr->push_back(c);
+        }
+
         TString typeData;
         Y_ENSURE(NResource::FindExact("pg_type.dat", &typeData));
         TString opData;
@@ -1602,6 +1708,10 @@ struct TCatalog {
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
     THashSet<TString> ProhibitedProcs;
+
+    TVector<TTableInfo> StaticTables;
+    TVector<TColumnInfo> AllStaticColumns;
+    THashMap<TTableInfo, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -2758,6 +2868,16 @@ const TConversionDesc& LookupConversion(const TString& from, const TString& to) 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
     const auto& catalog = TCatalog::Instance();
     return IsCompatibleTo(actualType, expectedType, catalog.Types);
+}
+
+const TVector<TTableInfo>& GetStaticTables() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticTables;
+}
+
+const THashMap<TTableInfo, TVector<TColumnInfo>>& GetStaticColumns() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticColumns;
 }
 
 }

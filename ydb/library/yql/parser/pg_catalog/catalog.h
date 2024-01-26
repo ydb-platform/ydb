@@ -285,6 +285,29 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType);
 inline bool IsArrayType(const TTypeDesc& typeDesc) noexcept {
     return typeDesc.ArrayTypeId == typeDesc.TypeId;
 }
+struct TTableInfo {
+    TString Schema;
+    TString Name;
+
+    bool operator==(const TTableInfo& other) const {
+        return Schema == other.Schema && Name == other.Name;
+    }
+
+    size_t Hash() const {
+        auto stringHasher = THash<TString>();
+        return CombineHashes(stringHasher(Schema), stringHasher(Name));
+    }
+};
+
+struct TColumnInfo {
+    TString Schema;
+    TString TableName;
+    TString Name;
+    TString UdtType;
+};
+
+const TVector<TTableInfo>& GetStaticTables();
+const THashMap<TTableInfo, TVector<TColumnInfo>>& GetStaticColumns();
 
 }
 
@@ -297,3 +320,10 @@ template <>
 inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercionCode coercionCode) {
     o.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(coercionCode));
 }
+
+template <>
+struct THash<NYql::NPg::TTableInfo> {
+    size_t operator ()(const NYql::NPg::TTableInfo& val) const {
+        return val.Hash();
+    }
+};

@@ -1689,6 +1689,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
             R"(`level` IS NULL XOR `message` IS NOT NULL)",
             R"(`level` IS NULL XOR `message` IS NULL)",
+            R"(`level` + 2. < 5.f)",
+            R"(`level` - 2.f >= 1.)",
+            R"(`level` * 3. > 4.f)",
+            R"(`level` / 2.f <= 1.)",
+            R"(`level` % 3. != 1.f)",
 #endif
         };
 
@@ -1749,7 +1754,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` >= CAST("2" As Uint32))",
             R"(`level` = NULL)",
             R"(`level` > NULL)",
-            R"(`level` * 3.14 > 4)",
 #if SSA_RUNTIME_VERSION < 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
@@ -1757,6 +1761,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "uid%001")",
 #endif
 #if SSA_RUNTIME_VERSION < 4U
+            R"(`level` * 3.14 > 4)",
             R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
             R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
             R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",

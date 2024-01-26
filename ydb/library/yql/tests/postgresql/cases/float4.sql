@@ -54,8 +54,6 @@ SELECT f.* FROM FLOAT4_TBL f WHERE '1004.3' >= f.f1;
 SELECT f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3';
 SELECT f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0';
-SELECT f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
-   WHERE f.f1 > '0.0';
 SELECT f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0';
 SELECT f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f

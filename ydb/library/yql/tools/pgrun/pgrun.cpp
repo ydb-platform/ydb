@@ -762,13 +762,13 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
 inline const TString FormatFloat4(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{0}", std::stof(val))); });
+        [] (const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
 }
 
 inline const TString FormatFloat8(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{0}", std::stod(val))); });
+        [] (const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
 }
 
 inline const TString FormatTransparent(const TString& value)

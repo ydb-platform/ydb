@@ -1,5 +1,6 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/core/graph/protos/graph.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
@@ -53,7 +54,7 @@ message TActorSystemConfig {
 
     enum EActorSystemProfile {
         DEFAULT = 1;
-        LOW_CPU_CONSUMPTION = 2;   
+        LOW_CPU_CONSUMPTION = 2;
         LOW_LATENCY = 3;
     }
 

@@ -280,13 +280,13 @@ void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId, const T
 
 class TLockedReadTxObserver: public NTable::ITransactionObserver {
 public:
-    TLockedReadTxObserver(TDataShardUserDb& userDb)
-        : UserDb(userDb)
+    TLockedReadTxObserver(IDataShardConflictChecker& conflictChecker)
+        : ConflictChecker(conflictChecker)
     {
     }
 
     void OnSkipUncommitted(ui64 txId) override {
-        UserDb.AddReadConflict(txId);
+        ConflictChecker.AddReadConflict(txId);
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
@@ -298,22 +298,22 @@ public:
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
-        UserDb.CheckReadConflict(rowVersion);
+        ConflictChecker.CheckReadConflict(rowVersion);
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) override {
-        UserDb.CheckReadConflict(rowVersion);
-        UserDb.CheckReadDependency(txId);
+        ConflictChecker.CheckReadConflict(rowVersion);
+        ConflictChecker.CheckReadDependency(txId);
     }
 
 private:
-    TDataShardUserDb& UserDb;
+    IDataShardConflictChecker& ConflictChecker;
 };
 
 class TReadTxObserver: public NTable::ITransactionObserver {
 public:
-    TReadTxObserver(TDataShardUserDb& userDb)
-        : UserDb(userDb)
+    TReadTxObserver(IDataShardConflictChecker& conflictChecker)
+        : ConflictChecker(conflictChecker)
     {
     }
 
@@ -335,11 +335,11 @@ public:
     }
 
     void OnApplyCommitted(const TRowVersion&, ui64 txId) override {
-        UserDb.CheckReadDependency(txId);
+        ConflictChecker.CheckReadDependency(txId);
     }
 
 private:
-    TDataShardUserDb& UserDb;
+    IDataShardConflictChecker& ConflictChecker;
 };
 
 void TDataShardUserDb::CheckReadDependency(ui64 txId) {
@@ -362,8 +362,8 @@ void TDataShardUserDb::CheckReadDependency(ui64 txId) {
 
 class TLockedWriteTxObserver: public NTable::ITransactionObserver {
 public:
-    TLockedWriteTxObserver(TDataShardUserDb& userDb, NTable::TDatabase& db, ui64 txId, ui64& skipCount, ui32 localTableId)
-        : UserDb(userDb)
+    TLockedWriteTxObserver(IDataShardConflictChecker& conflictChecker, NTable::TDatabase& db, ui64 txId, ui64& skipCount, ui32 localTableId)
+        : ConflictChecker(conflictChecker)
         , Db(db)
         , SelfTxId(txId)
         , SkipCount(skipCount)
@@ -378,7 +378,7 @@ public:
             ++SkipCount;
             if (!SelfFound) {
                 if (txId != SelfTxId) {
-                    UserDb.AddWriteConflict(txId);
+                    ConflictChecker.AddWriteConflict(txId);
                 } else {
                     SelfFound = true;
                 }
@@ -403,7 +403,7 @@ public:
     }
 
 private:
-    TDataShardUserDb& UserDb;
+    IDataShardConflictChecker& ConflictChecker;
     NTable::TDatabase& Db;
     const ui64 SelfTxId;
     ui64& SkipCount;
@@ -413,15 +413,15 @@ private:
 
 class TWriteTxObserver: public NTable::ITransactionObserver {
 public:
-    TWriteTxObserver(TDataShardUserDb& userDb)
-        : UserDb(userDb)
+    TWriteTxObserver(IDataShardConflictChecker& conflictChecker)
+        : ConflictChecker(conflictChecker)
     {
     }
 
     void OnSkipUncommitted(ui64 txId) override {
         // Note: all active volatile transactions will be uncommitted
         // without a tx map, and will be handled by BreakWriteConflict.
-        UserDb.BreakWriteConflict(txId);
+        ConflictChecker.BreakWriteConflict(txId);
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
@@ -441,7 +441,7 @@ public:
     }
 
 private:
-    TDataShardUserDb& UserDb;
+    IDataShardConflictChecker& ConflictChecker;
 };
 
 void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
@@ -515,7 +515,7 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
     }
 }
 
-void TDataShardUserDb::AddWriteConflict(ui64 txId) const {
+void TDataShardUserDb::AddWriteConflict(ui64 txId) {
     if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
         if (info->State != EVolatileTxState::Aborting) {
             Self.SysLocksTable().AddVolatileDependency(info->TxId);

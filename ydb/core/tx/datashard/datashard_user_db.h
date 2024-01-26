@@ -35,9 +35,23 @@ public:
             const TArrayRef<const TRawTypeValue> key) = 0;            
 };
 
+class IDataShardConflictChecker {
+protected:
+    ~IDataShardConflictChecker() = default;
+public:
+    virtual void AddReadConflict(ui64 txId) const = 0;
+    virtual void CheckReadConflict(const TRowVersion& rowVersion) const = 0;
+    virtual void CheckReadDependency(ui64 txId) = 0;
+
+    virtual void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) = 0;
+    virtual void AddWriteConflict(ui64 txId) = 0;
+    virtual void BreakWriteConflict(ui64 txId) = 0;
+};
+
 class TDataShardUserDb final
     : public IDataShardUserDb
-    , public IDataShardChangeGroupProvider {
+    , public IDataShardChangeGroupProvider
+    , public IDataShardConflictChecker {
 public:
     TDataShardUserDb(
             TDataShard& self,
@@ -49,6 +63,8 @@ public:
             TInstant now
     );
 
+//IDataShardUserDb
+public:  
     NTable::EReady SelectRow(
             const TTableId& tableId,
             TArrayRef<const TRawTypeValue> key,
@@ -72,21 +88,30 @@ public:
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
+
+//IDataShardChangeGroupProvider
+public:  
+    std::optional<ui64> GetCurrentChangeGroup() const override;
+    ui64 GetChangeGroup() override;
+
+//IDataShardConflictChecker
+public:  
+    void AddReadConflict(ui64 txId) const override;
+    void CheckReadConflict(const TRowVersion& rowVersion) const override;
+    void CheckReadDependency(ui64 txId) override;
+
+    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) override;
+    void AddWriteConflict(ui64 txId) override;
+    void BreakWriteConflict(ui64 txId) override;
+
 public:
     IDataShardChangeCollector* GetChangeCollector(const TTableId& tableId);
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
 
-private:
-    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
-
-public:
-    std::optional<ui64> GetCurrentChangeGroup() const override;
-    ui64 GetChangeGroup() override;
-
 public:
     void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
-
+    bool NeedToReadBeforeWrite(const TTableId& tableId);
     void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
     ui64 GetWriteTxId(const TTableId& tableId);
 
@@ -95,15 +120,6 @@ public:
 
     NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId);
     NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId);
-
-    void AddReadConflict(ui64 txId) const;
-    void CheckReadConflict(const TRowVersion& rowVersion) const;
-    void CheckReadDependency(ui64 txId);
-    bool NeedToReadBeforeWrite(const TTableId& tableId);
-
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells);
-    void AddWriteConflict(ui64 txId) const;
-    void BreakWriteConflict(ui64 txId);
 
     void ResetCounters();
     NMiniKQL::TEngineHostCounters& GetCounters();
@@ -120,6 +136,8 @@ private:
     NTable::TDatabase& Db;
 
     TDataShardChangeGroupProvider ChangeGroupProvider;
+
+    absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_ACCESSOR_DEF(ui64, LockTxId);

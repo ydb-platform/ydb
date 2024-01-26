@@ -5418,7 +5418,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         const TString query = R"(
-            CREATE TABLE `/Root/DataShard` (
+            CREATE TABLE `/Root/DataShard1` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
                 Col3 Int32 NOT NULL,
@@ -5426,7 +5426,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )
             WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
 
-            CREATE TABLE `/Root/ColumnShard` (
+            CREATE TABLE `/Root/ColumnShard1` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
                 Col3 Int32 NOT NULL,
@@ -5458,7 +5458,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto client = kikimr.GetQueryClient();
         auto prepareResult = client.ExecuteQuery(R"(
-            REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+            REPLACE INTO `/Root/DataShard1` (Col1, Col2, Col3) VALUES
                 (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
@@ -5466,14 +5466,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             // row -> column
             const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard`
-                SELECT * FROM `/Root/DataShard`
+                REPLACE INTO `/Root/ColumnShard1`
+                SELECT * FROM `/Root/DataShard1`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
             auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2, Col3;
+                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -5483,14 +5483,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             // Missing Nullable column
             const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard`
-                SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/DataShard`
+                REPLACE INTO `/Root/ColumnShard1`
+                SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/DataShard1`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
             auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2, Col3;
+                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -5503,7 +5503,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             // column -> column
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard2`
-                SELECT * FROM `/Root/ColumnShard`
+                SELECT * FROM `/Root/ColumnShard1`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());

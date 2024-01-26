@@ -2206,7 +2206,7 @@ private:
             }
         }
 
-        const bool singlePartitionOptAllowed = !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
+        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
         const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
 

@@ -7,6 +7,7 @@ ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.*
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage [6/10]*
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestStorageLoad
+ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/persqueue/ut [31/40]*
 ydb/core/persqueue/ut TopicSplitMerge.PartitionSplit
@@ -28,6 +29,7 @@ ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
+ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests sole*
@@ -36,7 +38,9 @@ ydb/library/yql/tests/sql/dq_file/part6 test.py.test[bigdate-input_date32-defaul
 ydb/library/yql/tests/sql/dq_file/part16 *
 ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-default.txt-Analyze]
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
+ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/fq/ut_integration Yq_1.Basic_TaggedLiteral
+ydb/services/fq/ut_integration Yq_1.CreateQuery_With_Idempotency
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/persqueue_v1/ut TPersQueueTest.UpdatePartitionLocation
 ydb/services/persqueue_v1/ut [3/10]*
@@ -47,6 +51,8 @@ ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplits
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/tests/fq/generic *
+ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
+ydb/tests/fq/multi_plane sole*
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
 ydb/tests/fq/s3 *
 ydb/tests/fq/yds *
@@ -57,6 +63,7 @@ ydb/tests/functional/clickbench test.py.test_run_*column]
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*
+ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/merge_split_common_table/fifo *
 ydb/tests/functional/sqs/merge_split_common_table/std *
 ydb/tests/functional/tenants test_dynamic_tenants.py.*

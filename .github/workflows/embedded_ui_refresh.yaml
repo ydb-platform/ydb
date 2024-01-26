@@ -46,9 +46,13 @@ jobs:
           mkdir $TARGET_DIR
           mv -vf $TEMP_ASSET_DIR/$ASSET_NAME/* $TARGET_DIR
 
+          # List of files in the target directory.
           NEW_RESOURCES=$(find $TARGET_DIR -type f | grep -v '.map' | sort)
+
+          # Current indentation of the start pointer line.
           INDENTATION=$(grep -e "$START_POINTER" $YA_MAKE_FILE | perl -lane 's/^(\s+)(.*)+$/$1/e; print')
 
+          # Replacing resources list between start and end pointers with saving the current indentation.
           perl -0777 -pi -e "s/\s+$START_POINTER.*$END_POINTER/
           $INDENTATION$START_POINTER
           ${INDENTATION}RESOURCE(

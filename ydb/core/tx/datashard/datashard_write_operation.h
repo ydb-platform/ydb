@@ -3,6 +3,7 @@
 #include "datashard_impl.h"
 #include "datashard_locks.h"
 #include "datashard__engine_host.h"
+#include "datashard_user_db.h"
 #include "operation.h"
 
 #include <ydb/core/tx/tx_processing.h>
@@ -18,8 +19,7 @@ class TValidatedWriteTx: TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
-    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TInstant receivedAt, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
-
+    TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
     ~TValidatedWriteTx();
 
     static constexpr ui64 MaxReorderTxKeys() {
@@ -74,69 +74,57 @@ public:
         return TxInfo().DynKeysCount != 0;
     }
 
-    ui64 GetMemoryAllocated() const {
-        return EngineBay.GetEngine() ? EngineBay.GetEngine()->GetMemoryAllocated() : 0;
-    }
-
-    NMiniKQL::IEngineFlat* GetEngine() {
-        return EngineBay.GetEngine();
-    }
-    NMiniKQL::TEngineHost* GetEngineHost() {
-        return EngineBay.GetEngineHost();
-    }
-    void DestroyEngine() {
-        EngineBay.DestroyEngine();
-    }
-
     TKeyValidator& GetKeyValidator() {
-        return EngineBay.GetKeyValidator();
+        return KeyValidator;
     }
     const TKeyValidator& GetKeyValidator() const {
-        return EngineBay.GetKeyValidator();
+        return KeyValidator;
     }
 
-    const NMiniKQL::TEngineHostCounters& GetCounters() {
-        return EngineBay.GetCounters();
+    TDataShardUserDb& GetUserDb() {
+        return UserDb;
     }
-    void ResetCounters() {
-        EngineBay.ResetCounters();
+
+    const TDataShardUserDb& GetUserDb() const {
+        return UserDb;
     }
 
     bool CanCancel();
     bool CheckCancelled();
 
     void SetWriteVersion(TRowVersion writeVersion) {
-        EngineBay.SetWriteVersion(writeVersion);
+        UserDb.SetWriteVersion(writeVersion);
     }
     void SetReadVersion(TRowVersion readVersion) {
-        EngineBay.SetReadVersion(readVersion);
+        UserDb.SetReadVersion(readVersion);
     }
+
     void SetVolatileTxId(ui64 txId) {
-        EngineBay.SetVolatileTxId(txId);
+        UserDb.SetVolatileTxId(txId);
     }
 
     void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-        EngineBay.CommitChanges(tableId, lockId, writeVersion);
+        UserDb.CommitChanges(tableId, lockId, writeVersion);
     }
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
-        return EngineBay.GetCollectedChanges();
+        return UserDb.GetCollectedChanges();
     }
     void ResetCollectedChanges() {
-        EngineBay.ResetCollectedChanges();
+        UserDb.ResetCollectedChanges();
     }
 
     TVector<ui64> GetVolatileCommitTxIds() const {
-        return EngineBay.GetVolatileCommitTxIds();
+        return UserDb.GetVolatileCommitTxIds();
     }
     const absl::flat_hash_set<ui64>& GetVolatileDependencies() const {
-        return EngineBay.GetVolatileDependencies();
+        return UserDb.GetVolatileDependencies();
     }
-    std::optional<ui64> GetVolatileChangeGroup() const {
-        return EngineBay.GetVolatileChangeGroup();
+    std::optional<ui64> GetVolatileChangeGroup() {
+        return UserDb.GetChangeGroup();
     }
     bool GetVolatileCommitOrdered() const {
-        return EngineBay.GetVolatileCommitOrdered();
+        return UserDb.GetVolatileCommitOrdered();
     }
 
     bool IsProposed() const {
@@ -171,19 +159,20 @@ public:
     }
 
     const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const {
-        return EngineBay.TxInfo();
+        return KeyValidator.GetInfo();
     }
 
 private:
     const NEvents::TDataEvents::TEvWrite::TPtr& Ev;
-    TEngineBay EngineBay;
+    TDataShardUserDb UserDb;
+    TKeyValidator KeyValidator;
+    NMiniKQL::TEngineHostCounters EngineHostCounters;
 
     const ui64 TabletId;
     const TActorContext& Ctx;
 
     YDB_ACCESSOR_DEF(TActorId, Source);
 
-    YDB_READONLY(TStepOrder, StepTxId, TStepOrder(0, 0));
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TInstant, ReceivedAt);

@@ -100,6 +100,11 @@ namespace NTi::NEq {
         }
 
         template <bool IgnoreHash>
+        bool StrictlyEqual(const TDate32Type&, const TDate32Type&) {
+            return true;
+        }
+
+        template <bool IgnoreHash>
         bool StrictlyEqual(const TDatetimeType&, const TDatetimeType&) {
             return true;
         }

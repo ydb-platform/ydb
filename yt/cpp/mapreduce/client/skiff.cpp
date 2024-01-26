@@ -94,6 +94,9 @@ NSkiff::EWireType ValueTypeToSkiffType(EValueType valueType)
 
         case VT_INTERVAL:
             return EWireType::Int64;
+
+        case VT_DATE32:
+            return EWireType::Int32;
     };
     ythrow yexception() << "Cannot convert EValueType '" << valueType << "' to NSkiff::EWireType";
 }

@@ -27,6 +27,7 @@ int ComputeTypeComplexity(const TType* type)
         case ETypeName::String:
         case ETypeName::Utf8:
         case ETypeName::Date:
+        case ETypeName::Date32:
         case ETypeName::Datetime:
         case ETypeName::Timestamp:
         case ETypeName::TzDate:

@@ -188,6 +188,9 @@ static NTi::TTypePtr OldTypeToTypeV3(EValueType type)
         case VT_INTERVAL:
             return NTi::Interval();
 
+        case VT_DATE32:
+            return NTi::Date32();
+
         case VT_FLOAT:
             return NTi::Float();
         case VT_JSON:
@@ -244,6 +247,9 @@ static std::pair<EValueType, bool> Simplify(const NTi::TTypePtr& type)
         case ETypeName::TzDatetime:
         case ETypeName::TzTimestamp:
             break;
+
+        case ETypeName::Date32:
+            return {VT_DATE32, true};
 
         case ETypeName::Json:
             return {VT_JSON, true};
@@ -627,6 +633,9 @@ TString ToString(EValueType type)
             return "timestamp";
         case VT_INTERVAL:
             return "interval";
+
+        case VT_DATE32:
+            return "date32";
 
         case VT_FLOAT:
             return "float";

@@ -617,6 +617,29 @@ namespace NTi {
         Y_UNUSED(factory);
     }
 
+    TDate32Type::TDate32Type()
+        : TPrimitiveType({}, EPrimitiveTypeName::Date32)
+    {
+    }
+
+    TDate32TypePtr TDate32Type::Instance() {
+        return InstanceRaw()->AsPtr();
+    }
+
+    const TDate32Type* TDate32Type::InstanceRaw() {
+        static auto singleton = TDate32Type();
+        return &singleton;
+    }
+
+    const TDate32Type* TDate32Type::Clone(ITypeFactoryInternal& factory) const noexcept {
+        Y_UNUSED(factory);
+        return InstanceRaw();
+    }
+
+    void TDate32Type::Drop(ITypeFactoryInternal& factory) noexcept {
+        Y_UNUSED(factory);
+    }
+
     TDatetimeType::TDatetimeType()
         : TPrimitiveType({}, EPrimitiveTypeName::Datetime)
     {
@@ -1331,6 +1354,10 @@ namespace NTi {
         return NPrivate::GetDefaultHeapFactory()->Date();
     }
 
+    TDate32TypePtr Date32() {
+        return NPrivate::GetDefaultHeapFactory()->Date32();
+    }
+
     TDatetimeTypePtr Datetime() {
         return NPrivate::GetDefaultHeapFactory()->Datetime();
     }
@@ -1500,6 +1527,11 @@ Y_DECLARE_OUT_SPEC(, NTi::TDateType, o, v) {
     o << "Date";
 }
 
+Y_DECLARE_OUT_SPEC(, NTi::TDate32Type, o, v) {
+    Y_UNUSED(v);
+    o << "Date32";
+}
+
 Y_DECLARE_OUT_SPEC(, NTi::TDatetimeType, o, v) {
     Y_UNUSED(v);
     o << "Datetime";
@@ -1641,6 +1673,7 @@ static_assert(std::is_trivially_destructible_v<NTi::TDoubleType>);
 static_assert(std::is_trivially_destructible_v<NTi::TStringType>);
 static_assert(std::is_trivially_destructible_v<NTi::TUtf8Type>);
 static_assert(std::is_trivially_destructible_v<NTi::TDateType>);
+static_assert(std::is_trivially_destructible_v<NTi::TDate32Type>);
 static_assert(std::is_trivially_destructible_v<NTi::TDatetimeType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTimestampType>);
 static_assert(std::is_trivially_destructible_v<NTi::TTzDateType>);

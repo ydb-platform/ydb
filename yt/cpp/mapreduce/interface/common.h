@@ -403,6 +403,9 @@ enum EValueType : int
     VT_FLOAT,
     /// Json, sequence of bytes that is valid json.
     VT_JSON,
+
+    /// Date, number of days since Unix epoch (signed)
+    VT_DATE32,
 };
 
 ///

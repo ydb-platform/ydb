@@ -50,6 +50,9 @@ namespace NTi {
     /// Create new `Date` type using the default heap factory.
     TDateTypePtr Date();
 
+    /// Create new `Date32` type using the default heap factory.
+    TDateTypePtr Date32();
+
     /// Create new `Datetime` type using the default heap factory.
     TDatetimeTypePtr Datetime();
 

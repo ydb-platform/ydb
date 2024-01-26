@@ -197,6 +197,14 @@ namespace NKikimr::NDataShard {
             return !VolatileTxByVersion.empty() && (*VolatileTxByVersion.begin())->Version <= snapshot;
         }
 
+        TRowVersion GetMinUncertainVersion() const {
+            if (!VolatileTxByVersion.empty()) {
+                return (*VolatileTxByVersion.begin())->Version;
+            } else {
+                return TRowVersion::Max();
+            }
+        }
+
         void PersistAddVolatileTx(
             ui64 txId, const TRowVersion& version,
             TConstArrayRef<ui64> commitTxIds,

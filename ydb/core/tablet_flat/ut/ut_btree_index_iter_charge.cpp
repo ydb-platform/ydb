@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
                                 bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
                                 
-                                UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
+                                UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
                                 AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
                             }
                         }

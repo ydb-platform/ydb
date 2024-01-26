@@ -66,10 +66,9 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        bool ready = true;
+        bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
 
-        Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
@@ -81,8 +80,8 @@ public:
             chargeGroups = false;
         }
 
-        if (!key1 && itemsLimit && endRowId - beginRowId - 1 > itemsLimit) {
-            endRowId = beginRowId + itemsLimit + 1;
+        if (!key1) {
+            ApplyItemsLimit(beginRowId, endRowId, itemsLimit, overshot);
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -124,6 +123,8 @@ public:
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
                         }
+                        // simulate the worst case when we skip key1 page
+                        ApplyItemsLimit(Max(beginRowId, node.GetShortChild(pos).RowCount), endRowId, itemsLimit, overshot);
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -156,6 +157,7 @@ public:
                     if (child.PageId == key1PageId) {
                         TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults).Off();
                         beginRowId = Max(beginRowId, key1RowId);
+                        ApplyItemsLimit(key1RowId, endRowId, itemsLimit, overshot);
                     }
                     if (child.PageId == key2PageId) {
                         TRowId key2RowId = data.BaseRow() + data.LookupKey(key2, Scheme.Groups[0], ESeek::Upper, &keyDefaults).Off();
@@ -193,7 +195,7 @@ public:
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        bool overshot = endRowId == sliceEndRowId;
+        overshot &= endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
@@ -224,10 +226,6 @@ public:
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
             chargeGroups = false;
-        }
-
-        if (!key1 && itemsLimit && endRowId - beginRowId - 1 > itemsLimit) {
-            beginRowId = endRowId - itemsLimit - 1;
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -431,6 +429,13 @@ private:
     }
 
 private:
+    void ApplyItemsLimit(TRowId beginRowId, TRowId &endRowId, ui64 itemsLimit, bool &overshot) const noexcept {
+        if (itemsLimit && endRowId > beginRowId && endRowId - beginRowId - 1 >= itemsLimit) {
+            endRowId = beginRowId + itemsLimit + 1;
+            overshot = false;
+        }
+    }
+
     const TSharedData* TryGetDataPage(TPageId pageId, TGroupId groupId) const noexcept {
         return Env->TryGetPage(Part, pageId, groupId);
     };

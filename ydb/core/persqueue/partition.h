@@ -23,6 +23,7 @@
 
 #include <util/generic/set.h>
 
+#include <variant>
 
 namespace NKikimr::NPQ {
 
@@ -638,12 +639,22 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
+    template <class T> T& GetUserActionAndTransactionEventsFront();
+    template <class T> bool UserActionAndTransactionEventsFrontIs() const;
+
+    bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
+
     //
     // user actions and transactions
     //
-    std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
-    std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
-    std::deque<TTransaction> DistrTxs;
+    using TUserActionAndTransactionEvent =
+        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
+                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
+                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config 
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;

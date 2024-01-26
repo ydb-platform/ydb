@@ -567,6 +567,9 @@ private:
             Counters->ReportCompileRequestGet(dbCounters);
 
             auto compileResult = QueryCache.FindByUid(*request.Uid, request.KeepInCache);
+            if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+                compileResult = nullptr;
+            }
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
                 if (compileResult->Query->UserSid == userSid) {
@@ -610,6 +613,10 @@ private:
         }
 
         auto compileResult = QueryCache.FindByQuery(query, request.KeepInCache);
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+            compileResult = nullptr;
+        }
+
         if (compileResult) {
             Counters->ReportQueryCacheHit(dbCounters, true);
 
@@ -672,7 +679,11 @@ private:
         auto dbCounters = request.DbCounters;
         Counters->ReportRecompileRequestGet(dbCounters);
 
-        auto compileResult = QueryCache.FindByUid(request.Uid, false);
+        TKqpCompileResult::TConstPtr compileResult = QueryCache.FindByUid(request.Uid, false);
+        if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
+            compileResult = nullptr;
+        }
+
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
@@ -736,19 +747,12 @@ private:
 
         bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
 
+        bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
+
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
-                if (QueryCache.FindByUid(compileResult->Uid, false)) {
-                    QueryCache.Replace(compileResult);
-                } else if (keepInCache) {
-                    if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache())) {
-                        Counters->CompileQueryCacheEvicted->Inc();
-                    }
-                    if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
-                        if (InsertPreparingQuery(compileResult, compileRequest.KeepInCache)) {
-                            Counters->CompileQueryCacheEvicted->Inc();
-                        };
-                    }
+                if (!hasTempTablesNameClashes) {
+                    UpdateQueryCache(compileResult, keepInCache);
                 }
 
                 if (ev->Get()->ReplayMessage) {
@@ -762,8 +766,10 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan), (CollectDiagnostics ? ev->Get()->ReplayMessageUserView : std::nullopt));
                 }
             } else {
-                if (QueryCache.FindByUid(compileResult->Uid, false)) {
-                    QueryCache.EraseByUid(compileResult->Uid);
+                if (!hasTempTablesNameClashes) {
+                    if (QueryCache.FindByUid(compileResult->Uid, false)) {
+                        QueryCache.EraseByUid(compileResult->Uid);
+                    }
                 }
             }
 
@@ -814,12 +820,43 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
+    bool HasTempTablesNameClashes(
+            TKqpCompileResult::TConstPtr compileResult,
+            TKqpTempTablesState::TConstPtr tempTablesState, bool withSessionId = false) {
+        if (!compileResult) {
+            return false;
+        }
+        if (!compileResult->PreparedQuery) {
+            return false;
+        }
+
+        return compileResult->PreparedQuery->HasTempTables(tempTablesState, withSessionId);
+    }
+
+    void UpdateQueryCache(TKqpCompileResult::TConstPtr compileResult, bool keepInCache) {
+        if (QueryCache.FindByUid(compileResult->Uid, false)) {
+            QueryCache.Replace(compileResult);
+        } else if (keepInCache) {
+            if (QueryCache.Insert(compileResult, TableServiceConfig.GetEnableAstCache())) {
+                Counters->CompileQueryCacheEvicted->Inc();
+            }
+            if (compileResult->Query && compileResult->Query->Settings.IsPrepareQuery) {
+                if (InsertPreparingQuery(compileResult, true)) {
+                    Counters->CompileQueryCacheEvicted->Inc();
+                };
+            }
+        }
+    }
+
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev, const TActorContext& ctx) {
         auto& parseResult = ev->Get()->AstResult;
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
         if (parseResult && parseResult->Ast->IsOk()) {
             auto compileResult = QueryCache.FindByAst(query, *parseResult->Ast, compileRequest.KeepInCache);
+            if (HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+                compileResult = nullptr;
+            }
             if (compileResult) {
                 Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
 

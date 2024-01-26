@@ -4,6 +4,9 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/program/program.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.h>
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
@@ -45,8 +48,7 @@ TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpRead
 }
 
 
-std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task)
-{
+std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task) {
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     std::vector<std::shared_ptr<arrow::Field>> columns;
     std::vector<std::shared_ptr<arrow::Array>> data;
@@ -917,11 +919,34 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
             if (tableInfo->TableKind == ETableKind::Olap) {
                 auto* olapProgram = protoTaskMeta.MutableOlapProgram();
+                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
+
                 olapProgram->SetProgram(task.Meta.ReadInfo.OlapProgram.Program);
 
-                auto [schema, parameters] = SerializeKqpTasksParametersForOlap(stageInfo, task);
                 olapProgram->SetParametersSchema(schema);
                 olapProgram->SetParameters(parameters);
+
+                if (!!stageInfo.Meta.ColumnTableInfoPtr) {
+                    std::shared_ptr<NSchemeShard::TOlapSchema> olapSchema = std::make_shared<NSchemeShard::TOlapSchema>();
+                    olapSchema->ParseFromLocalDB(stageInfo.Meta.ColumnTableInfoPtr->Description.GetSchema());
+                    if (olapSchema->GetIndexes().GetIndexes().size()) {
+                        NOlap::TProgramContainer container;
+                        NOlap::TSchemaResolverColumnsOnly resolver(olapSchema);
+                        TString error;
+                        YQL_ENSURE(container.Init(resolver, *olapProgram, error), "" << error);
+                        auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
+                        if (data) {
+                            for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
+                                AFL_VERIFY(!!i.GetIndexMeta());
+                                i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
+                            }
+                            auto checker = data->GetCoverChecker();
+                            if (!!checker) {
+                                checker.SerializeToProto(*olapProgram->MutableIndexChecker());
+                            }
+                        }
+                    }
+                }
             } else {
                 YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
             }

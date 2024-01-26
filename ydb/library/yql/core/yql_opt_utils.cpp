@@ -1570,6 +1570,7 @@ ui64 GetTypeWeight(const TTypeAnnotationNode& type) {
                 case NUdf::EDataSlot::Int32:
                 case NUdf::EDataSlot::Uint32:
                 case NUdf::EDataSlot::Float:
+                case NUdf::EDataSlot::Date32:
                 case NUdf::EDataSlot::Datetime: return 4;
 
                 case NUdf::EDataSlot::TzDatetime: return 5;

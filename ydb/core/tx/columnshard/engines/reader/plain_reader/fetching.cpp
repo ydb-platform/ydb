@@ -15,6 +15,10 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
 
 bool TStepAction::DoExecute() {
     while (Step) {
+        if (Source->IsEmptyData()) {
+            FinishedFlag = true;
+            return true;
+        }
         if (!Step->ExecuteInplace(Source, Step)) {
             return true;
         }
@@ -29,11 +33,20 @@ bool TStepAction::DoExecute() {
 }
 
 bool TBlobsFetchingStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& step) const {
-    return !source->StartFetchingColumns(source, step, Columns);
+    AFL_VERIFY((!!Columns) ^ (!!Indexes));
+
+    const bool startFetchingColumns = Columns ? source->StartFetchingColumns(source, step, Columns) : false;
+    const bool startFetchingIndexes = Indexes ? source->StartFetchingIndexes(source, step, Indexes) : false;
+    return !startFetchingColumns && !startFetchingIndexes;
 }
 
 ui64 TBlobsFetchingStep::PredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
-    return source->GetRawBytes(Columns->GetColumnIds());
+    if (Columns) {
+        return source->GetRawBytes(Columns->GetColumnIds());
+    } else {
+        AFL_VERIFY(Indexes);
+        return source->GetIndexBytes(Indexes->GetIndexIdsSet());
+    }
 }
 
 bool TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
@@ -65,6 +78,11 @@ bool TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), std::make_shared<arrow::UInt64Scalar>(0), Count));
     }
     source->MutableStageData().AddBatch(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns));
+    return true;
+}
+
+bool TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
+    source->ApplyIndex(IndexChecker);
     return true;
 }
 

@@ -19,6 +19,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FFColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, ProgramInputColumns);
 
+    NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
     std::shared_ptr<TColumnsSet> PKFFColumns;

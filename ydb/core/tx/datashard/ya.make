@@ -237,7 +237,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
-    ydb/core/io_formats
+    ydb/core/io_formats/ydb_dump
     ydb/core/kqp/runtime
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer

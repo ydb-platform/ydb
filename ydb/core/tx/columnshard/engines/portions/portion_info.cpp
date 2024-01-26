@@ -120,6 +120,16 @@ ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     return sum;
 }
 
+ui64 TPortionInfo::GetIndexBytes(const std::set<ui32>& entityIds) const {
+    ui64 sum = 0;
+    for (auto&& r : Indexes) {
+        if (entityIds.contains(r.GetIndexId())) {
+            sum += r.GetBlobRange().Size;
+        }
+    }
+    return sum;
+}
+
 int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
     return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
 }
@@ -211,12 +221,20 @@ void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.EraseColumn(*this, record);
     }
+    for (auto& record : Indexes) {
+        db.EraseIndex(*this, record);
+    }
 }
+
 void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
     for (auto& record : Records) {
         db.WriteColumn(*this, record);
     }
+    for (auto& record : Indexes) {
+        db.WriteIndex(*this, record);
+    }
 }
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

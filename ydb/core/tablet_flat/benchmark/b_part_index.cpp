@@ -76,8 +76,6 @@ namespace {
             UNIT_ASSERT_GE(part->Stat.Bytes, 100ull*1024*1024);
             UNIT_ASSERT_LE(part->Stat.Bytes, 100ull*1024*1024 + 10ull*1024*1024);
 
-            UNIT_ASSERT_VALUES_EQUAL(part->Slices->size(), 1);
-
             GroupId = TGroupId(groups ? 1 : 0);
         }
 
@@ -242,10 +240,10 @@ BENCHMARK_REGISTER_F(TPartIndexSeekFixture, SeekKey)
 BENCHMARK_REGISTER_F(TPartIndexIteratorFixture, DoReads)
     ->ArgsProduct({
         /* b-tree */ {0, 1},
-        /* groups: */ {0, 1},
-        /* history: */ {0, 1},
-        /* reverse: */ {0, 1},
-        /* ESeek: */ {1, 2, 3},
+        /* groups: */ {1},
+        /* history: */ {1},
+        /* reverse: */ {0},
+        /* ESeek: */ {1},
         /* items */ {1, 10, 100}})
     ->Unit(benchmark::kMicrosecond);
 

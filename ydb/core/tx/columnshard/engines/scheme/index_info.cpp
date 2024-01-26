@@ -380,6 +380,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         return false;
     }
 
+    for (const auto& idx : schema.GetIndexes()) {
+        NIndexes::TIndexMetaContainer meta;
+        AFL_VERIFY(meta.DeserializeFromProto(idx));
+        Indexes.emplace(meta->GetIndexId(), meta);
+    }
+
     for (const auto& col : schema.GetColumns()) {
         const ui32 id = col.GetId();
         const TString& name = col.GetName();

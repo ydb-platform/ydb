@@ -30,10 +30,15 @@
 extern "C" {
 #include "postgres.h"
 #include "access/xact.h"
-#include "catalog/pg_type_d.h"
+#include "catalog/pg_am_d.h"
 #include "catalog/pg_collation_d.h"
-#include "catalog/pg_tablespace_d.h"
+#include "catalog/pg_conversion_d.h"
 #include "catalog/pg_database_d.h"
+#include "catalog/pg_operator_d.h"
+#include "catalog/pg_proc_d.h"
+#include "catalog/pg_namespace_d.h"
+#include "catalog/pg_tablespace_d.h"
+#include "catalog/pg_type_d.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
@@ -270,56 +275,98 @@ public:
         , Table_(table)
         , ItemType_(AS_TYPE(TStructType, AS_TYPE(TListType, returnType)->GetItemType()))
     {
-        YQL_ENSURE(Cluster_ == "pg_catalog");
-        if (Table_ == "pg_type") {
-            static const std::pair<const char*, TPgTypeFiller> AllPgTypeFillers[] = {
-                {"oid", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TypeId)); }},
-                {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
-                {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
-                {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
-            };
+        YQL_ENSURE(Cluster_ == "pg_catalog" || Cluster_ == "information_schema");
+        if (Cluster_ == "pg_catalog") {
+            if (Table_ == "pg_type") {
+                static const std::pair<const char*, TPgTypeFiller> AllPgTypeFillers[] = {
+                    {"oid", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.TypeId)); }},
+                    {"typname", [](const NPg::TTypeDesc& desc) { return PointerDatumToPod((Datum)(MakeFixedString(desc.Name, NAMEDATALEN))); }},
+                    {"typinput", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.InFuncId)); }},
+                    {"typnamespace", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"typtype", [](const NPg::TTypeDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.TypType)); }},
+                };
 
-            ApplyFillers(AllPgTypeFillers, Y_ARRAY_SIZE(AllPgTypeFillers), PgTypeFillers_);
-        } else if (Table_ == "pg_database") {
-            static const std::pair<const char*, TPgDatabaseFiller> AllPgDatabaseFillers[] = {
-                {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
-                {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
-                {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
-                {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
-                {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
-                    index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
-                {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
-            };
+                ApplyFillers(AllPgTypeFillers, Y_ARRAY_SIZE(AllPgTypeFillers), PgTypeFillers_);
+            } else if (Table_ == "pg_database") {
+                static const std::pair<const char*, TPgDatabaseFiller> AllPgDatabaseFillers[] = {
+                    {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                    {"datdba", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"datistemplate", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index < 3)); }},
+                    {"datallowconn", [](ui32 index) { return ScalarDatumToPod(BoolGetDatum(index != 2)); }},
+                    {"datname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(
+                        index == 1 ? "template1" : (index == 2 ? "template0" : "postgres"), NAMEDATALEN))); }},
+                    {"encoding", [](ui32) { return ScalarDatumToPod(Int32GetDatum(PG_UTF8)); }},
+                };
 
-            ApplyFillers(AllPgDatabaseFillers, Y_ARRAY_SIZE(AllPgDatabaseFillers), PgDatabaseFillers_);
-        } else if (Table_ == "pg_tablespace") {
-            static const std::pair<const char*, TPgTablespaceFiller> AllPgTablespaceFillers[] = {
-                {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index == 1 ? DEFAULTTABLESPACE_OID : GLOBALTABLESPACE_OID)); }},
-                {"spcname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(index == 1 ? "pg_default" : "pg_global", NAMEDATALEN))); }},
-            };
+                ApplyFillers(AllPgDatabaseFillers, Y_ARRAY_SIZE(AllPgDatabaseFillers), PgDatabaseFillers_);
+            } else if (Table_ == "pg_tablespace") {
+                static const std::pair<const char*, TPgTablespaceFiller> AllPgTablespaceFillers[] = {
+                    {"oid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index == 1 ? DEFAULTTABLESPACE_OID : GLOBALTABLESPACE_OID)); }},
+                    {"spcname", [](ui32 index) { return PointerDatumToPod((Datum)(MakeFixedString(index == 1 ? "pg_default" : "pg_global", NAMEDATALEN))); }},
+                };
 
-            ApplyFillers(AllPgTablespaceFillers, Y_ARRAY_SIZE(AllPgTablespaceFillers), PgTablespaceFillers_);
-        } else if (Table_ == "pg_shdescription") {
-            static const std::pair<const char*, TPgShDescriptionFiller> AllPgShDescriptionFillers[] = {
-                {"objoid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
-                {"classoid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(DatabaseRelationId)); }},
-                {"description", [](ui32 index) { return PointerDatumToPod((Datum)MakeVar(
-                    index == 1 ? "default template for new databases" :
-                    (index == 2 ? "unmodifiable empty database" :
-                    "default administrative connection database")
-                )); }},
-            };
+                ApplyFillers(AllPgTablespaceFillers, Y_ARRAY_SIZE(AllPgTablespaceFillers), PgTablespaceFillers_);
+            } else if (Table_ == "pg_shdescription") {
+                static const std::pair<const char*, TPgShDescriptionFiller> AllPgShDescriptionFillers[] = {
+                    {"objoid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index)); }},
+                    {"classoid", [](ui32) { return ScalarDatumToPod(ObjectIdGetDatum(DatabaseRelationId)); }},
+                    {"description", [](ui32 index) { return PointerDatumToPod((Datum)MakeVar(
+                        index == 1 ? "default template for new databases" :
+                        (index == 2 ? "unmodifiable empty database" :
+                        "default administrative connection database")
+                    )); }},
+                };
 
-            ApplyFillers(AllPgShDescriptionFillers, Y_ARRAY_SIZE(AllPgShDescriptionFillers), PgShDescriptionFillers_);
-        } else if (Table_ == "pg_stat_gssapi") {
-            static const std::pair<const char*, TPgStatGssapiFiller> AllPgStatGssapiFillers[] = {
-                {"encrypted", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
-                {"gss_authenticated", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
-                {"pid", []() { return ScalarDatumToPod(Int32GetDatum(GetPID())); }}
-            };
+                ApplyFillers(AllPgShDescriptionFillers, Y_ARRAY_SIZE(AllPgShDescriptionFillers), PgShDescriptionFillers_);
+            } else if (Table_ == "pg_stat_gssapi") {
+                static const std::pair<const char*, TPgStatGssapiFiller> AllPgStatGssapiFillers[] = {
+                    {"encrypted", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                    {"gss_authenticated", []() { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                    {"pid", []() { return ScalarDatumToPod(Int32GetDatum(GetPID())); }}
+                };
 
-            ApplyFillers(AllPgStatGssapiFillers, Y_ARRAY_SIZE(AllPgStatGssapiFillers), PgStatGssapiFillers_);
+                ApplyFillers(AllPgStatGssapiFillers, Y_ARRAY_SIZE(AllPgStatGssapiFillers), PgStatGssapiFillers_);
+            } else if (Table_ == "pg_namespace") {
+                static const std::pair<const char*, TPgNamespaceFiller> AllPgNamespaceFillers[] = {
+                    {"nspname", [](const NPg::TNamespaceDesc& desc) {return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN));}},
+                    {"oid", [](const NPg::TNamespaceDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                };
+
+                ApplyFillers(AllPgNamespaceFillers, Y_ARRAY_SIZE(AllPgNamespaceFillers), PgNamespaceFillers_);
+            } else if (Table_ == "pg_am") {
+                static const std::pair<const char*, TPgAmFiller> AllPgAmFillers[] = {
+                    {"oid", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                    {"amname", [](const NPg::TAmDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.AmName, NAMEDATALEN)); }},
+                    {"amtype", [](const NPg::TAmDesc& desc) { return ScalarDatumToPod(CharGetDatum(desc.AmType)); }},
+                };
+
+                ApplyFillers(AllPgAmFillers, Y_ARRAY_SIZE(AllPgAmFillers), PgAmFillers_);
+            } else if (Table_ == "pg_description") {
+                static const std::pair<const char*, TPgDescriptionFiller> AllPgDescriptionFillers[] = {
+                    {"objoid", [](const TDescriptionDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Objoid)); }},
+                    {"classoid", [](const TDescriptionDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Classoid)); }},
+                    {"objsubid", [](const TDescriptionDesc& desc) { return ScalarDatumToPod(Int32GetDatum(desc.Objsubid)); }},
+                    {"description", [](const TDescriptionDesc& desc) { return PointerDatumToPod((Datum)MakeVar(desc.Description)); }}
+                };
+
+                ApplyFillers(AllPgDescriptionFillers, Y_ARRAY_SIZE(AllPgDescriptionFillers), PgDescriptionFillers_);
+            } else if (Table_ == "pg_tables") {
+                static const std::pair<const char*, TTablesFiller> AllPgTablesFillers[] = {
+                    {"schemaname", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
+                    {"tablename", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                };
+
+                ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
+            }
+        } else {
+            if (Table_ == "tables") {
+                static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
+                    {"table_schema", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
+                    {"table_name", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                };
+
+                ApplyFillers(AllTablesFillers, Y_ARRAY_SIZE(AllTablesFillers), TablesFillers_);
+            }
         }
     }
 
@@ -336,58 +383,186 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         TUnboxedValueVector rows;
-        if (Table_ == "pg_type") {
-            NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
-                if (desc.ArrayTypeId == desc.TypeId) {
-                    return;
-                }
+        if (Cluster_ == "pg_catalog") {
+            if (Table_ == "pg_type") {
+                NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc) {
+                    if (desc.ArrayTypeId == desc.TypeId) {
+                        return;
+                    }
 
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
+                    for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
+                        items[i] = PgTypeFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_database") {
+                for (ui32 index = 1; index <= 3; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
+                        items[i] = PgDatabaseFillers_[i](index);
+                    }
+
+                    rows.emplace_back(row);
+                }
+            } else if (Table_ == "pg_tablespace") {
+                for (ui32 index = 1; index <= 2; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablespaceFillers_.size(), items);
+                    for (ui32 i = 0; i < PgTablespaceFillers_.size(); ++i) {
+                        items[i] = PgTablespaceFillers_[i](index);
+                    }
+
+                    rows.emplace_back(row);
+                }
+            } else if (Table_ == "pg_shdescription") {
+                for (ui32 index = 1; index <= 3; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgShDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgShDescriptionFillers_.size(); ++i) {
+                        items[i] = PgShDescriptionFillers_[i](index);
+                    }
+
+                    rows.emplace_back(row);
+                }
+            } else if (Table_ == "pg_stat_gssapi") {
                 NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTypeFillers_.size(), items);
-                for (ui32 i = 0; i < PgTypeFillers_.size(); ++i) {
-                    items[i] = PgTypeFillers_[i](desc);
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgStatGssapiFillers_.size(), items);
+                for (ui32 i = 0; i < PgStatGssapiFillers_.size(); ++i) {
+                    items[i] = PgStatGssapiFillers_[i]();
                 }
 
                 rows.emplace_back(row);
-            });
-        } else if (Table_ == "pg_database") {
-            for (ui32 index = 1; index <= 3; ++index) {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseFillers_.size(), items);
-                for (ui32 i = 0; i < PgDatabaseFillers_.size(); ++i) {
-                    items[i] = PgDatabaseFillers_[i](index);
+            } else if (Table_ == "pg_namespace") {
+                NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
+                    for (ui32 i = 0; i < PgNamespaceFillers_.size(); ++i) {
+                        items[i] = PgNamespaceFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_am") {
+                NPg::EnumAm([&](ui32 oid, const NPg::TAmDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ItemType_->GetMembersCount(), items);
+                    for (ui32 i = 0; i < ItemType_->GetMembersCount(); ++i) {
+                        items[i] = PgAmFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_description") {
+                TDescriptionDesc desc;
+                desc.Classoid = AccessMethodRelationId;
+                NPg::EnumAm([&](ui32 oid, const NPg::TAmDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = oid;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+
+                desc.Classoid = TypeRelationId;
+                NPg::EnumTypes([&](ui32 oid, const NPg::TTypeDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = oid;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+
+                desc.Classoid = NamespaceRelationId;
+                NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = oid;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+
+                desc.Classoid = ConversionRelationId;
+
+                NPg::EnumConversions([&](const NPg::TConversionDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = desc_.ConversionId;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+
+                desc.Classoid = OperatorRelationId;
+
+                NPg::EnumOperators([&](const NPg::TOperDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = desc_.OperId;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+
+                desc.Classoid = ProcedureRelationId;
+
+                NPg::EnumProc([&](ui32, const NPg::TProcDesc& desc_) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDescriptionFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDescriptionFillers_.size(); ++i) {
+                        desc.Objoid = desc_.ProcId;
+                        desc.Description = desc_.Descr;
+                        items[i] = PgDescriptionFillers_[i](desc);
+                    }
+
+                    rows.emplace_back(row);
+                });
+            } else if (Table_ == "pg_tables") {
+                auto tables = GetStaticTables();
+                for (const auto& t : tables) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablesFillers_.size(), items);
+                    for (ui32 i = 0; i < PgTablesFillers_.size(); ++i) {
+                        items[i] = PgTablesFillers_[i](t);
+                    }
+
+                    rows.emplace_back(row);
                 }
-
-                rows.emplace_back(row);
             }
-        } else if (Table_ == "pg_tablespace") {
-            for (ui32 index = 1; index <= 2; ++index) {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablespaceFillers_.size(), items);
-                for (ui32 i = 0; i < PgTablespaceFillers_.size(); ++i) {
-                    items[i] = PgTablespaceFillers_[i](index);
+        } else {
+            if (Table_ == "tables") {
+                auto tables = GetStaticTables();
+                for (const auto& t : tables) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(TablesFillers_.size(), items);
+                    for (ui32 i = 0; i < TablesFillers_.size(); ++i) {
+                        items[i] = TablesFillers_[i](t);
+                    }
+
+                    rows.emplace_back(row);
                 }
-
-                rows.emplace_back(row);
             }
-        } else if (Table_ == "pg_shdescription") {
-            for (ui32 index = 1; index <= 3; ++index) {
-                NUdf::TUnboxedValue* items;
-                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgShDescriptionFillers_.size(), items);
-                for (ui32 i = 0; i < PgShDescriptionFillers_.size(); ++i) {
-                    items[i] = PgShDescriptionFillers_[i](index);
-                }
-
-                rows.emplace_back(row);
-            }
-        } else if (Table_ == "pg_stat_gssapi") {
-            NUdf::TUnboxedValue* items;
-            auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgStatGssapiFillers_.size(), items);
-            for (ui32 i = 0; i < PgStatGssapiFillers_.size(); ++i) {
-                items[i] = PgStatGssapiFillers_[i]();
-            }
-
-            rows.emplace_back(row);
         }
 
         return compCtx.HolderFactory.VectorAsVectorHolder(std::move(rows));
@@ -411,6 +586,47 @@ private:
     TVector<TPgShDescriptionFiller> PgShDescriptionFillers_;
     using TPgStatGssapiFiller = NUdf::TUnboxedValuePod(*)();
     TVector<TPgStatGssapiFiller> PgStatGssapiFillers_;
+    using TPgNamespaceFiller = NUdf::TUnboxedValuePod(*)(const NPg::TNamespaceDesc&);
+    TVector<TPgNamespaceFiller> PgNamespaceFillers_;
+    using TPgAmFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAmDesc&);
+    TVector<TPgAmFiller> PgAmFillers_;
+
+    struct TDescriptionDesc {
+        ui32 Objoid = 0;
+        ui32 Classoid = 0;
+        i32 Objsubid = 0;
+        TString Description;
+    };
+
+    using TPgDescriptionFiller = NUdf::TUnboxedValuePod(*)(const TDescriptionDesc&);
+    TVector<TPgDescriptionFiller> PgDescriptionFillers_;
+
+    struct TTableInfo {
+        TString Schema;
+        TString Name;
+    };
+
+    using TTablesFiller = NUdf::TUnboxedValuePod(*)(const TTableInfo&);
+    TVector<TTablesFiller> PgTablesFillers_;
+    TVector<TTablesFiller> TablesFillers_;
+
+    static TVector<TTableInfo> GetStaticTables() {
+        return {
+            {"pg_catalog", "pg_type"},
+            {"pg_catalog", "pg_database"},
+            {"pg_catalog", "pg_tablespace"},
+            {"pg_catalog", "pg_shdescription"},
+            {"pg_catalog", "pg_trigger"},
+            {"pg_catalog", "pg_locks"},
+            {"pg_catalog", "pg_stat_gssapi"},
+            {"pg_catalog", "pg_inherits"},
+            {"pg_catalog", "pg_stat_activity"},
+            {"pg_catalog", "pg_timezone_names"},
+            {"pg_catalog", "pg_timezone_abbrevs"},
+            {"pg_catalog", "pg_tables"},
+            {"information_schema", "tables"},
+        };
+    }
 };
 
 class TFunctionCallInfo {

@@ -599,6 +599,7 @@ public:
            "Columns { Name: \"Partition\"        Type: \"Uint32\"}"
            "Columns { Name: \"CreateTime\"       Type: \"Uint64\"}"
            "Columns { Name: \"AccessTime\"       Type: \"Uint64\"}"
+           "Columns { Name: \"SeqNo\"            Type: \"Uint64\"}"
            "KeyColumnNames: [\"Hash\", \"SourceId\", \"Topic\"]"
         );
     }

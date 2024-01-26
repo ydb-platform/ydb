@@ -815,54 +815,57 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
 
 TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
     if (column.Type == "bytea") {
-        if (cell.IsList()) {
-            TString result;
+        const auto rawValue = (cell.IsList())
+            ? Base64Decode(cell.AsList()[0].AsString())
+            : cell.AsString();
 
-            const auto rawValue = Base64Decode(cell.AsList()[0].AsString());
-            switch (byteaOutput) {
-                case EByteaOutput::hex: {
-                    const auto expectedSize = rawValue.size() * 2 + 2;
-                    result.resize(expectedSize);
-                    result[0] = '\\';
-                    result[1] = 'x';
-                    const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
+        switch (byteaOutput) {
+            case EByteaOutput::hex: {
+                TString result;
 
-                    Y_ASSERT(cnt + 2 == expectedSize);
+                const auto expectedSize = rawValue.size() * 2 + 2;
+                result.resize(expectedSize);
+                result[0] = '\\';
+                result[1] = 'x';
+                const auto cnt = HexEncode(rawValue.data(), rawValue.size(), result.begin() + 2);
 
-                    return result;
-                }
-                case EByteaOutput::escape: {
-                    ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
-                        [] (ui64 acc, char c) {
-                            return acc + ((c == '\\')
-                                          ? 2
-                                          : ((ui8)c < 0x20 || 0x7e < (ui8)c)
-                                            ? 4
-                                            : 1);
-                        });
-                    result.resize(expectedSize);
-                    auto p = result.begin();
-                    for (const auto c : rawValue) {
-                        if (c == '\\') {
-                            *p++ = '\\';
-                            *p++ = '\\';
-                        } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
-                            auto val = (ui8)c;
+                Y_ASSERT(cnt + 2 == expectedSize);
 
-                            *p++ = '\\';
-                            *p++ = ((val >> 6) & 03) + '0';
-                            *p++ = ((val >> 3) & 07) + '0';
-                            *p++ =  (val & 07) + '0';
-                        } else {
-                            *p++ = c;
-                        }
-                    }
-
-                    return result;
-                }
-                default:
-                    throw yexception() << "Unhandled EByteaOutput value";
+                return result;
             }
+            case EByteaOutput::escape: {
+                TString result;
+
+                ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
+                    [] (ui64 acc, char c) {
+                        return acc + ((c == '\\')
+                                        ? 2
+                                        : ((ui8)c < 0x20 || 0x7e < (ui8)c)
+                                        ? 4
+                                        : 1);
+                    });
+                result.resize(expectedSize);
+                auto p = result.begin();
+                for (const auto c : rawValue) {
+                    if (c == '\\') {
+                        *p++ = '\\';
+                        *p++ = '\\';
+                    } else if ((ui8)c < 0x20 || 0x7e < (ui8)c) {
+                        auto val = (ui8)c;
+
+                        *p++ = '\\';
+                        *p++ = ((val >> 6) & 03) + '0';
+                        *p++ = ((val >> 3) & 07) + '0';
+                        *p++ =  (val & 07) + '0';
+                    } else {
+                        *p++ = c;
+                    }
+                }
+
+                return result;
+            }
+            default:
+                throw yexception() << "Unhandled EByteaOutput value";
         }
     }
     return cell.AsString();

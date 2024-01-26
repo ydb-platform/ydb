@@ -30,6 +30,23 @@ private:
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
 
 public:
+    class TPage {
+    private:
+        YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);
+        YDB_READONLY_DEF(std::vector<const TIndexChunk*>, Indexes);
+        YDB_READONLY(ui32, RecordsCount, 0);
+    public:
+        TPage(std::vector<const TColumnRecord*>&& records, std::vector<const TIndexChunk*>&& indexes, const ui32 recordsCount)
+            : Records(std::move(records))
+            , Indexes(std::move(indexes))
+            , RecordsCount(recordsCount)
+        {
+
+        }
+    };
+
+    std::vector<TPage> BuildPages() const;
+
     std::vector<TColumnRecord> Records;
 
     const std::vector<TColumnRecord>& GetRecords() const {

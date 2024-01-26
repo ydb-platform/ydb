@@ -95,6 +95,7 @@ public:
 class TPortionIndexChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
+    const ui32 RecordsCount;
     const TString Data;
 protected:
     virtual const TString& DoGetData() const override {
@@ -110,7 +111,7 @@ protected:
         return false;
     }
     virtual std::optional<ui32> DoGetRecordsCount() const override {
-        return {};
+        return RecordsCount;
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
         return nullptr;
@@ -120,8 +121,9 @@ protected:
     }
     virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
 public:
-    TPortionIndexChunk(const ui32 entityId, const TString& data)
-        : TBase(entityId, 0) 
+    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const TString& data)
+        : TBase(entityId, 0)
+        , RecordsCount(recordsCount)
         , Data(data)
     {
     }

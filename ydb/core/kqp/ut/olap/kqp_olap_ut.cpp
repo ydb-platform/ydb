@@ -1327,8 +1327,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             Cout << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 4);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 2);
+            AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 17);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 4);
         }
         ui32 requestsCount = 100;
         for (ui32 i = 0; i < requestsCount; ++i) {
@@ -1353,7 +1353,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[1u;]])");
         }
 
-        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() / csController->GetIndexesSkippingOnSelect().Val() < 0.3);
+        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() / csController->GetIndexesSkippingOnSelect().Val() < 0.15);
 
     }
 

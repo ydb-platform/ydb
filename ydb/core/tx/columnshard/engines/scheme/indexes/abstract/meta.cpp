@@ -9,20 +9,25 @@
 namespace NKikimr::NOlap::NIndexes {
 
 void TPortionIndexChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), bRange));
+    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, bRange));
 }
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
     for (auto&& i : ColumnIds) {
         auto it = data.find(i);
         AFL_VERIFY(it != data.end());
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
+    ui32 recordsCount = 0;
+    for (auto&& i : data.begin()->second) {
+        recordsCount += i->GetRecordsCountVerified();
+    }
     TChunkedBatchReader reader(std::move(columnReaders));
     std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
     const TString indexData = TColumnSaver(nullptr, Serializer).Apply(indexBatch);
-    return std::make_shared<TPortionIndexChunk>(indexId, indexData);
+    return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

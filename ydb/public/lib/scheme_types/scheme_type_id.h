@@ -35,9 +35,6 @@ static constexpr TTypeId Timestamp = NYql::NProto::Timestamp; // microseconds si
 static constexpr TTypeId Interval = NYql::NProto::Interval; // microseconds aka TDuration, signed
 
 static constexpr TTypeId Date32 = NYql::NProto::Date32; // days since 1970, i32
-static constexpr TTypeId Datetime64 = NYql::NProto::Datetime64; // seconds since 1970
-static constexpr TTypeId Timestamp64 = NYql::NProto::Timestamp64; // microseconds since 1970 aka TInstant
-static constexpr TTypeId Interval64 = NYql::NProto::Interval64; // microseconds aka TDuration, signed
 
 static constexpr TTypeId PairUi64Ui64 = 0x101; // DEPRECATED, don't use
 
@@ -86,9 +83,6 @@ static constexpr TTypeId YqlIds[] = {
     DyNumber,
     Uuid,
     Date32,
-    Datetime64,
-    Timestamp64,
-    Interval64,
 };
 
 // types must be defined in GetValueHash and CompareTypedCells
@@ -123,6 +117,7 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Double:          return "Double";
         case NTypeIds::Float:           return "Float";
         case NTypeIds::Date:            return "Date";
+        case NTypeIds::Date32:          return "Date32";
         case NTypeIds::Datetime:        return "Datetime";
         case NTypeIds::Timestamp:       return "Timestamp";
         case NTypeIds::Interval:        return "Interval";

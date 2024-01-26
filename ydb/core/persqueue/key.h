@@ -17,14 +17,25 @@ public:
     {
     }
 
-    size_t GetHash() const {
+    size_t GetHash() const
+    {
         return MultiHash(OriginalPartitionId, WriteId);
     }
 
-    bool IsEqual(const TPartitionId& rhs) const {
+    bool IsEqual(const TPartitionId& rhs) const
+    {
         return
             (OriginalPartitionId == rhs.OriginalPartitionId) &&
             (WriteId == rhs.WriteId);
+    }
+
+    void ToStream(IOutputStream& s) const
+    {
+        if (WriteId.Defined()) {
+            s << '{' << OriginalPartitionId << ", " << *WriteId << ", " << InternalPartitionId << '}';
+        } else {
+            s << OriginalPartitionId;
+        }
     }
 
     ui32 OriginalPartitionId;
@@ -33,8 +44,16 @@ public:
 };
 
 inline
-bool operator==(const TPartitionId& lhs, const TPartitionId& rhs) {
+bool operator==(const TPartitionId& lhs, const TPartitionId& rhs)
+{
     return lhs.IsEqual(rhs);
+}
+
+inline
+IOutputStream& operator<<(IOutputStream& s, const TPartitionId& v)
+{
+    v.ToStream(s);
+    return s;
 }
 
 // {char type; ui32 partiton; (char mark)}

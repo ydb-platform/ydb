@@ -67,7 +67,7 @@ private:
 };
 
 struct TCacheBlobL2 {
-    ui32 Partition;
+    TPartitionId Partition;
     ui64 Offset;
     ui16 PartNo;
     TCacheValue::TPtr Value;

@@ -352,8 +352,8 @@ public:
                 ApplyFillers(AllPgDescriptionFillers, Y_ARRAY_SIZE(AllPgDescriptionFillers), PgDescriptionFillers_);
             } else if (Table_ == "pg_tables") {
                 static const std::pair<const char*, TTablesFiller> AllPgTablesFillers[] = {
-                    {"schemaname", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
-                    {"tablename", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"schemaname", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
+                    {"tablename", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
                 };
 
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
@@ -361,11 +361,20 @@ public:
         } else {
             if (Table_ == "tables") {
                 static const std::pair<const char*, TTablesFiller> AllTablesFillers[] = {
-                    {"table_schema", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
-                    {"table_name", [](const TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"table_schema", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
+                    {"table_name", [](const NPg::TTableInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
                 };
 
                 ApplyFillers(AllTablesFillers, Y_ARRAY_SIZE(AllTablesFillers), TablesFillers_);
+            } else if (Table_ == "columns") {
+                static const std::pair<const char*, TColumnsFiller> AllColumnsFillers[] = {
+                    {"table_schema", [](const NPg::TColumnInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Schema, NAMEDATALEN)); }},
+                    {"table_name", [](const NPg::TColumnInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.TableName, NAMEDATALEN)); }},
+                    {"column_name", [](const NPg::TColumnInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"udt_name", [](const NPg::TColumnInfo& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.UdtType, NAMEDATALEN)); }},
+                };
+
+                ApplyFillers(AllColumnsFillers, Y_ARRAY_SIZE(AllColumnsFillers), ColumnsFillers_);
             }
         }
     }
@@ -539,7 +548,7 @@ public:
                     rows.emplace_back(row);
                 });
             } else if (Table_ == "pg_tables") {
-                auto tables = GetStaticTables();
+                const auto& tables = NPg::GetStaticTables();
                 for (const auto& t : tables) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgTablesFillers_.size(), items);
@@ -552,7 +561,7 @@ public:
             }
         } else {
             if (Table_ == "tables") {
-                auto tables = GetStaticTables();
+                const auto& tables = NPg::GetStaticTables();
                 for (const auto& t : tables) {
                     NUdf::TUnboxedValue* items;
                     auto row = compCtx.HolderFactory.CreateDirectArrayHolder(TablesFillers_.size(), items);
@@ -561,6 +570,19 @@ public:
                     }
 
                     rows.emplace_back(row);
+                }
+            } else if (Table_ == "columns") {
+                const auto& columns = NPg::GetStaticColumns();
+                for (const auto& t : columns) {
+                    for (const auto& c : t.second) {
+                        NUdf::TUnboxedValue* items;
+                        auto row = compCtx.HolderFactory.CreateDirectArrayHolder(ColumnsFillers_.size(), items);
+                        for (ui32 i = 0; i < ColumnsFillers_.size(); ++i) {
+                            items[i] = ColumnsFillers_[i](c);
+                        }
+
+                        rows.emplace_back(row);
+                    }
                 }
             }
         }
@@ -601,32 +623,12 @@ private:
     using TPgDescriptionFiller = NUdf::TUnboxedValuePod(*)(const TDescriptionDesc&);
     TVector<TPgDescriptionFiller> PgDescriptionFillers_;
 
-    struct TTableInfo {
-        TString Schema;
-        TString Name;
-    };
-
-    using TTablesFiller = NUdf::TUnboxedValuePod(*)(const TTableInfo&);
+    using TTablesFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&);
     TVector<TTablesFiller> PgTablesFillers_;
     TVector<TTablesFiller> TablesFillers_;
 
-    static TVector<TTableInfo> GetStaticTables() {
-        return {
-            {"pg_catalog", "pg_type"},
-            {"pg_catalog", "pg_database"},
-            {"pg_catalog", "pg_tablespace"},
-            {"pg_catalog", "pg_shdescription"},
-            {"pg_catalog", "pg_trigger"},
-            {"pg_catalog", "pg_locks"},
-            {"pg_catalog", "pg_stat_gssapi"},
-            {"pg_catalog", "pg_inherits"},
-            {"pg_catalog", "pg_stat_activity"},
-            {"pg_catalog", "pg_timezone_names"},
-            {"pg_catalog", "pg_timezone_abbrevs"},
-            {"pg_catalog", "pg_tables"},
-            {"information_schema", "tables"},
-        };
-    }
+    using TColumnsFiller = NUdf::TUnboxedValuePod(*)(const NPg::TColumnInfo&);
+    TVector<TColumnsFiller> ColumnsFillers_;
 };
 
 class TFunctionCallInfo {

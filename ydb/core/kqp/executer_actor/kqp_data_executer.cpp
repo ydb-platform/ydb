@@ -1666,11 +1666,21 @@ private:
         }
 
         for (const auto &tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
-                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                 return true;
             }
         }
+
+        return false;
+    }
+
+    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage) {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -1703,7 +1713,8 @@ private:
                     }
                 }
 
-                if (stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage)) {
+                if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
+                    || (!AppData()->FeatureFlags.GetEnableOlapSink() && HasOlapSink(stage))) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,

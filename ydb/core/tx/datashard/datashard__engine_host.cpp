@@ -1075,7 +1075,6 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
     KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
-    KqpExecCtx.Alloc = KqpAlloc.Get();
     KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
     if (auto rm = NKqp::TryGetKqpResourceManager()) {
         KqpExecCtx.PatternCache = rm->GetPatternCache();
@@ -1238,9 +1237,9 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
 
         settings.OptLLVM = "OFF";
         settings.TerminateOnError = false;
-
+        Y_ABORT_UNLESS(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), *KqpAlloc.Get(), KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;

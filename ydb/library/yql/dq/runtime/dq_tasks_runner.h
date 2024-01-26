@@ -121,7 +121,6 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     NUdf::IApplyContext* ApplyCtx = nullptr;
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
-    NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
 };
@@ -380,7 +379,7 @@ public:
     virtual bool IsAllocatorAttached() = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;
-    virtual std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() const = 0;
+    virtual NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const = 0;
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
@@ -397,8 +396,12 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 };
 
-TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
-    const TLogFunc& logFunc);
+TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
+    NKikimr::NMiniKQL::TScopedAlloc& alloc, 
+    const TDqTaskRunnerContext& ctx, 
+    const TDqTaskRunnerSettings& settings,
+    const TLogFunc& logFunc
+);
 
 } // namespace NYql::NDq
 

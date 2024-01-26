@@ -724,7 +724,16 @@ public:
 
             Ctx.FuncProvider = TaskTransformFactory(taskParams, Ctx.FuncRegistry);
 
-            Runner = MakeDqTaskRunner(Ctx, settings, nullptr);
+            Y_ABORT_UNLESS(!Alloc);
+            Y_ABORT_UNLESS(FunctionRegistry);
+            Alloc = std::make_unique<NKikimr::NMiniKQL::TScopedAlloc>(
+                __LOCATION__,
+                NKikimr::TAlignedPagePoolCounters(),
+                FunctionRegistry->SupportsSizedAllocators(),
+                false
+            );
+
+            Runner = MakeDqTaskRunner(*Alloc.get(), Ctx, settings, nullptr);
         });
 
         auto guard = Runner->BindAllocator(DqConfiguration->MemoryLimit.Get().GetOrElse(0));
@@ -753,7 +762,8 @@ public:
 
         result.Save(&output);
     }
-
+private:
+    std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TTaskTransformFactory TaskTransformFactory;
     THashMap<TString, i64> CurrentJobStats;

@@ -304,11 +304,14 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ui64 maxOffset = 0;
 
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
-                maxSeqNo = it->second.SeqNo;
+                maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo);
                 maxOffset = it->second.Offset;
-                if (it->second.SeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
-                    already = true;
-                }
+            } else {
+                maxSeqNo = writeResponse.InitialSeqNo;
+            }
+
+            if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                already = true;
             }
 
             if (!already) {
@@ -658,10 +661,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        if (!msg.DisableDeduplication) {
-            SourceManager.EnsureSourceId(msg.SourceId);
-        }
-        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, ctx);
+        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -867,10 +867,6 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
         ui64& curOffset = parameters.CurOffset;
         auto& sourceIdBatch = parameters.SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
-
-        if (!p.Msg.DisableDeduplication && !sourceId) {
-            return ProcessResult::Break;
-        }
 
         WriteInflightSize -= p.Msg.Data.size();
 
@@ -1218,7 +1214,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-            }};
+            }, 0};
 
             WriteInflightSize += heartbeat->Data.size();
             auto result = ProcessRequest(hbMsg, parameters, request, ctx);
@@ -1534,8 +1530,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Requests.empty()
                     || !WriteQuota->CanExaust(now)
                     || WaitingForPreviousBlobQuota()
-                    || WaitingForSubDomainQuota(ctx)
-                    || SourceManager.WaitSources()); //in this case all writes must be processed or no quota left
+                    || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;

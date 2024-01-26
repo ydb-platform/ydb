@@ -343,7 +343,6 @@ private:
     void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
     // void DestroyReadSession(const TReadSessionKey& key);
 
-    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
@@ -481,9 +480,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -539,9 +536,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -612,7 +607,6 @@ private:
 
     std::deque<TMessage> Requests;
     std::deque<TMessage> Responses;
-    std::deque<TEvPQ::TEvGetMaxSeqNoRequest::TPtr> MaxSeqNoRequests;
 
     THead Head;
     THead NewHead;

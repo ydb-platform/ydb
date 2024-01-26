@@ -19,6 +19,7 @@ struct TWriteMsg {
     ui64 Cookie;
     TMaybe<ui64> Offset;
     TEvPQ::TEvWrite::TMsg Msg;
+    ui64 InitialSeqNo;
 };
 
 struct TOwnershipMsg {

@@ -470,6 +470,7 @@ private:
     ui64 PartitionTabletId;
     ui32 PreferedPartition;
     TString SourceId;
+    ui64 InitialSeqNo;
     TString OwnerCookie;
     TString UserAgent;
 

@@ -98,26 +98,40 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 }
 
 std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
-    const ui64 granule, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+    const ui64 pathId, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
     Y_ABORT_UNLESS(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-    std::vector<TPortionInfoWithBlobs> out;
 
     std::shared_ptr<NOlap::TSerializationStats> stats = std::make_shared<NOlap::TSerializationStats>();
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
     auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, stats);
-    TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
+    std::vector<TPortionInfoWithBlobs> out;
+    {
+        std::vector<TBatchSerializedSlice> pages = TRBSplitLimiter::BuildSimpleSlices(batch, SplitSettings, context.Counters.SplitterCounters, schema);
+        std::vector<TGeneralSerializedSlice> generalPages;
+        for (auto&& i : pages) {
+            std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns = i.GetPortionChunks();
+            resultSchema->GetIndexInfo().AppendIndexes(portionColumns);
+            generalPages.emplace_back(portionColumns, schema, context.Counters.SplitterCounters, SplitSettings);
+        }
 
-    std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunkByBlobs;
-    std::shared_ptr<arrow::RecordBatch> portionBatch;
-    while (limiter.Next(chunkByBlobs, portionBatch)) {
-        TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(chunkByBlobs, nullptr, granule, snapshot, SaverContext.GetStorageOperator());
-        infoWithBlob.GetPortionInfo().AddMetadata(*resultSchema, portionBatch, SaverContext.GetTierName());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());
-        out.emplace_back(std::move(infoWithBlob));
+        TSimilarSlicer slicer(SplitSettings.GetExpectedPortionSize());
+        auto packs = slicer.Split(generalPages);
+
+        ui32 recordIdx = 0;
+        for (auto&& i : packs) {
+            TGeneralSerializedSlice slice(std::move(i));
+            auto b = batch->Slice(recordIdx, slice.GetRecordsCount());
+            std::vector<std::vector<std::shared_ptr<IPortionDataChunk>>> chunksByBlobs = slice.GroupChunksByBlobs();
+            out.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, pathId, snapshot, SaverContext.GetStorageOperator()));
+            NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
+            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
+            out.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
+            recordIdx += slice.GetRecordsCount();
+        }
     }
 
     return out;

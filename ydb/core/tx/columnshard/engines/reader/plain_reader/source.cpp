@@ -121,6 +121,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSourc
     }
 
     if (!readAction->GetExpectedBlobsSize()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         return false;
     }
 
@@ -136,24 +137,37 @@ void TPortionDataSource::DoAbort() {
 void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
-    for (auto&& i : Portion->GetIndexes()) {
-        if (!indexIds.contains(i.GetIndexId())) {
-            continue;
+//    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
+    std::vector<TPortionInfo::TPage> pages = Portion->BuildPages();
+    NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& p : pages) {
+        for (auto&& i : p.GetIndexes()) {
+            if (!indexIds.contains(i->GetIndexId())) {
+                continue;
+            }
+            indexBlobs[i->GetIndexId()].emplace_back(StageData->ExtractBlob(i->GetBlobRange()));
         }
-        indexBlobs[i.GetIndexId()].emplace_back(StageData->ExtractBlob(i.GetBlobRange()));
-    }
-    for (auto&& i : indexIds) {
-        if (!indexBlobs.contains(i)) {
-            return;
+        for (auto&& i : indexIds) {
+            if (!indexBlobs.contains(i)) {
+                return;
+            }
+        }
+        if (indexChecker->Check(indexBlobs)) {
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
+            constructor.Add(true, p.GetRecordsCount());
+        } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(false);
+            constructor.Add(false, p.GetRecordsCount());
         }
     }
-    if (!indexChecker->Check(indexBlobs)) {
-        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(false);
+    AFL_VERIFY(constructor.Size() == Portion->GetRecordsCount());
+    if (constructor.IsTotalDenyFilter()) {
         StageData->AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+    } else if (constructor.IsTotalAllowFilter()) {
+        return;
     } else {
-        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
+        StageData->AddFilter(constructor);
     }
-    return;
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {

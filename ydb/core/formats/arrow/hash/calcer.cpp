@@ -18,9 +18,9 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TSt
 
         auto& typedScalar = static_cast<const TScalar&>(*scalar);
         if constexpr (arrow::has_string_view<T>()) {
-            hashCalcer.Update((const ui8*)typedScalar.value->data(), typedScalar.value->size());
+            hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.value->data()), typedScalar.value->size());
         } else if constexpr (arrow::has_c_type<T>()) {
-            hashCalcer.Update((const ui8*)(typedScalar.data()), sizeof(T));
+            hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.data()), sizeof(typedScalar.value));
         } else {
             static_assert(arrow::is_decimal_type<T>());
         }
@@ -128,6 +128,13 @@ std::vector<std::shared_ptr<arrow::Array>> TXX64::GetColumns(const std::shared_p
             ("field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
     }
     return columns;
+}
+
+ui64 TXX64::CalcHash(const std::shared_ptr<arrow::Scalar>& scalar) {
+    NXX64::TStreamStringHashCalcer calcer(0);
+    calcer.Start();
+    AppendField(scalar, calcer);
+    return calcer.Finish();
 }
 
 }

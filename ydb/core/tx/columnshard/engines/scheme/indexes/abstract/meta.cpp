@@ -9,20 +9,25 @@
 namespace NKikimr::NOlap::NIndexes {
 
 void TPortionIndexChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), bRange));
+    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, bRange));
 }
 
 std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
     for (auto&& i : ColumnIds) {
         auto it = data.find(i);
         AFL_VERIFY(it != data.end());
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
+    ui32 recordsCount = 0;
+    for (auto&& i : data.begin()->second) {
+        recordsCount += i->GetRecordsCountVerified();
+    }
     TChunkedBatchReader reader(std::move(columnReaders));
     std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
     const TString indexData = TColumnSaver(nullptr, Serializer).Apply(indexBatch);
-    return std::make_shared<TPortionIndexChunk>(indexId, indexData);
+    return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {
@@ -35,6 +40,22 @@ TIndexByColumns::TIndexByColumns(const ui32 indexId, const std::set<ui32>& colum
     , ColumnIds(columnIds)
 {
     Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
+}
+
+NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {
+    const auto* bMeta = dynamic_cast<const TIndexByColumns*>(&newMeta);
+    if (!bMeta) {
+        return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+    }
+    if (bMeta->ColumnIds.size() != ColumnIds.size()) {
+        return TConclusionStatus::Fail("columns count is different");
+    }
+    for (auto&& i : bMeta->ColumnIds) {
+        if (!ColumnIds.contains(i)) {
+            return TConclusionStatus::Fail("columns set is different or column was recreated in database");
+        }
+    }
+    return TConclusionStatus::Success();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

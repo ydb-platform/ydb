@@ -108,6 +108,15 @@ protected:
     }
 
 public:
+
+    std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunks() const {
+        std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
+        for (auto&& i : Data) {
+            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+        }
+        return result;
+    }
+
     std::shared_ptr<arrow::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
         std::vector<std::shared_ptr<arrow::Array>> pkColumns;
         for (auto&& i : pkSchema->fields()) {

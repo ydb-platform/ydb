@@ -298,9 +298,10 @@ struct Schema : NIceDb::Schema {
         struct Blob: Column<5, NScheme::NTypeIds::String> {};
         struct Offset: Column<6, NScheme::NTypeIds::Uint32> {};
         struct Size: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct RecordsCount: Column<8, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
-        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount>;
     };
 
     using TTables = SchemaTables<
@@ -618,14 +619,17 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
+    const ui32 RecordsCount;
 public:
     TIndexChunk BuildIndexChunk() const {
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), BlobRange);
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, BlobRange);
     }
 
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>()) {
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
+    {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());

@@ -41,7 +41,7 @@ message TProgram {
     }
 
     message TBloomFilterChecker {
-        repeated uint32 HashValues = 1;
+        repeated uint64 HashValues = 1;
     }
 
     message TOlapIndexChecker {

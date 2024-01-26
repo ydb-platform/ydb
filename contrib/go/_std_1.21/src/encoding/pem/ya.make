@@ -1,14 +1,42 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    pem.go
-)
-
-GO_TEST_SRCS(pem_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		pem.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

@@ -1,12 +1,12 @@
 IF (CGO_ENABLED)
     GO_LIBRARY()
-    
+
     PEERDIR(
         library/cpp/sanitizer/include
     )
 
     NO_COMPILER_WARNINGS()
-    
+
     SRCS(
         abi_loong64.h
         abi_ppc64x.h
@@ -126,3 +126,7 @@ IF (CGO_ENABLED)
 
     END()
 ENDIF()
+
+RECURSE(
+    # internal
+)

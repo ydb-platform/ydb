@@ -212,6 +212,10 @@ public:
     UNSUPPORTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
     UNSUPPORTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const TString&, const NBundleControllerClient::TGetBundleConfigOptions&));
+    UNSUPPORTED_METHOD(TFuture<TGetPipelineSpecResult>, GetPipelineSpec, (const NYPath::TYPath&, const TGetPipelineSpecOptions&));
+    UNSUPPORTED_METHOD(TFuture<TSetPipelineSpecResult>, SetPipelineSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineSpecOptions&));
+    UNSUPPORTED_METHOD(TFuture<TGetPipelineDynamicSpecResult>, GetPipelineDynamicSpec, (const NYPath::TYPath&, const TGetPipelineDynamicSpecOptions&));
+    UNSUPPORTED_METHOD(TFuture<TSetPipelineDynamicSpecResult>, SetPipelineDynamicSpec, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetPipelineDynamicSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SetBundleConfig, (const TString&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, StartPipeline, (const TYPath&, const TStartPipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, StopPipeline, (const TYPath&, const TStopPipelineOptions&));

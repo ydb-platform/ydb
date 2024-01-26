@@ -467,7 +467,7 @@ template <class T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer)
 {
     using TSerializer = typename TSerializationTraits<T>::TSerializer;
-    auto serializer = TSerializer::template CreateReadOnly<TSerializer>(value);
+    auto serializer = TSerializer::template CreateReadOnly<T, TSerializer>(value);
     Serialize(serializer, consumer);
 }
 
@@ -666,7 +666,7 @@ template <class T>
 void Deserialize(T& value, INodePtr node)
 {
     using TSerializer = typename TSerializationTraits<T>::TSerializer;
-    auto serializer = TSerializer::template CreateWritable<TSerializer>(value);
+    auto serializer = TSerializer::template CreateWritable<T, TSerializer>(value);
     Deserialize(serializer, node);
 }
 

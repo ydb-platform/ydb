@@ -1,45 +1,84 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    encodedword.go
-    grammar.go
-    mediatype.go
-    type.go
-)
-
-GO_TEST_SRCS(
-    encodedword_test.go
-    mediatype_test.go
-    type_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        type_unix.go
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
     )
-
-    GO_TEST_SRCS(type_unix_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_LINUX AND ARCH_ARM64)
     SRCS(
-        type_unix.go
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
     )
-
-    GO_TEST_SRCS(type_unix_test.go)
-ENDIF()
-
-IF (OS_WINDOWS)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        type_windows.go
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_unix.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		encodedword.go
+		grammar.go
+		mediatype.go
+		type.go
+		type_windows.go
     )
 ENDIF()
-
 END()
 
+
 RECURSE(
-    multipart
-    quotedprintable
+	multipart
+	quotedprintable
 )

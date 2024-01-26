@@ -1,22 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    interface.go
-    parser.go
-    resolver.go
-)
-
-GO_TEST_SRCS(
-    error_test.go
-    parser_test.go
-    performance_test.go
-    resolver_test.go
-    short_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		interface.go
+		parser.go
+		resolver.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

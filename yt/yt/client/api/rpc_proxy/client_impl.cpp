@@ -2116,6 +2116,91 @@ TFuture<TListUserTokensResult> TClient::ListUserTokens(
     ThrowUnimplemented("ListUserTokens");
 }
 
+TFuture<TGetPipelineSpecResult> TClient::GetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineSpecPtr& rsp) {
+        return TGetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineSpecResult> TClient::SetPipelineSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    req->set_force(options.Force);
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineSpecPtr& rsp) {
+        return TSetPipelineSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
+TFuture<TGetPipelineDynamicSpecResult> TClient::GetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const TGetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetPipelineDynamicSpecPtr& rsp) {
+        return TGetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+            .Spec = TYsonString(rsp->spec()),
+        };
+    }));
+}
+
+TFuture<TSetPipelineDynamicSpecResult> TClient::SetPipelineDynamicSpec(
+    const NYPath::TYPath& pipelinePath,
+    const NYson::TYsonString& spec,
+    const TSetPipelineDynamicSpecOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.SetPipelineDynamicSpec();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_spec(spec.ToString());
+    if (options.ExpectedVersion) {
+        req->set_expected_version(ToProto<i64>(*options.ExpectedVersion));
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSetPipelineDynamicSpecPtr& rsp) {
+        return TSetPipelineDynamicSpecResult{
+            .Version = FromProto<NFlow::TVersion>(rsp->version()),
+        };
+    }));
+}
+
 TFuture<void> TClient::StartPipeline(
     const NYPath::TYPath& pipelinePath,
     const TStartPipelineOptions& options)

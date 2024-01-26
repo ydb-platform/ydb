@@ -1,36 +1,105 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    decode.go
-    encode.go
-    fold.go
-    indent.go
-    scanner.go
-    stream.go
-    tables.go
-    tags.go
-)
-
-GO_TEST_SRCS(
-    bench_test.go
-    decode_test.go
-    encode_test.go
-    fold_test.go
-    fuzz_test.go
-    number_test.go
-    scanner_test.go
-    stream_test.go
-    tagkey_test.go
-    tags_test.go
-)
-
-GO_XTEST_SRCS(
-    example_marshaling_test.go
-    example_test.go
-    example_text_marshaling_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		decode.go
+		encode.go
+		fold.go
+		indent.go
+		scanner.go
+		stream.go
+		tables.go
+		tags.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

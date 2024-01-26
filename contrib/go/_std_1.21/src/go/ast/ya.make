@@ -1,29 +1,105 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    ast.go
-    commentmap.go
-    filter.go
-    import.go
-    print.go
-    resolve.go
-    scope.go
-    walk.go
-)
-
-GO_TEST_SRCS(
-    ast_test.go
-    print_test.go
-)
-
-GO_XTEST_SRCS(
-    commentmap_test.go
-    example_test.go
-    filter_test.go
-    issues_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		ast.go
+		commentmap.go
+		filter.go
+		import.go
+		print.go
+		resolve.go
+		scope.go
+		walk.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

@@ -35,6 +35,7 @@ struct TReplicaHistoryItem
     NTabletClient::ETableReplicaMode Mode;
     NTabletClient::ETableReplicaState State;
 
+    bool IsSync() const;
     void Persist(const TStreamPersistenceContext& context);
 };
 
@@ -125,11 +126,14 @@ TString ToString(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsReplicaSync(NTabletClient::ETableReplicaMode mode);
+bool IsReplicaSync(NTabletClient::ETableReplicaMode mode, const TReplicaHistoryItem& lastReplicaHistoryItem);
 bool IsReplicaAsync(NTabletClient::ETableReplicaMode mode);
 bool IsReplicaEnabled(NTabletClient::ETableReplicaState state);
 bool IsReplicaDisabled(NTabletClient::ETableReplicaState state);
-bool IsReplicaReallySync(NTabletClient::ETableReplicaMode mode, NTabletClient::ETableReplicaState state);
+bool IsReplicaReallySync(
+    NTabletClient::ETableReplicaMode mode,
+    NTabletClient::ETableReplicaState state,
+    const TReplicaHistoryItem& lastReplicaHistoryItem);
 NTabletClient::ETableReplicaMode GetTargetReplicaMode(NTabletClient::ETableReplicaMode mode);
 NTabletClient::ETableReplicaState GetTargetReplicaState(NTabletClient::ETableReplicaState state);
 

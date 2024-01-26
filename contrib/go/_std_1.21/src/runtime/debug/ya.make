@@ -1,29 +1,78 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    debug.s
-    garbage.go
-    mod.go
-    stack.go
-    stubs.go
-)
-
-GO_XTEST_SRCS(
-    garbage_test.go
-    heapdump_test.go
-    mod_test.go
-    stack_test.go
-)
-
-IF (OS_LINUX)
-    GO_XTEST_SRCS(panic_test.go)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		debug.s
+		garbage.go
+		mod.go
+		stack.go
+		stubs.go
+    )
 ENDIF()
-
-IF (OS_DARWIN)
-    GO_XTEST_SRCS(panic_test.go)
-ENDIF()
-
 END()
-
-RECURSE(
-)

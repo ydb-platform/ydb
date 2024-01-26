@@ -1,20 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    ecdsa.go
-    ecdsa_legacy.go
-    ecdsa_noasm.go
-    notboring.go
-)
-
-GO_TEST_SRCS(ecdsa_test.go)
-
-GO_XTEST_SRCS(
-    equal_test.go
-    example_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		ecdsa.go
+		ecdsa_legacy.go
+		ecdsa_noasm.go
+		notboring.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

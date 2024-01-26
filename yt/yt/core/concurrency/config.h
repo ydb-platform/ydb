@@ -40,7 +40,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TPeriodicExecutorOptions>
+    : public NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TPeriodicExecutorOptions, TPeriodicExecutorOptionsSerializer);
@@ -51,7 +51,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRetryingPeriodicExecutorOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TRetryingPeriodicExecutorOptions>
+    : public NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TRetryingPeriodicExecutorOptions, TRetryingPeriodicExecutorOptionsSerializer);

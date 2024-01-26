@@ -9,7 +9,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TExponentialBackoffOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TExponentialBackoffOptions>
+    : public NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
@@ -22,7 +22,7 @@ ASSIGN_EXTERNAL_YSON_SERIALIZER(TExponentialBackoffOptions, TExponentialBackoffO
 ////////////////////////////////////////////////////////////////////////////////
 
 class TConstantBackoffOptionsSerializer
-    : public NYTree::TExternalizedYsonStruct<TConstantBackoffOptions>
+    : public NYTree::TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);

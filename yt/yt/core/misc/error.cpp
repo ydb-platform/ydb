@@ -70,16 +70,16 @@ TString ToString(TErrorCode code)
 
 YT_THREAD_LOCAL(bool) ErrorSanitizerEnabled = false;
 YT_THREAD_LOCAL(TInstant) ErrorSanitizerDatetimeOverride = {};
-YT_THREAD_LOCAL(TErrorSanitizerGuard::THostNameSanitizer) LocalHostNameSanitizer = {};
+YT_THREAD_LOCAL(TSharedRef) ErrorSanitizerLocalHostNameOverride = {};
 
-TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, THostNameSanitizer localHostNameSanitizer)
+TErrorSanitizerGuard::TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride)
     : SavedEnabled_(ErrorSanitizerEnabled)
     , SavedDatetimeOverride_(GetTlsRef(ErrorSanitizerDatetimeOverride))
-    , SavedLocalHostNameSanitizer_(GetTlsRef(LocalHostNameSanitizer))
+    , SavedLocalHostNameOverride_(GetTlsRef(ErrorSanitizerLocalHostNameOverride))
 {
     ErrorSanitizerEnabled = true;
     GetTlsRef(ErrorSanitizerDatetimeOverride) = datetimeOverride;
-    GetTlsRef(LocalHostNameSanitizer) = localHostNameSanitizer;
+    GetTlsRef(ErrorSanitizerLocalHostNameOverride) = std::move(localHostNameOverride);
 }
 
 TErrorSanitizerGuard::~TErrorSanitizerGuard()
@@ -88,6 +88,7 @@ TErrorSanitizerGuard::~TErrorSanitizerGuard()
 
     ErrorSanitizerEnabled = SavedEnabled_;
     GetTlsRef(ErrorSanitizerDatetimeOverride) = SavedDatetimeOverride_;
+    GetTlsRef(ErrorSanitizerLocalHostNameOverride) = std::move(SavedLocalHostNameOverride_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -299,8 +300,8 @@ private:
     {
         if (ErrorSanitizerEnabled) {
             Datetime_ = GetTlsRef(ErrorSanitizerDatetimeOverride);
-            auto handleLocalHostName = GetTlsRef(LocalHostNameSanitizer);
-            Host_ = handleLocalHostName(NNet::ReadLocalHostName());
+            HostHolder_ = GetTlsRef(ErrorSanitizerLocalHostNameOverride);
+            Host_ = HostHolder_.empty() ? TStringBuf() : TStringBuf(HostHolder_.Begin(), HostHolder_.End());
             return;
         }
 
@@ -957,7 +958,7 @@ void AppendError(TStringBuilderBase* builder, const TError& error, int indent)
         AppendAttribute(
             builder,
             "host",
-            Format("%v", error.GetHost()),
+            ToString(error.GetHost()),
             indent);
     }
 

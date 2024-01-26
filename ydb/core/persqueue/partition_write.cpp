@@ -304,14 +304,16 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ui64 maxOffset = 0;
 
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
-                maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo);
+                maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
-            } else {
-                maxSeqNo = writeResponse.InitialSeqNo;
-            }
-
-            if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
-                already = true;
+                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                    already = true;
+                }
+            } else if (writeResponse.InitialSeqNo) {
+                maxSeqNo = writeResponse.InitialSeqNo.value();
+                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                    already = true;
+                }
             }
 
             if (!already) {

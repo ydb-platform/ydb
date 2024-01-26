@@ -938,10 +938,12 @@ message TEvSubDomainStatus {
 
 message TEvCheckPartitionStatusRequest {
     optional uint32 Partition = 1;
+    optional string SourceId = 2;
 };
 
 message TEvCheckPartitionStatusResponse {
     optional ETopicPartitionStatus Status = 1;
+    optional int64 SeqNo = 2;
 };
 
 message TTransaction {

@@ -1976,11 +1976,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     " offset: " << (req.HasCmdWriteOffset() ? (req.GetCmdWriteOffset() + i) : -1));
     }
     InitResponseBuilder(responseCookie, msgs.size(), COUNTER_LATENCY_PQ_WRITE);
+    std::optional<ui64> initialSeqNo;
+    if (req.HasInitialSeqNo()) {
+        initialSeqNo = req.GetInitialSeqNo();
+    }
     THolder<TEvPQ::TEvWrite> event =
         MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
                                     req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
                                     req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite(), req.GetInitialSeqNo());
+                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
     ctx.Send(partActor, event.Release());
 }
 

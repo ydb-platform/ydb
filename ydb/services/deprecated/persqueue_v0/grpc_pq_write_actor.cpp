@@ -455,7 +455,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
 void TWriteSessionActor::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
     auto* r = ev->Get();
     PartitionTabletId = r->TabletId;
-    InitialSeqNo = r->SeqNo.value_or(0);
+    InitialSeqNo = r->SeqNo;
     LastSourceIdUpdate = ctx.Now();
 
     ProceedPartition(r->PartitionId, ctx);

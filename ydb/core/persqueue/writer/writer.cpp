@@ -371,8 +371,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
-        if ((ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo) {
-            sourceIdInfo.SetSeqNo(Opts.InitialSeqNo);
+        if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
+            sourceIdInfo.SetSeqNo(Opts.InitialSeqNo.value());
         }
 
         InitResult(OwnerCookie, sourceIdInfo, WriteId);
@@ -614,7 +614,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
-        request.SetInitialSeqNo(Opts.InitialSeqNo);
+        if (Opts.InitialSeqNo) {
+            request.SetInitialSeqNo(Opts.InitialSeqNo.value());
+        }
 
         SetWriteId(request);
 

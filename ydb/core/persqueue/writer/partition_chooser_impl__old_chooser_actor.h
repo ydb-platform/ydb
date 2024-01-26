@@ -37,8 +37,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-            TThis::Initialize(ctx);
-            TThis::InitTable(ctx);
+        TThis::Initialize(ctx);
+        TThis::InitTable(ctx);
     }
 
     TActorIdentity SelfId() const {
@@ -57,11 +57,6 @@ public:
             TThis::Partition = p;
             OnPartitionChosen(ctx);
         }
-    }
-
-    void OnOwnership(const TActorContext &ctx) override {
-        DEBUG("OnOwnership");
-        TThis::ReplyResult(ctx);
     }
 
 private:

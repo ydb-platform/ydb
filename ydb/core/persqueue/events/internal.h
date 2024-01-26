@@ -200,7 +200,7 @@ struct TEvPQ {
             std::optional<TRowVersion> HeartbeatVersion;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, ui64 initialSeqNo)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
@@ -216,7 +216,7 @@ struct TEvPQ {
         TMaybe<ui64> Offset;
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
-        ui64 InitialSeqNo;
+        std::optional<ui64> InitialSeqNo;
 
     };
 

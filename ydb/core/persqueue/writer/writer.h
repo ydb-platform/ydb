@@ -176,7 +176,7 @@ struct TPartitionWriterOpts {
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
-    ui64 InitialSeqNo = 0;
+    std::optional<ui64> InitialSeqNo = 0;
 
     TString Database;
     TString TopicPath;
@@ -205,7 +205,7 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithTxId(const TString& value) { TxId = value; return *this; }
     TPartitionWriterOpts& WithTraceId(const TString& value) { TraceId = value; return *this; }
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
-    TPartitionWriterOpts& WithInitialSeqNo(const ui64 value) { InitialSeqNo = value; return *this; }
+    TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

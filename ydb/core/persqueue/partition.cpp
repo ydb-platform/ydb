@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -2576,6 +2577,13 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
     auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
     response->Record.SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
+
+    if (record.HasSourceId()) {
+        auto sit = SourceIdStorage.GetInMemorySourceIds().find(NSourceIdEncoding::EncodeSimple(record.GetSourceId()));
+        if (sit != SourceIdStorage.GetInMemorySourceIds().end()) {
+            response->Record.SetSeqNo(sit->second.SeqNo);
+        }
+    }
 
     Send(ev->Sender, response.Release());
 }

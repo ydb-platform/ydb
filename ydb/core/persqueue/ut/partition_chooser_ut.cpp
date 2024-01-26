@@ -344,18 +344,6 @@ private:
         response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-        if (ev->Get()->Record.GetPartitionRequest().HasCmdGetOwnership()) {
-            auto& o = ev->Get()->Record.GetPartitionRequest().GetCmdGetOwnership();
-            if (o.GetRegisterIfNotExists() || SeqNo) {
-                auto* cmd = response->Record.MutablePartitionResponse()->MutableCmdGetOwnershipResult();
-                cmd->SetOwnerCookie("ower_cookie");
-                cmd->SetStatus(Status);
-                cmd->SetSeqNo(SeqNo.value_or(0));
-            } else {
-                response->Record.SetErrorCode(NPersQueue::NErrorCode::SOURCEID_DELETED);
-            }
-        }
-
         auto* sn = response->Record.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult()->AddSourceIdInfo();
         sn->SetSeqNo(SeqNo.value_or(0));
         sn->SetState(SeqNo ? NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED : NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION);
@@ -365,6 +353,10 @@ private:
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
         auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        response->Record.SetStatus(Status);
+        if (SeqNo) {
+            response->Record.SetSeqNo(SeqNo.value());
+        }
 
         ctx.Send(ev->Sender, response.Release());
     }

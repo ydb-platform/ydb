@@ -123,7 +123,7 @@ namespace {
         
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
-        for (ui32 i : xrange(0u, 40u)) {
+        for (ui32 i : xrange<ui32>(0, 40)) {
             cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
         }
 
@@ -267,8 +267,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekRowId(const TPartStore& part) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
+        for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
+            for (TRowId rowId2 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                 TPartIndexIt flat(&part, &flatEnv, { });
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
     void CheckNextPrev(const TPartStore& part) {
         for (bool next : {true, false}) {
-            for (TRowId rowId : xrange(part.Stat.Rows)) {
+            for (TRowId rowId : xrange<TRowId>(0, part.Stat.Rows)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                 TPartIndexIt flat(&part, &flatEnv, { });
@@ -418,9 +418,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
-            for (ui32 itemsLimit : xrange(part.Stat.Rows + 1)) {
-                for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
-                    for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
+            for (ui32 itemsLimit : xrange<ui32>(0, part.Stat.Rows + 1)) {
+                for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
+                    for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
-            for (ui32 itemsLimit : xrange(part.Stat.Rows + 1)) {
+            for (ui32 itemsLimit : xrange<ui32>(0, part.Stat.Rows + 1)) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                         for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {

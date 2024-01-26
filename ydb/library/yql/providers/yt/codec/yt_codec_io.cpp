@@ -971,6 +971,7 @@ protected:
             case NUdf::TDataType<i16>::Id:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id:
             case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TDatetime64>::Id:

@@ -205,6 +205,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
             case NUdf::TDataType<NUdf::TYson>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
             case NUdf::TDataType<NUdf::TDate>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TDatetime>::Id:
             case NUdf::TDataType<NUdf::TTimestamp>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id:
@@ -513,6 +514,7 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
                 return NUdf::TUnboxedValuePod(value);
             }
             case NUdf::TDataType<NUdf::TDate>::Id:
+            case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TDatetime>::Id:
             case NUdf::TDataType<NUdf::TTimestamp>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id:

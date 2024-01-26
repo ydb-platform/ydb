@@ -796,9 +796,6 @@ private:
             case NUdf::TDataType<i32>::Id:
             case NUdf::TDataType<i64>::Id:
             case NUdf::TDataType<NUdf::TDate32>::Id:
-            case NUdf::TDataType<NUdf::TDatetime64>::Id:
-            case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-            case NUdf::TDataType<NUdf::TInterval64>::Id:
             case NUdf::TDataType<NUdf::TInterval>::Id: {
                 const auto sizeConst = ConstantInt::get(Type::getInt64Ty(context), (ui64)sizeof(i64));
                 CallInst::Create(module.getFunction("SkipFixedData"), { buf, sizeConst }, "", Block_);

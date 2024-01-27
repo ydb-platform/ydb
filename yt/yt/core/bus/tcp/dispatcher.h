@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <library/cpp/yt/misc/enum_indexed_array.h>
+
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,7 +29,7 @@ struct TBusNetworkCounters final
 {
     static constexpr bool EnableHazard = true;
 
-    TEnumIndexedVector<EMultiplexingBand, TBusNetworkBandCounters> PerBandCounters;
+    TEnumIndexedArray<EMultiplexingBand, TBusNetworkBandCounters> PerBandCounters;
 
     TBusNetworkStatistics ToStatistics() const;
 };

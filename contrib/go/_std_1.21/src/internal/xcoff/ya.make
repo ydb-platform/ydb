@@ -1,17 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    ar.go
-    file.go
-    xcoff.go
-)
-
-GO_TEST_SRCS(
-    ar_test.go
-    file_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		ar.go
+		file.go
+		xcoff.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

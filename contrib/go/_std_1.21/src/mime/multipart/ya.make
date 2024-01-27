@@ -1,21 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    formdata.go
-    multipart.go
-    readmimeheader.go
-    writer.go
-)
-
-GO_TEST_SRCS(
-    formdata_test.go
-    multipart_test.go
-    writer_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		formdata.go
+		multipart.go
+		readmimeheader.go
+		writer.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

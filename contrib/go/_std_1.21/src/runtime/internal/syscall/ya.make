@@ -1,33 +1,24 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-BUILD_ONLY_IF(
-    WARNING
-    OS_LINUX
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        syscall_linux.go
+		asm_linux_amd64.s
+		defs_linux_amd64.go
+		syscall_linux.go
     )
-
-    GO_XTEST_SRCS(syscall_linux_test.go)
-ENDIF()
-
-IF (OS_LINUX AND ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_ARM64)
     SRCS(
-        asm_linux_amd64.s
-        defs_linux_amd64.go
+		asm_linux_arm64.s
+		defs_linux_arm64.go
+		syscall_linux.go
     )
-ENDIF()
-
-IF (OS_LINUX AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        asm_linux_arm64.s
-        defs_linux_arm64.go
+		asm_linux_arm64.s
+		defs_linux_arm64.go
+		syscall_linux.go
     )
 ENDIF()
-
 END()
-
-RECURSE(
-)

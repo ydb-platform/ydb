@@ -33,9 +33,10 @@
 
 #endif
 
+#include "yql_arrow_column_converters.h"
+#include "yql_s3_actors_util.h"
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_factory.h"
-#include "yql_s3_actors_util.h"
 
 #include <ydb/library/services/services.pb.h>
 
@@ -1122,76 +1123,6 @@ void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSyste
         inflightCounter);
 }
 
-template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui16, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
-    ::NYql::NUdf::TFixedSizeBlockReader<i32, isOptional> reader;
-    for (i64 i = 0; i < value->length(); ++i) {
-        const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
-        if constexpr (isOptional) {
-            if (!item) {
-                builder.Add(item);
-                continue;
-            }
-        } else if (!item) {
-            throw parquet::ParquetException(TStringBuilder() << "null value for date could not be represented in non-optional type");
-        }
-
-        const i32 v = item.As<i32>();
-        if (v < 0 || v > ::NYql::NUdf::MAX_DATE) {
-            throw parquet::ParquetException(TStringBuilder() << "date in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATE << "]: " << v);
-        }
-        builder.Add(NUdf::TBlockItem(static_cast<ui16>(v)));
-    }
-    return builder.Build(true).make_array();
-}
-
-TColumnConverter BuildColumnConverter(const std::string& columnName, const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType) {
-    if (yqlType->IsPg()) {
-        auto pgType = AS_TYPE(TPgType, yqlType);
-        auto conv = BuildPgColumnConverter(originalType, pgType);
-        if (!conv) {
-            ythrow yexception() << "Arrow type: " << originalType->ToString() <<
-                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name;
-        }
-
-        return conv;
-    }
-
-    if (originalType->id() == arrow::Type::DATE32) {
-        // TODO: support more than 1 optional level
-        bool isOptional = false;
-        auto unpackedYqlType = UnpackOptional(yqlType, isOptional);
-
-        // arrow date -> yql date
-        if (unpackedYqlType->IsData()) {
-            auto slot = AS_TYPE(TDataType, unpackedYqlType)->GetDataSlot();
-            if (slot == NUdf::EDataSlot::Date) {
-                return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-                    if (isOptional) {
-                        return ArrowDate32AsYqlDate<true>(targetType, value);
-                    }
-                    return ArrowDate32AsYqlDate<false>(targetType, value);
-                };
-            }
-        }
-    }
-
-    if (targetType->Equals(originalType)) {
-        return {};
-    }
-
-    YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
-        << targetType->ToString() << ", got: " << originalType->ToString());
-
-
-    return [targetType](const std::shared_ptr<arrow::Array>& value) {
-        auto res = arrow::compute::Cast(*value, targetType);
-        THROW_ARROW_NOT_OK(res.status());
-        return std::move(res).ValueOrDie();
-    };
-}
-
 std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters) {
     auto columns = batch->columns();
     for (size_t i = 0; i < columnConverters.size(); ++i) {
@@ -1571,7 +1502,7 @@ public:
             columnIndices.push_back(srcFieldIndex);
             auto rowSpecColumnIt = ReadSpec->RowSpec.find(targetField->name());
             YQL_ENSURE(rowSpecColumnIt != ReadSpec->RowSpec.end(), "Column " << targetField->name() << " not found in row spec");
-            columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second));
+            columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second, ReadSpec->Settings));
         }
     }
 

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -63,6 +64,18 @@ namespace NPQ {
             , Cached(false)
             , Key(key)
         {}
+    };
+
+    struct TDataKey {
+        TKey Key;
+        ui32 Size;
+        TInstant Timestamp;
+        ui64 CumulativeSize;
+    };
+
+    struct TSeqNoRange {
+        ui64 Min;
+        ui64 Max;
     };
 
     struct TErrorInfo {
@@ -169,6 +182,11 @@ struct TEvPQ {
         EvCacheProxyForgetRead,
         EvGetFullDirectReadData,
         EvProvideDirectReadInfo,
+        EvCheckPartitionStatusRequest,
+        EvCheckPartitionStatusResponse,
+        EvGetWriteInfoRequest,
+        EvGetWriteInfoResponse,
+        EvGetWriteInfoError,
         EvEnd
     };
 
@@ -491,12 +509,13 @@ struct TEvPQ {
     };
 
     struct TEvChangeOwner : public TEventLocal<TEvChangeOwner, EvChangeOwner> {
-        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force)
+        explicit TEvChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const TActorId& sender, const bool force, const bool registerIfNotExists = true)
         : Cookie(cookie)
         , Owner(owner)
         , PipeClient(pipeClient)
         , Sender(sender)
         , Force(force)
+        , RegisterIfNotExists(registerIfNotExists)
         {}
 
         ui64 Cookie;
@@ -504,6 +523,7 @@ struct TEvPQ {
         TActorId PipeClient;
         TActorId Sender;
         bool Force;
+        bool RegisterIfNotExists;
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {
@@ -989,6 +1009,54 @@ struct TEvPQ {
     struct TEvProvideDirectReadInfo : public TEventLocal<TEvProvideDirectReadInfo, EvProvideDirectReadInfo> {
     };
 
+    struct TEvCheckPartitionStatusRequest : public TEventPB<TEvCheckPartitionStatusRequest, NKikimrPQ::TEvCheckPartitionStatusRequest, EvCheckPartitionStatusRequest> {
+        TEvCheckPartitionStatusRequest() = default;
+
+        TEvCheckPartitionStatusRequest(ui32 partitionId) {
+            Record.SetPartition(partitionId);
+        }
+    };
+
+    struct TEvCheckPartitionStatusResponse : public TEventPB<TEvCheckPartitionStatusResponse, NKikimrPQ::TEvCheckPartitionStatusResponse, EvCheckPartitionStatusResponse> {
+    };
+
+    struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
+        explicit TEvGetWriteInfoRequest(ui32 cookie) :
+            Cookie(cookie)
+        {
+        }
+
+        ui32 Cookie; // ShadowPartitionId
+    };
+
+    struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
+        TEvGetWriteInfoResponse(ui32 cookie,
+                                THashMap<TString, NPQ::TSeqNoRange>&& seqNo,
+                                std::deque<NPQ::TDataKey>&& bodyKeys,
+                                TVector<NPQ::TClientBlob>&& head) :
+            Cookie(cookie),
+            SeqNo(std::move(seqNo)),
+            BodyKeys(std::move(bodyKeys)),
+            Head(std::move(head))
+        {
+        }
+
+        ui32 Cookie; // ShadowPartitionId
+        THashMap<TString, NPQ::TSeqNoRange> SeqNo; // SourceId -> (MinSeqNo, MaxSeqNo)
+        std::deque<NPQ::TDataKey> BodyKeys;
+        TVector<NPQ::TClientBlob> Head;
+    };
+
+    struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
+        ui32 Cookie; // ShadowPartitionId
+        TString Message;
+
+        TEvGetWriteInfoError(ui32 cookie, TString message) :
+            Cookie(cookie),
+            Message(std::move(message))
+        {
+        }
+    };
 };
 
 } //NKikimr

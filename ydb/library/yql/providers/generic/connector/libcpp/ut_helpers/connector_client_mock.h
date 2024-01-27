@@ -54,6 +54,11 @@ namespace NYql::NConnector::NTest {
         return TClickHouseDataSourceInstanceBuilder<TBuilder>(                      \
             this->Result_->mutable_data_source_instance(),                          \
             static_cast<TBuilder*>(this));                                          \
+    }                                                                               \
+    TYdbDataSourceInstanceBuilder<TBuilder> YdbDataSourceInstance() {               \
+        return TYdbDataSourceInstanceBuilder<TBuilder>(                             \
+            this->Result_->mutable_data_source_instance(),                          \
+            static_cast<TBuilder*>(this));                                          \
     }
 
     MATCHER_P(ProtobufRequestMatcher, expected, "request does not match") {
@@ -200,6 +205,15 @@ namespace NYql::NConnector::NTest {
         const TString& serviceAccountIdSignature = DEFAULT_CH_SERVICE_ACCOUNT_ID_SIGNATURE,
         const TString& databaseName = DEFAULT_DATABASE);
 
+    void CreateYdbExternalDataSource(
+        const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
+        const TString& dataSourceName = DEFAULT_DATA_SOURCE_NAME,
+        const TString& login = DEFAULT_LOGIN,
+        const TString& password = DEFAULT_PASSWORD,
+        const TString& endpoint = DEFAULT_YDB_ENDPOINT,
+        bool useTls = DEFAULT_USE_TLS,
+        const TString& databaseName = DEFAULT_DATABASE);
+
     class TConnectorClientMock: public NYql::NConnector::IClient {
     public:
         MOCK_METHOD(TResult<NApi::TDescribeTableResponse>, DescribeTableImpl, (const NApi::TDescribeTableRequest& request));
@@ -274,6 +288,25 @@ namespace NYql::NConnector::NTest {
                 this->Port(DEFAULT_CH_PORT);
                 this->Kind(NApi::EDataSourceKind::CLICKHOUSE);
                 this->Protocol(DEFAULT_CH_PROTOCOL);
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
+        struct TYdbDataSourceInstanceBuilder: public TBaseDataSourceInstanceBuilder<TYdbDataSourceInstanceBuilder<TParent>, TParent> {
+            using TBase = TBaseDataSourceInstanceBuilder<TYdbDataSourceInstanceBuilder<TParent>, TParent>;
+
+            explicit TYdbDataSourceInstanceBuilder(NApi::TDataSourceInstance* result = nullptr, TParent* parent = nullptr)
+                : TBase(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            void FillWithDefaults() {
+                TBase::FillWithDefaults();
+                this->Host(DEFAULT_YDB_HOST);
+                this->Port(DEFAULT_YDB_PORT);
+                this->Kind(NApi::EDataSourceKind::YDB);
+                this->Protocol(DEFAULT_YDB_PROTOCOL);
             }
         };
 

@@ -1,33 +1,96 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    doc.go
-    stubs.go
-    types.go
-    types_64bit.go
-    unaligned.go
-)
-
-GO_XTEST_SRCS(
-    atomic_test.go
-    bench_test.go
-)
-
-IF (ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        atomic_amd64.go
-        atomic_amd64.s
+		atomic_amd64.go
+		atomic_amd64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		atomic_amd64.go
+		atomic_amd64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		atomic_amd64.go
+		atomic_amd64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		atomic_arm64.go
+		atomic_arm64.s
+		doc.go
+		stubs.go
+		types.go
+		types_64bit.go
+		unaligned.go
     )
 ENDIF()
-
-IF (ARCH_ARM64)
-    SRCS(
-        atomic_arm64.go
-        atomic_arm64.s
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -31,4 +31,12 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
     }
     return true;
 }   
+
+NKikimr::NSsa::TFunctionPtr TKernelsRegistry::GetFunction(const size_t index) const {
+    if (index < Functions.size()) {
+        return Functions[index];
+    }
+    return nullptr;
+}
+
 }

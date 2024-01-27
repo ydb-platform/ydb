@@ -15,7 +15,7 @@ TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
 
 bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value);
 
-bool IsLeapYear(ui32 year);
+bool IsLeapYear(i32 year);
 
 ui32 GetMonthLength(ui32 month, bool isLeap);
 
@@ -32,8 +32,10 @@ bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false);
 bool IsValidDecimal(NUdf::TStringRef buf);
 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value);
+bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value);
 bool MakeTime(ui32 hour, ui32 minute, ui32 second, ui32& value);
 bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day);
+bool SplitDate32(i32 value, i32& year, ui32& month, ui32& day);
 bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
 bool SplitTimestamp(ui64 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);
 bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& usec);

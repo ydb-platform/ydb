@@ -54,7 +54,7 @@ public:
             };
         }
 
-        auto taskRunner = TaskRunnerFactory(Task, RuntimeSettings.StatsMode, logger);
+        auto taskRunner = TaskRunnerFactory(GetAllocator(), Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
         TDqTaskRunnerExecutionContext execCtx(TxId, RuntimeSettings.UseSpilling, std::move(wakeup));

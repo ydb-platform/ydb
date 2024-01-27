@@ -281,7 +281,7 @@ void Deserialize(
 
 template <class E, class T, E Min, E Max>
 void Deserialize(
-    TEnumIndexedVector<E, T, Min, Max>& vector,
+    TEnumIndexedArray<E, T, Min, Max>& vector,
     TYsonPullParserCursor* cursor,
     std::enable_if_t<ArePullParserDeserializable<T>(), void*>)
 {
@@ -289,7 +289,7 @@ void Deserialize(
 
     auto itemVisitor = [&] (TYsonPullParserCursor* cursor) {
         auto key = ExtractTo<E>(cursor);
-        if (!vector.IsDomainValue(key)) {
+        if (!vector.IsValidIndex(key)) {
             THROW_ERROR_EXCEPTION("Enum value %Qlv is out of supported range",
                 key);
         }

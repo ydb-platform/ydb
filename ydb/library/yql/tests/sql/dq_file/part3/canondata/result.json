@@ -1940,6 +1940,50 @@
         }
     ],
     "test.test[pg_catalog-lambda--Results]": [],
+    "test.test[pg_catalog-pg_am_pg_syntax-default.txt-Analyze]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1871182/b2146249716fc2f308dff54f809c6f3e5b912d8d/resource.tar.gz#test.test_pg_catalog-pg_am_pg_syntax-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_am_pg_syntax-default.txt-Debug]": [
+        {
+            "checksum": "73e850f5d9ea897df524d146a0901f47",
+            "size": 498,
+            "uri": "https://{canondata_backend}/1871182/b2146249716fc2f308dff54f809c6f3e5b912d8d/resource.tar.gz#test.test_pg_catalog-pg_am_pg_syntax-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-pg_am_pg_syntax-default.txt-Plan]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1871182/b2146249716fc2f308dff54f809c6f3e5b912d8d/resource.tar.gz#test.test_pg_catalog-pg_am_pg_syntax-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-pg_am_pg_syntax-default.txt-Results]": [],
+    "test.test[pg_catalog-tables-default.txt-Analyze]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1923547/63a9bf11f98a47ebc6a355858fc4c8179b67ce82/resource.tar.gz#test.test_pg_catalog-tables-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-tables-default.txt-Debug]": [
+        {
+            "checksum": "2e8892e4dc2cd80714860bf3b4264747",
+            "size": 562,
+            "uri": "https://{canondata_backend}/1923547/63a9bf11f98a47ebc6a355858fc4c8179b67ce82/resource.tar.gz#test.test_pg_catalog-tables-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg_catalog-tables-default.txt-Plan]": [
+        {
+            "checksum": "c1f2d837c3623c81dd596a9877913fb8",
+            "size": 948,
+            "uri": "https://{canondata_backend}/1923547/63a9bf11f98a47ebc6a355858fc4c8179b67ce82/resource.tar.gz#test.test_pg_catalog-tables-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg_catalog-tables-default.txt-Results]": [],
     "test.test[produce-process_row_and_columns-default.txt-Analyze]": [
         {
             "checksum": "ebe34f5d2b86ce7954a161dc02a783aa",

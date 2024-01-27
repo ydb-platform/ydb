@@ -90,6 +90,9 @@ on:
       put_build_results_to_cache:
         type: boolean
         default: true
+      commit_sha:
+        type: string
+        default: ""
 jobs:
   main:
     uses: ./.github/workflows/build_and_test_ya.yml
@@ -107,4 +110,5 @@ jobs:
       link_threads: ${{ inputs.link_threads }}
       test_threads: ${{ inputs.test_threads }}
       put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+      commit_sha: ${{ inputs.commit_sha }}
     secrets: inherit

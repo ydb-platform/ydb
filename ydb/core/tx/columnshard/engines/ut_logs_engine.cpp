@@ -137,6 +137,10 @@ public:
         return true;
     }
 
+    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
+    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
+    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override { return true; }
+
     void WriteCounter(ui32 counterId, ui64 value) override {
         auto& counters = Indices[0].Counters;
         counters[counterId] = value;

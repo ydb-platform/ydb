@@ -1,26 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    marshal.go
-    read.go
-    typeinfo.go
-    xml.go
-)
-
-GO_TEST_SRCS(
-    atom_test.go
-    marshal_test.go
-    read_test.go
-    xml_test.go
-)
-
-GO_XTEST_SRCS(
-    example_marshaling_test.go
-    example_test.go
-    example_text_marshaling_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		marshal.go
+		read.go
+		typeinfo.go
+		xml.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

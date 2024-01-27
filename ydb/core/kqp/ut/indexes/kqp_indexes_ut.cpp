@@ -923,7 +923,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
-        auto uniqExtraStages = uniq ? 6 : 0;
+        auto uniqExtraStages = uniq ? 5 : 0;
         {
             // Upsert - add new row
             const TString query2 = Q1_(R"(
@@ -941,12 +941,14 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
+            Cerr << stats.DebugString() << Endl;
+
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + 5);
 
             // One read from main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access(0).reads().rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 0);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
@@ -988,9 +990,9 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + 5);
 
             // One read from main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 1).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);

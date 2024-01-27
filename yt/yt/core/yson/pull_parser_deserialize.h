@@ -4,12 +4,14 @@
 
 #include "pull_parser.h"
 
+#include <library/cpp/yt/misc/enum_indexed_array.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline void SkipAttributes(TYsonPullParserCursor* cursor);
-inline void MaybeSkipAttributes(TYsonPullParserCursor* cursor);
+void SkipAttributes(TYsonPullParserCursor* cursor);
+void MaybeSkipAttributes(TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,12 +19,12 @@ namespace NDetail {
 
 template <typename T, typename = void>
 struct TIsPullParserDeserializable
-    : std::false_type
+    : public std::false_type
 { };
 
 template <typename T>
 struct TIsPullParserDeserializable<T, std::void_t<decltype(Deserialize(std::declval<T&>(), (NYson::TYsonPullParserCursor*)(nullptr)))>>
-    : std::true_type
+    : public std::true_type
 { };
 
 template <typename T>
@@ -145,7 +147,7 @@ void Deserialize(
 
 template <class E, class T, E Min, E Max>
 void Deserialize(
-    TEnumIndexedVector<E, T, Min, Max>& vector,
+    TEnumIndexedArray<E, T, Min, Max>& vector,
     TYsonPullParserCursor* cursor,
     std::enable_if_t<ArePullParserDeserializable<T>(), void*> = nullptr);
 

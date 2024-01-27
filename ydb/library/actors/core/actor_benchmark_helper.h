@@ -138,6 +138,9 @@ struct TActorBenchmark {
             , InFlight(params.InFlight)
         {}
 
+        ~TSendReceiveActor() {
+        }
+
         void StoreCounters(std::vector<NThreading::TPadded<std::atomic<ui64>>> &dest) {
             for (ui32 idx = 0; idx < dest.size(); ++idx) {
                 dest[idx].store(SharedCounters->Counters[idx]);
@@ -258,14 +261,14 @@ struct TActorBenchmark {
         ui32 ReceiveTurn = 0;
     };
 
-    static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, i16 sharedExecutorsCount) {
+    static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, bool hasSharedThread) {
         TBasicExecutorPoolConfig basic;
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
         basic.SpinThreshold = TSettings::DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
-        basic.SharedExecutorsCount = sharedExecutorsCount;
+        basic.HasSharedThread = hasSharedThread;
         basic.SoftProcessingDurationTs = Us2Ts(100);
         if (activateEveryEvent) {
             basic.EventsPerMailbox = 1;

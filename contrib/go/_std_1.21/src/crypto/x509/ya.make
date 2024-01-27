@@ -1,64 +1,141 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    cert_pool.go
-    notboring.go
-    parser.go
-    pem_decrypt.go
-    pkcs1.go
-    pkcs8.go
-    root.go
-    sec1.go
-    verify.go
-    x509.go
-)
-
-GO_TEST_SRCS(
-    cert_pool_test.go
-    name_constraints_test.go
-    parser_test.go
-    pem_decrypt_test.go
-    pkcs8_test.go
-    platform_test.go
-    root_test.go
-    sec1_test.go
-    verify_test.go
-    x509_test.go
-)
-
-GO_XTEST_SRCS(
-    example_test.go
-    hybrid_pool_test.go
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        root_linux.go
-        root_unix.go
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_linux.go
+		root_unix.go
+		sec1.go
+		verify.go
+		x509.go
     )
-
-    GO_TEST_SRCS(root_unix_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_LINUX AND ARCH_ARM64)
     SRCS(
-        root_darwin.go
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_linux.go
+		root_unix.go
+		sec1.go
+		verify.go
+		x509.go
     )
-
-    GO_XTEST_SRCS(root_darwin_test.go)
-ENDIF()
-
-IF (OS_WINDOWS)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        root_windows.go
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_linux.go
+		root_unix.go
+		sec1.go
+		verify.go
+		x509.go
     )
-
-    GO_XTEST_SRCS(root_windows_test.go)
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_darwin.go
+		sec1.go
+		verify.go
+		x509.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_darwin.go
+		sec1.go
+		verify.go
+		x509.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_darwin.go
+		sec1.go
+		verify.go
+		x509.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_windows.go
+		sec1.go
+		verify.go
+		x509.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_windows.go
+		sec1.go
+		verify.go
+		x509.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		cert_pool.go
+		notboring.go
+		parser.go
+		pem_decrypt.go
+		pkcs1.go
+		pkcs8.go
+		root.go
+		root_windows.go
+		sec1.go
+		verify.go
+		x509.go
+    )
 ENDIF()
-
 END()
 
+
 RECURSE(
-    internal
-    pkix
+	internal
+	pkix
 )

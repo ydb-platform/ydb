@@ -231,6 +231,8 @@ void ConfigureSingletonsImpl(const TConfig& config)
             NProfiling::SetVCpuFactor(config->ResourceTrackerVCpuFactor.value());
         }
     }
+
+    NYson::SetProtobufInteropConfig(config->ProtobufInterop);
 }
 
 void ConfigureSingletons(const TSingletonsConfigPtr& config)
@@ -274,9 +276,7 @@ void ReconfigureSingletonsImpl(const TStaticConfig& config, const TDynamicConfig
         ConfigureTCMalloc(config->TCMalloc);
     }
 
-    if (dynamicConfig->ProtobufInterop) {
-        NYson::SetProtobufInteropConfig(dynamicConfig->ProtobufInterop);
-    }
+    NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));
 }
 
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)

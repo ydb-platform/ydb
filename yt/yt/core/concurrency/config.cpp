@@ -32,10 +32,22 @@ void TPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
 
 void TRetryingPeriodicExecutorOptionsSerializer::Register(TRegistrar registrar)
 {
-    registrar.ExternalClassParameter("periodic", &TThat::Periodic)
-        .Default();
-    registrar.ExternalClassParameter("backoff_strategy", &TThat::BackoffStrategy)
-        .Default();
+    //! NB(arkady-e1ppa): Defaults and preprocessors of derived class
+    //! override defaults and overrides of base class and base class fields
+    registrar.ExternalPreprocessor([] (TThat* options) {
+        *options = TRetryingPeriodicExecutorOptions{
+            {
+                .Period = TDuration::Seconds(5),
+                .Splay = TDuration::Seconds(1),
+                .Jitter = 0.0,
+            },
+            {
+                .MinBackoff = TDuration::Seconds(5),
+                .MaxBackoff = TDuration::Seconds(60),
+                .BackoffMultiplier = 2.0,
+            },
+        };
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

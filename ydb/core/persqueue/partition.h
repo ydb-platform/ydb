@@ -23,6 +23,7 @@
 
 #include <util/generic/set.h>
 
+#include <variant>
 
 namespace NKikimr::NPQ {
 
@@ -100,7 +101,7 @@ private:
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
-    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie);
+    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo);
 
     void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime);
 
@@ -344,6 +345,7 @@ private:
     // void DestroyReadSession(const TReadSessionKey& key);
 
     void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
     
@@ -481,6 +483,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
+            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
@@ -538,6 +541,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
+            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
@@ -635,12 +639,22 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
+    template <class T> T& GetUserActionAndTransactionEventsFront();
+    template <class T> bool UserActionAndTransactionEventsFrontIs() const;
+
+    bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
+
     //
     // user actions and transactions
     //
-    std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
-    std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
-    std::deque<TTransaction> DistrTxs;
+    using TUserActionAndTransactionEvent =
+        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
+                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
+                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config 
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;

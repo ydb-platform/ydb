@@ -3,7 +3,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 
 namespace NKikimr::NSchemeShard {
 

@@ -13,12 +13,6 @@ IF (OS_WINDOWS)
         zsyscall_windows.go
     )
 
-    GO_TEST_SRCS(export_test.go)
-
-    GO_XTEST_SRCS(registry_test.go)
 ENDIF()
 
 END()
-
-RECURSE(
-)

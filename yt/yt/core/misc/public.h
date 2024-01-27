@@ -191,10 +191,18 @@ struct TIsInvocable;
 template <class T, class TRet, bool NoExcept, class... TArgs>
 struct TIsInvocable<T, TRet(TArgs...) noexcept(NoExcept)>
 {
+private:
+    static constexpr bool IsInvocable_ = requires (T&& t, TArgs&&... args) {
+        { std::forward<T>(t)(std::forward<TArgs>(args)...) } -> std::same_as<TRet>;
+    };
+
+    static constexpr bool IsNoThrowInvocable_ = requires (T&& t, TArgs&&... args) {
+        { std::forward<T>(t)(std::forward<TArgs>(args)...) } noexcept;
+    };
+public:
     static constexpr bool Value =
-        NoExcept ?
-        std::is_nothrow_invocable_r_v<TRet, T, TArgs...> :
-        std::is_invocable_r_v<TRet, T, TArgs...>;
+        IsInvocable_ &&
+        (!NoExcept || IsNoThrowInvocable_);
 };
 
 template <class T, class Sig>

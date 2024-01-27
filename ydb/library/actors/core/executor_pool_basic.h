@@ -136,7 +136,6 @@ namespace NActors {
         TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
         std::atomic<ui16> LocalQueueSize;
 
-
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
         TArrayHolder<NSchedulerQueue::TWriter> ScheduleWriters;
 
@@ -160,11 +159,15 @@ namespace NActors {
         i16 MaxThreadCount;
         i16 DefaultThreadCount;
         IHarmonizer *Harmonizer;
-        i16 SharedExecutorsCount = 0;
         ui64 SoftProcessingDurationTs = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
+
+        static constexpr ui64 MaxSharedThreadsForPool = 2;
+        NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
+        NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
+
     public:
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits
@@ -251,9 +254,13 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
+        TSharedExecutorThreadCtx* ReleaseSharedThread();
+        void AddSharedThread(TSharedExecutorThreadCtx* thread);
+
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
+        bool WakeUpLoopShared();
     };
 }

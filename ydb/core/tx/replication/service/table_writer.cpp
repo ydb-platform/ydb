@@ -1,12 +1,131 @@
+#include "json_change_record.h"
 #include "table_writer.h"
 #include "worker.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/change_exchange/change_sender_common_ops.h>
+#include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/map.h>
+
 namespace NKikimr::NReplication::NService {
+
+class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
+    void GetProxyServices() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest());
+        Become(&TThis::StateGetProxyServices);
+    }
+
+    STATEFN(StateGetProxyServices) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
+        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
+        Ready();
+    }
+
+    void Ready() {
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvReady(TabletId));
+        Become(&TThis::StateWaitingRecords);
+    }
+
+    STATEFN(StateWaitingRecords) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
+        auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
+
+        auto& tableId = *event->Record.MutableTableId();
+        tableId.SetOwnerId(TablePathId.OwnerId);
+        tableId.SetTableId(TablePathId.LocalPathId);
+        // TODO: SetSchemaVersion?
+
+        for (auto recordPtr : ev->Get()->Records) {
+            const auto& record = *recordPtr->Get<TChangeRecord>();
+            record.Serialize(*event->Record.AddChanges());
+            // TODO: set WriteTxId, Source
+        }
+
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), TabletId, false));
+        Become(&TThis::StateWaitingStatus);
+    }
+
+    STATEFN(StateWaitingStatus) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvDataShard::TEvApplyReplicationChangesResult, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr&) {
+        // TODO: handle result
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (TabletId == ev->Get()->TabletId) {
+            Leave();
+        }
+    }
+
+    void Leave() {
+        Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId));
+        PassAway();
+    }
+
+    void Unlink() {
+        if (LeaderPipeCache) {
+            Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(TabletId));
+        }
+    }
+
+    void PassAway() override {
+        Unlink();
+        TActorBootstrapped::PassAway();
+    }
+
+public:
+    explicit TTablePartitionWriter(const TActorId& parent, ui64 tabletId, const TPathId& tablePathId)
+        : Parent(parent)
+        , TabletId(tabletId)
+        , TablePathId(tablePathId)
+    {
+    }
+
+    void Bootstrap() {
+        GetProxyServices();
+    }
+
+    STATEFN(StateBase) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    const TActorId Parent;
+    const ui64 TabletId;
+    const TPathId TablePathId;
+
+    TActorId LeaderPipeCache;
+
+}; // TTablePartitionWriter
 
 class TLocalTableWriter
     : public TActor<TLocalTableWriter>
@@ -61,7 +180,7 @@ class TLocalTableWriter
     }
 
     static TVector<ui64> MakePartitionIds(const TVector<TKeyDesc::TPartitionInfo>& partitions) {
-        TVector<ui64> result(Reserve(partitions.size()));
+        TVector<ui64> result(::Reserve(partitions.size()));
 
         for (const auto& partition : partitions) {
             result.push_back(partition.ShardId);
@@ -124,24 +243,29 @@ class TLocalTableWriter
             return;
         }
 
-        TVector<NScheme::TTypeInfo> keyColumnTypes;
+        auto schema = MakeIntrusive<TLightweightSchema>();
         for (const auto& [_, column] : entry.Columns) {
-            if (column.KeyOrder < 0) {
-                continue;
-            }
+            if (column.KeyOrder >= 0) {
+                if (schema->KeyColumns.size() <= static_cast<ui32>(column.KeyOrder)) {
+                    schema->KeyColumns.resize(column.KeyOrder + 1);
+                }
 
-            if (keyColumnTypes.size() <= static_cast<ui32>(column.KeyOrder)) {
-                keyColumnTypes.resize(column.KeyOrder + 1);
+                schema->KeyColumns[column.KeyOrder] = column.PType;
+            } else {
+                auto res = schema->ValueColumns.emplace(column.Name, TLightweightSchema::TColumn{
+                    .Tag = column.Id,
+                    .Type = column.PType,
+                });
+                Y_ABORT_UNLESS(res.second);
             }
-
-            keyColumnTypes[column.KeyOrder] = column.PType;
         }
 
+        Schema = schema;
         KeyDesc = MakeHolder<TKeyDesc>(
             entry.TableId,
-            GetFullRange(keyColumnTypes.size()).ToTableRange(),
+            GetFullRange(schema->KeyColumns.size()).ToTableRange(),
             TKeyDesc::ERowOperation::Update,
-            keyColumnTypes,
+            schema->KeyColumns,
             TVector<TKeyDesc::TColumnOp>()
         );
 
@@ -190,31 +314,69 @@ class TLocalTableWriter
     }
 
     IActor* CreateSender(ui64 partitionId) override {
-        Y_UNUSED(partitionId);
-        return nullptr;
+        return new TTablePartitionWriter(SelfId(), partitionId, PathId);
     }
 
     ui64 GetPartitionId(NChangeExchange::IChangeRecord::TPtr record) const override {
-        Y_UNUSED(record);
-        return 0;
+        Y_ABORT_UNLESS(KeyDesc);
+        Y_ABORT_UNLESS(KeyDesc->GetPartitions());
+
+        const auto range = TTableRange(record->Get<TChangeRecord>()->GetKey());
+        Y_ABORT_UNLESS(range.Point);
+
+        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
+            KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
+            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
+                const int compares = CompareBorders<true, false>(
+                    partition.Range->EndKeyPrefix.GetCells(), range.From,
+                    partition.Range->IsInclusive || partition.Range->IsPoint,
+                    range.InclusiveFrom || range.Point, KeyDesc->KeyColumnTypes
+                );
+
+                return (compares < 0);
+            }
+        );
+
+        Y_ABORT_UNLESS(it != KeyDesc->GetPartitions().end());
+        return it->ShardId;
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        Worker = ev->Sender;
-        // TODO: enqueue records
+        Y_ABORT_UNLESS(PendingRecords.empty());
+
+        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
+        for (auto& record : ev->Get()->Records) {
+            records.emplace_back(record.Offset, PathId, record.Data.size());
+            auto res = PendingRecords.emplace(record.Offset, TChangeRecordBuilder()
+                .WithBody(std::move(record.Data))
+                .WithSchema(Schema)
+                .Build()
+            );
+            Y_ABORT_UNLESS(res.second);
+        }
+
+        EnqueueRecords(std::move(records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        Y_UNUSED(ev);
-        // TODO: send records
+        TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
+        for (const auto& record : ev->Get()->Records) {
+            auto it = PendingRecords.find(record.Order);
+            Y_ABORT_UNLESS(it != PendingRecords.end());
+            records.emplace_back(it->second);
+        }
+
+        ProcessRecords(std::move(records));
     }
 
-    void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        ProcessRecords(std::move(ev->Get()->Records));
-    }
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
+        for (const auto& record : ev->Get()->Records) {
+            PendingRecords.erase(record);
+        }
 
-    void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        ForgetRecords(std::move(ev->Get()->Records));
+        if (PendingRecords.empty()) {
+            Send(Worker, new TEvWorker::TEvPoll());
+        }
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
@@ -251,8 +413,7 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
-            hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
-            hFunc(NChangeExchange::TEvChangeExchange::TEvForgetRecords, Handle);
+            hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvGone, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -266,7 +427,10 @@ private:
     TActorId Worker;
     ui64 TableVersion = 0;
     THolder<TKeyDesc> KeyDesc;
+    TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
+
+    TMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
 
 }; // TLocalTableWriter
 

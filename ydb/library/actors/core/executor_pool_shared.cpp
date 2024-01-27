@@ -108,8 +108,8 @@ void TSharedExecutorPool::ReturnHalfThread(i16 pool) {
     Y_ABORT_UNLESS(borrowingPool);
     BorrowedThreadByPool[PoolByBorrowedThread[threadIdx]] = -1;
     PoolByBorrowedThread[threadIdx] = -1;
-
-    // TODO(kruall): add change in executor pool basic
+    // TODO(kruall): Check on race
+    borrowingPool->ReleaseSharedThread();
 }
 
 void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
@@ -118,8 +118,8 @@ void TSharedExecutorPool::GiveHalfThread(i16 from, i16 to) {
     Threads[threadIdx].ExecutorPools[1].store(borrowingPool, std::memory_order_release);
     BorrowedThreadByPool[to] = threadIdx;
     PoolByBorrowedThread[threadIdx] = to;
-
-    // TODO(kruall): add change in executor pool basic
+    // TODO(kruall): Check on race
+    borrowingPool->AddSharedThread(&Threads[threadIdx]);
 }
 
 void TSharedExecutorPool::GetSharedStats(i16 poolId, std::vector<TExecutorThreadStats>& statsCopy) {

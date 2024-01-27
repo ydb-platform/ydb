@@ -1,16 +1,51 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    benchmarks.go
-    handlers.go
-)
-
-GO_TEST_SRCS(
-    benchmarks_test.go
-    handlers_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		benchmarks.go
+		handlers.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

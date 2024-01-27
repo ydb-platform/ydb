@@ -126,7 +126,6 @@ protected:
         RlNoResourceTag = 102,
     };
 
-    static constexpr bool HasAsyncTaskRunner = false;
 
 public:
     void Bootstrap() {

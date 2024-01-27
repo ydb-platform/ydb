@@ -1,23 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		sha256.go
-		sha256block.go
-		sha256block_amd64.go
-		sha256block_amd64.s
-		sha256block_decl.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		sha256.go
-		sha256block.go
-		sha256block_arm64.go
-		sha256block_arm64.s
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		sha256.go
 		sha256block.go
@@ -32,19 +14,20 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		sha256block_amd64.s
 		sha256block_decl.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		sha256.go
 		sha256block.go
 		sha256block_arm64.go
 		sha256block_arm64.s
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		sha256.go
 		sha256block.go
-		sha256block_arm64.go
-		sha256block_arm64.s
+		sha256block_amd64.go
+		sha256block_amd64.s
+		sha256block_decl.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
     SRCS(
@@ -53,20 +36,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64)
 		sha256block_amd64.go
 		sha256block_amd64.s
 		sha256block_decl.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		sha256.go
-		sha256block.go
-		sha256block_arm64.go
-		sha256block_arm64.s
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
-    SRCS(
-		sha256.go
-		sha256block.go
-		sha256block_arm64.go
-		sha256block_arm64.s
     )
 ENDIF()
 END()

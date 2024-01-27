@@ -48,7 +48,7 @@ using TFairShareCallbackQueueFactory = std::function<IFairShareCallbackQueuePtr(
 //! so use with care in case of multiple workers in the underlying invoker.
 //! Factory #callbackQueueFactory is used by the invoker pool for creation of the storage for callbacks.
 //! Ability to specify #callbackQueueFactory is provided for testing purposes.
-IDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
+TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,

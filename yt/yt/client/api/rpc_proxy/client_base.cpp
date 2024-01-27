@@ -950,6 +950,7 @@ void FillRequestBySelectRowsOptionsBase(
     } else if (defaultUdfRegistryPath) {
         request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
+    request->set_syntax_version(options.SyntaxVersion);
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(

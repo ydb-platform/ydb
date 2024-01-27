@@ -1,24 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		fe.go
-		fe_amd64.go
-		fe_amd64.s
-		fe_arm64_noasm.go
-		fe_generic.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		fe.go
-		fe_amd64_noasm.go
-		fe_arm64.go
-		fe_arm64.s
-		fe_generic.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		fe.go
 		fe_amd64_noasm.go
@@ -34,7 +15,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		fe_arm64_noasm.go
 		fe_generic.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		fe.go
 		fe_amd64_noasm.go
@@ -42,12 +23,12 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		fe_arm64.s
 		fe_generic.go
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		fe.go
-		fe_amd64_noasm.go
-		fe_arm64.go
-		fe_arm64.s
+		fe_amd64.go
+		fe_amd64.s
+		fe_arm64_noasm.go
 		fe_generic.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
@@ -56,22 +37,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64)
 		fe_amd64.go
 		fe_amd64.s
 		fe_arm64_noasm.go
-		fe_generic.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		fe.go
-		fe_amd64_noasm.go
-		fe_arm64.go
-		fe_arm64.s
-		fe_generic.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
-    SRCS(
-		fe.go
-		fe_amd64_noasm.go
-		fe_arm64.go
-		fe_arm64.s
 		fe_generic.go
     )
 ENDIF()

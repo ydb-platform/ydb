@@ -590,6 +590,7 @@ message TReqSelectRows
     optional bool new_range_inference = 19;
     optional bool use_canonical_null_relations = 20;
     optional bool merge_versioned_rows = 21;
+    optional int32 syntax_version = 22;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }
@@ -733,6 +734,7 @@ message TReqExplainQuery
     optional string udf_registry_path = 10;
     optional string execution_pool = 11;
     optional bool new_range_inference = 12;
+    optional int32 syntax_version = 13;
 }
 
 message TRspExplainQuery

@@ -1,24 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		header.go
-		pipeline.go
-		reader.go
-		textproto.go
-		writer.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		header.go
-		pipeline.go
-		reader.go
-		textproto.go
-		writer.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		header.go
 		pipeline.go
@@ -34,7 +15,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		textproto.go
 		writer.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		header.go
 		pipeline.go
@@ -42,7 +23,7 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		textproto.go
 		writer.go
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		header.go
 		pipeline.go
@@ -51,22 +32,6 @@ ELSEIF (OS_DARWIN AND ARCH_AARCH64)
 		writer.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
-    SRCS(
-		header.go
-		pipeline.go
-		reader.go
-		textproto.go
-		writer.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		header.go
-		pipeline.go
-		reader.go
-		textproto.go
-		writer.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
     SRCS(
 		header.go
 		pipeline.go

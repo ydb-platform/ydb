@@ -171,6 +171,14 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = 10; break;
         case NUdf::EDataSlot::Decimal:
             res.Bytes = 16; break;
+        case NUdf::EDataSlot::Date32:
+            res.Bytes = 4; break;
+        case NUdf::EDataSlot::Datetime64:
+            res.Bytes = 8; break;
+        case NUdf::EDataSlot::Timestamp64:
+            res.Bytes = 8; break;
+        case NUdf::EDataSlot::Interval64:
+            res.Bytes = 8; break;
         case NUdf::EDataSlot::DyNumber:
             res.IsString = true; break;
         case NUdf::EDataSlot::JsonDocument:
@@ -269,6 +277,15 @@ void TGraceJoinPacker::Pack()  {
             WriteUnaligned<ui64>(buffPtr, value.Get<ui64>()); break;
         case NUdf::EDataSlot::Interval:
             WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Date32:
+            WriteUnaligned<i64>(buffPtr, value.Get<i32>()); break;
+        case NUdf::EDataSlot::Datetime64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Timestamp64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+        case NUdf::EDataSlot::Interval64:
+            WriteUnaligned<i64>(buffPtr, value.Get<i64>()); break;
+
         case NUdf::EDataSlot::Uuid:
         {
             auto str = TuplePtrs[i]->AsStringRef();
@@ -380,6 +397,14 @@ void TGraceJoinPacker::UnPack()  {
         case NUdf::EDataSlot::Timestamp:
             value = NUdf::TUnboxedValuePod(ReadUnaligned<ui64>(buffPtr)); break;
         case NUdf::EDataSlot::Interval:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Date32:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i32>(buffPtr)); break;
+        case NUdf::EDataSlot::Datetime64:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Timestamp64:
+            value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
+        case NUdf::EDataSlot::Interval64:
             value = NUdf::TUnboxedValuePod(ReadUnaligned<i64>(buffPtr)); break;
         case NUdf::EDataSlot::Uuid:
         {

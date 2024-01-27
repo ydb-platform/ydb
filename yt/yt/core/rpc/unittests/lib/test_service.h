@@ -52,12 +52,11 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(ITestService)
+DECLARE_REFCOUNTED_STRUCT(ITestService)
 
-class ITestService
+struct ITestService
     : public virtual IService
 {
-public:
     virtual TFuture<void> GetSlowCallCanceled() const = 0;
     virtual TFuture<void> GetServerStreamsAborted() const = 0;
 };

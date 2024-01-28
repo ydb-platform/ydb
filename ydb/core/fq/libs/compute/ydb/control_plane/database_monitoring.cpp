@@ -71,17 +71,14 @@ public:
     TComputeDatabaseMonitoringActor(const TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters)
         : MonitoringClientActorId(monitoringClientActorId)
         , Counters(counters)
-    {
-        MonitoringRequestDelay = GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1));
-        AverageLoadInterval = std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1));
-        MaxClusterLoad = std::min<ui32>(config.GetMaxClusterLoadPercentage(), 100) / 100.0;
-        DefaultQueryLoad = std::min<ui32>(config.GetDefaultQueryLoadPercentage(), 100) / 100.0;
-        if (DefaultQueryLoad == 0.0) {
-            DefaultQueryLoad = 0.1;
-        }
-        PendingQueueSize = config.GetPendingQueueSize();
-        CpuNumber = config.GetCpuNumber();
-    }
+        , MonitoringRequestDelay(GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1)))
+        , AverageLoadInterval(std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1)))
+        , MaxClusterLoad(std::min<ui32>(config.GetMaxClusterLoadPercentage(), 100) / 100.0)
+        , DefaultQueryLoad(config.GetDefaultQueryLoadPercentage() ? std::min<ui32>(config.GetDefaultQueryLoadPercentage(), 100) / 100.0 : 0.1)
+        , PendingQueueSize(config.GetPendingQueueSize())
+        , Strict(config.GetStrict())
+        , CpuNumber(config.GetCpuNumber())
+    {}
 
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
 
@@ -160,7 +157,7 @@ public:
                 request.Quota = DefaultQueryLoad;
             }
             CheckLoadIsOutdated();
-            if (MaxClusterLoad > 0.0 && (!Ready || QuotedLoad >= MaxClusterLoad)) {
+            if (MaxClusterLoad > 0.0 && ((!Ready && Strict) || QuotedLoad >= MaxClusterLoad)) {
                 if (PendingQueue.size() >= PendingQueueSize) {
                     Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{
                         NYql::TIssue{TStringBuilder{} 
@@ -209,11 +206,14 @@ public:
         // TODO: support timeout to decline quota after request pending time is over, not load info
         if (TInstant::Now() - LastCpuLoad > AverageLoadInterval) {
             Ready = false;
-            while (PendingQueue.size()) {
-                auto& ev = PendingQueue.front();
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load info is not available"}}), 0, ev->Cookie);
-                PendingQueue.pop();
-                Counters.PendingQueueSize->Dec();
+            QuotedLoad = 0.0;
+            if (Strict) {
+                while (PendingQueue.size()) {
+                    auto& ev = PendingQueue.front();
+                    Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load info is not available"}}), 0, ev->Cookie);
+                    PendingQueue.pop();
+                    Counters.PendingQueueSize->Dec();
+                }
             }
         }
     }
@@ -240,17 +240,21 @@ private:
     TInstant LastCpuLoad;
     TActorId MonitoringClientActorId;
     TCounters Counters;
+
     double InstantLoad = 0.0;
     double AverageLoad = 0.0;
     double QuotedLoad = 0.0;
     bool Ready = false;
-    TDuration MonitoringRequestDelay;
-    TDuration AverageLoadInterval;
-    double MaxClusterLoad;
-    double DefaultQueryLoad;
-    ui32 PendingQueueSize;
+
+    const TDuration MonitoringRequestDelay;
+    const TDuration AverageLoadInterval;
+    const double MaxClusterLoad;
+    const double DefaultQueryLoad;
+    const ui32 PendingQueueSize;
+    const bool Strict;
+    const ui32 CpuNumber;
+
     TQueue<TEvYdbCompute::TEvCpuQuotaRequest::TPtr> PendingQueue;
-    ui32 CpuNumber;
 };
 
 std::unique_ptr<NActors::IActor> CreateDatabaseMonitoringActor(const NActors::TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters) {

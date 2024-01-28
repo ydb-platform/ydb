@@ -38,7 +38,6 @@ struct TDatabaseClients {
         TActorId ActorId;
         NConfig::TComputeDatabaseConfig Config;
         TActorId DatabasesCacheActorId;
-        TActorId MonitoringClientActorId;
         TActorId MonitoringActorId;
     };
 
@@ -342,28 +341,28 @@ public:
     }
 
     void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {
-        if (Config.GetYdb().GetLoadControlConfig().GetEnable()) {
-            MonitoringClientActorId = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider()).release());
-            MonitoringActorId = Register(CreateDatabaseMonitoringActor(MonitoringClientActorId, Config.GetYdb().GetLoadControlConfig(), Counters).release());
+        auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
+        if (globalLoadConfig.GetEnable()) {
+            auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider()).release());
+            MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
         }
     }
 
     void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig, const TString& databasesCacheReloadPeriod) {
         const auto& mapping = cmsConfig.GetDatabaseMapping();
-        auto inheritGlobalLoadConfig = Config.GetYdb().GetLoadControlConfig().GetInherit();
+        auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            TActorId monitoringClientActor;
             TActorId databaseMonitoringActor;
-            const NConfig::TLoadControlConfig& loadConfig = inheritGlobalLoadConfig || config.GetLoadControlConfig().GetInherit()
+            const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? Config.GetYdb().GetLoadControlConfig()
-                : config.GetLoadControlConfig();
+                : globalLoadConfig;
             if (loadConfig.GetEnable()) {
-                monitoringClientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(monitoringClientActor, loadConfig, Counters).release());
+                auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, Counters).release());
             }
-            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, monitoringClientActor, databaseMonitoringActor});
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, databaseMonitoringActor});
         }
 
         Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
@@ -371,16 +370,15 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            TActorId monitoringClientActor;
             TActorId databaseMonitoringActor;
-            const NConfig::TLoadControlConfig& loadConfig = inheritGlobalLoadConfig || config.GetLoadControlConfig().GetInherit()
+            const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? Config.GetYdb().GetLoadControlConfig()
-                : config.GetLoadControlConfig();
+                : globalLoadConfig;
             if (loadConfig.GetEnable()) {
-                monitoringClientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
-                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(monitoringClientActor, loadConfig, Counters).release());
+                auto clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
+                databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, Counters).release());
             }
-            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, monitoringClientActor, databaseMonitoringActor};
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, databaseMonitoringActor};
         }
     }
 
@@ -389,7 +387,7 @@ public:
         for (const auto& config: mapping.GetCommon()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, {}, {}});
+            Clients->CommonDatabaseClients.push_back({clientActor, config, cacheActor, {}});
         }
 
         Y_ABORT_UNLESS(Clients->CommonDatabaseClients);
@@ -397,7 +395,7 @@ public:
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
             const auto clientActor = Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release());
             const auto cacheActor = Register(CreateComputeDatabasesCacheActor(clientActor, databasesCacheReloadPeriod, Counters).release());
-            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, {}, {}};
+            Clients->ScopeToDatabaseClient[scope] = {clientActor, config, cacheActor, {}};
         }
     }
 

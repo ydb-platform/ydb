@@ -24,7 +24,7 @@ message TLoadControlConfig {
     uint32 MaxClusterLoadPercentage = 4;   // default 0 == no load control
     uint32 DefaultQueryLoadPercentage = 5; // default 10
     uint32 PendingQueueSize = 6;           // default 0 == instant decline if overloaded
-    bool Inherit = 7;                      // whether to apply global config to databases (override, NOT merge)
+    bool Strict = 7;                       // default false, whether to deny execution in load level unavailable
     uint32 CpuNumber = 8;
 }
 

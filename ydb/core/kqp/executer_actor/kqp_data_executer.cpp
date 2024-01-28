@@ -1271,11 +1271,6 @@ private:
                 LOG_N("Shard " << msg->TabletId << " lost pipe while waiting for reply"
                     << (msg->NotDelivered ? " (last message not delivered)" : ""));
 
-                if (ReadOnlyTx && msg->NotDelivered) {
-                    CancelProposal(msg->TabletId);
-                    return ReplyUnavailable(TStringBuilder() << "Could not deliver program to shard " << msg->TabletId);
-                }
-
                 return ReplyTxStateUnknown(msg->TabletId);
             }
 

@@ -18,7 +18,7 @@ SRCS(
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard.cpp
-    columnshard_impl.cpp
+    GLOBAL columnshard_impl.cpp
     columnshard_common.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
@@ -27,7 +27,6 @@ SRCS(
     defs.cpp
     write_actor.cpp
     tables_manager.cpp
-    tx_controller.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
@@ -49,6 +48,8 @@ PEERDIR(
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/operations
+    ydb/core/tx/columnshard/transactions
+    ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/blobs_reader
     ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/resource_subscriber

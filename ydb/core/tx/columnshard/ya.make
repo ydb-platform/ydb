@@ -18,7 +18,7 @@ SRCS(
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard.cpp
-    GLOBAL columnshard_impl.cpp
+    columnshard_impl.cpp
     columnshard_common.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp

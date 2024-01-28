@@ -33,69 +33,8 @@ private:
         return TStringBuilder() << " at tablet " << Self->TabletID();
     }
 
-    void ConstructResult(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
-        Result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(Self->TabletID(), txInfo.TxKind, txInfo.TxId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
-        if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED) {
-            Self->IncCounter(COUNTER_PREPARE_SUCCESS);
-            Result->Record.SetMinStep(txInfo.MinStep);
-            Result->Record.SetMaxStep(txInfo.MaxStep);
-            if (Self->ProcessingParams) {
-                Result->Record.MutableDomainCoordinators()->CopyFrom(Self->ProcessingParams->GetCoordinators());
-            }
-        } else if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
-            Self->IncCounter(COUNTER_PREPARE_SUCCESS);
-        } else {
-            Self->IncCounter(COUNTER_PREPARE_ERROR);
-            LOG_S_INFO(TxPrefix() << "error txId " << txInfo.TxId << " " << proposeResult.GetStatusMessage() << TxSuffix());
-        }
-    }
-
-    TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody) {
-        /// @note There's no tx guaranties now. For now TX_KIND_TTL is used to trigger TTL in tests only.
-        /// In future we could trigger TTL outside of tablet. Then we need real tx with complete notification.
-        // TODO: make real tx: save and progress with tablets restart support
-
-        NKikimrTxColumnShard::TTtlTxBody ttlBody;
-        if (!ttlBody.ParseFromString(txBody)) {
-            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx cannot be parsed");
-        }
-
-        // If no paths trigger schema defined TTL
-        THashMap<ui64, NOlap::TTiering> pathTtls;
-        if (!ttlBody.GetPathIds().empty()) {
-            auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
-            if (!unixTime) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong timestamp");
-            }
-
-            TString columnName = ttlBody.GetTtlColumnName();
-            if (columnName.empty()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column ''");
-            }
-
-            if (!Self->TablesManager.HasPrimaryIndex()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
-            }
-
-            auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
-            auto ttlColumn = schema->GetFieldByName(columnName);
-            if (!ttlColumn) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,  "TTL tx wrong TTL column '" + columnName + "'");
-            }
-
-            const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
-            for (ui64 pathId : ttlBody.GetPathIds()) {
-                NOlap::TTiering tiering;
-                tiering.Ttl = NOlap::TTierInfo::MakeTtl(now - unixTime, columnName);
-                pathTtls.emplace(pathId, std::move(tiering));
-            }
-        }
-        if (!Self->SetupTtl(pathTtls, true)) {
-            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
-        }
-
-        return TTxController::TProposeResult();
-    }
+    void ConstructResult(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo);
+    TTxController::TProposeResult ProposeTtlDeprecated(const TString& txBody);
 };
 
 
@@ -153,7 +92,6 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
         }
         TTxController::TProposeResult proposeResult;
         ConstructResult(proposeResult, *txInfoPtr);
-        // Overregister for schemeshard
     } else {
         auto proposeResult = txOperator->Propose(*Self, txc, false);
         if (!!proposeResult) {
@@ -167,6 +105,70 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
     }
     AFL_VERIFY(!!Result);
     return true;
+}
+
+TTxController::TProposeResult TTxProposeTransaction::ProposeTtlDeprecated(const TString& txBody) {
+    /// @note There's no tx guaranties now. For now TX_KIND_TTL is used to trigger TTL in tests only.
+    /// In future we could trigger TTL outside of tablet. Then we need real tx with complete notification.
+    // TODO: make real tx: save and progress with tablets restart support
+
+    NKikimrTxColumnShard::TTtlTxBody ttlBody;
+    if (!ttlBody.ParseFromString(txBody)) {
+        return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx cannot be parsed");
+    }
+
+    // If no paths trigger schema defined TTL
+    THashMap<ui64, NOlap::TTiering> pathTtls;
+    if (!ttlBody.GetPathIds().empty()) {
+        auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
+        if (!unixTime) {
+            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong timestamp");
+        }
+
+        TString columnName = ttlBody.GetTtlColumnName();
+        if (columnName.empty()) {
+            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column ''");
+        }
+
+        if (!Self->TablesManager.HasPrimaryIndex()) {
+            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
+        }
+
+        auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
+        auto ttlColumn = schema->GetFieldByName(columnName);
+        if (!ttlColumn) {
+            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,  "TTL tx wrong TTL column '" + columnName + "'");
+        }
+
+        const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
+        for (ui64 pathId : ttlBody.GetPathIds()) {
+            NOlap::TTiering tiering;
+            tiering.Ttl = NOlap::TTierInfo::MakeTtl(now - unixTime, columnName);
+            pathTtls.emplace(pathId, std::move(tiering));
+        }
+    }
+    if (!Self->SetupTtl(pathTtls, true)) {
+        return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL not started");
+    }
+
+    return TTxController::TProposeResult();
+}
+
+void TTxProposeTransaction::ConstructResult(TTxController::TProposeResult& proposeResult, const TTxController::TBasicTxInfo& txInfo) {
+    Result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(Self->TabletID(), txInfo.TxKind, txInfo.TxId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
+    if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED) {
+        Self->IncCounter(COUNTER_PREPARE_SUCCESS);
+        Result->Record.SetMinStep(txInfo.MinStep);
+        Result->Record.SetMaxStep(txInfo.MaxStep);
+        if (Self->ProcessingParams) {
+            Result->Record.MutableDomainCoordinators()->CopyFrom(Self->ProcessingParams->GetCoordinators());
+        }
+    } else if (proposeResult.GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
+        Self->IncCounter(COUNTER_PREPARE_SUCCESS);
+    } else {
+        Self->IncCounter(COUNTER_PREPARE_ERROR);
+        LOG_S_INFO(TxPrefix() << "error txId " << txInfo.TxId << " " << proposeResult.GetStatusMessage() << TxSuffix());
+    }
 }
 
 void TTxProposeTransaction::Complete(const TActorContext& ctx) {

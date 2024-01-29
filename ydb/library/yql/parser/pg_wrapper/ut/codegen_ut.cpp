@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                 NUdf::ZeroMemoryContext(s.data() + sizeof(void*));
                 auto t = (text*)(s.data() + sizeof(void*));
                 SET_VARSIZE(t, VARHDRSZ + 500);
-                builder.Append(s);
+                ARROW_OK(builder.Append(s));
             }
 
             std::shared_ptr<arrow::ArrayData> out;

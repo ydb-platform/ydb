@@ -16,8 +16,6 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-std::atomic_int SpillerBlobId = 0;
-
 namespace {
 
 #define LOG_D(s) \
@@ -37,10 +35,18 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
                                public IDqComputeStorageActor
 {
     using TBase = TActorBootstrapped<TDqComputeStorageActor>;
+    // size + promise with key
+    using TWritingBlobInfo = std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>;
+    // remove after read + promise with blob
+    using TLoadingBlobInfo = std::pair<bool, NThreading::TPromise<TRope>>;
+    // void promise that completes when block is removed
+    using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId)
-        : TxId_(txId)  
-    {}
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName)
+        : TxId_(txId),
+        SpillerName_(spillerName)
+    {
+    }
 
     void Bootstrap() {
         Become(&TDqComputeStorageActor::WorkState);
@@ -53,76 +59,90 @@ public:
     }
 
     NThreading::TFuture<IDqComputeStorageActor::TKey> Put(TRope&& blob) override {
+        InitializeIfNot();
+        // Use lock to prevent race when state is changed on event processing and on Put call
         std::lock_guard lock(Mutex_);
+
         FailOnError();
-        CreateSpiller();
 
         ui64 size = blob.size();
-        ui64 NextBlobId = SpillerBlobId++;
 
+        bool isSent = SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+        if (!isSent) {
+            LOG_E("Can't send event for BlobId: " << NextBlobId); 
+            Error_ = "Internal error";
 
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            return {};
+        }
 
-        auto res = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>()));
+        auto it = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>())).first;
         WritingBlobsSize_ += size;
 
         ++NextBlobId;
 
-        return res.first->second.second.GetFuture();
-    }
+        auto& promise = it->second.second;
 
-    std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
-        std::lock_guard lock(Mutex_);
-        FailOnError();
-        CreateSpiller();
-
-        if (!SavedBlobs_.contains(blobId)) return std::nullopt;
-
-        auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
-
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
-
-        return res.first->second.GetFuture();
-    }
-
-    std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
-        std::lock_guard lock(Mutex_);
-        FailOnError();
-        CreateSpiller();
-
-        if (!SavedBlobs_.contains(blobId)) return std::nullopt;
-
-        auto res = LoadingBlobs_.emplace(blobId, NThreading::NewPromise<TRope>());
-
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
-        BlobsToRemoveAfterRead_.emplace(blobId);
-
-        return res.first->second.GetFuture();
-    }
-
-    NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
-        std::lock_guard lock(Mutex_);
-        FailOnError();
-        CreateSpiller();
-
-        auto promise = NThreading::NewPromise<void>();
-
-        promise.SetValue();
-
-
-        if (!SavedBlobs_.contains(blobId)) promise.GetFuture();
-
-        // TODO: actual delete
         return promise.GetFuture();
     }
 
+    std::optional<NThreading::TFuture<TRope>> Get(IDqComputeStorageActor::TKey blobId) override {
+        return GetInternal(blobId, false);
+    }
+
+    std::optional<NThreading::TFuture<TRope>> Extract(IDqComputeStorageActor::TKey blobId) override {
+        return GetInternal(blobId, true);
+    }
+
+    NThreading::TFuture<void> Delete(IDqComputeStorageActor::TKey blobId) override {
+        InitializeIfNot();
+        // Use lock to prevent race when state is changed on event processing and on Delete call
+        std::lock_guard lock(Mutex_);
+
+        FailOnError();
+
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+
+        if (!StoredBlobs_.contains(blobId)) {
+            promise.SetValue();
+            return future;
+        }
+
+        DeletingBlobs_.emplace(blobId, std::move(promise));
+
+        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+
+        return future;
+    }
+
 protected:
+    std::optional<NThreading::TFuture<TRope>>GetInternal(IDqComputeStorageActor::TKey blobId, bool removeAfterRead) {
+        InitializeIfNot();
+        // Use lock to prevent race when state is changed on event processing and on Get call
+        std::lock_guard lock(Mutex_);
+
+        FailOnError();
+
+        if (!StoredBlobs_.contains(blobId)) return std::nullopt;
+
+        TLoadingBlobInfo loadingblobInfo = std::make_pair(removeAfterRead, NThreading::NewPromise<TRope>());
+        auto it = LoadingBlobs_.emplace(blobId, std::move(loadingblobInfo)).first;
+
+        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+
+        auto& promise = it->second.second;
+        return promise.GetFuture();
+    }
+
     void PassAway() override {
+        InitializeIfNot();
         SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
     void FailOnError() {
+        InitializeIfNot();
         if (Error_) {
             LOG_E("Error: " << *Error_);
             SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
@@ -144,9 +164,11 @@ private:
     }
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
-        std::lock_guard lock(Mutex_);
         auto& msg = *ev->Get();
         LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
+
+        // Use lock to prevent race when state is changed on event processing and on Put call
+        std::lock_guard lock(Mutex_);
 
         auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
@@ -158,23 +180,31 @@ private:
             return;
         }
 
-        auto& blob = it->second;
-        // complete future and wake up waiting compute node
-        blob.second.SetValue(msg.BlobId);
-        ui64 size = blob.first;
+        auto& [size, promise] = it->second;
+
         WritingBlobsSize_ -= size;
         WritingBlobs_.erase(it);
 
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
 
-        SavedBlobs_.insert(msg.BlobId);
+        StoredBlobs_.insert(msg.BlobId);
+
+        // complete future and wake up waiting compute node
+        promise.SetValue(msg.BlobId);
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
-        std::lock_guard lock(Mutex_);
         auto& msg = *ev->Get();
         LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+
+        // Use lock to prevent race when state is changed on event processing and on Put call
+        std::lock_guard lock(Mutex_);
+
+        // if there was Delete request
+        if (HandleDelete(msg.BlobId, msg.Blob.Size())) {
+            return;
+        }
 
         auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {
@@ -186,16 +216,15 @@ private:
             return;
         }
 
-        if (BlobsToRemoveAfterRead_.contains(msg.BlobId)) {
-            StoredBlobsCount_--;
-            StoredBlobsSize_ -= msg.Blob.Size();
-            BlobsToRemoveAfterRead_.erase(msg.BlobId);
-            SavedBlobs_.erase(msg.BlobId);
+        bool removedAfterRead = it->second.first;
+        if (removedAfterRead) {
+            UpdateStatsAfterBlobDeletion(msg.BlobId, msg.Blob.Size());
         }
 
         TRope res(std::move(msg.Blob.Data()));
 
-        it->second.SetValue(std::move(res));
+        auto& promise = it->second.second;
+        promise.SetValue(std::move(res));
 
         LoadingBlobs_.erase(it);
     }
@@ -207,43 +236,68 @@ private:
         Error_.ConstructInPlace(msg.Message);
     }
 
-    void CreateSpiller() {
-        if (IsCreated) return;
-        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, TStringBuilder() << "ComputeId: " << 1998,
-            SelfId(), true);
+    bool HandleDelete(IDqComputeStorageActor::TKey blobId, ui64 size) {
+        auto it = DeletingBlobs_.find(blobId);
+        if (it == DeletingBlobs_.end()) {
+            return false;
+        }
+
+        UpdateStatsAfterBlobDeletion(blobId, size);
+
+        auto& promise = it->second;
+        promise.SetValue();
+        DeletingBlobs_.erase(it);
+        return true;
+    }
+
+    void UpdateStatsAfterBlobDeletion(IDqComputeStorageActor::TKey blobId, ui64 size) {
+        StoredBlobsCount_--;
+        StoredBlobsSize_ -= size;
+        StoredBlobs_.erase(blobId);
+    }
+
+    void InitializeIfNot() {
+        if (IsInitialized_) return;
+        auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
+            SelfId(), false);
         SpillingActorId_ = Register(spillingActor);
 
-        IsCreated = true;
+        IsInitialized_ = true;
     }
+
 
     protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
 
-    TMap<IDqComputeStorageActor::TKey, std::pair<ui64, NThreading::TPromise<IDqComputeStorageActor::TKey>>> WritingBlobs_;
-    TSet<ui64> SavedBlobs_;
+    TMap<IDqComputeStorageActor::TKey, TWritingBlobInfo> WritingBlobs_;
+    TSet<ui64> StoredBlobs_;
     ui64 WritingBlobsSize_ = 0;
 
     ui32 StoredBlobsCount_ = 0;
     ui64 StoredBlobsSize_ = 0;
 
-    TMap<IDqComputeStorageActor::TKey, NThreading::TPromise<TRope>> LoadingBlobs_;
-    TSet<IDqComputeStorageActor::TKey> BlobsToRemoveAfterRead_;
+    TMap<IDqComputeStorageActor::TKey, TLoadingBlobInfo> LoadingBlobs_;
+
+    TMap<IDqComputeStorageActor::TKey, TDeletingBlobInfo> DeletingBlobs_;
 
     TMaybe<TString> Error_;
 
-    // IDqComputeStorageActor::TKey NextBlobId = 0;
+    IDqComputeStorageActor::TKey NextBlobId = 0;
 
-    bool IsCreated = false;
+    TString SpillerName_;
 
+    bool IsInitialized_ = false;
+
+    private:
     std::mutex Mutex_;
 
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId) {
-    return new TDqComputeStorageActor(txId);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName) {
+    return new TDqComputeStorageActor(txId, spillerName);
 }
 
 } // namespace NYql::NDq

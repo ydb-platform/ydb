@@ -623,7 +623,7 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                Spiller = NYql::NDq::MakeSpiller();
+                Spiller = NYql::NDq::MakeSpiller("My spiller");
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

@@ -25,6 +25,6 @@ public:
     virtual NThreading::TFuture<void> Delete(TKey key) = 0;
 };
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName);
 
 } // namespace NYql::NDq

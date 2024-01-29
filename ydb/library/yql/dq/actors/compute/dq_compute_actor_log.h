@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/ydb/library/services/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #if defined CA_LOG_D || defined CA_LOG_I || defined CA_LOG_E || defined CA_LOG_C
 #   error log macro definition clash
@@ -23,7 +23,7 @@
     LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 #pragma once
-#include <contrib/ydb/library/services/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #if defined CA_LOG_D || defined CA_LOG_I || defined CA_LOG_E || defined CA_LOG_C
 #   error log macro definition clash

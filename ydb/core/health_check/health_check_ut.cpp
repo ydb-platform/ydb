@@ -8,6 +8,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include "health_check.cpp"
 
+#include <util/stream/null.h>
+
 namespace NKikimr {
 
 using namespace NSchemeShard;

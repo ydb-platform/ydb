@@ -5539,6 +5539,59 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(OlapReplace_FromSelectLarge) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+
+        TTestHelper testHelper(settings);
+
+        TKikimrRunner& kikimr = testHelper.GetKikimr();
+        testHelper.GetRuntime().GetAppData(0).EnableOlapSink = true;
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Col1").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Col2").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable1;
+        testTable1.SetName("/Root/ColumnShard1").SetPrimaryKey({ "Col1" }).SetSharding({ "Col1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable1);
+
+        TTestHelper::TColumnTable testTable2;
+        testTable2.SetName("/Root/ColumnShard2").SetPrimaryKey({ "Col1" }).SetSharding({ "Col1" }).SetSchema(schema);
+        testHelper.CreateTable(testTable2);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable1.GetArrowSchema(schema));
+            for (size_t index = 0; index < 10000; ++index) {
+                tableInserter.AddRow().Add(index).Add(index * 10);
+            }
+            testHelper.BulkUpsert(testTable1, tableInserter);
+        }
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString sql = R"(
+                REPLACE INTO `/Root/ColumnShard2`
+                SELECT * FROM `/Root/ColumnShard1`
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/ColumnShard2`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[10000u]])");
+        }
+    }
+
     Y_UNIT_TEST(OlapReplace_Simple) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

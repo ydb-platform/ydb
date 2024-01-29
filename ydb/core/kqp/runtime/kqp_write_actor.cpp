@@ -256,7 +256,7 @@ private:
 
     void ProcessRows() {
         SplitBatchByShards();
-        SendNewBatchesToShards();
+        SendBatchesToShards();
 
         if (Finished && SchemeEntry && IsInFlightBatchesEmpty()) {
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
@@ -299,9 +299,9 @@ private:
         }
     }
 
-    void SendNewBatchesToShards() {
+    void SendBatchesToShards() {
         for (auto& [shardId, batches] : InFlightBatches) {
-            if (!batches.empty() && batches.front().SendAttempts == 0) {
+            if (!batches.empty() && batches.front().TxId == 0) {
                 if (const auto txId = AllocateTxId(); txId) {
                     batches.front().TxId = *txId;
                     SendRequestShard(shardId);
@@ -358,9 +358,10 @@ private:
     }
 
     void RetryShard(const ui64 shardId) {
-        if (!InFlightBatches.contains(shardId) && InFlightBatches.at(shardId).empty()) {
+        if (!InFlightBatches.contains(shardId) || InFlightBatches.at(shardId).empty()) {
             return;
         }
+        CA_LOG_D("Retry ShardID=" << shardId);
         auto& inFlightBatch = InFlightBatches.at(shardId).front();
         inFlightBatch.TxId = 0;
         RequestNewTxId();

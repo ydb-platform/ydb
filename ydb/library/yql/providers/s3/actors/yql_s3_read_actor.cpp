@@ -3034,6 +3034,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         readSpec->Format = params.GetFormat();
 
+        if (readSpec->Format == "csv_with_names") {
+            readSpec->Settings.csv.empty_as_default = true;
+        }
+
         if (const auto it = settings.find("compression"); settings.cend() != it)
             readSpec->Compression = it->second;
 

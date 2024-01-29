@@ -31,6 +31,7 @@ private:
     std::vector<TString> Tables = {"customer", "lineitem", "nation", "orders",
         "region", "part", "partsupp", "supplier"};
     bool IsExternal = false;
+    TString TablesPath;
 };
 
 class TTpchCommandRun : public NYdb::NConsoleClient::TYdbCommand {

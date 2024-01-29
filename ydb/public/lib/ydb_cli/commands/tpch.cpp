@@ -318,6 +318,9 @@ void TTpchCommandClean::Config(TConfig& config) {
     config.Opts->AddLongOption('e', "external", "Drop tables as external. Use if initialized with external storage")
         .Optional()
         .StoreTrue(&IsExternal);
+    config.Opts->AddLongOption('p', "path", "Folder name where benchmark tables are located")
+        .Optional()
+        .StoreResult(&TablesPath);
 };
 
 int TTpchCommandClean::Run(TConfig& config) {
@@ -325,8 +328,8 @@ int TTpchCommandClean::Run(TConfig& config) {
     TTableClient client(driver);
 
     TString dropDdl;
-    for (auto& table : Tables) {
-        TString fullPath = FullTablePath(config.Database, table);
+    for (const auto& table : Tables) {
+        TString fullPath = FullTablePath(config.Database, fmt::format("{}{}", TablesPath, table));
         fmt::format_to(std::back_inserter(dropDdl), "DROP {} TABLE `{}`", IsExternal ? "EXTERNAL" : "", fullPath);
 
         ThrowOnError(client.RetryOperationSync([&dropDdl](TSession session) {
@@ -336,8 +339,9 @@ int TTpchCommandClean::Run(TConfig& config) {
     }
 
     if (IsExternal) {
-        ThrowOnError(client.RetryOperationSync([](TSession session) {
-            return session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE `_tpc_s3_external_source`;").GetValueSync();
+        TString fullPath = FullTablePath(config.Database, fmt::format("{}_tpc_s3_external_source", TablesPath));
+        ThrowOnError(client.RetryOperationSync([&](TSession session) {
+            return session.ExecuteSchemeQuery(fmt::format("DROP EXTERNAL DATA SOURCE `{}`;", fullPath)).GetValueSync();
         }));
     }
 

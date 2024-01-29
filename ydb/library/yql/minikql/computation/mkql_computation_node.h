@@ -121,6 +121,7 @@ struct TComputationContext : public TComputationContextLLVM {
     std::vector<NUdf::TUnboxedValue*> WideFields;
     TTypeEnvironment* TypeEnv = nullptr;
     const TComputationMutables Mutables;
+    std::function<void()> WakeUpCallback;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,

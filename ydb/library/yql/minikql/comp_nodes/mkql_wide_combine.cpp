@@ -351,6 +351,7 @@ public:
         if (HasRunningSpillingAsyncOperation()) {
             return EFetchResult::Yield;
         }
+
         while (true) {
             switch(GetMode()) {
                 case EOperatingMode::InMemory: {
@@ -361,9 +362,9 @@ public:
                     break;
                 }
                 case EOperatingMode::SpillState: {
-                    SpillState();
+                    SpillState(ctx);
                     if (GetMode() == EOperatingMode::SpillState) {
-                        return AsyncWrite();
+                        return AsyncWrite(ctx);
                     }
                     MKQL_ENSURE(GetMode() == EOperatingMode::SpillData, "Internal logic error");
                     break;
@@ -371,7 +372,7 @@ public:
                 case EOperatingMode::SpillData: {
                     SpillData(ctx);
                     if (GetMode() == EOperatingMode::SpillData) {
-                        return AsyncWrite();
+                        return AsyncWrite(ctx);
                     }
                     break;
                 }
@@ -383,18 +384,16 @@ public:
         Y_UNREACHABLE();
     }
 private:
-    EFetchResult AsyncWrite() {
+    EFetchResult AsyncWrite(TComputationContext& ctx) {
         MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncWriteOperation->HasValue(), "Internal logic error");
-        //AsyncWriteOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
-    EFetchResult AsyncRead() {
+    EFetchResult AsyncRead(TComputationContext& ctx) {
         MKQL_ENSURE(!AsyncWriteOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation.has_value(), "Internal logic error");
         MKQL_ENSURE(AsyncReadOperation->HasValue(), "Internal logic error");
-        //AsyncReadOperation.Subscribe() //TODO YQL-16988
         return EFetchResult::Yield;
     }
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
@@ -414,7 +413,7 @@ private:
                         static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                     );
                     if (IsSwitchToSpillingModeCondition()) {
-                        SwitchMode(EOperatingMode::SpillState);
+                        SwitchMode(EOperatingMode::SpillState, ctx);
                         return EFetchResult::Yield;
                     }
                     continue;
@@ -432,7 +431,7 @@ private:
         return EFetchResult::Finish;
     }
 
-    void SpillState() {
+    void SpillState(TComputationContext& ctx) {
         // mini State machine that:
         //1. Spills InMemoryProcessingState
         //2. Finilizes buckets
@@ -470,7 +469,7 @@ private:
             }
         }
         InMemoryProcessingState.ReadMore<false>();
-        SwitchMode(EOperatingMode::SpillData);
+        SwitchMode(EOperatingMode::SpillData, ctx);
     }
 
     void SpillData(TComputationContext& ctx) {
@@ -523,7 +522,7 @@ private:
                 return;
             }
         }
-        SwitchMode(EOperatingMode::ProcessSpilled);
+        SwitchMode(EOperatingMode::ProcessSpilled, ctx);
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output){
@@ -547,7 +546,7 @@ private:
                 AsyncReadOperation = bucket.InitialState->ExtractWideItem(BufferForKeyAnsState);
                 if (AsyncReadOperation) {
                     BufferForKeyAnsState.resize(0);
-                    return AsyncRead();
+                    return AsyncRead(ctx);
                 }
                 for (size_t i = 0; i != KeyWidth; ++i) {
                     //jumping into unsafe world, refusing ownership
@@ -567,7 +566,7 @@ private:
                 BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
                 AsyncReadOperation = bucket.Data->ExtractWideItem(BufferForUsedInputItems);
                 if (AsyncReadOperation) {
-                    return AsyncRead();
+                    return AsyncRead(ctx);
                 }
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
                 for (size_t i = 0, j = 0; i != Nodes.ItemNodes.size(); ++i) {
@@ -606,7 +605,7 @@ private:
             (AsyncReadOperation.has_value() && !AsyncReadOperation->HasValue());
     }
 
-    void SwitchMode(EOperatingMode mode) {
+    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         MKQL_ENSURE(!AsyncReadOperation, "Internal logic error");
         MKQL_ENSURE(!AsyncWriteOperation, "Internal logic error");
         switch(mode) {
@@ -616,7 +615,7 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                Spiller = MakeSpiller();
+                Spiller = MakeSpiller(std::move(ctx.WakeUpCallback));
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

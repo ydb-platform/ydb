@@ -163,12 +163,12 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
-            res = TaskRunner->Run();
 
-            if (ERunStatus::PendingInput == res){
-                //very poor man waiting for spiller async operation completion
-                Schedule(TDuration::MilliSeconds(1), new TEvContinueRun(THashSet<ui32>(ev->Get()->InputChannels), ev->Get()->MemLimit));
-            }
+            TaskRunner->SetWakeUpCallback([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), memlimit = ev->Get()->MemLimit, inputChannels = ev->Get()->InputChannels]() {
+                bool res = actorSystem->Send(selfId, new TEvContinueRun(THashSet<ui32>(inputChannels), memlimit));
+                (void)res;
+            });
+            res = TaskRunner->Run();
         }
 
         for (auto& channelId : inputMap) {

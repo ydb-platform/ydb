@@ -1611,6 +1611,9 @@ public:
         return Task.GetId();
     }
 
+    void SetWakeUpCallback(std::function<void()>&& ) override {
+    }
+
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {

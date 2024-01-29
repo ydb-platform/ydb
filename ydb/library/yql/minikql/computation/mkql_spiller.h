@@ -22,6 +22,6 @@ struct ISpiller {
 
 };
 
-ISpiller::TPtr MakeSpiller();
+ISpiller::TPtr MakeSpiller(std::function<void()>&& wakeupCallback);
 
 }//namespace NKikimr::NMiniKQL

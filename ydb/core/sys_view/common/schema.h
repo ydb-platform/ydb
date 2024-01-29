@@ -393,7 +393,7 @@ struct Schema : NIceDb::Schema {
         struct RawBytes : Column<5, NScheme::NTypeIds::Uint64> {};
         struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
         struct ChunkIdx : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct ColumnName: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct EntityName: Column<8, NScheme::NTypeIds::Utf8> {};
         struct InternalEntityId : Column<9, NScheme::NTypeIds::Uint32> {};
         struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
         struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
@@ -411,7 +411,7 @@ struct Schema : NIceDb::Schema {
             RawBytes,
             PortionId,
             ChunkIdx, 
-            ColumnName,
+            EntityName,
             InternalEntityId,
             BlobId,
             BlobRangeOffset,

@@ -23,13 +23,17 @@ public:
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
-
+        
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
         CompletionLogWrite->Exec(actorSystem);
 
         delete this;
     }
 
     void Release(TActorSystem *actorSystem) override {
+        CompletionLogWrite->SetResult(Result);
+        CompletionLogWrite->SetErrorReason(ErrorReason);
         CompletionLogWrite->Release(actorSystem);
 
         delete this;

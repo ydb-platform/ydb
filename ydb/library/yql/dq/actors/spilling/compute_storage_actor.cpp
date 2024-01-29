@@ -184,7 +184,6 @@ private:
         auto& [size, promise] = it->second;
 
         WritingBlobsSize_ -= size;
-        WritingBlobs_.erase(it);
 
         StoredBlobsCount_++;
         StoredBlobsSize_ += size;
@@ -193,6 +192,8 @@ private:
 
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
+
+        WritingBlobs_.erase(it);
         WakeupCallback_();
     }
 
@@ -264,7 +265,7 @@ private:
         if (IsInitialized_) return;
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
             SelfId(), false);
-        SpillingActorId_ = Register(spillingActor);
+        SpillingActorId_ = RegisterWithSameMailbox(spillingActor);
 
         IsInitialized_ = true;
     }

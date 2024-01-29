@@ -241,8 +241,8 @@ private:
             Send(ev->Sender, st.Release());
         }
 
-        Send(
-            ev->Sender,
+        bool wasSent = Send(
+            ParentId,
             new TEvTaskRunFinished(
                 res,
                 std::move(inputChannelFreeSpace),
@@ -256,6 +256,8 @@ private:
                 TInstant::Now() - start),
             /*flags=*/0,
             ev->Cookie);
+
+        LOG_I("Event was sent? " << wasSent);
     }
 
     void OnChannelPush(TEvPush::TPtr& ev) {

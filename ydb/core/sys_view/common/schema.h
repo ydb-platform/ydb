@@ -394,14 +394,15 @@ struct Schema : NIceDb::Schema {
         struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
         struct ChunkIdx : Column<7, NScheme::NTypeIds::Uint64> {};
         struct ColumnName: Column<8, NScheme::NTypeIds::Utf8> {};
-        struct InternalColumnId : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct InternalEntityId : Column<9, NScheme::NTypeIds::Uint32> {};
         struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
         struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Activity : Column<13, NScheme::NTypeIds::Bool> {};
-        struct TierName : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
+        struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<PathId, TabletId, PortionId, InternalColumnId, ChunkIdx>;
+        using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
             PathId,
             Kind,
@@ -411,12 +412,13 @@ struct Schema : NIceDb::Schema {
             PortionId,
             ChunkIdx, 
             ColumnName,
-            InternalColumnId,
+            InternalEntityId,
             BlobId,
             BlobRangeOffset,
             BlobRangeSize,
             Activity,
-            TierName
+            TierName,
+            EntityType
             >;
     };
 

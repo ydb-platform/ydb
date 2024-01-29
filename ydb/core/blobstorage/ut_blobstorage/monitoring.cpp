@@ -77,25 +77,30 @@ public:
     ui32 Fails = 0;
 };
 
-ui64 AggregateVDiskCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TString storagePool,
-        ui32 groupSize, ui32 groupId, const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter,
-        bool derivative = false) {
+ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, const NKikimrBlobStorage::TBaseConfig& baseConfig,
+        TString storagePool, ui32 groupSize, ui32 groupId, const std::vector<ui32>& pdiskLayout, TString subsystem,
+        TString counter, bool derivative = false) {
     ui64 ctr = 0;
-    for (ui32 i = 0; i < groupSize; ++i) {
-        ctr += GetServiceCounters(counters, "vdisks")->
-                GetSubgroup("storagePool", storagePool)->
-                GetSubgroup("group", std::to_string(groupId))->
-                GetSubgroup("orderNumber", "0" + std::to_string(i))->
-                GetSubgroup("pdisk", "00000" + std::to_string(pdiskLayout[i]))->
-                GetSubgroup("media", "rot")->
-                GetSubgroup("subsystem", subsystem)->
-                GetCounter(counter, derivative)->Val();
+
+    for (const auto& vslot : baseConfig.GetVSlot()) {
+        auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+        for (ui32 i = 0; i < groupSize; ++i) {
+            ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                    GetSubgroup("storagePool", storagePool)->
+                    GetSubgroup("group", std::to_string(groupId))->
+                    GetSubgroup("orderNumber", "0" + std::to_string(i))->
+                    GetSubgroup("pdisk", "00000" + std::to_string(pdiskLayout[i]))->
+                    GetSubgroup("media", "rot")->
+                    GetSubgroup("subsystem", subsystem)->
+                    GetCounter(counter, derivative)->Val();
+        }
     }
     return ctr;
 };
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
-        ui32& groupSize, TBlobStorageGroupType& groupType, ui32& groupId, std::vector<ui32>& pdiskLayout) {
+        NKikimrBlobStorage::TBaseConfig& baseConfig, ui32& groupSize, TBlobStorageGroupType& groupType,
+        ui32& groupId, std::vector<ui32>& pdiskLayout) {
     groupSize = topology.TotalVDisks;
     groupType = topology.GType;
     env.reset(new TEnvironmentSetup({
@@ -110,7 +115,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     request.AddCommand()->MutableQueryBaseConfig();
     auto response = env->Invoke(request);
 
-    const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
+    baseConfig = response.GetStatus(0).GetBaseConfig();
     UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
     groupId = baseConfig.GetGroup(0).GetGroupId();
     pdiskLayout.resize(groupSize);
@@ -126,24 +131,24 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
 template <typename TInflightActor>
 void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
     std::unique_ptr<TEnvironmentSetup> env;
+    NKikimrBlobStorage::TBaseConfig baseConfig;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
+    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
 
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
 
-    auto* appData = env->Runtime->GetAppData();
-    Y_ABORT_UNLESS(appData);
+    TAppData* appData = env->Runtime->GetNode(1)->AppData.get();
 
     auto updateCounters = [&]() {
         dsproxyCost = GetServiceCounters(appData->Counters, "dsproxynode")->
                 GetSubgroup("subsystem", "request")->
                 GetSubgroup("storagePool", env->StoragePoolName)->
                 GetCounter("DSProxyDiskCostNs")->Val();
-        vdiskCost = AggregateVDiskCounters(appData->Counters, env->StoragePoolName, groupSize, groupId,
+        vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
                 pdiskLayout, "cost", "SkeletonFrontUserCostNs");
     };
 
@@ -402,19 +407,18 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
 template <typename TInflightActor>
 void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, bool burstExpected) {
     std::unique_ptr<TEnvironmentSetup> env;
+    NKikimrBlobStorage::TBaseConfig baseConfig;
     ui32 groupSize;
     TBlobStorageGroupType groupType;
     ui32 groupId;
     std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
-
-    auto* appData = env->Runtime->GetAppData();
+    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
 
     actor->SetGroupId(groupId);
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Seconds(15));
 
-    ui64 redMs = AggregateVDiskCounters(appData->Counters, env->StoragePoolName, groupSize, groupId,
+    ui64 redMs = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
             pdiskLayout, "advancedCost", "BurstDetector_redMs");
     
     if (burstExpected) {

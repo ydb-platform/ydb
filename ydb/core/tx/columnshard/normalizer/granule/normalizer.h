@@ -14,10 +14,6 @@ public:
         return name;
     }
 
-    virtual bool WaitResult() const override {
-        return false;
-    }
-
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 

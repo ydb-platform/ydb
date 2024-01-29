@@ -93,18 +93,9 @@ namespace NKikimr::NOlap {
             return name;
         }
 
-        virtual bool WaitResult() const override {
-            return AtomicGet(ActiveTasksCount) > 0;
-        }
-
-        void OnResultReady() override {
-            AtomicDecrement(ActiveTasksCount);
-        }
-
         virtual TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     private:
         NColumnShard::TBlobGroupSelector DsGroupSelector;
-        TAtomic ActiveTasksCount = 0;
     };
 }

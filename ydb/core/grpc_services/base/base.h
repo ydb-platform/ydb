@@ -1437,7 +1437,12 @@ public:
     void Pass(const IFacilityProvider& facility) override {
         this->Span_.End();
 
-        PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+        try {
+            PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
+        } catch (const std::exception& ex) {
+            this->RaiseIssue(NYql::TIssue{TStringBuilder() << "unexpected exception: " << ex.what()});
+            this->ReplyWithYdbStatus(Ydb::StatusIds::INTERNAL_ERROR);
+        }
     }
 
     TRateLimiterMode GetRlMode() const override {

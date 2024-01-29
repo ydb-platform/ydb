@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package yandex.cloud.priv.ydb.v1;
 
-import "ydb/public/api/client/yc_public/common/operation.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_private/access/access.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
 import "ydb/public/api/client/yc_private/ydb/backup.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/ydb;ydb";

@@ -2,8 +2,7 @@ PROTO_LIBRARY()
 
 GRPC()
 SRCS(
-    quota.proto
-    quota_limit.proto
+    operation.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -16,7 +15,7 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 PEERDIR(
-    ydb/public/api/client/yc_private/common
+    ydb/public/api/client/yc_common/api/tools
 )
 END()
 

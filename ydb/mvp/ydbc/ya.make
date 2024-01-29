@@ -4,12 +4,6 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
-OWNER(
-    alexnick
-    xenoxeno
-    g:kikimr
-)
-
 SRCS(
     mvp.cpp
     mvp.h

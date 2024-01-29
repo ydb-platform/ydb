@@ -3,14 +3,14 @@ syntax = "proto3";
 package yandex.cloud.priv.oauth.v1;
 
 import "google/protobuf/timestamp.proto";
-import "ydb/public/api/client/yc_public/common/validation.proto";
-import "ydb/public/api/client/yc_private/oauth/sensitive.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
 import "ydb/public/api/client/yc_private/iam/iam_token.proto";
 import "ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto";
 import "ydb/public/api/client/yc_private/oauth/claims.proto";
 import "ydb/public/api/client/yc_private/oauth/cloud_user.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/oauth/v1;oauth";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/oauth;oauth";
 option java_outer_classname = "OAuth";
 
 service SessionService {

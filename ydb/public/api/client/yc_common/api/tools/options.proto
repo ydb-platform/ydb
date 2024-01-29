@@ -4,7 +4,7 @@ package yandex.cloud.api.tools;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "a.yandex-team.ru/cloud/bitbucket/common-api/yandex/cloud/api/tools;tools";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/common-api/api/tools;tools";
 option (cloud.api.tools.file).lint_skip.java_package = true;
 
 // NOTE(skipor): option extention names should have package scope unique names

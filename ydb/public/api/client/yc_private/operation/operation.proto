@@ -6,6 +6,9 @@ import "google/protobuf/any.proto";
 import "google/rpc/status.proto";
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/operation;operation";
+option java_outer_classname = "PO";
+
 message Operation {
   string id = 1;
   string description = 2; // ex: Create VM, Stop VM, Delete Disk, Snapshot Disk, etc

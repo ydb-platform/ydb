@@ -1,10 +1,3 @@
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
-)
-
 RECURSE(
     core
     meta

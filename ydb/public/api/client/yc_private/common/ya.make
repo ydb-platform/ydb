@@ -2,8 +2,8 @@ PROTO_LIBRARY()
 
 GRPC()
 SRCS(
-    quota.proto
-    quota_limit.proto
+    sensitive.proto
+    validation.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -15,8 +15,4 @@ USE_COMMON_GOOGLE_APIS(
     type/dayofweek
 )
 
-PEERDIR(
-    ydb/public/api/client/yc_private/common
-)
 END()
-

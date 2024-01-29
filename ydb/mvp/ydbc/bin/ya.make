@@ -1,12 +1,5 @@
 PROGRAM(mvp_ydbc)
 
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
-)
-
 CFLAGS(
     -DPROFILE_MEMORY_ALLOCATIONS
 )

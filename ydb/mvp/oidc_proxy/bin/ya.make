@@ -1,12 +1,5 @@
 PROGRAM(mvp_oidc_proxy)
 
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
-)
-
 CFLAGS(
     -DPROFILE_MEMORY_ALLOCATIONS
 )

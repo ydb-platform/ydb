@@ -1,12 +1,5 @@
 LIBRARY()
 
-OWNER(
-    alexnick
-    xenoxeno
-    tarasov-egor
-    g:kikimr
-)
-
 SRCS(
     meta.cpp
     meta.h

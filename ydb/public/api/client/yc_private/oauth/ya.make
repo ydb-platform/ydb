@@ -8,7 +8,6 @@ SRCS(
     login_history_service.proto
     oauth_request.proto
     session_service.proto
-    sensitive.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -21,8 +20,8 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 PEERDIR(
+    ydb/public/api/client/yc_private/common
     ydb/public/api/client/yc_private/iam
-    ydb/public/api/client/yc_public/common
 )
 END()
 

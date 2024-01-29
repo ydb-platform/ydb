@@ -5,8 +5,8 @@ package yandex.cloud.priv.oauth;
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/oauth;oauth";
 option java_outer_classname = "Claims";
 
-import "ydb/public/api/client/yc_public/common/validation.proto";
-import "ydb/public/api/client/yc_private/oauth/sensitive.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
 
 // claims representation, see https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims for details
 message SubjectClaims {

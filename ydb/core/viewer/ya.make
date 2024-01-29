@@ -66,6 +66,7 @@ SRCS(
 )
 
 IF (NOT EXPORT_CMAKE)
+    # GENERATED MONITORING RESOURCES START
     RESOURCE(
         monitoring/index.html monitoring/index.html
 	monitoring/static/favicon.png monitoring/static/favicon.png
@@ -162,6 +163,7 @@ IF (NOT EXPORT_CMAKE)
 	monitoring/static/media/error.ca9e31d5d3dc34da07e11a00f7af0842.svg monitoring/static/media/error.ca9e31d5d3dc34da07e11a00f7af0842.svg
 	monitoring/static/media/thumbsUp.d4a03fbaa64ce85a0045bf8ba77f8e2b.svg monitoring/static/media/thumbsUp.d4a03fbaa64ce85a0045bf8ba77f8e2b.svg
     )
+    # GENERATED MONITORING RESOURCES END
 ENDIF()
 
 RESOURCE(

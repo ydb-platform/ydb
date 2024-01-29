@@ -940,19 +940,30 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         pqDescr->SetName(name);
         ui32 parts = 1;
+        ui32 maxParts = 0;
         if (request.has_partitioning_settings()) {
-            if (request.partitioning_settings().min_active_partitions() < 0) {
-                error = TStringBuilder() << "Partitions count must be positive, provided " << request.partitioning_settings().min_active_partitions();
+            const auto& settings = request.partitioning_settings();
+            if (settings.min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
-            parts = request.partitioning_settings().min_active_partitions();
+            parts = settings.min_active_partitions();
             if (parts == 0) parts = 1;
+
+            if (settings.partition_count_limit() > 0) {
+                maxParts = settings.partition_count_limit();
+            }
         }
 
         pqDescr->SetTotalGroupCount(parts);
 
         auto config = pqDescr->MutablePQTabletConfig();
         auto partConfig = config->MutablePartitionConfig();
+
+        if (maxParts > 0 && AppData(ctx)->FeatureFlags.GetEnableTopicSplitMerge()) {
+            config->MutablePartitionStrategy()->SetMinPartitionCount(parts);
+            config->MutablePartitionStrategy()->SetMaxPartitionCount(maxParts);
+        }
 
         config->SetRequireAuthWrite(true);
         config->SetRequireAuthRead(true);

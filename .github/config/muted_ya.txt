@@ -49,8 +49,10 @@ ydb/library/yql/tests/sql/dq_file/part16 *
 ydb/library/yql/tests/sql/dq_file/part18 test.py.test[expr-cast_type_bind-default.txt-Analyze]
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
+ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/fq/ut_integration Yq_1.*
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
+ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.UpdatePartitionLocation
 ydb/services/persqueue_v1/ut [3/10]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
@@ -70,6 +72,7 @@ ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/clickbench test.py.test_plans*
 ydb/tests/functional/clickbench test.py.test_run_*column]
+ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*

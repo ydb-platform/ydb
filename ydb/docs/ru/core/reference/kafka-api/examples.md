@@ -8,11 +8,12 @@
 
 В примерах используются:
 
- * `ydb:9093` — имя хоста.
+ * `ydb:9093` — имя хоста и порт.
  * `/Root/Database` — название базы данных.
- * `/Root/Database/Topic` — имя топика.
- * `user@/Root/Database` — имя пользователя. Имя пользователя указывается полностью и включает название базы данных.
+ * `/Root/Database/Topic-1` — имя топика. Допускается указывать как полное имя (вместе с базой данных), так и только имя топика.
+ * `user@/Root/Database` — имя пользователя. Имя пользователя включает название базы данных, которое указывается после `@`.
  * `*****` — пароль пользователя.
+ * `consumer-1` — имя читателя.
 
 
 ## Запись данных в топик
@@ -23,7 +24,7 @@
 
   ```java
   String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
+  String TOPIC = "/Root/Database/Topic-1";
   String USER = "user@/Root/Database";
   String PASS = "*****";
 
@@ -56,7 +57,7 @@
   output {
     kafka {
       codec => json
-      topic_id => "/Root/Database/Topic"
+      topic_id => "/Root/Database/Topic-1"
       bootstrap_servers => "ydb:9093"
       compression_type => none
       security_protocol => SASL_SSL
@@ -75,7 +76,7 @@
     name                          kafka
     match                         *
     Brokers                       ydb:9093
-    Topics                        /Root/Database/Topic
+    Topics                        /Root/Database/Topic-1
     rdkafka.client.id             Fluent-bit
     rdkafka.request.required.acks 1
     rdkafka.log_level             7
@@ -89,25 +90,61 @@
 
 ### Чтение данных из топика через Kafka Java SDK
 
-В этом примере приведен фрагмент кода для чтения данных из топика через Kafka API.
-
 ```java
   String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
+  String TOPIC = "/Root/Database/Topic-1";
   String USER = "user@/Root/Database";
   String PASS = "*****";
+  String CONSUMER = "consumer-1";
 
   Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("auto.offset.reset", "earliest"); // to read from start
-  props.put("check.crcs", false);
 
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
+  props.put("bootstrap.servers", HOST);
 
   props.put("security.protocol", "SASL_SSL");
   props.put("sasl.mechanism", "PLAIN");
   props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+
+  props.put("key.deserializer", StringDeserializer.class.getName());
+  props.put("value.deserializer", StringDeserializer.class.getName());
+
+  props.put("check.crcs", false);
+  props.put("partition.assignment.strategy", RoundRobinAssignor.class.getName());
+
+  props.put("group.id", CONSUMER);
+  Consumer<String, String> consumer = new KafkaConsumer<>(props);
+  consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
+
+  while (true) {
+      ConsumerRecords<String, String> records = consumer.poll(10000);
+      for (ConsumerRecord<String, String> record : records) {
+          System.out.println(record.key() + ":" + record.value());
+      }
+  }
+
+```
+
+### Чтение данных из топика через Kafka Java SDK без группы потребителей (читателя)
+
+```java
+  String HOST = "ydb:9093";
+  String TOPIC = "/Root/Database/Topic-1";
+  String USER = "user@/Root/Database";
+  String PASS = "*****";
+
+  Properties props = new Properties();
+
+  props.put("bootstrap.servers", HOST);
+
+  props.put("security.protocol", "SASL_SSL");
+  props.put("sasl.mechanism", "PLAIN");
+  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+
+  props.put("key.deserializer", StringDeserializer.class.getName());
+  props.put("value.deserializer", StringDeserializer.class.getName());
+
+  props.put("check.crcs", false);
+  props.put("auto.offset.reset", "earliest"); // to read from start
 
   Consumer<String, String> consumer = new KafkaConsumer<>(props);
 
@@ -120,8 +157,136 @@
   consumer.assign(topicPartitions);
 
   while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(1000);
+      ConsumerRecords<String, String> records = consumer.poll(10000);
       for (ConsumerRecord<String, String> record : records) {
           System.out.println(record.key() + ":" + record.value());
       }
   }
+
+```
+
+## Использование Kafka Connect
+
+Инструмент Kafka Connect предназначен для перемещения данных между Apache Kafka® и другими хранилищами данных.
+
+Работа с данными в Kafka Connect осуществляется с помощью процессов-исполнителей (workers).
+
+{% note warning %}
+
+Экземпляры Kafka Connect для работы с YDB стоит разворачивать только в режиме одного процесса-исполнителя (standalone mode). YDB не поддерживает работу Kafka Connect в распределенном режиме (distributed mode).
+
+{% endnote %}
+
+
+
+Непосредственно перемещение данных выполняется с помощью коннекторов, которые запускаются в отдельных потоках процесса-исполнителя.
+
+Ниже приведены примеры файлов для настройки коннекторов Kafka Connect.
+Подробную информацию о Kafka Connect и его настройке см. в документации [Apache Kafka®](https://kafka.apache.org/documentation/#connect).
+
+## Настройка Kafka Connect
+
+Для работы коннекторов, которые будут читать данные из топиков YDB нужно [создать читателя](../ydb-cli/topic-consumer-add.md) с именем `connect-<connector-name>`. Имя коннектора указывается в конфигурационном файле при его настройке в поле `name`.
+
+### Пример файла настроек процесса-исполнителя
+Для всех коннекторов можно использовать один файл настроек процесса-исполнителя `/etc/kafka-connect-worker/worker.properties`:
+
+```ini
+  # Main properties
+  bootstrap.servers=ydb:9095
+
+  # AdminAPI properties
+  sasl.mechanism=PLAIN
+  security.protocol=SASL_SSL
+  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+
+  # Producer properties
+  producer.sasl.mechanism=PLAIN
+  producer.security.protocol=SASL_SSL
+  producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+
+  # Consumer properties
+  consumer.sasl.mechanism=PLAIN
+  consumer.security.protocol=SASL_SSL
+  consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+
+  consumer.partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
+  consumer.check.crcs=false
+
+  # Converter properties
+  key.converter=org.apache.kafka.connect.storage.StringConverter
+  value.converter=org.apache.kafka.connect.storage.StringConverter
+  key.converter.schemas.enable=false
+  value.converter.schemas.enable=false
+
+  # Worker properties
+  plugin.path=/etc/kafka-connect-worker/plugins
+  offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
+```
+
+### Примеры файлов настроек коннекторов
+Пример файла настроек FileSink коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из топика в файл:
+
+```ini
+  name=local-file-sink
+  connector.class=FileStreamSink
+  tasks.max=1
+  file=file_to_write.json
+  topics=Topic-1
+```
+
+Пример файла настроек FileSource коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
+```ini
+  name=local-file-source
+  connector.class=FileStreamSource
+  tasks.max=1
+  file=file_to_read.json
+  topic=Topic-1
+```
+
+Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу Postgres:
+```ini
+  name=postgres-sink
+  connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
+
+  connection.url=jdbc:postgresql://<postgres-url>:<port>/<db>
+  connection.user=<pg-user>
+  connection.password=<pg-user-pass>
+
+  topics=Topic-1
+  batch.size=2000
+  auto.commit.interval.ms=1000
+
+  transforms=wrap
+  transforms.wrap.type=org.apache.kafka.connect.transforms.HoistField$Value
+  transforms.wrap.field=data
+
+  auto.create=true
+  insert.mode=insert
+  pk.mode=none
+  auto.evolve=true
+```
+
+Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из топика в таблицу Postgres:
+```ini
+  name=postgres-source
+  connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
+
+  connection.url=jdbc:postgresql://<postgres-url>:<port>/<db>
+  connection.user=<pg-user>
+  connection.password=<pg-user-pass>
+
+  mode=bulk
+  query=SELECT * FROM "Topic-1";
+  topic.prefix=Topic-1
+  poll.interval.ms=1000
+  validate.non.null=false
+```
+
+Для запуска процесса-исполнителя выполните:
+```bash
+  cd ~/opt/kafka/bin/ && \
+  sudo ./connect-standalone.sh \
+        /etc/kafka-connect-worker/worker.properties \
+        /etc/kafka-connect-worker/file-sink.properties
+```

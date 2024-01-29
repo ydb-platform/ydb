@@ -89,6 +89,7 @@
 ## Чтение данных из топика
 
 ### Чтение данных из топика через Kafka Java SDK
+В этом примере приведен фрагмент кода для чтения данных из топика через Kafka API.
 
 ```java
   String HOST = "ydb:9093";
@@ -116,7 +117,7 @@
   consumer.subscribe(Arrays.asList(new String[] {TOPIC}));
 
   while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(10000);
+      ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
       for (ConsumerRecord<String, String> record : records) {
           System.out.println(record.key() + ":" + record.value());
       }
@@ -124,7 +125,10 @@
 
 ```
 
-### Чтение данных из топика через Kafka Java SDK без группы потребителей (читателя)
+### Чтение данных из топика через Kafka Java SDK без группы потребителей
+В этом примере приведен фрагмент кода для чтения данных из топика через Kafka API без группы потребителей (Manual Partition Assignment).
+При таком чтении можно не создавать читателя.
+
 
 ```java
   String HOST = "ydb:9093";
@@ -157,7 +161,7 @@
   consumer.assign(topicPartitions);
 
   while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(10000);
+      ConsumerRecords<String, String> records = consumer.poll(10000); // timeout 10 sec
       for (ConsumerRecord<String, String> record : records) {
           System.out.println(record.key() + ":" + record.value());
       }
@@ -167,7 +171,7 @@
 
 ## Использование Kafka Connect
 
-Инструмент Kafka Connect предназначен для перемещения данных между Apache Kafka® и другими хранилищами данных.
+Инструмент [Kafka Connect](https://kafka.apache.org/documentation/#connect) предназначен для перемещения данных между Apache Kafka® и другими хранилищами данных.
 
 Работа с данными в Kafka Connect осуществляется с помощью процессов-исполнителей (workers).
 
@@ -193,22 +197,22 @@
 
 ```ini
   # Main properties
-  bootstrap.servers=ydb:9095
+  bootstrap.servers=ydb:9093
 
   # AdminAPI properties
   sasl.mechanism=PLAIN
   security.protocol=SASL_SSL
-  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user_pass>";
 
   # Producer properties
   producer.sasl.mechanism=PLAIN
   producer.security.protocol=SASL_SSL
-  producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+  producer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user_pass>";
 
   # Consumer properties
   consumer.sasl.mechanism=PLAIN
   consumer.security.protocol=SASL_SSL
-  consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="tesseract@/Root/test" password="123456";
+  consumer.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="<user>@<db>" password="<user_pass>";
 
   consumer.partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor
   consumer.check.crcs=false

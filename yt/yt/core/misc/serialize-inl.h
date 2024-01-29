@@ -10,7 +10,7 @@
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
 #include <library/cpp/yt/small_containers/compact_set.h>
 
-#include <library/cpp/yt/misc/enum_indexed_array.h>
+#include <library/cpp/yt/containers/enum_indexed_array.h>
 
 #include <optional>
 #include <variant>

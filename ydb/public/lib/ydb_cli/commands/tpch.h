@@ -17,8 +17,8 @@ private:
 
     TString TablesPath;
     TString StoreType;
-    TString Scale;
-    TString Bucket;
+    TString S3Endpoint;
+    TString S3Prefix;
 };
 
 class TTpchCommandClean : public NYdb::NConsoleClient::TYdbCommand {

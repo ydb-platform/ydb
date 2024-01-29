@@ -222,14 +222,12 @@ void TTpchCommandInit::Config(TConfig& config) {
             "column - use column-based storage engine.\n"
             "s3 - use cloud tpc bucket")
         .DefaultValue("row").StoreResult(&StoreType);
-    config.Opts->AddLongOption('s', "scale", "TPC-H dataset scale. One of 1, 10, 100, 1000. Default is 1")
+    config.Opts->AddLongOption("s3-prefix", "Root path to TPC-H dataset in s3 storage")
         .Optional()
-        .DefaultValue("1")
-        .StoreResult(&Scale);
-    config.Opts->AddLongOption('b', "bucket", "S3 bucket with TPC-H dataset")
+        .StoreResult(&S3Prefix);
+    config.Opts->AddLongOption('e', "s3-endpoint", "Endpoint of S3 bucket with TPC-H dataset")
         .Optional()
-        .DefaultValue("")
-        .StoreResult(&Bucket);
+        .StoreResult(&S3Endpoint);
 };
 
 void TTpchCommandInit::SetPartitionByCols(TString& createSql) {
@@ -266,15 +264,15 @@ int TTpchCommandInit::Run(TConfig& config) {
         storageType = "STORE = COLUMN, --";
         notNull = "NOT NULL";
     } else if (StoreType == "s3") {
-        storageType = R"(DATA_SOURCE = "{path}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )";
+        storageType = fmt::format(R"(DATA_SOURCE = "{}_tpc_s3_external_source", FORMAT = "parquet", LOCATION = )", TablesPath);
         notNull = "NOT NULL";
         createExternalDataSource = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{{path}}_tpc_s3_external_source` WITH (
+            CREATE EXTERNAL DATA SOURCE `{}_tpc_s3_external_source` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="https://storage.yandexcloud.net/{}/",
+                LOCATION="{}",
                 AUTH_METHOD="NONE"
             );
-        )", Bucket);
+        )", TablesPath, S3Endpoint);
         external = "EXTERNAL";
         partitioning = "--";
         primaryKey = "--";
@@ -291,10 +289,10 @@ int TTpchCommandInit::Run(TConfig& config) {
     SubstGlobal(createSql, "{external}", external);
     SubstGlobal(createSql, "{notnull}", notNull);
     SubstGlobal(createSql, "{partitioning}", partitioning);
-    SubstGlobal(createSql, "{primary_key}", primaryKey);
-    SubstGlobal(createSql, "{scale}", Scale);
-    SubstGlobal(createSql, "{store}", storageType);
     SubstGlobal(createSql, "{path}", TablesPath);
+    SubstGlobal(createSql, "{primary_key}", primaryKey);
+    SubstGlobal(createSql, "{s3_prefix}", S3Prefix);
+    SubstGlobal(createSql, "{store}", storageType);
     SetPartitionByCols(createSql);
 
     Cout << createSql << Endl;

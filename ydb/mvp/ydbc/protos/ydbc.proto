@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package NMvp;
 
-import "yandex/cloud/priv/ydb/resource_preset.proto";
-import "yandex/cloud/priv/ydb/storage_type.proto";
-import "yandex/cloud/priv/ydb/console_service.proto";
+import "ydb/public/api/client/yc_private/ydb/resource_preset.proto";
+import "ydb/public/api/client/yc_private/ydb/storage_type.proto";
+import "ydb/public/api/client/yc_private/ydb/console_service.proto";
 
 message YdbcConfig {
     repeated yandex.cloud.priv.ydb.v1.ResourcePreset resource_presets = 1;

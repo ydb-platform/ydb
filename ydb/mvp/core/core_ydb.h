@@ -1,6 +1,6 @@
 #pragma once
 
-#include <kikimr/yndx/security/security.h>
+#include <ydb/mvp/core/security/security.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>

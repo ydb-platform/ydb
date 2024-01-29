@@ -1,0 +1,256 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.resourcemanager.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/oauth/claims.proto";
+import "ydb/public/api/client/yc_private/oauth/sensitive.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+
+option java_outer_classname = "PCS";
+
+service CloudService {
+
+  rpc Get (GetCloudRequest) returns (Cloud) {
+    option (google.api.http) = { get: "/yrm/v1/clouds/{cloud_id}" };
+  }
+
+  rpc List (ListCloudsRequest) returns (ListCloudsResponse) {
+    option (google.api.http) = { get: "/yrm/v1/clouds" };
+  }
+
+  rpc Resolve (ResolveCloudsRequest) returns (ResolveCloudsResponse);
+
+  rpc ListCreators (ListCreatorsRequest) returns (ListCreatorsResponse) {
+    option (google.api.http) = { get: "/yrm/v1/clouds:creators" };
+  }
+
+  rpc Create (CreateCloudRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/yrm/v1/clouds" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateCloudMetadata"
+      response: "Cloud"
+    };
+  }
+
+  rpc Update (UpdateCloudRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/yrm/v1/clouds/{cloud_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateCloudMetadata"
+      response: "Cloud"
+    };
+  }
+
+  rpc Move (MoveCloudRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveCloudMetadata"
+      response: "Cloud"
+    };
+  }
+
+  rpc Delete (DeleteCloudRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/yrm/v1/clouds/{cloud_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteCloudMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListCloudOperationsRequest) returns (ListCloudOperationsResponse) {
+    option (google.api.http) = { get: "/yrm/v1/clouds/{cloud_id}/operations" };
+  }
+
+  rpc Block (BlockCloudRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "BlockCloudMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Unblock (UnblockCloudRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UnblockCloudMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // access
+
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/yrm/v1/clouds/{resource_id}:listAccessBindings" };
+  }
+
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/yrm/v1/clouds/{resource_id}:setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+  }
+
+  rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
+
+  // permission stages
+
+  rpc GetPermissionStages (GetPermissionStagesRequest) returns (GetPermissionStagesResponse);
+}
+
+message GetCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListCloudsRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=2000"];
+  string filter = 3 [(length) = "<=1000"];
+  string organization_id = 4 [(length) = "<=50"];
+}
+
+message ListCloudsResponse {
+  repeated Cloud clouds = 1;
+  string next_page_token = 2;
+}
+
+message ResolveCloudsRequest {
+  repeated string cloud_ids = 1 [(size) = "1-1000", (length) = "1-50"];
+  google.protobuf.FieldMask response_mask = 2;
+  bool resolve_existing_only = 3;
+}
+
+message ResolveCloudsResponse {
+  repeated ResolvedCloud resolved_clouds = 1;
+}
+
+message ListCreatorsRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=2000"];
+  google.protobuf.Timestamp created_after = 3;
+  google.protobuf.Timestamp modified_after = 4;
+  bool show_blocked = 5;
+  repeated string cloud_id = 6 [(length) = "<=50"];
+}
+
+message ListCreatorsResponse {
+  repeated CloudCreator cloud_creators = 1;
+  string next_page_token = 2;
+}
+
+message CloudCreator {
+  Cloud cloud = 1;
+  oneof creator {
+    PassportUserAccount passport_user_account = 2;
+  }
+  google.protobuf.Any user_settings = 3;
+
+  message PassportUserAccount {
+    string id = 1 [(sensitive) = true];
+    string passport_uid = 2 [(sensitive) = true];
+    string first_name = 3 [(sensitive) = true];
+    string last_name = 4 [(sensitive) = true];
+    string login = 5 [(sensitive) = true];
+    string email = 6 [(sensitive) = true];
+    string phone = 7 [(sensitive) = true];
+  }
+}
+
+message CreateCloudRequest {
+  string name = 1 [(required) = true, (pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 2 [(length) = "<=256"];
+  string id = 3 [(length) = "<=50"];
+  string organization_id = 4 [(required) = true, (length) = "<=50"];
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message CreateCloudMetadata {
+  string cloud_id = 1;
+}
+
+message UpdateCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message UpdateCloudMetadata {
+  string cloud_id = 1;
+}
+
+message MoveCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  string organization_id = 2 [(required) = true, (length) = "<=50"];
+  // When mode is SAFE, perform preliminary check instead. In case there are
+  // access bindings that would be lost in the process, returned failed operation with code FAILED_PRECONDITION
+  // will contain an error message describing subjects whose access bindings would be lost.
+  Mode mode = 3;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    SAFE = 1;
+    FORCE = 2;
+  }
+}
+
+message MoveCloudMetadata {
+  string cloud_id = 1;
+}
+
+message DeleteCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+
+  // The timestamp after which the process of deleting the cloud should begin.
+  // Until this timestamp, the cloud goes into the [Cloud.Status.PENDING_DELETION] state and all resources in this
+  // cloud are stopped. In this state, it is possible to cancel the delete operation without any loss.
+  // After this timestamp, the status of the cloud will become [Cloud.Status.DELETING] and the process of deleting
+  // all the resources  of the cloud will be started. If [delete_after] is not specified it will be
+  // (now + 24 hours). To initiate an immediate deletion [delete_after] must be <= now.
+  google.protobuf.Timestamp delete_after = 2;
+}
+
+message DeleteCloudMetadata {
+  string cloud_id = 1;
+  google.protobuf.Timestamp delete_after = 2;
+  string cancelled_by = 3;
+  google.protobuf.Timestamp cancelled_at = 4;
+}
+
+message ListCloudOperationsRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListCloudOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message GetPermissionStagesRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetPermissionStagesResponse {
+  repeated string permission_stages = 1;
+}
+
+message BlockCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message BlockCloudMetadata {
+  string cloud_id = 1;
+}
+
+message UnblockCloudRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message UnblockCloudMetadata {
+  string cloud_id = 1;
+}

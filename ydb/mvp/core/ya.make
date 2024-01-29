@@ -49,7 +49,7 @@ PEERDIR(
     contrib/libs/yaml-cpp
 
     ydb/mvp/core/protos
-    kikimr/yndx/security/simple
+    ydb/mvp/core/security
 
     ydb/library/actors/core
     ydb/library/actors/http

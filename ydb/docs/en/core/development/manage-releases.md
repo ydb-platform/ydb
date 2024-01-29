@@ -17,7 +17,7 @@ YDB server release schedule includes 4 major releases for each year, so the rele
 
 ### Compatibility {#server-compatibility}
 
-YDB maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable.
+YDB maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating YDB](../administration/upgrade.md) article for cluster upgrade procedure.
 
 Given the above compatibility target, major releases go in pairs, with odd numbers adding new functionality switched off by feature flags, and even numbers enabling that functionality.
 

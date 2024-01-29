@@ -67,7 +67,7 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        bool ready = true;
+        bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
         // TRowId items = 0;
 
@@ -119,6 +119,7 @@ public:
                             if (itemsLimit) {
                                 ui64 items = child->GetNonErasedRowCount() - firstChild->GetNonErasedRowCount();
                                 if (LimitExceeded(items, itemsLimit)) {
+                                    overshot = false;
                                     return;
                                 }
                             }
@@ -206,7 +207,7 @@ public:
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        bool overshot = endRowId == sliceEndRowId;
+        overshot &= endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));

@@ -48,7 +48,7 @@ public:
         ObjectId = data.ObjectId();
         TypeId = data.TypeId();
         if constexpr (NObjectOptionsParsing::THasReplaceIfExists<TKiObject>::value) {
-            ReplaceIfExists = (data.IsReplace().Value() == "1");
+            ReplaceIfExists = (data.ReplaceIfExists().Value() == "1");
         }
         if constexpr (NObjectOptionsParsing::THasExistingOk<TKiObject>::value) {
             ExistingOk = (data.ExistingOk().Value() == "1");

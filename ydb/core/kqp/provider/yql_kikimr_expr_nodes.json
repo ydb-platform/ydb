@@ -132,7 +132,7 @@
                 {"Index": 11, "Name": "TableType", "Type": "TCoAtom"},
                 {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
                 {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"},
-                {"Index": 14, "Name": "IsReplace", "Type":  "TCoAtom"}
+                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
             ]
         },
         {
@@ -256,7 +256,7 @@
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
                 {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "IsReplace", "Type":  "TCoAtom"}
+                {"Index": 6, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
             ]
         },
         {

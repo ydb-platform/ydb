@@ -5585,7 +5585,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
     Y_UNIT_TEST(CreateExternalDataSourceOrReplace) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
-                CREATE EXTERNAL DATA SOURCE OR REPLACE MyDataSource WITH (
+                CREATE OR REPLACE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
@@ -5940,7 +5940,7 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
     Y_UNIT_TEST(CreateExternalTableOrReplace) {
         NYql::TAstParseResult res = SqlToYql(R"(
             USE plato;
-            CREATE EXTERNAL TABLE OR REPLACE mytable (
+            CREATE OR REPLACE EXTERNAL TABLE mytable (
                 a int
             ) WITH (
                 DATA_SOURCE="/Root/mydatasource",

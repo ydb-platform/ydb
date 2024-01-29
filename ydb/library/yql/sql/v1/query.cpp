@@ -808,12 +808,12 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool isReplace, const TCreateTableParameters& params, TScopedStatePtr scoped)
+    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
         , Params(params)
         , ExistingOk(existingOk)
-        , IsReplace(isReplace)
+        , ReplaceIfExists(replaceIfExists)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -901,7 +901,7 @@ public:
 
         if (ExistingOk) {
           opts = L(opts, Q(Y(Q("mode"), Q("create_if_not_exists"))));
-        } else if (IsReplace) {
+        } else if (ReplaceIfExists) {
           opts = L(opts, Q(Y(Q("mode"), Q("create_or_replace"))));
         } else {
           opts = L(opts, Q(Y(Q("mode"), Q("create"))));
@@ -1156,13 +1156,13 @@ private:
     const TTableRef Table;
     const TCreateTableParameters Params;
     const bool ExistingOk;
-    const bool IsReplace;
+    const bool ReplaceIfExists;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool isReplace, const TCreateTableParameters& params, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, isReplace, params, scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, scoped);
 }
 
 class TAlterTableNode final: public TAstListNode {
@@ -2120,8 +2120,8 @@ TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, cons
     return new TUpsertObject(pos, objectId, typeId, false, false, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-    bool existingOk, bool isReplace, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, existingOk, isReplace, std::move(features), std::set<TString>(), context);
+    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, existingOk, replaceIfExists, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)

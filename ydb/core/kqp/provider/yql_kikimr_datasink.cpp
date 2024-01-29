@@ -779,7 +779,7 @@ public:
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
 
-                    auto isReplace = (settings.Mode.Cast().Value() == "create_or_replace");
+                    auto replaceIfExists = (settings.Mode.Cast().Value() == "create_or_replace");
                     auto existringOk = (settings.Mode.Cast().Value() == "create_if_not_exists");
 
                     return Build<TKiCreateTable>(ctx, node->Pos())
@@ -796,8 +796,8 @@ public:
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
-                        .IsReplace<TCoAtom>()
-                            .Value(isReplace)
+                        .ReplaceIfExists<TCoAtom>()
+                            .Value(replaceIfExists)
                             .Build()
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
@@ -897,7 +897,7 @@ public:
                         .ObjectId().Build(key.GetObjectId())
                         .TypeId().Build(key.GetObjectType())
                         .Features(settings.Features)
-                        .IsReplace<TCoAtom>()
+                        .ReplaceIfExists<TCoAtom>()
                             .Value(mode == "createObjectOrReplace")
                             .Build()
                         .ExistingOk<TCoAtom>()

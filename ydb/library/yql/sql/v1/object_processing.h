@@ -40,13 +40,13 @@ private:
     std::set<TString> FeaturesToReset;
 protected:
     bool ExistingOk = false;
-    bool IsReplace = false;
+    bool ReplaceIfExists = false;
 protected:
     virtual INode::TPtr BuildOptions() const override {
         TString mode;
         if (ExistingOk) {
             mode = "createObjectIfNotExists";
-        } else if (IsReplace) {
+        } else if (ReplaceIfExists) {
             mode = "createObjectOrReplace";
         } else {
             mode = "createObject";
@@ -57,12 +57,12 @@ protected:
     virtual INode::TPtr FillFeatures(INode::TPtr options) const override;
 public:
     TCreateObject(TPosition pos, const TString& objectId,
-        const TString& typeId, bool existingOk, bool isReplace, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
+        const TString& typeId, bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
         : TBase(pos, objectId, typeId, context)
         , Features(std::move(features))
         , FeaturesToReset(std::move(featuresToReset))
         , ExistingOk(existingOk)
-        , IsReplace(isReplace) {
+        , ReplaceIfExists(replaceIfExists) {
         }
 };
 

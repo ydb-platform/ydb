@@ -14,12 +14,13 @@ class TChargeBTreeIndex : public ICharge {
     using TChild = TBtreeIndexNode::TChild;
 
     // TODO: store PageId only instead of TChild?
-    struct TChildState : TChild {
+    struct TChildState {
+        TPageId PageId;
         TRowId BeginRowId;
         TRowId EndRowId;
 
-        TChildState(TChild meta, TRowId beginRowId, TRowId endRowId)
-            : TChild(meta)
+        TChildState(TPageId pageId, TRowId beginRowId, TRowId endRowId)
+            : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
         {
@@ -27,8 +28,8 @@ class TChargeBTreeIndex : public ICharge {
     };
 
     struct TNodeState : TChildState, TBtreeIndexNode {
-        TNodeState(TSharedData data, TChild meta, TRowId beginRowId, TRowId endRowId)
-            : TChildState(meta, beginRowId, endRowId)
+        TNodeState(TSharedData data, TPageId pageId, TRowId beginRowId, TRowId endRowId)
+            : TChildState(pageId, beginRowId, endRowId)
             , TBtreeIndexNode(data)
         {
         }
@@ -68,6 +69,7 @@ public:
 
         bool ready = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
+        // TRowId items = 0;
 
         Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
@@ -103,9 +105,10 @@ public:
                 }
                 for (TRecIdx pos : xrange(from, to)) {
                     auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
                 }
             }
         };
@@ -173,7 +176,7 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -191,7 +194,7 @@ public:
         bool overshot = endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -243,9 +246,10 @@ public:
                 }
                 for (TRecIdx pos : xrange(from, to)) {
                     auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
                 }
             }
         };
@@ -323,7 +327,7 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -341,7 +345,7 @@ public:
         bool overshot = beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -381,10 +385,11 @@ private:
                     to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    auto child = node.GetShortChild(pos);
+                    auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
                 }
             }
         };
@@ -399,7 +404,7 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -412,7 +417,7 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }

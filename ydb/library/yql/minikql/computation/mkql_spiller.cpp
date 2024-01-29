@@ -31,6 +31,7 @@ public:
             WakeupCallback();
         });
         t.Start();
+        t.Detach();
 
         return promise.GetFuture();;
     }
@@ -42,6 +43,7 @@ public:
             WakeupCallback();
         });
         t.Start();
+        t.Detach();
 
         if (auto it = Storage.find(key); it != Storage.end()) {
             promise.SetValue(it->second);

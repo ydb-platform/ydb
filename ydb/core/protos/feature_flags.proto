@@ -128,5 +128,4 @@ message TFeatureFlags {
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
     optional bool EnableAddColumsWithDefaults = 115 [ default = false];
-    optional bool EnableOlapSink = 116 [default = false];
 }

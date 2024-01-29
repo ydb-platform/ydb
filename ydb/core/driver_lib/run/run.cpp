@@ -1087,6 +1087,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
     }
 
+    if (runConfig.AppConfig.GetQueryServiceConfig().HasEnableOlapSink()) {
+        AppData->EnableOlapSink = runConfig.AppConfig.GetQueryServiceConfig().GetEnableOlapSink();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

@@ -5412,7 +5412,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableOlapSink(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).EnableOlapSink = true;
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 
@@ -5543,7 +5543,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableOlapSink(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).EnableOlapSink = true;
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 
@@ -5594,7 +5594,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableOlapSink(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).EnableOlapSink = true;
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 
@@ -5648,7 +5648,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableOlapSink(true);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).EnableOlapSink = true;
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 
@@ -5696,7 +5696,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableOlapSink(false);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).EnableOlapSink = false;
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 

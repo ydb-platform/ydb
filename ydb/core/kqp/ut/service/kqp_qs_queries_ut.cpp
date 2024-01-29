@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/testlib/common_helper.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -672,6 +674,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(DdlColumnTable) {
+        const TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value").SetType(NScheme::NTypeIds::String)
+        };
+
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -679,7 +686,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
 
-        TKikimrRunner kikimr(serverSettings);
+        TTestHelper testHelper(serverSettings);
+        auto& kikimr = testHelper.GetKikimr();
+
         auto db = kikimr.GetQueryClient();
 
         enum EEx {
@@ -688,20 +697,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             IfNotExists,
         };
 
-        auto checkCreate = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, const TString& objPath, bool isStore) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
             const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
             const TString sql = fmt::format(R"sql(
-                CREATE TABLE {if_not_exists} TestDdl_{name_suffix} (
+                CREATE {obj_type} {if_not_exists} {obj_path} (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
                 )
                 WITH (
-                    STORE = COLUMN
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
                 );)sql",
+                "obj_type"_a = objType,
                 "if_not_exists"_a = ifNotExistsStatement,
-                "name_suffix"_a = nameSuffix
+                "obj_path"_a = objPath
             );
 
             auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
@@ -713,14 +725,30 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(result.GetResultSets().empty());
         };
 
-        auto checkDrop = [&](bool expectSuccess, EEx exMode, int nameSuffix) {
+        auto checkAlter = [&](const TString& objPath, bool isStore) {
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
+            const TString sql = fmt::format(R"sql(
+                ALTER {obj_type} {obj_path} (
+                    SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)
+                );)sql",
+                "obj_type"_a = objType,
+                "obj_path"_a = objPath
+            );
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode,
+                const TString& objPath, bool isStore) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
             const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
             const TString sql = fmt::format(R"sql(
-                DROP TABLE {if_exists} TestDdl_{name_suffix};
+                DROP {obj_type} {if_exists} {obj_path};
                 )sql",
+                "obj_type"_a = objType,
                 "if_exists"_a = ifExistsStatement,
-                "name_suffix"_a = nameSuffix
+                "obj_path"_a = objPath
             );
 
             auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
@@ -732,65 +760,58 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(result.GetResultSets().empty());
         };
 
-        auto checkUpsert = [&](int nameSuffix) {
-            const TString sql = fmt::format(R"sql(
-                UPSERT INTO TestDdl_{name_suffix} (Key, Value) VALUES (1, "One");
-                )sql",
-                "name_suffix"_a = nameSuffix
-            );
-
-            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        };
-
-        auto checkExists = [&](bool expectSuccess, int nameSuffix) {
-            const TString sql = fmt::format(R"sql(
-                SELECT * FROM TestDdl_{name_suffix};
-                )sql",
-                "name_suffix"_a = nameSuffix
-            );
-            auto result = db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-            if (expectSuccess) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        auto checkAddRow = [&](const TString& objPath) {
+            const size_t inserted_rows = 5;
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(objPath)
+                .SetPrimaryKey({"Key"})
+                .SetSharding({"Key"})
+                .SetSchema(schema);
+            {
+                TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+                for (size_t i = 0; i < inserted_rows; i++) {
+                    tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i));
+                }
+                testHelper.BulkUpsert(testTable, tableInserter);
             }
+
+            Sleep(TDuration::Seconds(1));
+
+            auto settings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
+            auto describeResult =
+                testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
+
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& description = describeResult.GetTableDescription();
+
+            UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
         };
+        Y_UNUSED(checkAddRow);
 
-        // usual create
-        checkCreate(true, EEx::Empty, 0);
-        checkUpsert(0);
-        checkExists(true, 0);
+        checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
+        checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
+        checkAlter("/Root/TableStoreTest", true);
+        checkDrop(true, EEx::Empty, "/Root/TableStoreTest", true);
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
 
-        // create already existing table
-        checkCreate(false, EEx::Empty, 0); // already exists
-        checkCreate(true, EEx::IfNotExists, 0);
-        checkExists(true, 0);
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
+        checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
+        checkAlter("/Root/TableStoreTest", true);
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
 
-        // usual drop
-        checkDrop(true, EEx::Empty, 0);
-        checkExists(false, 0);
-        checkDrop(false, EEx::Empty, 0); // no such table
-
-        // drop if exists
-        checkDrop(true, EEx::IfExists, 0);
-        checkExists(false, 0);
-
-        // failed attempt to drop nonexisting table
-        checkDrop(false, EEx::Empty, 0);
-
-        // create with if not exists
-        checkCreate(true, EEx::IfNotExists, 1); // real creation
-        checkUpsert(1);
-        checkExists(true, 1);
-        checkCreate(true, EEx::IfNotExists, 1);
-
-        // drop if exists
-        checkDrop(true, EEx::IfExists, 1); // real drop
-        checkExists(false, 1);
-        checkDrop(true, EEx::IfExists, 1);
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
+        checkCreate(true, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
+        checkCreate(false, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest/ColumnTable", false);
+        checkAddRow("/Root/TableStoreTest/ColumnTable");
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest/ColumnTable", false);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest/ColumnTable", false);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
     }
 
     Y_UNIT_TEST(DdlUser) {

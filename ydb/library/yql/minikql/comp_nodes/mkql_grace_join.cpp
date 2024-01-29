@@ -161,8 +161,6 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = sizeof(ui64); break;
         case NUdf::EDataSlot::Interval:
             res.Bytes = sizeof(i64); break;
-        case NUdf::EDataSlot::Uuid:
-            res.IsString = true; break;
         case NUdf::EDataSlot::TzDate:
             res.Bytes = 4; break;
         case NUdf::EDataSlot::TzDatetime:
@@ -179,16 +177,12 @@ TColumnDataPackInfo GetPackInfo(TType* type) {
             res.Bytes = 8; break;
         case NUdf::EDataSlot::Interval64:
             res.Bytes = 8; break;
+        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
-            res.IsString = true; break;
         case NUdf::EDataSlot::JsonDocument:
-            res.IsString = true; break;
         case NUdf::EDataSlot::String:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Utf8:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Yson:
-            res.IsString = true; break;
         case NUdf::EDataSlot::Json:
             res.IsString = true; break;
         default:

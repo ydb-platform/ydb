@@ -9,6 +9,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
@@ -128,10 +129,10 @@ struct TEvPQ {
         EvSplitMessageGroup,
         EvUpdateCounters,
         EvMirrorerCounters,
-        EvAccountReadQuotaRequest,
-        EvAccountReadQuotaResponse,
-        EvAccountReadQuotaConsumed,
-        EvAccountReadQuotaCounters,
+        EvAccountQuotaRequest,
+        EvAccountQuotaResponse,
+        EvAccountQuotaConsumed,
+        EvAccountQuotaCounters,
         EvRetryWrite,
         EvInitCredentials,
         EvCredentialsCreated,
@@ -150,7 +151,8 @@ struct TEvPQ {
         EvSubDomainStatus,
         EvStatsWakeup,
         EvRequestQuota,
-        EvApproveQuota,
+        EvApproveReadQuota,
+        EvApproveWriteQuota,
         EvConsumed,
         EvQuotaUpdated,
         EvAccountQuotaCountersUpdated,
@@ -872,34 +874,45 @@ struct TEvPQ {
     };
 
     struct TEvRequestQuota : public TEventLocal<TEvRequestQuota, EvRequestQuota> {
-        TEvRequestQuota(TEvPQ::TEvRead::TPtr readRequest)
-            :
-            ReadRequest(std::move(readRequest))
+        TEvRequestQuota(ui64 cookie, TAutoPtr<IEventHandle>&& request)
+            : Cookie(cookie)
+            , Request(std::move(request))
         {}
 
-        TEvPQ::TEvRead::TPtr ReadRequest;
+        ui64 Cookie;
+        TAutoPtr<IEventHandle> Request;
     };
 
-    struct TEvApproveQuota : public TEventLocal<TEvApproveQuota, EvApproveQuota> {
-        TEvApproveQuota(TEvPQ::TEvRead::TPtr readRequest, TDuration waitTime)
-            :
-            ReadRequest(std::move(readRequest)),
-            WaitTime(std::move(waitTime))
+    struct TEvApproveReadQuota : public TEventLocal<TEvApproveReadQuota, EvApproveReadQuota> {
+        TEvApproveReadQuota(TEvPQ::TEvRead::TPtr readRequest, TDuration& waitTime)
+            : ReadRequest(readRequest)
+            , WaitTime(std::move(waitTime))
         {}
 
         TEvPQ::TEvRead::TPtr ReadRequest;
         TDuration WaitTime;
     };
 
+    struct TEvApproveWriteQuota : public TEventLocal<TEvApproveWriteQuota, EvApproveWriteQuota> {
+        TEvApproveWriteQuota(ui64 requestCookie, const TDuration& accountWaitTime, const TDuration& partitionWaitTime)
+            : Cookie(requestCookie)
+            , AccountQuotaWaitTime(accountWaitTime)
+            , PartitionQuotaWaitTime(partitionWaitTime)
+        {}
+        ui64 Cookie;
+        TDuration AccountQuotaWaitTime;
+        TDuration PartitionQuotaWaitTime;
+    };
+
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 readBytes, ui64 readRequestCookie, const TString& consumer)
-            : ReadBytes(readBytes),
-              ReadRequestCookie(readRequestCookie),
+        TEvConsumed(ui64 consumedBytes, ui64 requestCookie, const TString& consumer)
+            : ConsumedBytes(consumedBytes),
+              RequestCookie(requestCookie),
               Consumer(consumer)
         {}
 
-        ui64 ReadBytes;
-        ui64 ReadRequestCookie;
+        ui64 ConsumedBytes;
+        ui64 RequestCookie;
         TString Consumer;
     };
 

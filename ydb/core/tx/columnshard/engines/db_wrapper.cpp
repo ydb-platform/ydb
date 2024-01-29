@@ -102,7 +102,9 @@ void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row)
     db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Update(
             NIceDb::TUpdate<IndexIndexes::Blob>(row.GetBlobRange().BlobId.SerializeBinary()),
             NIceDb::TUpdate<IndexIndexes::Offset>(row.GetBlobRange().Offset),
-            NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size)
+            NIceDb::TUpdate<IndexIndexes::Size>(row.GetBlobRange().Size),
+            NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),
+            NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes())
         );
 }
 

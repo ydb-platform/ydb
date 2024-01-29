@@ -42,6 +42,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/time_cast
     ydb/core/tx/columnshard/engines
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/counters

@@ -233,9 +233,13 @@ private:
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
             auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
-            YQL_ENSURE(!batchesQueue.empty());
 
-            if (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId) {
+            if (!batchesQueue.empty()
+                && (ev->Get()->Record.GetTxId() == batchesQueue.front().TxId
+                    || std::find(
+                        std::begin(batchesQueue.front().OldTxIds),
+                        std::end(batchesQueue.front().OldTxIds),
+                        ev->Get()->Record.GetTxId()) == std::end(batchesQueue.front().OldTxIds))) {
                 const bool needToResume = (GetFreeSpace() <= 0);
 
                 EgressStats.Bytes += batchesQueue.front().Data.size();
@@ -363,7 +367,10 @@ private:
         }
         CA_LOG_D("Retry ShardID=" << shardId);
         auto& inFlightBatch = InFlightBatches.at(shardId).front();
-        inFlightBatch.TxId = 0;
+        if (inFlightBatch.TxId != 0) {
+            inFlightBatch.OldTxIds.push_back(inFlightBatch.TxId);
+            inFlightBatch.TxId = 0;
+        }
         RequestNewTxId();
     }
 
@@ -402,8 +409,8 @@ private:
         if (FreeTxIds.empty()) {
             return std::nullopt;
         }
-        const ui64 result = FreeTxIds.back();
-        FreeTxIds.pop_back();
+        const ui64 result = FreeTxIds.front();
+        FreeTxIds.pop_front();
         return result;
     }
 
@@ -532,6 +539,7 @@ private:
         TString Data;
         ui32 SendAttempts = 0;
         ui64 TxId = 0;
+        TVector<ui64> OldTxIds;
     };
     THashMap<ui64, std::deque<TInFlightBatch>> InFlightBatches;
     bool Finished = false;
@@ -539,7 +547,7 @@ private:
     const i64 MemoryLimit = kInFlightMemoryLimitPerActor;
     i64 MemoryInFlight = 0;
 
-    std::vector<ui64> FreeTxIds;
+    std::deque<ui64> FreeTxIds;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

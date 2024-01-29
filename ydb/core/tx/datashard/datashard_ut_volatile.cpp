@@ -1998,6 +1998,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         serverSettings.SetDomainName("Root")
             .SetNodeCount(1)
             .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true)
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2016,14 +2017,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                         .Followers(1);
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
-
-        runtime.SimulateSleep(TDuration::Seconds(1));
-        for (ui64 shard : GetTableShards(server, sender, "/Root/table-1")) {
-            InvalidateTabletResolverCache(runtime, shard);
-        }
-        for (ui64 shard : GetTableShards(server, sender, "/Root/table-2")) {
-            InvalidateTabletResolverCache(runtime, shard);
-        }
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");

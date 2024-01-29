@@ -275,7 +275,7 @@ private:
     TBucketQuoter<i64, TSpinLock, THPTimerUs> Bucket;
     static constexpr ui64 BucketCapacity = 1'000'000'000;
     TLight BurstDetector;
-    TAtomic SeqnoBurstDetector = 0;
+    std::atomic<ui64> SeqnoBurstDetector = 0;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -304,7 +304,7 @@ public:
 
     void CountRequest(ui64 cost) {
         Bucket.Use(cost);
-        BurstDetector.Set(!Bucket.IsAvail(), AtomicGetAndIncrement(SeqnoBurstDetector));
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 
 public:
@@ -351,6 +351,10 @@ public:
     void CountInternalCost(ui64 cost) {
         *InternalDiskCost += cost;
         CountRequest(cost);
+    }
+
+    void CountPDiskResponse() {
+        Bucket.IsAvail();
     }
 };
 

@@ -120,7 +120,7 @@ class TestSelect1(object):
             assert "Failed to parse query" in describe_string, describe_string
 
     @yq_all
-    def test_ast_in_failed_query(self, client):
+    def test_ast_in_failed_query_runtime(self, client):
         sql = "SELECT unwrap(1 / 0)"
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id

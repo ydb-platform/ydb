@@ -51,9 +51,6 @@ IF (ARCH_X86_64)
     )
 ENDIF()
 
-# DTCC-950
-NO_COMPILER_WARNINGS()
-
 INCLUDE(pg_sources.inc)
 
 INCLUDE(pg_kernel_sources.inc)

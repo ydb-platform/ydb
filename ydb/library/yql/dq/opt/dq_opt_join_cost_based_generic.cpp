@@ -157,11 +157,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 	TExprContext& ctx, 
 	TTypeAnnotationContext& typesCtx,
 	const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
-    bool ruleEnabled)
+    ui32 optLevel)
 {
     Y_UNUSED(ctx);
 
-    if (!ruleEnabled) {
+    if (optLevel==0) {
         return node;
     }
 
@@ -184,7 +184,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     TState state(equiJoin);
     // collect Rels
-    if (!DqCollectJoinRelationsWithStats(typesCtx, equiJoin, [&](auto label, auto stat) {
+    TVector<std::shared_ptr<TRelOptimizerNode>> rels;
+    if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, [&](auto r, auto label, auto node, auto stat) {
+        Y_UNUSED(r);
+        Y_UNUSED(node);
         state.CollectRel(label, stat);
     })) {
         return node;

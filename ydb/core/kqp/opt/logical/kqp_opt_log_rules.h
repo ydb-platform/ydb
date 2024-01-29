@@ -38,9 +38,6 @@ NYql::NNodes::TExprBase KqpRewriteIndexRead(const NYql::NNodes::TExprBase& node,
 NYql::NNodes::TExprBase KqpRewriteLookupIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
-bool KqpLookupJoinIsApplicable(const NYql::NNodes::TExprBase& node, TVector<TString> joinColumns, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx);
-
 NYql::NNodes::TExprBase KqpRewriteStreamLookupIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 

@@ -50,12 +50,12 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
     TString Label;
 
     // Temporary solution to check if a LookupJoin is possible in KQP
-    TExprNode::TPtr Expr;
+    //void* Expr;
 
     TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) : 
         IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
-    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) : 
-        IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
+    //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) : 
+    //    IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
     virtual ~TRelOptimizerNode() {}
 
     virtual TVector<TString> Labels();
@@ -79,6 +79,54 @@ enum EJoinKind: ui32
 EJoinKind ConvertToJoinKind(const TString& joinString);
 TString ConvertToJoinString(const EJoinKind kind);
 
+/**
+ * This is a temporary structure for KQP provider
+ * We will soon be supporting multiple providers and we will need to design
+ * some interfaces to pass provider-specific context to the optimizer
+*/
+struct IProviderContext {
+    virtual ~IProviderContext() = default;
+
+    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinImplType joinImpl) const = 0;
+
+    virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
+        const std::shared_ptr<IBaseOptimizerNode>& right, 
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        EJoinImplType joinImpl) = 0;
+
+};
+
+/**
+ * Temporary solution for default provider context
+*/
+
+struct TDummyProviderContext : IProviderContext {
+    TDummyProviderContext() {}
+
+    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinImplType joinImpl) const {
+        Y_UNUSED(joinImpl);
+        return leftStats.Nrows + 2.0 * rightStats.Nrows;
+    }
+
+    bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
+        const std::shared_ptr<IBaseOptimizerNode>& right, 
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        EJoinImplType joinImpl) {
+
+        Y_UNUSED(left);
+        Y_UNUSED(right);
+        Y_UNUSED(joinConditions);
+        Y_UNUSED(joinImpl);
+
+        return true;
+    }
+
+    static const TDummyProviderContext& instance() {
+        static TDummyProviderContext staticContext;
+        return staticContext;
+    }
+
+};
 
 /**
  * JoinOptimizerNode records the left and right arguments of the join
@@ -101,6 +149,9 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
 };
 
 struct IOptimizerNew {
+    IProviderContext& Pctx;
+
+    IOptimizerNew(IProviderContext& ctx) : Pctx(ctx) {}
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) = 0;
 };

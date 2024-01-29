@@ -1,4 +1,5 @@
 #include "kqp_opt_log_rules.h"
+#include "kqp_opt_cbo.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -134,7 +135,11 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPccpDPTableSize = Config->MaxDPccpDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPccpDPTableSize);
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->HasOptEnableCostBasedOptimization(), maxDPccpDPTableSize);
+        TKqpProviderContext providerContext(KqpCtx);
+        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel), 
+            maxDPccpDPTableSize, providerContext, [](auto& rels, auto label, auto node, auto stat) {
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+            });
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

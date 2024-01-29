@@ -8,6 +8,7 @@
 namespace NYql {
 
 struct TOptimizerStatistics;
+struct TRelOptimizerNode;
 
 namespace NDq {
 
@@ -25,9 +26,10 @@ NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx
 NNodes::TDqJoin DqSuppressSortOnJoinInput(const NNodes::TDqJoin& node, TExprContext& ctx);
 
 bool DqCollectJoinRelationsWithStats(
+    TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     TTypeAnnotationContext& typesCtx,
     const NNodes::TCoEquiJoin& equiJoin,
-    const std::function<void(TStringBuf, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
+    const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
 
 } // namespace NDq
 } // namespace NYql

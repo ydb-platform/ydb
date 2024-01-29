@@ -1,4 +1,5 @@
 RECURSE(
+    access
     compute
     iam
     kms

@@ -235,7 +235,7 @@ message ScalePolicy {
   }
 
   message FixedScale {
-    int64 size = 1 [(yandex.cloud.priv.value) = ">=1"];
+    int64 size = 1;
   }
 }
 

@@ -646,7 +646,7 @@ void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPu
 }
 
 bool IsGoodTypeForPushdown(const TTypeAnnotationNode& type) {
-    return NUdf::EDataTypeFeatures::IntegralType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
 }
 
 bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo) {

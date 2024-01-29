@@ -176,7 +176,7 @@ struct TPartitionWriterOpts {
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
-    std::optional<ui64> InitialSeqNo = 0;
+    std::optional<ui64> InitialSeqNo;
 
     TString Database;
     TString TopicPath;

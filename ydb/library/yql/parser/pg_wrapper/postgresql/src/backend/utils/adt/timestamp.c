@@ -5750,16 +5750,6 @@ generate_series_timestamp(PG_FUNCTION_ARGS)
 		Interval   *step = PG_GETARG_INTERVAL_P(2);
 		MemoryContext oldcontext;
 		Interval	interval_zero;
-		int step_sign;
-
-		/* Determine sign of the interval */
-		MemSet(&interval_zero, 0, sizeof(Interval));
-		step_sign = interval_cmp_internal(step, &interval_zero);
-
-		if (step_sign == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("step size cannot equal zero")));
 
 		/* create a function context for cross-call persistence */
 		funcctx = SRF_FIRSTCALL_INIT();
@@ -5780,7 +5770,15 @@ generate_series_timestamp(PG_FUNCTION_ARGS)
 		fctx->current = start;
 		fctx->finish = finish;
 		fctx->step = *step;
-		fctx->step_sign = step_sign;
+
+		/* Determine sign of the interval */
+		MemSet(&interval_zero, 0, sizeof(Interval));
+		fctx->step_sign = interval_cmp_internal(&fctx->step, &interval_zero);
+
+		if (fctx->step_sign == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("step size cannot equal zero")));
 
 		funcctx->user_fctx = fctx;
 		MemoryContextSwitchTo(oldcontext);
@@ -5832,16 +5830,6 @@ generate_series_timestamptz(PG_FUNCTION_ARGS)
 		Interval   *step = PG_GETARG_INTERVAL_P(2);
 		MemoryContext oldcontext;
 		Interval	interval_zero;
-		int step_sign;
-
-		/* Determine sign of the interval */
-		MemSet(&interval_zero, 0, sizeof(Interval));
-		step_sign = interval_cmp_internal(step, &interval_zero);
-
-		if (step_sign == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("step size cannot equal zero")));
 
 		/* create a function context for cross-call persistence */
 		funcctx = SRF_FIRSTCALL_INIT();
@@ -5862,7 +5850,15 @@ generate_series_timestamptz(PG_FUNCTION_ARGS)
 		fctx->current = start;
 		fctx->finish = finish;
 		fctx->step = *step;
-		fctx->step_sign = step_sign;
+
+		/* Determine sign of the interval */
+		MemSet(&interval_zero, 0, sizeof(Interval));
+		fctx->step_sign = interval_cmp_internal(&fctx->step, &interval_zero);
+
+		if (fctx->step_sign == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("step size cannot equal zero")));
 
 		funcctx->user_fctx = fctx;
 		MemoryContextSwitchTo(oldcontext);

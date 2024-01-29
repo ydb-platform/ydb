@@ -37,7 +37,7 @@ namespace {
     };
 
     void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
-            bool allowFirstLastPartPageDifference = false, bool allowFirstLoadedPageDifference = false, bool allowLastLoadedPageDifference = false) {
+            bool allowAdditionalFirstLastPartPages = false, bool allowAdditionalFirstLoadedPage = false, bool allowLastLoadedPageDifference = false) {
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
@@ -60,21 +60,21 @@ namespace {
 
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
-            if (allowFirstLastPartPageDifference) {
+            if (allowAdditionalFirstLastPartPages) {
                 for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
             }
-            // Note: due to implementation details it is possible that b-tree precharge is more precise
-            if (allowFirstLoadedPageDifference && flatDataPages.size() == bTreeDataPages.size() + 1) {
-                bTreeDataPages.insert(*flatDataPages.begin());
+            // Note: due to implementation details it is possible that B-Tree index touches an extra page
+            if (allowAdditionalFirstLoadedPage && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+                flatDataPages.insert(*bTreeDataPages.begin());
             }
-            if (allowLastLoadedPageDifference && flatDataPages.size() == bTreeDataPages.size() + 1) {
-                bTreeDataPages.insert(*flatDataPages.rbegin());
+            if (allowLastLoadedPageDifference && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+                flatDataPages.insert(*bTreeDataPages.rbegin());
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,
                 TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
         }
     }
@@ -436,7 +436,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
                         DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
                         DoChargeRowId(flat, flatEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
-                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                            false, reverse && itemsLimit, !reverse && itemsLimit);
                     }
                 }
             }

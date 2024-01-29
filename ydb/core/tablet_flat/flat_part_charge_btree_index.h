@@ -69,10 +69,7 @@ public:
 
         bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
-        // TRowId items = 0;
-
-        Y_UNUSED(itemsLimit);
-        Y_UNUSED(bytesLimit);
+        ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -131,6 +128,15 @@ public:
 
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
+                if (chargeGroups && chargeGroupsItemsLimit) {
+                    // TODO: use erased count
+                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    if (unloadedItems < chargeGroupsItemsLimit) {
+                        chargeGroupsItemsLimit -= unloadedItems;
+                    } else {
+                        chargeGroups = false;
+                    }
+                }
                 beginRowId = Max(beginRowId, child.EndRowId);
             }
             if (child.PageId == key2PageId) {
@@ -201,7 +207,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -215,7 +221,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }

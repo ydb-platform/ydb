@@ -5,6 +5,8 @@
 
 #include "grpc_request_proxy_handle_methods.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/ptr.h>
@@ -21,7 +23,7 @@ struct TAppData;
 namespace NGRpcService {
 
 TString DatabaseFromDomain(const TAppData* appdata);
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<TControlBoard> icb);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {

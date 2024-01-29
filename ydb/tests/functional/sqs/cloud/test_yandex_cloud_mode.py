@@ -489,7 +489,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
 
         # waiting until the message appears in queue1 again
         result_list = self._read_while_not_empty(
-            queue_url = queue1_url,
+            queue_url=queue1_url,
             messages_count=1,
             visibility_timeout=0,
             wait_timeout=10

@@ -1187,14 +1187,16 @@ def onsetup_run_python(unit):
 
 def get_canonical_test_resources(unit):
     unit_path = unit.path()
-    canon_data_dir = os.path.join(unit.resolve(unit_path), CANON_DATA_DIR_NAME, unit.get('CANONIZE_SUB_PATH') or '')
-
+    if unit.get("CUSTOM_CANONDATA_PATH"):
+        path_to_canondata = unit_path.replace("$S", unit.get("CUSTOM_CANONDATA_PATH"))
+    else:
+        path_to_canondata = unit.resolve(unit_path)
+    canon_data_dir = os.path.join(path_to_canondata, CANON_DATA_DIR_NAME, unit.get('CANONIZE_SUB_PATH') or '')
     try:
         _, dirs, files = next(os.walk(canon_data_dir))
     except StopIteration:
         # path doesn't exist
         return [], []
-
     if CANON_RESULT_FILE_NAME in files:
         return _get_canonical_data_resources_v2(os.path.join(canon_data_dir, CANON_RESULT_FILE_NAME), unit_path)
     return [], []

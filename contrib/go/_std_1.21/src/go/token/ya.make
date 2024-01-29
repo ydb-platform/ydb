@@ -1,21 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    position.go
-    serialize.go
-    token.go
-)
-
-GO_TEST_SRCS(
-    position_bench_test.go
-    position_test.go
-    serialize_test.go
-    token_test.go
-)
-
-GO_XTEST_SRCS(example_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		position.go
+		serialize.go
+		token.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

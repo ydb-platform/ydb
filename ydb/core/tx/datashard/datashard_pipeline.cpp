@@ -1583,13 +1583,13 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
 
-    auto badRequest = [&](const TString& error) {
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << error << " at tablet# " << Self->TabletID());
+    auto badRequest = [&](NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& error) {
+        writeOp->SetError(status, TStringBuilder() << error << " at tablet# " << Self->TabletID());
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
     if (!writeTx->Ready()) {
-        badRequest(TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
+        badRequest(EvWrite::Convertor::ConvertErrCode(writeOp->GetWriteTx()->GetErrCode()), TStringBuilder() << "Cannot parse tx " << writeOp->GetTxId() << ". " << writeOp->GetWriteTx()->GetErrCode() << ": " << writeOp->GetWriteTx()->GetErrStr());
         return writeOp;
     }
 
@@ -1605,7 +1605,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
             writeOp->SetImmediateFlag();
             break;
         default:
-            badRequest(TStringBuilder() << "Unknown txmode: " << rec.txmode());
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder() << "Unknown txmode: " << rec.txmode());
             return writeOp;
     }
 

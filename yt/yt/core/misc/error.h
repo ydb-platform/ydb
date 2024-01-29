@@ -67,21 +67,18 @@ constexpr int ErrorSerializationDepthLimit = 16;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! When this guard is set, newly created errors do not have non-deterministic
-//! system attributes and have "datetime" attribute overridden with a given value.
+//! system attributes and have "datetime" and "host" attributes overridden with a given values.
 class TErrorSanitizerGuard
     : public TNonCopyable
 {
 public:
-    using TLocalHostNameSanitizerSignature = TString (TStringBuf);
-    using THostNameSanitizer = TCallback<TLocalHostNameSanitizerSignature>;
-
-    explicit TErrorSanitizerGuard(TInstant datetimeOverride, THostNameSanitizer localHostNameSanitizer);
+    TErrorSanitizerGuard(TInstant datetimeOverride, TSharedRef localHostNameOverride);
     ~TErrorSanitizerGuard();
 
 private:
     const bool SavedEnabled_;
     const TInstant SavedDatetimeOverride_;
-    const THostNameSanitizer SavedLocalHostNameSanitizer_;
+    const TSharedRef SavedLocalHostNameOverride_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

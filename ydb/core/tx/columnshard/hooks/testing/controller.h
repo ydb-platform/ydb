@@ -8,6 +8,9 @@ private:
     YDB_READONLY(TAtomicCounter, FilteredRecordsCount, 0);
     YDB_READONLY(TAtomicCounter, Compactions, 0);
     YDB_READONLY(TAtomicCounter, Indexations, 0);
+    YDB_READONLY(TAtomicCounter, IndexesSkippingOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, IndexesApprovedOnSelect, 0);
+    YDB_READONLY(TAtomicCounter, IndexesSkippedNoData, 0);
     YDB_ACCESSOR(std::optional<TDuration>, GuaranteeIndexationInterval, TDuration::Zero());
     YDB_ACCESSOR(std::optional<TDuration>, PeriodicWakeupActivationPeriod, std::nullopt);
     YDB_ACCESSOR(std::optional<TDuration>, StatsReportInterval, std::nullopt);
@@ -38,6 +41,15 @@ protected:
     }
 
 public:
+    virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
+        if (!result) {
+            IndexesSkippedNoData.Inc();
+        } else if (*result) {
+            IndexesApprovedOnSelect.Inc();
+        } else {
+            IndexesSkippingOnSelect.Inc();
+        }
+    }
     void SetCompactionControl(const EOptimizerCompactionWeightControl value) {
         CompactionControl = value;
     }

@@ -11,10 +11,10 @@ create_misc,76,3,3.95
 create_table,368,43,11.68
 date,264,200,75.76
 dbsize,24,24,100.0
-delete,10,0,0.0
+delete,10,5,50.0
 expressions,63,14,22.22
-float4,96,80,83.33
-float8,168,132,78.57
+float4,96,82,85.42
+float8,168,140,83.33
 functional_deps,40,7,17.5
 horology,306,79,25.82
 insert,357,15,4.2
@@ -40,7 +40,7 @@ select_distinct_on,4,0,0.0
 select_having,23,16,69.57
 select_implicit,44,13,29.55
 select_into,67,3,4.48
-strings,390,81,20.77
+strings,390,86,22.05
 subselect,234,5,2.14
 text,76,16,21.05
 time,39,33,84.62

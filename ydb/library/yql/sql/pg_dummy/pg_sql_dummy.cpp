@@ -498,11 +498,14 @@ TString GetPostgresServerVersionStr() {
 
 } // namespace NKikimr::NPg
 
-ui64 hex_encode(const char *src, size_t len, char *dst) {
+namespace NYql {
+
+ui64 HexEncode(const char *src, size_t len, char *dst) {
     Y_UNUSED(src);
     Y_UNUSED(len);
     Y_UNUSED(dst);
 
-    return 0;
+    throw yexception() << "HexEncode in pg_dummy does nothing";
 }
 
+} // NYql

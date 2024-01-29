@@ -598,11 +598,17 @@ namespace NKikimr::NDataShard {
 
         UnblockWaitingRemovalOperations(info);
 
+        TRowVersion prevUncertain = GetMinUncertainVersion();
+
         for (ui64 commitTxId : info->CommitTxIds) {
             VolatileTxByCommitTxId.erase(commitTxId);
         }
         VolatileTxByVersion.erase(info);
         VolatileTxs.erase(txId);
+
+        if (prevUncertain < GetMinUncertainVersion()) {
+            Self->PromoteFollowerReadEdge();
+        }
 
         if (!WaitingSnapshotEvents.empty()) {
             TVolatileTxInfo* next = !VolatileTxByVersion.empty() ? *VolatileTxByVersion.begin() : nullptr;

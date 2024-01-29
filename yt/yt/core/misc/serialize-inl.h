@@ -10,6 +10,8 @@
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
 #include <library/cpp/yt/small_containers/compact_set.h>
 
+#include <library/cpp/yt/misc/enum_indexed_array.h>
+
 #include <optional>
 #include <variant>
 
@@ -1356,17 +1358,17 @@ struct TOptionalListSerializer
 };
 
 template <class TItemSerializer = TDefaultSerializer>
-struct TEnumIndexedVectorSerializer
+struct TEnumIndexedArraySerializer
 {
     template <class E, class T, class C, E Min, E Max>
-    static void Save(C& context, const TEnumIndexedVector<E, T, Min, Max>& vector)
+    static void Save(C& context, const TEnumIndexedArray<E, T, Min, Max>& vector)
     {
         using NYT::Save;
 
         auto keys = TEnumTraits<E>::GetDomainValues();
         size_t count = 0;
         for (auto key : keys) {
-            if (!vector.IsDomainValue(key)) {
+            if (!vector.IsValidIndex(key)) {
                 continue;
             }
             ++count;
@@ -1375,7 +1377,7 @@ struct TEnumIndexedVectorSerializer
         TSizeSerializer::Save(context, count);
 
         for (auto key : keys) {
-            if (!vector.IsDomainValue(key)) {
+            if (!vector.IsValidIndex(key)) {
                 continue;
             }
             Save(context, key);
@@ -1384,7 +1386,7 @@ struct TEnumIndexedVectorSerializer
     }
 
     template <class E, class T, class C, E Min, E Max>
-    static void Load(C& context, TEnumIndexedVector<E, T, Min, Max>& vector)
+    static void Load(C& context, TEnumIndexedArray<E, T, Min, Max>& vector)
     {
         if constexpr (std::is_copy_assignable_v<T>) {
             std::fill(vector.begin(), vector.end(), T());
@@ -1403,7 +1405,7 @@ struct TEnumIndexedVectorSerializer
                 auto key = LoadSuspended<E>(context);
                 SERIALIZATION_DUMP_WRITE(context, "%v =>", key);
                 SERIALIZATION_DUMP_INDENT(context) {
-                    if (!vector.IsDomainValue(key)) {
+                    if (!vector.IsValidIndex(key)) {
                         T dummy;
                         TItemSerializer::Load(context, dummy);
                     } else {
@@ -1967,9 +1969,9 @@ struct TSerializerTraits<THashMultiMap<K, V>, C, void>
 };
 
 template <class E, class T, class C, E Min, E Max>
-struct TSerializerTraits<TEnumIndexedVector<E, T, Min, Max>, C, void>
+struct TSerializerTraits<TEnumIndexedArray<E, T, Min, Max>, C, void>
 {
-    using TSerializer = TEnumIndexedVectorSerializer<>;
+    using TSerializer = TEnumIndexedArraySerializer<>;
 };
 
 template <class F, class S, class C>

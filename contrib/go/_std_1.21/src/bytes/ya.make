@@ -1,26 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    buffer.go
-    bytes.go
-    reader.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(
-    buffer_test.go
-    bytes_test.go
-    compare_test.go
-    example_test.go
-    reader_test.go
-)
-
-IF (OS_LINUX)
-    GO_XTEST_SRCS(boundary_test.go)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		buffer.go
+		bytes.go
+		reader.go
+    )
 ENDIF()
-
 END()
-
-RECURSE(
-)

@@ -122,6 +122,11 @@ public:
             ? CreateDeterministicRandomProvider(1)
             : State->RandomProvider;
 
+        TScopedAlloc alloc(
+            __LOCATION__, 
+            NKikimr::TAlignedPagePoolCounters(), 
+            State->FunctionRegistry->SupportsSizedAllocators(),
+            false);
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
 
@@ -138,7 +143,7 @@ public:
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
-        auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
+        auto runner = NDq::MakeDqTaskRunner(alloc, executionContext, settings, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {

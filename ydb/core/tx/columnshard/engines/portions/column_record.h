@@ -16,6 +16,28 @@ namespace NKikimr::NOlap {
 class TColumnChunkLoadContext;
 struct TIndexInfo;
 
+class TIndexChunk {
+private:
+    YDB_READONLY(ui32, IndexId, 0);
+    YDB_READONLY(ui32, ChunkIdx, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY_DEF(TBlobRange, BlobRange);
+
+public:
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const TBlobRange& blobRange)
+        : IndexId(indexId)
+        , ChunkIdx(chunkIdx)
+        , RecordsCount(recordsCount)
+        , BlobRange(blobRange) {
+
+    }
+
+    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        BlobRange.BlobId = blobId;
+    }
+};
+
 struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;

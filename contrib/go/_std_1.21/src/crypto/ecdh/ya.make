@@ -1,14 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    ecdh.go
-    nist.go
-    x25519.go
-)
-
-GO_XTEST_SRCS(ecdh_test.go)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		ecdh.go
+		nist.go
+		x25519.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

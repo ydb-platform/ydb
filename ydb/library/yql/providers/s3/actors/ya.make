@@ -9,6 +9,7 @@ ADDINCL(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    yql_arrow_column_converters.cpp
     yql_s3_actors_util.cpp
     yql_s3_applicator_actor.cpp
     yql_s3_sink_factory.cpp

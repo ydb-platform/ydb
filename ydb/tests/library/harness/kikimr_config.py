@@ -331,6 +331,9 @@ class KikimrConfigGenerator(object):
 
         if auth_config_path:
             self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
+        else:
+            self.yaml_config['auth_config'] = {}
+        self.yaml_config['auth_config']['use_builtin_domain'] = True
 
         if fq_config_path:
             self.yaml_config["federated_query_config"] = _load_yaml_config(fq_config_path)

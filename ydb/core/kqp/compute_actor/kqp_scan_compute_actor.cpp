@@ -188,7 +188,6 @@ void TKqpScanComputeActor::DoBootstrap() {
     execCtx.RandomProvider = TAppData::RandomProvider.Get();
     execCtx.TimeProvider = TAppData::TimeProvider.Get();
     execCtx.ApplyCtx = nullptr;
-    execCtx.Alloc = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
@@ -219,7 +218,7 @@ void TKqpScanComputeActor::DoBootstrap() {
         };
     }
 
-    auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(GetAllocator(), execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
     auto wakeup = [this] { ContinueExecute(); };

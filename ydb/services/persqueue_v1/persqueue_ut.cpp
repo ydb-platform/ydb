@@ -4561,7 +4561,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         StreamingWriteClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sequenceNumber = 1;
-        auto messageCount = 0;
         const auto message = NUnitTest::RandomString(250_KB, std::rand());
         auto compress = [](TString data, i32 codecID) {
             Y_UNUSED(codecID);
@@ -4581,7 +4580,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             writeRequest->add_blocks_uncompressed_sizes(message.size());
             writeRequest->add_blocks_headers(TString(1, codecID));
             writeRequest->add_blocks_data(compressedMessage);
-            ++messageCount;
         }
         auto session = setup.InitWriteSession();
 

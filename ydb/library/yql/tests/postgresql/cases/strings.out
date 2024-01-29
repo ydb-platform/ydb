@@ -178,6 +178,30 @@ SELECT E'\\xDe00BeEf'::bytea;
  \xde00beef
 (1 row)
 
+SELECT E'DeAdBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465416442654566
+(1 row)
+
+SELECT E'De\\000dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465006442654566
+(1 row)
+
+SELECT E'De\123dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465536442654566
+(1 row)
+
+SELECT E'De\\123dBeEf'::bytea;
+       bytea        
+--------------------
+ \x4465536442654566
+(1 row)
+
 SELECT E'De\\678dBeEf'::bytea;
 ERROR:  invalid input syntax for type bytea
 LINE 1: SELECT E'De\\678dBeEf'::bytea;
@@ -205,6 +229,12 @@ SELECT E'DeAdBeEf'::bytea;
   bytea   
 ----------
  DeAdBeEf
+(1 row)
+
+SELECT E'De\\000dBeEf'::bytea;
+    bytea    
+-------------
+ De\000dBeEf
 (1 row)
 
 SELECT E'De\\123dBeEf'::bytea;

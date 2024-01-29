@@ -147,17 +147,10 @@ class TYsonStructLite
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <std::default_initializable TStruct>
 class TExternalizedYsonStruct
     : public TYsonStructLite
 {
 public:
-    //! NB(arkady-e1ppa): Alias is used by registrar postprocessors
-    //! in order to properly infer template argument.
-    using TExternal = TStruct;
-
-    TStruct* That = nullptr;
-
     //! NB(arkady-e1ppa): Due to still present bug in clang which makes it
     //! incapable of processing constraints, which refer to class template
     //! parameters, we cannot properly constraint TSerializer here and
@@ -167,15 +160,16 @@ public:
     //! replace class with std::derived_from<TExternalizedYsonStruct<TStruct>>
     //! and remove exposition-only "requires" statements
 
-    template <class TSerializer>
+    template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
     static TSerializer CreateWritable(TStruct& writable);
 
-    template <class TSerializer>
+    template <std::default_initializable TStruct, class TSerializer>
         // requires std::derived_from<TSerializer, TExternalizedYsonStruct<TStruct>>
     static TSerializer CreateReadOnly(const TStruct& readOnly);
 
 protected:
+    template <std::default_initializable TStruct>
     static TStruct* GetDefault() noexcept;
 };
 
@@ -341,7 +335,7 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 #define REGISTER_YSON_STRUCT(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and fields. Must be
-//! supplemented by DEFINE_YSON_STRUCT.
+//! supplemented by DEFINE_YSON_STRUCT_LITE.
 #define DECLARE_YSON_STRUCT_LITE(TStruct)
 
 //! Declare non-ref-counted Yson Struct auxiliary methods and define them inplace.
@@ -350,8 +344,13 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 //! Define Yson Struct auxiliary methods out of class.
 #define DEFINE_YSON_STRUCT(TStruct)
 
+//! Define non-ref-counted Yson Struct auxiliary methods out of class.
+#define DEFINE_YSON_STRUCT_LITE(TStruct)
+
 //! Define non-ref-counted Yson external serializer methods and fields.
 #define REGISTER_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer)
+
+#define REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TStruct, TSerializer, TBases)
 
 ////////////////////////////////////////////////////////////////////////////////
 

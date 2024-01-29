@@ -1818,6 +1818,7 @@ public:
         const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats);
 
     const TVector<TResultSet>& GetResultSets() const;
+    TVector<TResultSet> ExtractResultSets() &&;
     TResultSet GetResultSet(size_t resultIndex) const;
 
     TResultSetParser GetResultSetParser(size_t resultIndex) const;

@@ -98,6 +98,10 @@ TTopicSdkTestSetup CreateSetup() {
 
     setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
+
+    setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
 
     return setup;
 }
@@ -209,7 +213,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
     Y_UNIT_TEST(PartitionSplit) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -271,7 +275,7 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
     Y_UNIT_TEST(PartitionMerge) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 

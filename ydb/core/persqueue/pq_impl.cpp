@@ -3969,6 +3969,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+        HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         default:
             return false;
     }

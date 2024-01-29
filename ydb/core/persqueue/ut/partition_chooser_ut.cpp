@@ -605,6 +605,22 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_InactiveA
     UNIT_ASSERT(r->Error);
 }
 
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_OtherPartition_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, "F");
+    AddPartition(config, 1, "F", {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
+
+    WriteToTable(server, "A_Source_10", 0, 13);
+    auto r = ChoosePartition(server, config, "A_Source_10", 1);
+
+    UNIT_ASSERT(r->Error);
+    AssertTable(server, "A_Source_10", 0, 13);
+}
+
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
     NPersQueue::TTestServer server = CreateServer();
 

@@ -877,7 +877,19 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
 
         ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
-        if (!p.Msg.DisableDeduplication && sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) {
+        LOG_TRACE_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicName() << "' partition " << Partition
+                    << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
+                    << " DisableDeduplication=" << p.Msg.DisableDeduplication
+                    << " SeqNo=" << p.Msg.SeqNo
+                    << " LocalSeqNo=" << sourceId.SeqNo()
+                    << " InitialSeqNo=" << p.InitialSeqNo
+        );
+
+        if (!p.Msg.DisableDeduplication
+            && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
+            || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
             if (poffset >= curOffset) {
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
@@ -1216,7 +1228,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-            }, 0};
+            }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
             auto result = ProcessRequest(hbMsg, parameters, request, ctx);

@@ -35,7 +35,6 @@ public:
                            std::optional<ui32> preferedPartition)
         : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
         , Graph(MakePartitionGraph(config)) {
-
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -123,6 +122,9 @@ private:
                 && ev->Get()->Record.HasSeqNo()
                 && ev->Get()->Record.GetSeqNo() > 0) {
             // Fast path: the partition ative and already written
+            TThis::Partition = BoundaryPartition;
+            TThis::SeqNo = ev->Get()->Record.GetSeqNo();
+
             TThis::SendUpdateRequests(ctx);
             return TThis::ReplyResult(ctx);
         }
@@ -186,7 +188,7 @@ private:
         }
 
         TThis::PartitionHelper.Close(ctx);
-        TThis::StartCheckPartitionRequest(ctx);
+        OnPartitionChosen(ctx);
     }
 
     STATEFN(StateGetMaxSeqNo) {

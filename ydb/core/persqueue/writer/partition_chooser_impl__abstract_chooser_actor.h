@@ -73,8 +73,10 @@ protected:
     void InitTable(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
+        TRACE("InitTable: SourceId="<< SourceId 
+              << " TopicsAreFirstClassCitizen=" << pqConfig.GetTopicsAreFirstClassCitizen()
+              << " UseSrcIdMetaMappingInFirstClass=" <<pqConfig.GetUseSrcIdMetaMappingInFirstClass());
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
-            DEBUG("InitTable");
             TableHelper.SendInitTableRequest(ctx);
         } else {
             StartKqpSession(ctx);
@@ -286,6 +288,7 @@ protected:
 
 protected:
     void ReplyResult(const NActors::TActorContext& ctx) {
+        DEBUG("ReplyResult: Partition=" << Partition->PartitionId << ", SeqNo=" << SeqNo);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 

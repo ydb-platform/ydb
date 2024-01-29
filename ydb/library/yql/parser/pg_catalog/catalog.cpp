@@ -1419,6 +1419,7 @@ struct TCatalog {
             {"pg_catalog", "pg_namespace"},
             {"information_schema", "tables"},
             {"information_schema", "columns"},
+            {"information_schema", "table_constraints"},
         }),
         AllStaticColumns({
             {"pg_catalog", "pg_type", "oid", "oid"},
@@ -1496,6 +1497,10 @@ struct TCatalog {
             {"information_schema", "columns", "table_name", "name"},
             {"information_schema", "columns", "column_name", "name"},
             {"information_schema", "columns", "udt_name", "name"},
+
+            {"information_schema", "table_constraints", "constraint_schema", "name"},
+            {"information_schema", "table_constraints", "table_name", "name"},
+            {"information_schema", "table_constraints", "constraint_type", "varchar"},
         })
     {
         for (const auto& t : StaticTables) {
@@ -1506,6 +1511,10 @@ struct TCatalog {
             auto tablePtr = StaticColumns.FindPtr(TTableInfo{c.Schema, c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
+        }
+
+        for (const auto& t : StaticColumns) {
+            Y_ENSURE(!t.second.empty());
         }
 
         TString typeData;

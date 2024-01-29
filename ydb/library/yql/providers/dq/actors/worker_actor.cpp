@@ -94,15 +94,13 @@ public:
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const IDqAsyncIoFactory::TPtr& asyncIoFactory,
         TWorkerRuntimeData* runtimeData,
-        const TString& traceId,
-        bool useSpilling)
+        const TString& traceId)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
         , AsyncIoFactory(asyncIoFactory)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
         , MemoryQuotaManager(new TDummyMemoryQuotaManager)
-        , UseSpilling(useSpilling)
     {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker created ";
@@ -262,8 +260,7 @@ private:
         limits.OutputChunkMaxSize = 2_MB;
 
         auto wakeup = [this]{ ResumeExecution(EResumeSource::Default); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
-            TraceId, UseSpilling, std::move(wakeup));
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TraceId, std::move(wakeup));
 
         Send(TaskRunnerActor, new TEvTaskRunnerCreate(std::move(ev->Get()->Record.GetTask()), limits, NDqProto::DQ_STATS_MODE_BASIC, execCtx));
     }
@@ -796,15 +793,13 @@ private:
     TVector<Yql::DqsProto::TWorkerInfo> AllWorkers;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
-    const bool UseSpilling;
 };
 
 NActors::IActor* CreateWorkerActor(
     TWorkerRuntimeData* runtimeData,
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    const IDqAsyncIoFactory::TPtr& asyncIoFactory,
-    bool useSpilling)
+    const IDqAsyncIoFactory::TPtr& asyncIoFactory)
 {
     Y_ABORT_UNLESS(taskRunnerActorFactory);
     return new TLogWrapReceive(
@@ -812,8 +807,7 @@ NActors::IActor* CreateWorkerActor(
             taskRunnerActorFactory,
             asyncIoFactory,
             runtimeData,
-            traceId,
-            useSpilling), traceId);
+            traceId), traceId);
 }
 
 } // namespace NYql::NDqs

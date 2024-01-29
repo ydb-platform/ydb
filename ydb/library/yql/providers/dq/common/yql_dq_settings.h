@@ -204,6 +204,10 @@ struct TDqSettings {
             return fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
         }
     }
+
+    bool IsSpillingEnabled() const {
+        return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
+    }
 };
 
 struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher {

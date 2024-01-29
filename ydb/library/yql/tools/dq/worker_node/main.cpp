@@ -406,23 +406,25 @@ int main(int argc, char** argv) {
                 })
             : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory, functionRegistry.Get());
         lwmOptions.ComputeActorOwnsCounters = true;
-        lwmOptions.UseSpilling = res.Has("enable-spilling");
+        bool enableSpilling = res.Has("enable-spilling");
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);
 
         auto workerManagerActorId = actorSystem->Register(resman);
         actorSystem->RegisterLocalService(MakeWorkerManagerActorID(nodeId), workerManagerActorId);
 
-        auto spillingActor = actorSystem->Register(
-            NDq::CreateDqLocalFileSpillingService(
-                NDq::TFileSpillingServiceConfig{
-                    .Root = "./spilling",
-                    .CleanupOnShutdown = true
-                },
-                MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
-            )
-        );
+        if (enableSpilling) {
+            auto spillingActor = actorSystem->Register(
+                NDq::CreateDqLocalFileSpillingService(
+                    NDq::TFileSpillingServiceConfig{
+                        .Root = "./spilling",
+                        .CleanupOnShutdown = true
+                    },
+                    MakeIntrusive<NDq::TSpillingCounters>(dqSensors)
+                )
+            );
 
-        actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+            actorSystem->RegisterLocalService(NDq::MakeDqLocalFileSpillingServiceID(nodeId), spillingActor);
+        }
 
         auto endFuture = ShouldContinue.GetFuture();
 

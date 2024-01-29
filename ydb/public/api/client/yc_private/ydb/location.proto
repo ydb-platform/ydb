@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+option go_package = "a.yandex-team.ru/ydb/public/api/client/yc_private/ydb;ydb";
+
+message Location {
+  string id = 1;
+  string description = 2;
+}

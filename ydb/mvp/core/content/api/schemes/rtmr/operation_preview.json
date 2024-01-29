@@ -1,0 +1,291 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Operation preview info",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "operation",
+            "in": "query",
+            "description": "RTMR operation",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title" : "Operation preview",
+                    "required": [],
+                    "properties": {
+                        "operation": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "records": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "timestamp": {
+                                                "type": "integer",
+                                                "format": "int64"
+                                            },
+                                            "input": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "tables": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "columns": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "key": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "type": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "records": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "timestamp": {
+                                                                                "type": "integer",
+                                                                                "format": "int64"
+                                                                            },
+                                                                            "data": {
+                                                                                "type": "object",
+                                                                                "required": [],
+                                                                                "properties": {
+                                                                                    "Key": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "SubKey": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "Value": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "state": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "columns": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "key": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "type": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "records": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "timestamp": {
+                                                                                "type": "integer",
+                                                                                "format": "int64"
+                                                                            },
+                                                                            "data": {
+                                                                                "type": "object",
+                                                                                "required": [],
+                                                                                "properties": {
+                                                                                    "Key": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "SubKey": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "Value": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "output": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "tables": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "columns": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "key": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "type": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "records": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "timestamp": {
+                                                                                "type": "integer",
+                                                                                "format": "int64"
+                                                                            },
+                                                                            "data": {
+                                                                                "type": "object",
+                                                                                "required": [],
+                                                                                "properties": {
+                                                                                    "Key": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "SubKey": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "Value": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "state": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "columns": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "name": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "key": {
+                                                                                "type": "boolean"
+                                                                            },
+                                                                            "type": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "records": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "timestamp": {
+                                                                                "type": "integer",
+                                                                                "format": "int64"
+                                                                            },
+                                                                            "data": {
+                                                                                "type": "object",
+                                                                                "required": [],
+                                                                                "properties": {
+                                                                                    "Key": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "SubKey": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "Value": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "id": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

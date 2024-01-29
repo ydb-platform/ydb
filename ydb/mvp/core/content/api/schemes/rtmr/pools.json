@@ -1,0 +1,150 @@
+{
+    "get": {
+        "tags": ["RTMR"],
+        "produces": ["application/json"],
+        "summary": "Lists pools",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "RTMR installation",
+            "required": true,
+            "type": "string"
+        },{
+            "name": "location",
+            "in": "query",
+            "description": "RTMR location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "account",
+            "in": "query",
+            "description": "list pools for specified account in specific location",
+            "required": false,
+            "type": "string"
+        },{
+            "name": "pool",
+            "in": "query",
+            "description": "get data for specific pool in specific location",
+            "required": false,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title": "ListPoolsResult",
+                    "required": ["locations"],
+                    "properties": {
+                        "locations": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["location", "pools"],
+                                "properties": {
+                                    "location": {
+                                        "type": "string"
+                                    },
+                                    "pools": {
+                                        "title" : "PoolsList",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "title" : "Pool",
+                                            "required": ["account", "pool"],
+                                            "properties": {
+                                                "location": {
+                                                    "type": "string"
+                                                },
+                                                "account": {
+                                                    "type": "string"
+                                                },
+                                                "pool": {
+                                                    "type": "string"
+                                                },
+                                                "owner": {
+                                                    "type": "string"
+                                                },
+                                                "my": {
+                                                    "type": "boolean"
+                                                },
+                                                "inputBytes": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "inputBytesDiscarded": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedRead": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedExec": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuConsumedLoadState": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "vcpuCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "flowCurrentLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageConsumed": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "storageLimit": {
+                                                    "type": "number",
+                                                    "format": "double"
+                                                },
+                                                "operations": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "tasks": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "tables": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                },
+                                                "weight": {
+                                                    "type": "integer",
+                                                    "format": "int64"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

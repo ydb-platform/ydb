@@ -1,0 +1,54 @@
+{
+  "get": {
+    "consumes": [
+      "application/json"
+    ],
+    "description": "describe topic's consumer",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database with topic",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "topic path",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "consumer name",
+        "in": "query",
+        "name": "consumer",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation"
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "describe topic consumer",
+    "tags": [
+      "YDBC"
+    ]
+  }
+}
+

@@ -1,0 +1,25 @@
+{
+    "title" : "TError",
+    "type": "object",
+    "required" : ["code"],
+    "properties": {
+        "code" : {
+            "type": "integer",
+            "description" : "HTTP status code closest to real failed operation status code"
+        },
+        "status": {
+            "type": "string",
+            "description" : "String representation of HTTP status code closest to real failed operation status code"
+        },
+        "message": {
+            "type": "string"
+        },
+        "details" : {
+            "type": "array",
+            "description": "Additional error details",
+            "items": {
+                "type": "object"
+            }
+        }
+    }
+}

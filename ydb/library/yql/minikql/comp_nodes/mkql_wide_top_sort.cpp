@@ -327,8 +327,6 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
 
@@ -345,6 +343,7 @@ public:
 
         for (auto i = 0U; i < getters.size(); ++i) {
             getters[Indexes[i]] = [i, outs, indexType, valueType, outputPtrType, outputType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto values = new LoadInst(outputPtrType, outs, "values", block);
                 const auto pointer = GetElementPtrInst::CreateInBounds(outputType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
                 return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
@@ -438,7 +437,7 @@ public:
             }
 
             if constexpr (!HasCount) {
-                for (auto i = 0; i < Representations.size(); ++i) {
+                for (auto i = 0U; i < Representations.size(); ++i) {
                     const auto item = getres.second[Indexes[i]](ctx, block);
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);

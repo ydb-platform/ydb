@@ -949,7 +949,6 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -1139,7 +1138,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -1460,7 +1458,6 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
@@ -1658,7 +1655,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());

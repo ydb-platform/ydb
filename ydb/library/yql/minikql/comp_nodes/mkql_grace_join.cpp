@@ -637,11 +637,6 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto contextType = GetCompContextType(context);
-        const auto statusType = Type::getInt32Ty(context);
-
 
         const auto arrayType = ArrayType::get(valueType, OutputRepresentations.size());
         const auto fieldsType = ArrayType::get(PointerType::getUnqual(valueType), OutputRepresentations.size());
@@ -663,6 +658,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
 
             getters[i] = [i, values, indexType, arrayType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
                 return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };

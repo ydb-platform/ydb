@@ -998,18 +998,23 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         Ctest << result.ShortDebugString();
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        
+        bool databaseFoundInResult = false;
+        for (const auto &database_status : result.database_status()) {
+            if (database_status.name() == "/Root/serverless") {
+                databaseFoundInResult = true;
+                UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::GREEN);
 
-        const auto &database_status = result.database_status(0);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root/serverless");
-        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::GREEN);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::GREEN);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(exclusiveDynNodeId));
 
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::GREEN);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().nodes()[0].id(), ToString(exclusiveDynNodeId));
-
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), SHARED_STORAGE_POOL_NAME);
+            }
+        }
+        UNIT_ASSERT(databaseFoundInResult);
     }
     
     Y_UNIT_TEST(ServerlessWhenTroublesWithSharedNodes) {
@@ -1078,7 +1083,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         Ctest << result.ShortDebugString();
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
-
 
         UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
         const auto &database_status = result.database_status(0);

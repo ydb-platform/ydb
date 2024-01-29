@@ -1,5 +1,5 @@
 #include "tx_controller.h"
-#include "columnshard_impl.h"
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -64,13 +64,30 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         }
 
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
-        Y_ABORT_UNLESS(Owner.LoadTx(txId, txInfo.TxKind, txBody));
+        ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+        Y_ABORT_UNLESS(!!txOperator);
+        Y_ABORT_UNLESS(txOperator->Parse(txBody));
+        Operators[txId] = txOperator;
 
         if (!rowset.Next()) {
             return false;
         }
     }
     return true;
+}
+
+TTxController::ITransactionOperatior::TPtr TTxController::GetTxOperator(const ui64 txId) {
+    auto it = Operators.find(txId);
+    if(it == Operators.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+TTxController::ITransactionOperatior::TPtr TTxController::GetVerifiedTxOperator(const ui64 txId) {
+    auto it = Operators.find(txId);
+    AFL_VERIFY(it != Operators.end())("tx_id", txId);
+    return it->second;
 }
 
 const TTxController::TBasicTxInfo& TTxController::RegisterTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody, const TActorId& source, const ui64 cookie, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -81,6 +98,12 @@ const TTxController::TBasicTxInfo& TTxController::RegisterTx(const ui64 txId, co
     txInfo.TxKind = txKind;
     txInfo.Source = source;
     txInfo.Cookie = cookie;
+
+    ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+    Y_ABORT_UNLESS(!!txOperator);
+    Y_ABORT_UNLESS(txOperator->Parse(txBody));
+    Operators[txId] = txOperator;
+
     Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, Max<ui64>(), txInfo.Source, txInfo.Cookie);
     return txInfo;
 }
@@ -95,6 +118,12 @@ const TTxController::TBasicTxInfo& TTxController::RegisterTxWithDeadline(const u
     txInfo.Cookie = cookie;
     txInfo.MinStep = GetAllowedStep();
     txInfo.MaxStep = txInfo.MinStep + MaxCommitTxDelay.MilliSeconds();
+
+    ITransactionOperatior::TPtr txOperator(ITransactionOperatior::TFactory::Construct(txInfo.TxKind, txInfo));
+    Y_ABORT_UNLESS(!!txOperator);
+    Y_ABORT_UNLESS(txOperator->Parse(txBody));
+    Operators[txId] = txOperator;
+
     Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
     DeadlineQueue.emplace(txInfo.MaxStep, txId);
     return txInfo;
@@ -106,11 +135,16 @@ bool TTxController::AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionCo
         return true;
     }
     Y_ABORT_UNLESS(it->second.PlanStep == 0);
-    Owner.AbortTx(txId, it->second.TxKind, txc);
+
+    auto opIt = Operators.find(txId);
+    Y_ABORT_UNLESS(opIt != Operators.end());
+    opIt->second->Abort(Owner, txc);
+
     if (it->second.MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
     }
     BasicTxInfo.erase(it);
+    Operators.erase(txId);
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, txId);
     return true;
@@ -125,11 +159,16 @@ bool TTxController::CancelTx(const ui64 txId, NTabletFlatExecutor::TTransactionC
         // Cannot cancel planned transaction
         return false;
     }
-    Owner.AbortTx(txId, it->second.TxKind, txc);
+
+    auto opIt = Operators.find(txId);
+    Y_ABORT_UNLESS(opIt != Operators.end());
+    opIt->second->Abort(Owner, txc);
+
     if (it->second.MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(it->second.MaxStep, txId));
     }
     BasicTxInfo.erase(it);
+    Operators.erase(txId);
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, txId);
     return true;
@@ -152,6 +191,7 @@ void TTxController::FinishPlannedTx(const ui64 txId, NTabletFlatExecutor::TTrans
     NIceDb::TNiceDb db(txc.DB);
 
     BasicTxInfo.erase(txId);
+    Operators.erase(txId);
     Schema::EraseTxInfo(db, txId);
 }
 
@@ -217,4 +257,15 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
     return EPlanResult::AlreadyPlanned;
 }
 
+void TTxController::OnTabletInit() {
+    for (auto&& txOperator : Operators) {
+        txOperator.second->OnTabletInit(Owner);
+    }
+}
+
+}
+
+template <>
+void Out<NKikimrTxColumnShard::ETransactionKind>(IOutputStream& out, TTypeTraits<NKikimrTxColumnShard::ETransactionKind>::TFuncParam txKind) {
+    out << (ui64) txKind;
 }

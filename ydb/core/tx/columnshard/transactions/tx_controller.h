@@ -1,6 +1,6 @@
 #pragma once
 
-#include "columnshard_schema.h"
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -36,6 +36,54 @@ public:
         NKikimrTxColumnShard::ETransactionKind TxKind;
     };
 
+    class TProposeResult {
+        YDB_READONLY(NKikimrTxColumnShard::EResultStatus, Status, NKikimrTxColumnShard::EResultStatus::PREPARED);
+        YDB_READONLY_DEF(TString, StatusMessage);
+    public:
+        TProposeResult() = default;
+        TProposeResult(NKikimrTxColumnShard::EResultStatus status, const TString& statusMessage)
+            : Status(status)
+            , StatusMessage(statusMessage)
+        {}
+
+        bool operator!() const {
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED;
+        }
+    };
+
+    class ITransactionOperatior {
+    protected:
+        TBasicTxInfo TxInfo;
+    public:
+        using TPtr = std::shared_ptr<ITransactionOperatior>;
+        using TFactory = NObjectFactory::TParametrizedObjectFactory<ITransactionOperatior, NKikimrTxColumnShard::ETransactionKind, TBasicTxInfo>;
+
+        ITransactionOperatior(const TBasicTxInfo& txInfo)
+            : TxInfo(txInfo)
+        {}
+
+        ui64 GetTxId() const {
+            return TxInfo.TxId;
+        }
+
+        virtual ~ITransactionOperatior() {}
+
+        virtual bool TxWithDeadline() const {
+            return true;
+        }
+
+        virtual bool Parse(const TString& data) = 0;
+        virtual TProposeResult Propose(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, bool proposed) const = 0;
+
+        virtual bool Progress(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual bool Complete(TColumnShard& owner, const TActorContext& ctx) = 0;
+        virtual void RegisterSubscriber(const TActorId&) {
+            AFL_VERIFY(false)("message", "Not implemented");
+        };
+        virtual void OnTabletInit(TColumnShard& /*owner*/) {}
+    };
+
 private:
     const TDuration MaxCommitTxDelay = TDuration::Seconds(30);
     TColumnShard& Owner;
@@ -44,12 +92,17 @@ private:
     std::set<TPlanQueueItem> PlanQueue;
     std::set<TPlanQueueItem> RunningQueue;
 
+    THashMap<ui64, ITransactionOperatior::TPtr> Operators;
+
 private:
     ui64 GetAllowedStep() const;
     bool AbortTx(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
 
 public:
     TTxController(TColumnShard& owner);
+
+    ITransactionOperatior::TPtr GetTxOperator(const ui64 txId);
+    ITransactionOperatior::TPtr GetVerifiedTxOperator(const ui64 txId);
 
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
@@ -79,6 +132,8 @@ public:
     };
 
     EPlanResult PlanTx(const ui64 planStep, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void OnTabletInit();
 };
 
 }
+

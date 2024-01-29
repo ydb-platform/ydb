@@ -252,7 +252,7 @@ int BuildAST(int argc, char* argv[]) {
             queries.push_back(queryString);
         }
 
-        for (const auto query: queries) {
+        for (const auto& query: queries) {
             if (query.empty()) {
                 continue;
             }

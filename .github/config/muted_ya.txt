@@ -20,6 +20,7 @@ ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDat
 ydb/core/kqp/ut/federated_query/generic *
 ydb/core/kqp/ut/olap *
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
+ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.QueryWithAlter
@@ -61,8 +62,10 @@ ydb/services/ydb/sdk_sessions_ut [6/10]*
 ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
+ydb/services/ydb/ut YdbScripting.BasicV0
+ydb/services/ydb/ut YdbYqlClient.TestYqlSessionClosed
 ydb/tests/fq/generic *
-ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_node_limit[kikimr0]
+ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane sole*
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*

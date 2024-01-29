@@ -18,6 +18,9 @@
 
 extern "C" {
 Y_PRAGMA_DIAGNOSTIC_PUSH
+#ifdef _win_
+Y_PRAGMA("GCC diagnostic ignored \"-Wshift-count-overflow\"")
+#endif
 Y_PRAGMA("GCC diagnostic ignored \"-Wunused-parameter\"")
 #include "postgres.h"
 #include "miscadmin.h"

@@ -228,7 +228,7 @@ public:
         TTabletId HiveId = {};
         TPathId ResourcePathId = {};
         TVector<TNodeId> ComputeNodeIds;
-        TVector<TString> StoragePoolNames;
+        THashSet<TString> StoragePoolNames;
         THashMap<std::pair<TTabletId, NNodeWhiteboard::TFollowerId>, const NKikimrHive::TTabletInfo*> MergedTabletState;
         THashMap<TNodeId, TNodeTabletState> MergedNodeTabletState;
         THashMap<TNodeId, ui32> NodeRestartsPerPeriod;
@@ -594,7 +594,7 @@ public:
                     StoragePoolState[storagePoolName].Groups.emplace(group.groupid());
 
                     if (!IsSpecificDatabaseFilter()) {
-                        DatabaseState[DomainPath].StoragePoolNames.emplace_back(storagePoolName);
+                        DatabaseState[DomainPath].StoragePoolNames.emplace(storagePoolName);
                     }
                 }
             }
@@ -870,12 +870,12 @@ public:
             TDatabaseState& state(DatabaseState[path]);
             for (const auto& storagePool : ev->Get()->GetRecord().pathdescription().domaindescription().storagepools()) {
                 TString storagePoolName = storagePool.name();
-                state.StoragePoolNames.emplace_back(storagePoolName);
+                state.StoragePoolNames.emplace(storagePoolName);
                 StoragePoolState[storagePoolName].Kind = storagePool.kind();
                 RequestSelectGroups(storagePoolName);
             }
             if (path == DomainPath) {
-                state.StoragePoolNames.emplace_back(STATIC_STORAGE_POOL_NAME);
+                state.StoragePoolNames.emplace(STATIC_STORAGE_POOL_NAME);
             }
             state.StorageUsage = ev->Get()->GetRecord().pathdescription().domaindescription().diskspaceusage().tables().totalsize();
             state.StorageQuota = ev->Get()->GetRecord().pathdescription().domaindescription().databasequotas().data_size_hard_quota();
@@ -890,15 +890,17 @@ public:
             auto domainInfo = ev->Get()->Request->ResultSet.begin()->DomainInfo;
             TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
             if (domainInfo->IsServerless()) {
-                if (NeedIgnoreServerless(domainInfo)) {
-                    DatabaseState.erase(path);
-                    DatabaseStatusByPath.erase(path);
-                } else {
+                if (NeedHealthCheckForServerless(domainInfo)) {
                     if (SharedDatabases.emplace(domainInfo->ResourcesDomainKey, path).second) {
                         RequestSchemeCacheNavigate(domainInfo->ResourcesDomainKey);
                     }
                     DatabaseState[path].ResourcePathId = domainInfo->ResourcesDomainKey;
                     DatabaseState[path].ServerlessComputeResourcesMode = domainInfo->ServerlessComputeResourcesMode;
+                } else {
+                    DatabaseState.erase(path);
+                    DatabaseStatusByPath.erase(path);
+                    RequestDone("TEvNavigateKeySetResult");
+                    return;
                 }
             }
             TTabletId hiveId = domainInfo->Params.GetHive();
@@ -924,9 +926,9 @@ public:
         RequestDone("TEvNavigateKeySetResult");
     }
 
-    bool NeedIgnoreServerless(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) const {
-        return !IsSpecificDatabaseFilter() // we don't ignore sl database if it was exactly specified
-            && domainInfo->ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive;
+    bool NeedHealthCheckForServerless(TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) const {
+        return IsSpecificDatabaseFilter()
+            || domainInfo->ServerlessComputeResourcesMode == NKikimrSubDomains::EServerlessComputeResourcesModeExclusive;
     }
 
     void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
@@ -1956,8 +1958,7 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (databaseState.StoragePoolNames.empty()) {
-            // pointless in real life
-            // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools");
+            context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "There are no storage pools info");
         } else {
             for (const TString& poolName : databaseState.StoragePoolNames) {
                 auto itStoragePoolState = StoragePoolState.find(poolName);
@@ -2131,7 +2132,7 @@ public:
             TDatabaseState unknownDatabase;
             for (auto& [name, pool] : StoragePoolState) {
                 if (StoragePoolSeen.count(name) == 0) {
-                    unknownDatabase.StoragePoolNames.push_back(name);
+                    unknownDatabase.StoragePoolNames.insert(name);
                 }
             }
             if (!unknownDatabase.StoragePoolNames.empty()) {

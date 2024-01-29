@@ -1503,7 +1503,7 @@ struct TCatalog {
         }
 
         for (const auto& c: AllStaticColumns) {
-            auto tablePtr = StaticColumns.FindPtr(TTableInfo(c.Schema, c.TableName));
+            auto tablePtr = StaticColumns.FindPtr(TTableInfo{c.Schema, c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
         }

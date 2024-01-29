@@ -11,6 +11,7 @@ import "ydb/public/api/client/yc_private/oauth/sensitive.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 import "ydb/public/api/client/yc_public/common/validation.proto";
 
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/resourcemanager/v1;resourcemanager";
 option java_outer_classname = "PCS";
 
 service CloudService {

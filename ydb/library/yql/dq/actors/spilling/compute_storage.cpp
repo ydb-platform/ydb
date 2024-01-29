@@ -22,9 +22,9 @@ namespace {
 
 class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller {
 public:
-    TDqComputeStorage(TTxId txId, const TString& spillerName) {
+    TDqComputeStorage(TTxId txId, const TString& spillerName, std::function<void()>&& wakeUpCallback) {
 
-        SelfActor_ = CreateDqComputeStorageActor(txId, spillerName);
+        SelfActor_ = CreateDqComputeStorageActor(txId, spillerName, std::move(wakeUpCallback));
         SelfActorId_ = TlsActivationContext->AsActorContext().Register(SelfActor_->GetActor());
         SelfId_ = TlsActivationContext->AsActorContext().SelfID;
     }
@@ -57,8 +57,8 @@ private:
 
 } // anonymous namespace
 
-NKikimr::NMiniKQL::ISpiller::TPtr MakeSpiller(const TString& spillerName) {
-    return std::make_shared<TDqComputeStorage>(TTxId(), spillerName);
+NKikimr::NMiniKQL::ISpiller::TPtr MakeSpiller(const TString& spillerName, std::function<void()>&& wakeUpCallback) {
+    return std::make_shared<TDqComputeStorage>(TTxId(), spillerName, std::move(wakeUpCallback));
 }
 
 } // namespace NYql::NDq

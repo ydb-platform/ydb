@@ -42,9 +42,10 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()>&& wakeupCallback)
         : TxId_(txId),
-        SpillerName_(spillerName)
+        SpillerName_(spillerName),
+        WakeupCallback_(wakeupCallback)
     {
     }
 
@@ -192,6 +193,7 @@ private:
 
         // complete future and wake up waiting compute node
         promise.SetValue(msg.BlobId);
+        WakeupCallback_();
     }
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
@@ -221,12 +223,14 @@ private:
             UpdateStatsAfterBlobDeletion(msg.BlobId, msg.Blob.Size());
         }
 
-        TRope res(std::move(msg.Blob.Data()));
+        TRope res(TString(reinterpret_cast<const char*>(msg.Blob.Data()), msg.Blob.Size()));
 
         auto& promise = it->second.second;
         promise.SetValue(std::move(res));
 
         LoadingBlobs_.erase(it);
+
+        WakeupCallback_();
     }
 
     void HandleWork(TEvDqSpilling::TEvError::TPtr& ev) {
@@ -289,6 +293,8 @@ private:
 
     bool IsInitialized_ = false;
 
+    std::function<void()> WakeupCallback_;
+
     private:
     std::mutex Mutex_;
 
@@ -296,8 +302,8 @@ private:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName) {
-    return new TDqComputeStorageActor(txId, spillerName);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()>&& wakeupCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, std::move(wakeupCallback));
 }
 
 } // namespace NYql::NDq

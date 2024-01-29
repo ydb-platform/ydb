@@ -268,6 +268,10 @@ public:
         return TaskId;
     }
 
+    void SetWakeUpCallback(std::function<void()>&& callback) override {
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().WakeUpCallback = std::move(callback);
+    }
+
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {
         return Context.PatternCache &&
             (Settings.OptLLVM == "OFF" || taskSettings.IsLLVMDisabled() || Settings.UseCacheForLLVM);

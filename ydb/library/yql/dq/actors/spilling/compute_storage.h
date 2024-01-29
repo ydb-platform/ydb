@@ -10,6 +10,6 @@ namespace NActors {
 
 namespace NYql::NDq {
 
-NKikimr::NMiniKQL::ISpiller::TPtr MakeSpiller(const TString& spillerName);
+NKikimr::NMiniKQL::ISpiller::TPtr MakeSpiller(const TString& spillerName, std::function<void()>&& wakeUpCallback);
 
 } // namespace NYql::NDq

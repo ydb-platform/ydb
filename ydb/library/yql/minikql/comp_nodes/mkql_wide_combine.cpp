@@ -364,7 +364,7 @@ public:
                     break;
                 }
                 case EOperatingMode::SpillState: {
-                    SpillState();
+                    SpillState(ctx);
                     if (GetMode() == EOperatingMode::SpillState) {
                         return AsyncWrite();
                     }
@@ -423,7 +423,7 @@ private:
                         static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                     );
                     if (IsSwitchToSpillingModeCondition()) {
-                        SwitchMode(EOperatingMode::SpillState);
+                        SwitchMode(EOperatingMode::SpillState, ctx);
                         return EFetchResult::Yield;
                     }
                     continue;
@@ -441,7 +441,7 @@ private:
         return EFetchResult::Finish;
     }
 
-    void SpillState() {
+    void SpillState(TComputationContext& ctx) {
         // mini State machine that:
         //1. Spills InMemoryProcessingState
         //2. Finilizes buckets
@@ -479,7 +479,7 @@ private:
             }
         }
         InMemoryProcessingState.ReadMore<false>();
-        SwitchMode(EOperatingMode::SpillData);
+        SwitchMode(EOperatingMode::SpillData, ctx);
     }
 
     void SpillData(TComputationContext& ctx) {
@@ -532,7 +532,7 @@ private:
                 return;
             }
         }
-        SwitchMode(EOperatingMode::ProcessSpilled);
+        SwitchMode(EOperatingMode::ProcessSpilled, ctx);
     }
 
     EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output){
@@ -613,7 +613,7 @@ private:
             (AsyncReadOperation.has_value() && !AsyncReadOperation->HasValue());
     }
 
-    void SwitchMode(EOperatingMode mode) {
+    void SwitchMode(EOperatingMode mode, TComputationContext& ctx) {
         MKQL_ENSURE(!AsyncReadOperation, "Internal logic error");
         MKQL_ENSURE(!AsyncWriteOperation, "Internal logic error");
         switch(mode) {
@@ -623,7 +623,7 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                Spiller = NYql::NDq::MakeSpiller("My spiller");
+                Spiller = NYql::NDq::MakeSpiller("My spiller", std::move(ctx.WakeUpCallback));
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

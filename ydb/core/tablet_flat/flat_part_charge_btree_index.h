@@ -91,6 +91,8 @@ public:
             // tryHandleChild may update them, copy for simplicity
             // always load beginRowId regardless of keys
             const TRowId levelBeginRowId = beginRowId, levelEndRowId = Max(endRowId, beginRowId + 1);
+
+            const TChild* firstChild = nullptr;
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
                     continue;
@@ -104,11 +106,24 @@ public:
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
+                    auto child = node.GetChildRef(pos);
                     auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
                     TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
+                    TRowId endRowId = child->RowCount;
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
+                    if (itemsLimit || bytesLimit) {
+                        if (!firstChild) {
+                            // do not apply limit on first child because beginRowId/key1 position is uncertain
+                            firstChild = child;
+                        } else {
+                            if (itemsLimit) {
+                                ui64 items = child->GetNonErasedRowCount() - firstChild->GetNonErasedRowCount();
+                                if (LimitExceeded(items, itemsLimit)) {
+                                    return;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -185,7 +200,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -199,7 +214,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -336,7 +351,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -350,26 +365,32 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
 
 private:
-    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId) const noexcept {
+    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
+            if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
+                endRowId = beginRowId + itemsLimit + 1;
+            }
+
             for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId);
+                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
             }
         }
 
         return ready;
     }
 
-    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId) const noexcept {
+    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
+
+        Y_UNUSED(bytesLimit);
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
@@ -459,6 +480,10 @@ private:
             ? 0
             // Missing point cells are filled with a virtual +inf
             : (left.size() > right.size() ? -1 : 1);
+    }
+
+    bool LimitExceeded(ui64 value, ui64 limit) const noexcept {
+        return limit && value > limit;
     }
 
 private:

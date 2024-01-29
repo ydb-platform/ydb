@@ -25,7 +25,10 @@ using namespace NYql;
 using namespace NYql::NCodegen;
 
 extern "C" {
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 #include <ydb/library/yql/parser/pg_wrapper/pg_kernels_fwd.inc>
+Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 enum class EKernelFlavor {

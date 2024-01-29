@@ -66,9 +66,10 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        bool ready = true, overshot = true;
+        bool ready = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
 
+        Y_UNUSED(itemsLimit);
         Y_UNUSED(bytesLimit);
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
@@ -78,10 +79,6 @@ public:
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
             chargeGroups = false;
-        }
-
-        if (!key1) {
-            ApplyItemsLimit(beginRowId, endRowId, itemsLimit, overshot);
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -113,9 +110,18 @@ public:
             }
         };
 
+        const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == key1PageId) {
+                beginRowId = Max(beginRowId, child.EndRowId);
+            }
+            if (child.PageId == key2PageId) {
+                endRowId = Min(endRowId, child.BeginRowId);
+            }
+        };
+
         const auto tryHandleNode = [&](TChildState child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
-                if (TryLoadNode(child, nextLevel)) { // update beginRowId, endRowId
+                if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -123,8 +129,6 @@ public:
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
                         }
-                        // simulate the worst case when we skip key1 page
-                        ApplyItemsLimit(node.GetShortChild(pos).RowCount, endRowId, itemsLimit, overshot);
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -135,21 +139,8 @@ public:
                         }
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        if (itemsLimit) {
-                            if (itemsLimit > child.EndRowId - child.BeginRowId) {
-                                itemsLimit -= child.EndRowId - child.BeginRowId;
-                                ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
-                            } else {
-                                chargeGroups = false;
-                            }
-                        }
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -160,39 +151,22 @@ public:
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
             if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
-                if (page) { // update beginRowId, endRowId
+                if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.PageId == key1PageId) {
                         TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults).Off();
                         beginRowId = Max(beginRowId, key1RowId);
-                        ApplyItemsLimit(key1RowId, endRowId, itemsLimit, overshot);
                     }
                     if (child.PageId == key2PageId) {
                         TRowId key2RowId = data.BaseRow() + data.LookupKey(key2, Scheme.Groups[0], ESeek::Upper, &keyDefaults).Off();
                         endRowId = Min(endRowId, key2RowId);
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        if (itemsLimit) {
-                            if (itemsLimit > child.EndRowId - child.BeginRowId) {
-                                itemsLimit -= child.EndRowId - child.BeginRowId;
-                                ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
-                            } else {
-                                chargeGroups = false;
-                            }
-                        }
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
-                if (child.PageId == key1PageId) {
-                    ApplyItemsLimit(child.EndRowId, endRowId, itemsLimit, overshot);
-                }
                 return HasDataPage(child.PageId, { });
             }
         };
@@ -214,7 +188,7 @@ public:
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        overshot &= endRowId == sliceEndRowId;
+        bool overshot = endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
@@ -276,9 +250,18 @@ public:
             }
         };
 
+        const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == key1PageId) {
+                endRowId = Min(endRowId, child.BeginRowId);
+            }
+            if (child.PageId == key2PageId) {
+                beginRowId = Max(beginRowId, child.EndRowId);
+            }
+        };
+
         const auto tryHandleNode = [&](TChildState child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
-                if (TryLoadNode(child, nextLevel)) { // update beginRowId, endRowId
+                if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -296,13 +279,8 @@ public:
                         }                        
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -313,7 +291,7 @@ public:
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
             if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
-                if (page) { // update beginRowId, endRowId
+                if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.PageId == key1PageId) {
                         auto iter = data.LookupKeyReverse(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
@@ -334,13 +312,8 @@ public:
                         }
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -448,13 +421,6 @@ private:
     }
 
 private:
-    void ApplyItemsLimit(TRowId beginRowId, TRowId &endRowId, ui64 itemsLimit, bool &overshot) const noexcept {
-        if (itemsLimit && endRowId > beginRowId && endRowId - beginRowId - 1 >= itemsLimit) {
-            endRowId = beginRowId + itemsLimit + 1;
-            overshot = false;
-        }
-    }
-
     const TSharedData* TryGetDataPage(TPageId pageId, TGroupId groupId) const noexcept {
         return Env->TryGetPage(Part, pageId, groupId);
     };

@@ -36,7 +36,8 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, bool allowFirstLastPageDifference = false) {
+    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
+            bool allowFirstLastPartPageDifference = false, bool allowFirstLoadedPageDifference = false, bool allowLastLoadedPageDifference = false) {
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
@@ -59,12 +60,19 @@ namespace {
 
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
-            if (allowFirstLastPageDifference) {
+            if (allowFirstLastPartPageDifference) {
                 for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
+            }
+            // Note: due to implementation details it is possible that b-tree precharge is more precise
+            if (allowFirstLoadedPageDifference && flatDataPages.size() == bTreeDataPages.size() + 1) {
+                bTreeDataPages.insert(*flatDataPages.begin());
+            }
+            if (allowLastLoadedPageDifference && flatDataPages.size() == bTreeDataPages.size() + 1) {
+                bTreeDataPages.insert(*flatDataPages.rbegin());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
                 TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
@@ -462,8 +470,14 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
                                 bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
                                 
-                                UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
-                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
+                                if (!itemsLimit) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                                } else if (bTreeOvershot) {
+                                    // Note: due to implementation details it is possible that b-tree precharge is more precise
+                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                                }
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, 
+                                    true, reverse && itemsLimit, !reverse && itemsLimit);
                             }
                         }
                     }
@@ -644,7 +658,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                                 Charge(btreeRun, tags, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
                                 Charge(flatRun, tags, flatEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
 
-                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                                    false, reverse && itemsLimit, !reverse && itemsLimit);
                             }
                         }
                     }

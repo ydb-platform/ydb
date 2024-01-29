@@ -101,9 +101,12 @@ namespace NKikimr::NTable::NPage {
 
             auto operator<=>(const TChild&) const = default;
 
-            TString ToString() const noexcept
-            {
+            TString ToString() const noexcept {
                 return TStringBuilder() << "PageId: " << PageId << " RowCount: " << RowCount << " DataSize: " << DataSize << " ErasedRowCount: " << ErasedRowCount;
+            }
+
+            TRowId GetNonErasedRowCount() const noexcept {
+                return RowCount - ErasedRowCount;
             }
         } Y_PACKED;
 

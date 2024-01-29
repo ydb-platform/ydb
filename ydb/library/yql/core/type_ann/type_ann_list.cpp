@@ -1306,18 +1306,15 @@ namespace {
         return i >= input->ChildrenSize() ? builder : AddChildren(builder.Add(i, input->ChildPtr(i)), ++index, input);
     }
 
-    template<i32 MinArgsCount = 2U, i32 MaxArgsCount = MinArgsCount, bool UseFlatMap = false>
+    template<ui32 MinArgsCount = 2U, ui32 MaxArgsCount = MinArgsCount, bool UseFlatMap = false>
     IGraphTransformer::TStatus OptListWrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx,
         TStringBuf name) {
-        if (MinArgsCount != -1 && MinArgsCount == MaxArgsCount) {
+        if (MinArgsCount == MaxArgsCount) {
             if (!EnsureArgsCount(*input, MinArgsCount, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         } else {
-            if (MinArgsCount != -1 && !EnsureMinArgsCount(*input, MinArgsCount, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (MaxArgsCount != -1 && !EnsureMaxArgsCount(*input, MaxArgsCount, ctx.Expr)) {
+            if (!(EnsureMinArgsCount(*input, MinArgsCount, ctx.Expr) && EnsureMaxArgsCount(*input, MaxArgsCount, ctx.Expr))) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
@@ -1395,11 +1392,11 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListHeadWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<1, 1, true>(input, output, ctx, "Head");
+        return OptListWrapperImpl<1U, 1U, true>(input, output, ctx, "Head");
     }
 
     IGraphTransformer::TStatus ListLastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<1, 1, true>(input, output, ctx, "Last");
+        return OptListWrapperImpl<1U, 1U, true>(input, output, ctx, "Last");
     }
 
     IGraphTransformer::TStatus ListTakeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1407,35 +1404,23 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListEnumerateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<1, 3>(input, output, ctx, "Enumerate");
+        return OptListWrapperImpl<1U, 3U>(input, output, ctx, "Enumerate");
     }
 
     IGraphTransformer::TStatus ListReverseWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<1>(input, output, ctx, "Reverse");
+        return OptListWrapperImpl<1U>(input, output, ctx, "Reverse");
     }
 
     IGraphTransformer::TStatus ListSortWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3>(input, output, ctx, "Sort");
+        return OptListWrapperImpl<3U>(input, output, ctx, "Sort");
     }
 
     IGraphTransformer::TStatus ListExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<2>(input, output, ctx, "OrderedExtract");
+        return OptListWrapperImpl<2U>(input, output, ctx, "OrderedExtract");
     }
 
     IGraphTransformer::TStatus ListCollectWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<1>(input, output, ctx, "Collect");
-    }
-
-    IGraphTransformer::TStatus ListSampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3, -1>(input, output, ctx, "Sample");
-    }
-
-    IGraphTransformer::TStatus ListSampleNWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3, -1>(input, output, ctx, "SampleN");
-    }
-
-    IGraphTransformer::TStatus ListShuffleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<2, -1>(input, output, ctx, "Shuffle");
+        return OptListWrapperImpl<1U>(input, output, ctx, "Collect");
     }
 
     IGraphTransformer::TStatus OptListFold1WrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx, TExprNode::TPtr&& updateLambda) {
@@ -1514,19 +1499,19 @@ namespace {
     }
 
     IGraphTransformer::TStatus ListFoldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3>(input, output, ctx, "Fold");
+        return OptListWrapperImpl<3U>(input, output, ctx, "Fold");
     }
 
     IGraphTransformer::TStatus ListFold1Wrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3, 3, true>(input, output, ctx, "Fold1");
+        return OptListWrapperImpl<3U, 3U, true>(input, output, ctx, "Fold1");
     }
 
     IGraphTransformer::TStatus ListFoldMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3>(input, output, ctx, "FoldMap");
+        return OptListWrapperImpl<3U>(input, output, ctx, "FoldMap");
     }
 
     IGraphTransformer::TStatus ListFold1MapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        return OptListWrapperImpl<3>(input, output, ctx, "Fold1Map");
+        return OptListWrapperImpl<3U>(input, output, ctx, "Fold1Map");
     }
 
     IGraphTransformer::TStatus ListMinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -3501,57 +3486,6 @@ namespace {
         }
 
         if (!EnsureListType(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        input->SetTypeAnn(input->Head().GetTypeAnn());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    template<EDataSlot Slot>
-    IGraphTransformer::TStatus SampleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (IsEmptyList(input->Head()) || input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
-            output = input->HeadPtr();
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto argType = input->Child(1)->GetTypeAnn();
-        auto argTargetType = ctx.Expr.MakeType<TDataExprType>(Slot);
-        const TTypeAnnotationNode* expectedType;
-        if (argType->GetKind() == ETypeAnnotationKind::Optional) {
-            expectedType = ctx.Expr.MakeType<TOptionalExprType>(argTargetType);
-        } else {
-            expectedType = argTargetType;
-        }
-
-        auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
-        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Mismatch argument types"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
-            return convertStatus;
-        }
-
-        input->SetTypeAnn(input->Head().GetTypeAnn());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    template IGraphTransformer::TStatus SampleWrapper<EDataSlot::Uint64>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    template IGraphTransformer::TStatus SampleWrapper<EDataSlot::Double>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-
-    IGraphTransformer::TStatus ShuffleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (IsEmptyList(input->Head())) {
-            output = input->HeadPtr();
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

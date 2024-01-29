@@ -20,5 +20,6 @@ select ListSample(NULL, 1, 1) is NULL,
        $test(0.8, 7),
        $test(1, 8),
        $test(0, 9),
-       ListSample(Just($list), Just(0.1), 10, 1),
-       ListSample(Just($list), Just(0.1), 10, 2);
+       ListSample(Just($list), Just(0.1), (10, 1)),
+       ListSample(Just($list), Just(0.1), (10, 2)),
+       ListSample(Just($list), 0.1);

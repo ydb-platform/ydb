@@ -9,5 +9,6 @@ select ListShuffle(NULL, 1) is NULL,
        $test(2),
        $test(3),
        $test(4),
-       ListShuffle(Just($list), 6, 1),
-       ListShuffle(Just($list), 6, 2);
+       ListShuffle(Just($list), (6, 1)),
+       ListShuffle(Just($list), (6, 2)),
+       ListShuffle($list);

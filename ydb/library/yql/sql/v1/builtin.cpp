@@ -2885,9 +2885,6 @@ struct TBuiltinFuncData {
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
-            {"listsample", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSample", 3, -1)},
-            {"listsamplen", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSampleN", 3, -1)},
-            {"listshuffle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListShuffle", 2, -1)},
 
             // Dict builtins
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
@@ -3251,6 +3248,9 @@ struct TBuiltinFuncData {
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
             {"listfromtuple", { "ListFromTuple", 1, 1}},
             {"listtotuple", { "ListToTuple", 2, 2}},
+            {"listsample", { "ListSample", 2, 3}},
+            {"listsamplen", { "ListSampleN", 2, 3}},
+            {"listshuffle", { "ListShuffle", 1, 2}},
         };
         return coreFuncs;
     }

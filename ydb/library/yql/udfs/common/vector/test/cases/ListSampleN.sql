@@ -9,14 +9,15 @@ $test = ($n, $c) -> {
     );
 };
 
-select ListSampleN(NULL, 1, 1) is NULL,
+select ListSampleN(NULL, 1ul, 1) is NULL,
        ListSampleN($list, NULL, 2) == $list,
-       $test(5, 1), $test(5, 1),
-       $test(10, 2),
-       $test(20, 3),
-       $test(0, 4),
-       $test(100, 5),
-       ListSampleN(Just($list), Just(10), 10, 1),
-       ListSampleN(Just($list), Just(10), 10, 2),
-       ListSampleN($list, 10, 11),
-       ListSampleN($list, 15, 12);
+       $test(5u, 1), $test(5u, 1),
+       $test(10u, 2),
+       $test(20u, 3),
+       $test(0u, 4),
+       $test(100u, 5),
+       ListSampleN(Just($list), Just(10u), (10, 1)),
+       ListSampleN(Just($list), Just(10u), (10, 2)),
+       ListSampleN($list, 10u, 11),
+       ListSampleN($list, 15u, 12),
+       ListSampleN($list, 10u);

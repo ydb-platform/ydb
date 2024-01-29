@@ -2,7 +2,7 @@ YQL_UDF_YDB(vector_udf)
 
 YQL_ABI_VERSION(
     2
-    28
+    35
     0
 )
 

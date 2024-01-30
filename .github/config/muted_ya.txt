@@ -45,6 +45,7 @@ ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/actors/http/ut HttpProxy.TooLongHeader
 ydb/library/actors/http/ut sole*
 ydb/library/yql/providers/generic/connector/tests sole*
+ydb/library/yql/providers/generic/connector/tests test.py.*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
 ydb/library/yql/tests/sql/dq_file/part* *
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
@@ -58,6 +59,7 @@ ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPersQueueTest.UpdatePartitionLocation
+ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut [3/10]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession
@@ -69,15 +71,14 @@ ydb/services/ydb/ut YdbScripting.BasicV0
 ydb/services/ydb/ut YdbYqlClient.TestYqlSessionClosed
 ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
-ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
-ydb/tests/fq/multi_plane sole*
+ydb/tests/fq/multi_plane *
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
 ydb/tests/fq/s3 *
 ydb/tests/fq/yds *
 ydb/tests/functional/audit *
 ydb/tests/functional/blobstorage test_replication.py.TestReplicationAfterNodesRestart.test_replication*
 ydb/tests/functional/clickbench test.py.test_plans*
-ydb/tests/functional/clickbench test.py.test_run_*column]
+ydb/tests/functional/clickbench test.py.test_run*
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*

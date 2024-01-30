@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/util/ui64id.h>
 

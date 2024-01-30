@@ -1800,9 +1800,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (tableInfo->IsTemporary) {
                     Y_VERIFY_S(tableInfo->OwnerActorId,  "Empty OwnerActorId for temp table");
-                    auto tempTablePath = TPath::Init(pathId, Self);
-                    auto tempTableName = tempTablePath.LeafName();
-                    auto tempTableWorkingDir = tempTablePath.Parent().PathString();
 
                     TActorId ownerActorId = tableInfo->OwnerActorId;
 

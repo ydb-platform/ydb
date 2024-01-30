@@ -881,7 +881,6 @@ public:
     void HandleBackgroundCleaningTransactionResult(
         TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& result);
     void HandleBackgroundCleaningCompletionResult(const TTxId& txId);
-    void RemoveBackgroundCleaningInfo(const TPathId& pathId);
     void ClearTempTablesState();
 
     struct TTxCleanDroppedSubDomains;

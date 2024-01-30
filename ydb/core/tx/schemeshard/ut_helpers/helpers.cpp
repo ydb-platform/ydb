@@ -1706,7 +1706,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus) 
+        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus)
     {
         AsyncBuildColumn(runtime, id, schemeShard, dbName, src, columnName, literal);
 
@@ -2181,8 +2181,13 @@ namespace NSchemeShardUT_Private {
         return combination;
     }
 
-    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev) {
-        ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(), ev);
+    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev,
+            ui32 nodeIndex = 0, TActorId sender = TActorId()) {
+        if (sender == TActorId()) {
+            ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(nodeIndex), ev,);
+        } else {
+            ForwardToTablet(runtime, targetTabletId, sender, ev, nodeIndex);
+        }
     }
 
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {

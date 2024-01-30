@@ -32,7 +32,6 @@ struct TEvPrivate {
         EvSendBaseStatsToSA,
         EvRunBackgroundCleaning,
         EvRetryNodeSubscribe,
-        EvDropTempTable,
         EvEnd
     };
 

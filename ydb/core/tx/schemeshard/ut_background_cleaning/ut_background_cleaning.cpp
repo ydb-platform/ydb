@@ -13,7 +13,7 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig(bool withRetries = false) {
+THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestBackgroundCleaningConfig(bool withRetries = false) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto* backgroundCleaningConfig = request->Record.MutableConfig()->MutableBackgroundCleaningConfig();
@@ -37,7 +37,7 @@ void SetFeatures(
     const NKikimrConfig::TFeatureFlags& features,
     bool withRetries = false)
 {
-    auto request = GetTestCompactionConfig(withRetries);
+    auto request = GetTestBackgroundCleaningConfig(withRetries);
     *request->Record.MutableConfig()->MutableFeatureFlags() = features;
     SetConfig(runtime, schemeShard, std::move(request));
 }
@@ -55,9 +55,7 @@ void AsyncCreateTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 t
     desc->SetTemporary(true);
     ActorIdToProto(ownerActorId, tx->MutableTempTableOwnerActorId());
 
-    runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
-            new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },
-                TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIdx);
+    AsyncSend(runtime, schemeShardId, ev, nodeIdx, ownerActorId);
 }
 
 void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx) {
@@ -65,17 +63,9 @@ void TestCreateTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& w
     TestModificationResults(runtime, txId, expectedResults);
 }
 
-void AsyncDropTempTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, ui32 nodeIdx) {
-    auto ev = DropTableRequest(txId, workingDir, scheme);
-
-    runtime.Send(new IEventHandle(MakeTabletResolverID(), ownerActorId,
-            new TEvTabletResolver::TEvForward(schemeShardId, new IEventHandle(TActorId(), ownerActorId, ev), { },
-                TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIdx);
-}
-
-void TestDropTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& scheme, const TActorId& ownerActorId, const TVector<TExpectedResult>& expectedResults, ui32 ownerNodeIdx, bool checkUnsubscribe) {
-    AsyncDropTempTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, scheme, ownerActorId, ownerNodeIdx);
-    TestModificationResults(runtime, txId, expectedResults);
+void TestDropTempTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir,
+        const TString& scheme, bool checkUnsubscribe) {
+    TestDropTable(runtime, ++txId, workingDir, scheme);
     if (checkUnsubscribe) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Unsubscribe);
@@ -326,7 +316,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckTable(runtime, "/MyRoot/TempTable");
 
         ++txId;
-        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        TestDropTempTable(runtime, txId, "/MyRoot", "TempTable", true);
 
         env.SimulateSleep(runtime, TDuration::Seconds(50));
         CheckTable(runtime, "/MyRoot/TempTable", TTestTxConfig::SchemeShard, false);

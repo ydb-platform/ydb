@@ -29,19 +29,97 @@ struct TCallContext {
 };
 
 #define TRACE_CONFIG_CHANGE(CHANGE_CONTEXT, KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
-        TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer->Add(KIND, TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE(KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[KIND].Updates.emplace_back( \
-        TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer->Add(KIND, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define TRACE_CONFIG_CHANGE_INPLACE_T(KIND, CHANGE_KIND) \
-    RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem:: KIND ## Item].Updates.emplace_back( \
-        TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
+    ConfigUpdateTracer->Add(NKikimrConsole::TConfigItem:: KIND ## Item, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
 
 #define CALL_CTX() TCallContext{__FILE__, __LINE__}
 
+class IConfigUpdateTracer {
+public:
+    virtual ~IConfigUpdateTracer() {}
+    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate) = 0;
+    virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
+};
+
+class TDefaultConfigUpdateTracer
+    : public IConfigUpdateTracer
+{
+private:
+    THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
+
+public:
+    void Add(ui32 kind, TConfigItemInfo::TUpdate update) {
+        ConfigInitInfo[kind].Updates.emplace_back(update);
+    }
+
+    THashMap<ui32, TConfigItemInfo> Dump() const {
+        return ConfigInitInfo;
+    }
+};
+
+struct TConfigRefs {
+    NKikimrConfig::TAppConfig& BaseConfig;
+    NKikimrConfig::TAppConfig& AppConfig;
+    IConfigUpdateTracer& Tracer;
+};
+
+template<typename TProto>
+TProto *MutableConfigPart(
+        TConfigRefs refs,
+        TClientCommand::TConfig& config,
+        const char *optname,
+        bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
+        const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const,
+        TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
+        ui32 kind,
+        TCallContext callCtx)
+{
+    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
+    TProto *res = nullptr;
+    if ((refs.AppConfig.*hasConfig)()) {
+        return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
+    }
+
+    if (optname && config.ParseResult->Has(optname)) {
+        const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (refs.AppConfig.*mutableConfig)());
+        Y_ABORT_UNLESS(success);
+        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromFile);
+    } else if ((refs.BaseConfig.*hasConfig)()) {
+        res = (refs.AppConfig.*mutableConfig)();
+        res->CopyFrom((refs.BaseConfig.*getConfig)());
+        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromBaseConfig);
+    }
+
+    return res;
+}
+
+template<typename TProto>
+TProto *MutableConfigPartMerge(
+    TConfigRefs refs,
+    TClientCommand::TConfig& config, const char *optname,
+    TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
+    ui32 kind,
+    TCallContext callCtx)
+{
+    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
+    TProto *res = nullptr;
+
+    if (config.ParseResult->Has(optname)) {
+        TProto cfg;
+        bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
+        Y_ABORT_UNLESS(success);
+        res = (refs.AppConfig.*mutableConfig)();
+        res->MergeFrom(cfg);
+        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartMergeFromFile);
+    }
+
+    return res;
+}
 
 constexpr auto NODE_KIND_YDB = "ydb";
 constexpr auto NODE_KIND_YQ = "yq";
@@ -110,10 +188,14 @@ protected:
     TString PathToInterconnectCaFile;
     TVector<TString> YamlConfigFiles;
 
+    std::unique_ptr<IConfigUpdateTracer> ConfigUpdateTracer;
+
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
         , RunConfig(AppConfig)
-    {}
+    {
+        ConfigUpdateTracer = std::make_unique<TDefaultConfigUpdateTracer>();
+    }
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -285,50 +367,6 @@ protected:
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 
-    template<typename TProto>
-    TProto *MutableConfigPart(TConfig& config, const char *optname,
-            bool (NKikimrConfig::TAppConfig::*hasConfig)() const,
-            const TProto& (NKikimrConfig::TAppConfig::*getConfig)() const,
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
-            ui32 kind,
-            TCallContext callCtx) {
-        TProto *res = nullptr;
-        if ((AppConfig.*hasConfig)()) {
-            return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
-        }
-
-        if (optname && config.ParseResult->Has(optname)) {
-            const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (AppConfig.*mutableConfig)());
-            Y_ABORT_UNLESS(success);
-            TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromFile);
-        } else if ((BaseConfig.*hasConfig)()) {
-            res = (AppConfig.*mutableConfig)();
-            res->CopyFrom((BaseConfig.*getConfig)());
-            TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromBaseConfig);
-        }
-
-        return res;
-    }
-
-    template<typename TProto>
-    TProto *MutableConfigPartMerge(TConfig& config, const char *optname,
-            TProto* (NKikimrConfig::TAppConfig::*mutableConfig)(),
-            ui32 kind,
-            TCallContext callCtx) {
-        TProto *res = nullptr;
-
-        if (config.ParseResult->Has(optname)) {
-            TProto cfg;
-            bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
-            Y_ABORT_UNLESS(success);
-            res = (AppConfig.*mutableConfig)();
-            res->MergeFrom(cfg);
-            TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartMergeFromFile);
-        }
-
-        return res;
-    }
-
     ui32 FindStaticNodeId() const {
         std::vector<TString> candidates = {HostName(), FQDNHostName()};
         for(auto& candidate: candidates) {
@@ -361,10 +399,12 @@ protected:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-#define OPTION(NAME, FIELD) MutableConfigPart(config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
+        TConfigRefs refs{BaseConfig, AppConfig, *ConfigUpdateTracer};
+
+#define OPTION(NAME, FIELD) MutableConfigPart(refs, config, NAME, &NKikimrConfig::TAppConfig::Has##FIELD, \
             &NKikimrConfig::TAppConfig::Get##FIELD, &NKikimrConfig::TAppConfig::Mutable##FIELD, \
             (ui32)NKikimrConsole::TConfigItem:: FIELD ## Item, TCallContext{__FILE__, __LINE__})
-#define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD, \
+#define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(refs, config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD, \
             (ui32)NKikimrConsole::TConfigItem:: FIELD ## Item, TCallContext{__FILE__, __LINE__})
 
         OPTION("auth-file", AuthConfig);
@@ -813,6 +853,8 @@ protected:
             TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
         }
 
+        RunConfig.ConfigInitInfo = ConfigUpdateTracer->Dump();
+
         if (AppConfig.HasDynamicNameserviceConfig()) {
             bool isDynamic = RunConfig.NodeId > AppConfig.GetDynamicNameserviceConfig().GetMaxStaticNodeId();
             RunConfig.Labels["dynamic"] = ToString(isDynamic ? "true" : "false");
@@ -1204,7 +1246,8 @@ protected:
         // config for naming service.
         if (!AppConfig.HasNameserviceConfig()) {
             AppConfig.MutableNameserviceConfig()->Swap(appConfig.MutableNameserviceConfig());
-            RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
+            // FIXME(innokentii)
+            // RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
         }
     }
 

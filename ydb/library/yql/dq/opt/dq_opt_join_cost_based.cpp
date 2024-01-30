@@ -97,10 +97,11 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+    EJoinKind joinKind,
     EJoinAlgoType joinAlgo,
     IProviderContext& ctx) {
 
-    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, EJoinKind::InnerJoin, joinAlgo);
+    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, joinKind, joinAlgo);
     res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinAlgo, ctx));
     return res;
 }
@@ -117,12 +118,12 @@ std::shared_ptr<TJoinOptimizerNode> PickBestJoin(std::shared_ptr<IBaseOptimizerN
 
     auto res = std::shared_ptr<TJoinOptimizerNode>();
 
-    for ( auto joinType : AllJoinTypes ) {
-        auto p1 = ctx.IsJoinApplicable(left, right, leftJoinConditions, joinType) ? 
-            MakeJoin(left, right, leftJoinConditions, joinType, ctx) :
+    for ( auto joinAlgo : AllJoinAlgos ) {
+        auto p1 = ctx.IsJoinApplicable(left, right, leftJoinConditions, joinAlgo) ? 
+            MakeJoin(left, right, leftJoinConditions, EJoinKind::InnerJoin, joinAlgo, ctx) :
             std::shared_ptr<TJoinOptimizerNode>();
-        auto p2 = ctx.IsJoinApplicable(right, left, rightJoinConditions, joinType) ? 
-            MakeJoin(right, left, rightJoinConditions, joinType, ctx) :
+        auto p2 = ctx.IsJoinApplicable(right, left, rightJoinConditions, joinAlgo) ? 
+            MakeJoin(right, left, rightJoinConditions, EJoinKind::InnerJoin, joinAlgo, ctx) :
             std::shared_ptr<TJoinOptimizerNode>();
             
         if (p1) {
@@ -155,13 +156,14 @@ std::shared_ptr<TJoinOptimizerNode> PickBestJoin(std::shared_ptr<IBaseOptimizerN
 std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& leftJoinConditions,
+    EJoinKind joinKind,
     IProviderContext& ctx) {
 
     auto res = std::shared_ptr<TJoinOptimizerNode>();
 
-    for ( auto joinType : AllJoinTypes ) {
-        auto p = ctx.IsJoinApplicable(left, right, leftJoinConditions, joinType) ? 
-            MakeJoin(left, right, leftJoinConditions, joinType, ctx) :
+    for ( auto joinAlgo : AllJoinAlgos ) {
+        auto p = ctx.IsJoinApplicable(left, right, leftJoinConditions, joinAlgo) ? 
+            MakeJoin(left, right, leftJoinConditions, joinKind, joinAlgo, ctx) :
             std::shared_ptr<TJoinOptimizerNode>();
             
         if (p) {
@@ -1009,7 +1011,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 */
 std::shared_ptr<TJoinOptimizerNode> OptimizeSubtree(const std::shared_ptr<TJoinOptimizerNode>& joinTree, ui32 maxDPccpDPTableSize, IProviderContext& ctx) {
     if (!joinTree->IsReorderable) {
-        return PickBestNonReorderabeJoin(joinTree->LeftArg, joinTree->RightArg, joinTree->JoinConditions, ctx);
+        return PickBestNonReorderabeJoin(joinTree->LeftArg, joinTree->RightArg, joinTree->JoinConditions, joinTree->JoinType, ctx);
     }
 
     TGraph<64> joinGraph;

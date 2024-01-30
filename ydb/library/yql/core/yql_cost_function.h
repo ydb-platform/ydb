@@ -52,7 +52,7 @@ enum EJoinAlgoType {
     LookupJoin
 };
 
-static const EJoinAlgoType AllJoinTypes[] = { DictJoin, MapJoin, GraceJoin, LookupJoin };
+static const EJoinAlgoType AllJoinAlgos[] = { DictJoin, MapJoin, GraceJoin, LookupJoin };
 
 TOptimizerStatistics ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx);

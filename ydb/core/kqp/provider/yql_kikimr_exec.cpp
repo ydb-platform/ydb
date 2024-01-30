@@ -948,7 +948,7 @@ public:
                         return SyncError();
                     }
                     future = Gateway->CreateTableStore(cluster,
-                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
+                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings), existingOk);
                     break;
                 }
                 case ETableType::Table:
@@ -1018,7 +1018,7 @@ public:
                     }
                     break;
                 case ETableType::TableStore:
-                    future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
+                    future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()), missingOk);
                     break;
                 case ETableType::ExternalTable:
                     future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()), missingOk);

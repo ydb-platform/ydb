@@ -1381,7 +1381,7 @@ public:
     }
 
     TFuture<TGenericResult> CreateTableStore(const TString& cluster,
-        const TCreateTableStoreSettings& settings) override
+        const TCreateTableStoreSettings& settings, bool existingOk) override
     {
         CHECK_PREPARED_DDL(CreateTableStore);
 
@@ -1405,6 +1405,8 @@ public:
         schemeTx.SetWorkingDir(pathPair.first);
 
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnStore);
+        schemeTx.SetFailedOnAlreadyExists(!existingOk);
+
         NKikimrSchemeOp::TColumnStoreDescription* storeDesc = schemeTx.MutableCreateColumnStore();
         storeDesc->SetName(pathPair.second);
         storeDesc->SetColumnShardCount(settings.ShardsCount);
@@ -1462,7 +1464,7 @@ public:
     }
 
     TFuture<TGenericResult> DropTableStore(const TString& cluster,
-        const TDropTableStoreSettings& settings) override
+        const TDropTableStoreSettings& settings, bool missingOk) override
     {
         CHECK_PREPARED_DDL(DropTableStore);
 
@@ -1484,7 +1486,7 @@ public:
 
         auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableDropTableStore();
         schemeTx.SetWorkingDir(pathPair.first);
-
+        schemeTx.SetSuccessOnNotExist(missingOk);
         schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnStore);
         NKikimrSchemeOp::TDrop* drop = schemeTx.MutableDrop();
         drop->SetName(pathPair.second);

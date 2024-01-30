@@ -1002,9 +1002,11 @@ public:
     }
 
     TFuture<TGenericResult> CreateTableStore(const TString& cluster,
-                                             const NYql::TCreateTableStoreSettings& settings) override {
+                                             const NYql::TCreateTableStoreSettings& settings,
+                                             bool existingOk) override {
         Y_UNUSED(cluster);
         Y_UNUSED(settings);
+        Y_UNUSED(existingOk);
         return NotImplemented<TGenericResult>();
     }
 
@@ -1016,9 +1018,10 @@ public:
     }
 
     TFuture<TGenericResult> DropTableStore(const TString& cluster,
-                                           const NYql::TDropTableStoreSettings& settings) override {
+                                           const NYql::TDropTableStoreSettings& settings, bool missingOk) override {
         Y_UNUSED(cluster);
         Y_UNUSED(settings);
+        Y_UNUSED(missingOk);
         return NotImplemented<TGenericResult>();
     }
 

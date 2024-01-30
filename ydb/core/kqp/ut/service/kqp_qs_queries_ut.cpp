@@ -701,8 +701,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
             const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
             const TString objType = isStore ? "TABLESTORE" : "TABLE";
-            const TString sql = fmt::format(R"sql(
-                CREATE {obj_type} {if_not_exists} {obj_path} (
+            auto sql = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE )" << objType << " " << ifNotExistsStatement << " `" << objPath << R"(` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
@@ -710,11 +711,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-                );)sql",
-                "obj_type"_a = objType,
-                "if_not_exists"_a = ifNotExistsStatement,
-                "obj_path"_a = objPath
-            );
+                );)";
 
             auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
             if (expectSuccess) {
@@ -727,15 +724,26 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         auto checkAlter = [&](const TString& objPath, bool isStore) {
             const TString objType = isStore ? "TABLESTORE" : "TABLE";
-            const TString sql = fmt::format(R"sql(
-                ALTER {obj_type} {obj_path} (
-                    SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10)
-                );)sql",
-                "obj_type"_a = objType,
-                "obj_path"_a = objPath
-            );
+            {
+                auto sql = TStringBuilder() << R"(
+                    --!syntax_v1
+                    ALTER )" << objType << " `" << objPath << R"(`
+                        ADD COLUMN NewColumn Uint64;
+                    ;)";
 
-            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                auto sql = TStringBuilder() << R"(
+                    --!syntax_v1
+                    ALTER )" << objType << " `" << objPath << R"(`
+                        DROP COLUMN NewColumn;
+                    ;)";
+
+                auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
         };
 
         auto checkDrop = [&](bool expectSuccess, EEx exMode,
@@ -743,13 +751,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
             const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
             const TString objType = isStore ? "TABLESTORE" : "TABLE";
-            const TString sql = fmt::format(R"sql(
-                DROP {obj_type} {if_exists} {obj_path};
-                )sql",
-                "obj_type"_a = objType,
-                "if_exists"_a = ifExistsStatement,
-                "obj_path"_a = objPath
-            );
+            auto sql = TStringBuilder() << R"(
+                --!syntax_v1
+                DROP )" << objType << " " << ifExistsStatement << " `" << objPath << R"(`;)";
 
             auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
             if (expectSuccess) {
@@ -779,7 +783,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             auto settings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult =
-                testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
+                testHelper.GetSession().DescribeTable(objPath, settings).GetValueSync();
 
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
@@ -792,26 +796,26 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
-        checkAlter("/Root/TableStoreTest", true);
         checkDrop(true, EEx::Empty, "/Root/TableStoreTest", true);
         checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
         checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
 
         checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
         checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
-        checkAlter("/Root/TableStoreTest", true);
         checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
         checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
 
-        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
-        checkCreate(true, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
-        checkCreate(false, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
-        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest/ColumnTable", false);
-        checkAddRow("/Root/TableStoreTest/ColumnTable");
-        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest/ColumnTable", false);
-        checkDrop(false, EEx::Empty, "/Root/TableStoreTest/ColumnTable", false);
-        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest/ColumnTable", false);
-        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
+        checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
+        checkAlter("/Root/ColumnTable", false);
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
+
+        checkCreate(true, EEx::Empty, "/Root/ColumnTable", false);
+        checkCreate(false, EEx::Empty, "/Root/ColumnTable", false);
+        checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
+        checkAddRow("/Root/ColumnTable");
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
+        checkDrop(false, EEx::Empty, "/Root/ColumnTable", false);
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
     }
 
     Y_UNIT_TEST(DdlUser) {

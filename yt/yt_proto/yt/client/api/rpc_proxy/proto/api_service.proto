@@ -590,7 +590,7 @@ message TReqSelectRows
     optional bool new_range_inference = 19;
     optional bool use_canonical_null_relations = 20;
     optional bool merge_versioned_rows = 21;
-    optional int32 syntax_version = 22;
+    optional int32 syntax_version = 22 [default = 1];
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }

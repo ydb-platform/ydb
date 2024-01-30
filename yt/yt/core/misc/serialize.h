@@ -217,8 +217,7 @@ struct TEntitySerializationKey
     constexpr TEntitySerializationKey();
     constexpr explicit TEntitySerializationKey(int index);
 
-    constexpr bool operator == (TEntitySerializationKey rhs) const;
-    constexpr bool operator != (TEntitySerializationKey rhs) const;
+    constexpr bool operator==(const TEntitySerializationKey& other) const = default;
 
     constexpr explicit operator bool() const;
 

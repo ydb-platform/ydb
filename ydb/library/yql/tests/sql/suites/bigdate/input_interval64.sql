@@ -1,45 +1,15 @@
-select cast("-P106751616DT23H59M59.999999S" as interval64), cast(cast("-P106751616DT23H59M59.999999S" as interval64) as string);
-select cast("P106751616DT23H59M59.999999S" as interval64), cast(cast("P106751616DT23H59M59.999999S" as interval64) as string);
-
-select cast("-P106751616DT23H59M60S" as interval64), cast(cast("-P106751616DT23H59M60S" as interval64) as string);
-select cast("P106751616DT23H59M60S" as interval64), cast(cast("P106751616DT23H59M60S" as interval64) as string);
-
-select cast("P000000000DT00H00M00.000000S" as interval64), cast(cast("P000000000DT00H00M00.000000S" as interval64) as string);
-select cast("PT0S" as interval64), cast(cast("PT0S" as interval64) as string);
-select cast("-PT0S" as interval64), cast(cast("-PT0S" as interval64) as string);
-select cast("PT0.000001S" as interval64), cast(cast("PT0.000001S" as interval64) as string);
-select cast("-PT0.000001S" as interval64), cast(cast("-PT0.000001S" as interval64) as string);
-
-select cast("PT0S" as interval64), cast(cast("PT0S" as interval64) as string);
-select cast("PT0M" as interval64), cast(cast("PT0M" as interval64) as string);
-select cast("PT0H" as interval64), cast(cast("PT0H" as interval64) as string);
-select cast("P0D" as interval64), cast(cast("P0D" as interval64) as string);
-select cast("P0W" as interval64), cast(cast("P0W" as interval64) as string);
-
-select cast("PT999999S" as interval64), cast(cast("PT999999S" as interval64) as string);
-select cast("PT999999M" as interval64), cast(cast("PT999999M" as interval64) as string);
-select cast("PT999999H" as interval64), cast(cast("PT999999H" as interval64) as string);
-
-select cast("P106751616D" as interval64), cast(cast("P106751616D" as interval64) as string);
-select cast("P106751617D" as interval64), cast(cast("P106751617D" as interval64) as string);
-select cast("P15250230W" as interval64), cast(cast("P15250230W" as interval64) as string);
-select cast("P15250231W" as interval64), cast(cast("P15250231W" as interval64) as string);
-
-select cast("PT0000000S" as interval64), cast(cast("PT0000000S" as interval64) as string);
-select cast("PT0000000M" as interval64), cast(cast("PT0000000M" as interval64) as string);
-select cast("PT0000000H" as interval64), cast(cast("PT0000000H" as interval64) as string);
-select cast("P0000000000D" as interval64), cast(cast("P0000000000D" as interval64) as string);
-select cast("P0000000000W" as interval64), cast(cast("P0000000000W" as interval64) as string);
-
-select cast("PT1S" as interval64), cast(cast("PT1S" as interval64) as string);
-select cast("PT1M" as interval64), cast(cast("PT1M" as interval64) as string);
-select cast("PT1H" as interval64), cast(cast("PT1H" as interval64) as string);
-select cast("P1D" as interval64), cast(cast("P1D" as interval64) as string);
-select cast("P1W" as interval64), cast(cast("P1W" as interval64) as string);
-
-select cast("-PT1S" as interval64), cast(cast("-PT1S" as interval64) as string);
-select cast("-PT1M" as interval64), cast(cast("-PT1M" as interval64) as string);
-select cast("-PT1H" as interval64), cast(cast("-PT1H" as interval64) as string);
-select cast("-P1D" as interval64), cast(cast("-P1D" as interval64) as string);
-select cast("-P1W" as interval64), cast(cast("-P1W" as interval64) as string);
-
+select cast("-144170-12-31" as date32), cast(cast("-144170-12-31" as date32) as string);
+select cast("-144169-01-01" as date32), cast(cast("-144169-01-01" as date32) as string);
+select cast("-1-1-1" as date32), cast(cast("-1-1-1" as date32) as string);
+select cast("0-1-1" as date32), cast(cast("0-1-1" as date32) as string);
+select cast("1-1-1" as date32), cast(cast("1-1-1" as date32) as string);
+select cast("1-02-29" as date32), cast(cast("1-02-29" as date32) as string);
+select cast("1969-12-31" as date32), cast(cast("1969-12-31" as date32) as string);
+select cast("1970-01-01" as date32), cast(cast("1970-01-01" as date32) as string);
+select cast("2000-04-05" as date32), cast(cast("2000-04-05" as date32) as string);
+select cast("2100-02-29" as date32), cast(cast("2100-02-29" as date32) as string);
+select cast("2100-03-01" as date32), cast(cast("2100-03-01" as date32) as string);
+select cast("2105-12-31" as date32), cast(cast("2105-12-31" as date32) as string);
+select cast("2106-01-01" as date32), cast(cast("2106-01-01" as date32) as string);
+select cast("148107-12-31" as date32), cast(cast("148107-12-31" as date32) as string);
+select cast("148108-01-01" as date32), cast(cast("148108-01-01" as date32) as string);

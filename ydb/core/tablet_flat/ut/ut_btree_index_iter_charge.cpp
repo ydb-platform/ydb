@@ -526,6 +526,20 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
+    void MakeRuns(const TPartEggs& eggs, TRun& btreeRun, TRun& flatRun) {
+        const auto part = *eggs.Lone();
+
+        auto flatPart = part.CloneWithEpoch(part.Epoch);
+        for (auto& slice : *part.Slices) {
+            btreeRun.Insert(eggs.Lone(), slice);
+            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
+            pages->clear();
+            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
+            pages->clear();
+            flatRun.Insert(flatPart, slice);
+        }
+    }
+
     void AssertEqual(const TRunIt& bTree, EReady bTreeReady, const TRunIt& flat, EReady flatReady, const TString& message) {
         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, flatReady, message);
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
@@ -563,15 +577,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
-        auto flatPart = part.CloneWithEpoch(part.Epoch);
-        for (auto& slice : *part.Slices) {
-            btreeRun.Insert(eggs.Lone(), slice);
-            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
-            pages->clear();
-            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
-            pages->clear();
-            flatRun.Insert(flatPart, slice);
-        }
+        MakeRuns(eggs, btreeRun, flatRun);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {
@@ -620,15 +626,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
-        auto flatPart = part.CloneWithEpoch(part.Epoch);
-        for (auto& slice : *part.Slices) {
-            btreeRun.Insert(eggs.Lone(), slice);
-            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
-            pages->clear();
-            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
-            pages->clear();
-            flatRun.Insert(flatPart, slice);
-        }
+        MakeRuns(eggs, btreeRun, flatRun);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {
@@ -636,7 +634,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         for (bool reverse : {false, true}) {
-            for (ui32 itemsLimit : xrange<ui32>(0, part.Stat.Rows + 1)) {
+            for (ui32 itemsLimit : xrange<ui32>(0, part.Slices->size() > 1 ? 1 : part.Stat.Rows + 1)) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                         for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {

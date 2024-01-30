@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/envoyproxy/go-control-plane/pkg/server/config"
 	"github.com/envoyproxy/go-control-plane/pkg/server/delta/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/server/rest/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/server/sotw/v3"
@@ -29,7 +30,6 @@ import (
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	clusterservice "github.com/envoyproxy/go-control-plane/envoy/service/cluster/v3"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	endpointservice "github.com/envoyproxy/go-control-plane/envoy/service/endpoint/v3"
 	extensionconfigservice "github.com/envoyproxy/go-control-plane/envoy/service/extension/v3"
 	listenerservice "github.com/envoyproxy/go-control-plane/envoy/service/listener/v3"
@@ -49,7 +49,7 @@ type Server interface {
 	routeservice.ScopedRoutesDiscoveryServiceServer
 	routeservice.VirtualHostDiscoveryServiceServer
 	listenerservice.ListenerDiscoveryServiceServer
-	discoverygrpc.AggregatedDiscoveryServiceServer
+	discovery.AggregatedDiscoveryServiceServer
 	secretservice.SecretDiscoveryServiceServer
 	runtimeservice.RuntimeDiscoveryServiceServer
 	extensionconfigservice.ExtensionConfigDiscoveryServiceServer
@@ -165,10 +165,10 @@ func (c CallbackFuncs) OnFetchResponse(req *discovery.DiscoveryRequest, resp *di
 }
 
 // NewServer creates handlers from a config watcher and callbacks.
-func NewServer(ctx context.Context, config cache.Cache, callbacks Callbacks) Server {
+func NewServer(ctx context.Context, config cache.Cache, callbacks Callbacks, opts ...config.XDSOption) Server {
 	return NewServerAdvanced(rest.NewServer(config, callbacks),
-		sotw.NewServer(ctx, config, callbacks),
-		delta.NewServer(ctx, config, callbacks),
+		sotw.NewServer(ctx, config, callbacks, opts...),
+		delta.NewServer(ctx, config, callbacks, opts...),
 	)
 }
 
@@ -186,7 +186,7 @@ func (s *server) StreamHandler(stream stream.Stream, typeURL string) error {
 	return s.sotw.StreamHandler(stream, typeURL)
 }
 
-func (s *server) StreamAggregatedResources(stream discoverygrpc.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {
+func (s *server) StreamAggregatedResources(stream discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer) error {
 	return s.StreamHandler(stream, resource.AnyType)
 }
 
@@ -311,7 +311,7 @@ func (s *server) DeltaStreamHandler(stream stream.DeltaStream, typeURL string) e
 	return s.delta.DeltaStreamHandler(stream, typeURL)
 }
 
-func (s *server) DeltaAggregatedResources(stream discoverygrpc.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
+func (s *server) DeltaAggregatedResources(stream discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
 	return s.DeltaStreamHandler(stream, resource.AnyType)
 }
 

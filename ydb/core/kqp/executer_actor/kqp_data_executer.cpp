@@ -127,12 +127,14 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
-        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        const bool enableOlapSink)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
             maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::DataExecuter, "DataExecuter"
         )
         , AsyncIoFactory(std::move(asyncIoFactory))
         , StreamResult(streamResult)
+        , EnableOlapSink(enableOlapSink)
     {
         Target = creator;
 
@@ -1661,11 +1663,21 @@ private:
         }
 
         for (const auto &tableOp : stage.GetTableOps()) {
-            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange
-                && tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kUpsertRows) {
+            if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                 return true;
             }
         }
+
+        return false;
+    }
+
+    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage) {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -1698,7 +1710,8 @@ private:
                     }
                 }
 
-                if (stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage)) {
+                if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))
+                    || (EnableOlapSink && HasOlapSink(stage))) {
                     auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -2201,7 +2214,7 @@ private:
             }
         }
 
-        const bool singlePartitionOptAllowed = !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
+        const bool singlePartitionOptAllowed = !HasOlapTable && !UnknownAffectedShardCount && !HasExternalSources && (DatashardTxs.size() == 0);
         const bool useDataQueryPool = !(HasExternalSources && DatashardTxs.size() == 0);
         const bool localComputeTasks = !((HasExternalSources || HasOlapTable || HasDatashardSourceScan) && DatashardTxs.size() == 0);
 
@@ -2405,6 +2418,7 @@ private:
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     bool StreamResult = false;
+    bool EnableOlapSink = false;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
@@ -2446,10 +2460,10 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext, const bool enableOlapSink)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext);
+        std::move(asyncIoFactory), chanTransportVersion, aggregation, creator, maximalSecretsSnapshotWaitTime, userRequestContext, enableOlapSink);
 }
 
 } // namespace NKqp

@@ -34,7 +34,7 @@ using namespace NNodes;
 using TPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&);
 using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOptimizerPtr>;
 
-using TExtPeepHoleOptimizerPtr = std::function<TExprNode::TPtr(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types)>;
+using TExtPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
 using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHoleOptimizerPtr>;
 
 struct TBlockFuncRule {
@@ -5488,7 +5488,6 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
     return true;
 }
 
-<<<<<<< HEAD
 bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationContext& types) {
     EBlockEngineMode effectiveMode = types.UseBlocks ? EBlockEngineMode::Force : types.BlockEngineMode;
     switch (effectiveMode) {
@@ -5515,69 +5514,9 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
                     .Seal()
                 .Seal()
                 .Build();
-=======
-struct TOptimizeWideMapBlocks {
-    bool ContinuousBlocksComputation = false;
-
-    TExprNode::TPtr operator()(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-        if (ContinuousBlocksComputation && !node->Head().IsCallable("WideFromBlocks")) {
-            return node;
->>>>>>> 31fddf8a09 (fix)
         }
-        
-        const auto lambda = node->TailPtr();
-        if (node->Head().IsCallable("WideFromBlocks")) {
-            if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Head().Content() << " with " << node->Content();
-                return ctx.Builder(node->Pos())
-                    .Callable("WideFromBlocks")
-                        .Callable(0, "WideMap")
-                            .Add(0, node->Head().HeadPtr())
-                            .Add(1, newLambda)
-                        .Seal()
-                    .Seal()
-                    .Build();
-            }
-        }
-
-        auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-        ui32 newNodes;
-        TNodeMap<size_t> rewritePositions;
-        TExprNode::TPtr blockLambda;
-        TExprNode::TPtr restLambda;
-        bool keepInputColumns = false;
-        if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
-            return node;
-        }
-
-        if (!newNodes) {
-            return node;
-        }
-
-        YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
-                                    << ", extra columns: " << rewritePositions.size();
-
-        auto ret = ctx.Builder(node->Pos())
-            .Callable("WideFromBlocks")
-                .Callable(0, "WideMap")
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                    .Add(1, blockLambda)
-                .Seal()
-            .Seal()
-            .Build();
-
-        return ctx.Builder(node->Pos())
-            .Callable(node->Content())
-                .Add(0, ret)
-                .Add(1, restLambda)
-            .Seal()
-            .Build();
     }
-};
 
-<<<<<<< HEAD
     if (!CanRewriteToBlocksWithInput(node->Head(), types)) {
         return node;
     }
@@ -5591,49 +5530,33 @@ struct TOptimizeWideMapBlocks {
     if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
         return node;
     }
-=======
-struct TOptimizeWideFilterBlocks {
-    bool ContinuousBlocksComputation = false;
->>>>>>> 31fddf8a09 (fix)
 
-    TExprNode::TPtr operator()(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-        if (ContinuousBlocksComputation && !node->Head().IsCallable("WideFromBlocks")) {
-            return node;
-        }
+    if (!newNodes) {
+        return node;
+    }
 
-        auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
-        auto lambda = node->ChildPtr(1);
-        YQL_ENSURE(lambda->ChildrenSize() == 2); // filter lambda should have single output
+    YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
+                                  << ", extra columns: " << rewritePositions.size();
 
-        ui32 newNodes;
-        TNodeMap<size_t> rewritePositions;
-        TExprNode::TPtr blockLambda;
-        TExprNode::TPtr restLambda;
-        bool keepInputColumns = true;
-        if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
-            return node;
-        }
-
-        auto blockMapped = ctx.Builder(node->Pos())
-            .Callable("WideMap")
+    auto ret = ctx.Builder(node->Pos())
+        .Callable("WideFromBlocks")
+            .Callable(0, "WideMap")
                 .Callable(0, "WideToBlocks")
                     .Add(0, node->HeadPtr())
                 .Seal()
                 .Add(1, blockLambda)
             .Seal()
-            .Build();
+        .Seal()
+        .Build();
 
-        if (auto it = rewritePositions.find(lambda->Child(1)); it != rewritePositions.end()) {
-            // lambda is block-friendly
-            YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
-            auto result = ctx.Builder(node->Pos())
-                .Callable("BlockCompress")
-                    .Add(0, blockMapped)
-                    .Atom(1, it->second)
-                .Seal()
-                .Build();
+    return ctx.Builder(node->Pos())
+        .Callable(node->Content())
+            .Add(0, ret)
+            .Add(1, restLambda)
+        .Seal()
+        .Build();
+}
 
-<<<<<<< HEAD
 TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!CanRewriteToBlocksWithInput(node->Head(), types)) {
         return node;
@@ -5642,109 +5565,48 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
     auto multiInputType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     auto lambda = node->ChildPtr(1);
     YQL_ENSURE(lambda->ChildrenSize() == 2); // filter lambda should have single output
-=======
-            if (node->ChildrenSize() == 3) {
-                result = ctx.Builder(node->Pos())
-                    .Callable("WideTakeBlocks")
-                        .Add(0, result)
-                        .Add(1, node->ChildPtr(2))
-                    .Seal()
-                    .Build();
-            }
->>>>>>> 31fddf8a09 (fix)
 
-            YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
-                                        << ", extra columns: " << rewritePositions.size();
-            return ctx.Builder(node->Pos())
-                .Callable("WideFromBlocks")
-                    .Add(0, result)
-                .Seal()
-                .Build();
-        }
+    ui32 newNodes;
+    TNodeMap<size_t> rewritePositions;
+    TExprNode::TPtr blockLambda;
+    TExprNode::TPtr restLambda;
+    bool keepInputColumns = true;
+    if (!CollectBlockRewrites(multiInputType, keepInputColumns, lambda, newNodes, rewritePositions, blockLambda, restLambda, ctx, types)) {
+        return node;
+    }
 
-        if (!newNodes) {
-            return node;
-        }
+    auto blockMapped = ctx.Builder(node->Pos())
+        .Callable("WideMap")
+            .Callable(0, "WideToBlocks")
+                .Add(0, node->HeadPtr())
+            .Seal()
+            .Add(1, blockLambda)
+        .Seal()
+        .Build();
 
-        auto filtered = ctx.Builder(node->Pos())
-            .Callable("WideFilter")
-                .Callable(0, "WideFromBlocks")
-                    .Add(0, blockMapped)
-                .Seal()
-                .Add(1, restLambda)
+    if (auto it = rewritePositions.find(lambda->Child(1)); it != rewritePositions.end()) {
+        // lambda is block-friendly
+        YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
+        auto result = ctx.Builder(node->Pos())
+            .Callable("BlockCompress")
+                .Add(0, blockMapped)
+                .Atom(1, it->second)
             .Seal()
             .Build();
 
         if (node->ChildrenSize() == 3) {
-            filtered = ctx.Builder(node->Pos())
-                .Callable("Take")
-                    .Add(0, filtered)
+            result = ctx.Builder(node->Pos())
+                .Callable("WideTakeBlocks")
+                    .Add(0, result)
                     .Add(1, node->ChildPtr(2))
                 .Seal()
                 .Build();
         }
 
-        YQL_ENSURE(blockLambda->ChildrenSize() > 1);
-        const size_t blockOutputs = blockLambda->ChildrenSize() - 2; // last column is a block count
-        TExprNode::TListType allArgs;
-        for (size_t i = 0; i < blockOutputs; ++i) {
-            allArgs.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i)));
-        }
-
-        YQL_ENSURE(allArgs.size() > multiInputType->GetSize());
-        TExprNode::TListType outputs = allArgs;
-        outputs.resize(multiInputType->GetSize());
-
-        auto removeRootsLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), std::move(allArgs)), std::move(outputs));
-        YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to (partial) blocks, extra nodes: " << newNodes
-                                    << ", extra columns: " << rewritePositions.size();
-        return ctx.Builder(node->Pos())
-            .Callable("WideMap")
-                .Add(0, filtered)
-                .Add(1, removeRootsLambda)
-            .Seal()
-            .Build();
-    }
-};
-
-struct TOptimizeSkipTakeToBlocks {
-    bool ContinuousBlocksComputation = false;
-
-    TExprNode::TPtr operator()(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-        if (ContinuousBlocksComputation && !node->Head().IsCallable("WideFromBlocks")) {
-            return node;
-        }
-
-        if (!types.ArrowResolver) {
-            return node;
-        }
-
-        if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
-            return node;
-        }
-
-        auto flowItemType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
-        if (flowItemType->GetKind() != ETypeAnnotationKind::Multi) {
-            return node;
-        }
-
-        const auto& allTypes = flowItemType->Cast<TMultiExprType>()->GetItems();
-        if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->IsBlockOrScalar(); })) {
-            return node;
-        }
-
-        auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
-            TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()), ctx);
-        YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-        if (resolveStatus != IArrowResolver::OK) {
-            return node;
-        }
-
-        TStringBuf newName = node->Content() == "Skip" ? "WideSkipBlocks" : "WideTakeBlocks";
-        YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
+        YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to blocks, extra nodes: " << newNodes
+                                      << ", extra columns: " << rewritePositions.size();
         return ctx.Builder(node->Pos())
             .Callable("WideFromBlocks")
-<<<<<<< HEAD
                 .Add(0, result)
             .Seal()
             .Build();
@@ -5831,64 +5693,21 @@ TExprNode::TPtr OptimizeSkipTakeToBlocks(const TExprNode::TPtr& node, TExprConte
             .Callable(0, newName)
                 .Callable(0, "WideToBlocks")
                     .Add(0, node->HeadPtr())
-=======
-                .Callable(0, newName)
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                    .Add(1, node->ChildPtr(1))
->>>>>>> 31fddf8a09 (fix)
                 .Seal()
+                .Add(1, node->ChildPtr(1))
             .Seal()
-            .Build();
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr OptimizeTopOrSortBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.ArrowResolver) {
+        return node;
     }
-};
 
-struct TOptimizeTopOrSortBlocks {
-    bool ContinuousBlocksComputation = false;
-
-    TExprNode::TPtr operator()(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-        if (ContinuousBlocksComputation && !node->Head().IsCallable("WideFromBlocks")) {
-            return node;
-        }
-
-        if (!types.ArrowResolver) {
-            return node;
-        }
-
-        if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
-            return node;
-        }
-
-        auto flowItemType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
-        if (flowItemType->GetKind() != ETypeAnnotationKind::Multi) {
-            return node;
-        }
-
-        const auto& allTypes = flowItemType->Cast<TMultiExprType>()->GetItems();
-        if (AnyOf(allTypes, [](const TTypeAnnotationNode* type) { return type->IsBlockOrScalar(); })) {
-            return node;
-        }
-
-        auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(node->Head().Pos()),
-            TVector<const TTypeAnnotationNode*>(allTypes.begin(), allTypes.end()), ctx);
-        YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
-        if (resolveStatus != IArrowResolver::OK) {
-            return node;
-        }
-
-        TString newName = node->Content() + TString("Blocks");
-        YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " to " << newName;
-        auto children = node->ChildrenList();
-        children[0] = ctx.NewCallable(node->Pos(), "WideToBlocks", { children[0] });
-
-        return ctx.Builder(node->Pos())
-            .Callable("WideFromBlocks")
-                .Add(0, ctx.NewCallable(node->Pos(), newName, std::move(children)))
-            .Seal()
-            .Build();
+    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        return node;
     }
-<<<<<<< HEAD
 
     auto flowItemType = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
     if (flowItemType->GetKind() != ETypeAnnotationKind::Multi) {
@@ -5922,9 +5741,6 @@ struct TOptimizeTopOrSortBlocks {
         .Seal()
         .Build();
 }
-=======
-};
->>>>>>> 31fddf8a09 (fix)
 
 TExprNode::TPtr UpdateBlockCombineColumns(const TExprNode::TPtr& node, std::optional<ui32> filterColumn, const TVector<ui32>& argIndices, TExprContext& ctx) {
     auto combineChildren = node->ChildrenList();
@@ -7938,39 +7754,19 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
-        {"NarrowFlatMap", TOptimizeWideMapBlocks{false}},
-        {"NarrowMultiMap", TOptimizeWideMapBlocks{false}},
-        {"WideMap", TOptimizeWideMapBlocks{false}},
-        {"NarrowMap", TOptimizeWideMapBlocks{false}},
-        {"WideFilter", TOptimizeWideFilterBlocks{false}},
-        {"Skip", TOptimizeSkipTakeToBlocks{false}},
-        {"Take", TOptimizeSkipTakeToBlocks{false}},
-        {"WideTop", TOptimizeTopOrSortBlocks{false}},
-        {"WideTopSort", TOptimizeTopOrSortBlocks{false}},
-        {"WideSort", TOptimizeTopOrSortBlocks{false}},
-
+        {"NarrowFlatMap", &OptimizeWideMapBlocks},
+        {"NarrowMultiMap", &OptimizeWideMapBlocks},
+        {"WideMap", &OptimizeWideMapBlocks},
+        {"NarrowMap", &OptimizeWideMapBlocks},
+        {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
-
+        {"Skip", &OptimizeSkipTakeToBlocks},
+        {"Take", &OptimizeSkipTakeToBlocks},
         {"BlockCombineAll", &OptimizeBlockCombine},
         {"BlockCombineHashed", &OptimizeBlockCombine},
-    };
-
-    const TExtPeepHoleOptimizerMap ContinuousBlockStageExtRules = {
-        {"NarrowFlatMap", TOptimizeWideMapBlocks{true}},
-        {"NarrowMultiMap", TOptimizeWideMapBlocks{true}},
-        {"WideMap", TOptimizeWideMapBlocks{true}},
-        {"NarrowMap", TOptimizeWideMapBlocks{true}},
-        {"WideFilter", TOptimizeWideFilterBlocks{true}},
-        {"Skip", TOptimizeSkipTakeToBlocks{true}},
-        {"Take", TOptimizeSkipTakeToBlocks{true}},
-        {"WideTop", TOptimizeTopOrSortBlocks{true}},
-        {"WideTopSort", TOptimizeTopOrSortBlocks{true}},
-        {"WideSort", TOptimizeTopOrSortBlocks{true}},
-
-        {"WideToBlocks", &OptimizeWideToBlocks},
-
-        {"BlockCombineAll", &OptimizeBlockCombine},
-        {"BlockCombineHashed", &OptimizeBlockCombine},
+        {"WideTop", &OptimizeTopOrSortBlocks},
+        {"WideTopSort", &OptimizeTopOrSortBlocks},
+        {"WideSort", &OptimizeTopOrSortBlocks},
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtFinalRules = {
@@ -8057,10 +7853,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
     pipeline.Add(
         CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
-                if (types.IsBlockEngineEnabled() && types.ContinuousBlocksComputation) {
-                    const auto& extStageRules = TPeepHoleRules::Instance().ContinuousBlockStageExtRules;
-                    return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
-                } else if (types.IsBlockEngineEnabled()) {
+                if (types.IsBlockEngineEnabled()) {
                     const auto& extStageRules = TPeepHoleRules::Instance().BlockStageExtRules;
                     return PeepHoleBlockStage(input, output, ctx, types, extStageRules);
                 } else {

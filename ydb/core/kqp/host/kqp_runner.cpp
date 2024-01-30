@@ -194,8 +194,7 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
-        TypesCtx.UseBlocks = true;
-        TypesCtx.ContinuousBlocksComputation = true;
+        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
 
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }

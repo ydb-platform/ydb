@@ -54,6 +54,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
+IActor* CreateWriteActor(const TPathId& TargetPathId, ui32 shardNum);
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 

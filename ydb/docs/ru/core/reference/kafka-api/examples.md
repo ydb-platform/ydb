@@ -274,10 +274,10 @@
 #### Из PostgreSQL в YDB
 Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в файл:
 ```ini
-  name=postgres-source
+  name=postgresql-source
   connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
 
-  connection.url=jdbc:postgresql://<postgres-url>:<port>/<db>
+  connection.url=jdbc:postgresql://<postgresql-host>:<postgresql-port>/<db>
   connection.user=<pg-user>
   connection.password=<pg-user-pass>
 

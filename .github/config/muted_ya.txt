@@ -8,6 +8,7 @@ ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage [6/10]*
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk ReadOnlyVDisk.TestStorageLoad
 ydb/core/client/ut TClientTest.PromoteFollower
+ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/persqueue/ut [31/40]*
@@ -55,6 +56,7 @@ ydb/services/fq/ut_integration Yq_1.*
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
+ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/persqueue_v1/ut TPersQueueTest.UpdatePartitionLocation
 ydb/services/persqueue_v1/ut [3/10]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*

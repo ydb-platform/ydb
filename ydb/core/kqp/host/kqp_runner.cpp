@@ -21,6 +21,8 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 #include <util/generic/is_in.h>
 
 namespace NKikimr {
@@ -144,7 +146,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)))
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
     }
@@ -262,7 +264,7 @@ private:
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
-            .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
+            .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")
             .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")

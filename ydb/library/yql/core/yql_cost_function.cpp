@@ -39,7 +39,7 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
 */
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinImplType joinImpl, const IProviderContext& ctx) {
+    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     double newCard;
     EStatisticsType outputType;
@@ -70,7 +70,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
 
-    double cost = ctx.ComputeJoinCost(leftStats, rightStats, joinImpl)
+    double cost = ctx.ComputeJoinCost(leftStats, rightStats, joinAlgo)
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
@@ -78,7 +78,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 }
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinImplType joinImpl, const IProviderContext& ctx) {
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -88,5 +88,5 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinImpl, ctx);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx);
 }

@@ -97,14 +97,18 @@ void ComputeJoinConditions(const TCoEquiJoinTuple& joinTuple,
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    EJoinImplType joinImpl,
+    EJoinAlgoType joinAlgo,
     IProviderContext& ctx) {
 
-    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, EJoinKind::InnerJoin);
-    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinImpl, ctx));
+    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions, EJoinKind::InnerJoin, joinAlgo);
+    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinConditions, joinAlgo, ctx));
     return res;
 }
 
+/**
+ * Iterate over all join algorithms and pick the best join that is applicable.
+ * Also considers commuting joins
+*/
 std::shared_ptr<TJoinOptimizerNode> PickBestJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& leftJoinConditions,
@@ -145,6 +149,9 @@ std::shared_ptr<TJoinOptimizerNode> PickBestJoin(std::shared_ptr<IBaseOptimizerN
     return res;
 }
 
+/**
+ * Iterate over all join algorithms and pick the best join that is applicable
+*/
 std::shared_ptr<TJoinOptimizerNode> PickBestNonReorderabeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, 
     const std::set<std::pair<TJoinColumn, TJoinColumn>>& leftJoinConditions,
@@ -927,7 +934,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(const TCoEquiJoinTuple& jo
             TJoinColumn(rightScope, rightColumn)));
     }
 
-    return std::make_shared<TJoinOptimizerNode>(left,right,joinConds,ConvertToJoinKind(joinTuple.Type().StringValue()));
+    return std::make_shared<TJoinOptimizerNode>(left, right, joinConds, ConvertToJoinKind(joinTuple.Type().StringValue()), EJoinAlgoType::DictJoin);
 }
 
 /**
@@ -992,7 +999,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
     if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
         ComputeStatistics(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), ctx);
     }
-    join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin, ctx));
+    join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinAlgoType::DictJoin, ctx));
 }
 
 /**
@@ -1086,7 +1093,7 @@ public:
             if (join->RightArg->Kind == EOptimizerNodeKind::JoinNodeType) {
                 join->RightArg = OptimizeSubtree(static_pointer_cast<TJoinOptimizerNode>(join->RightArg), MaxDPccpDPTableSize, Pctx);
             }  
-            join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinImplType::DictJoin, Pctx));
+            join->Stats = std::make_shared<TOptimizerStatistics>(ComputeJoinStats(*join->LeftArg->Stats, *join->RightArg->Stats, join->JoinConditions, EJoinAlgoType::DictJoin, Pctx));
         }
 
         // Optimize the root

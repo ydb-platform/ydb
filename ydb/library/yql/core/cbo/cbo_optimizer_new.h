@@ -87,12 +87,12 @@ TString ConvertToJoinString(const EJoinKind kind);
 struct IProviderContext {
     virtual ~IProviderContext() = default;
 
-    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinImplType joinImpl) const = 0;
+    virtual double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgol) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
         const std::shared_ptr<IBaseOptimizerNode>& right, 
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        EJoinImplType joinImpl) = 0;
+        EJoinAlgoType joinAlgo) = 0;
 
 };
 
@@ -100,23 +100,23 @@ struct IProviderContext {
  * Temporary solution for default provider context
 */
 
-struct TDummyProviderContext : IProviderContext {
+struct TDummyProviderContext : public IProviderContext {
     TDummyProviderContext() {}
 
-    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinImplType joinImpl) const {
-        Y_UNUSED(joinImpl);
+    double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgo) const override {
+        Y_UNUSED(joinAlgo);
         return leftStats.Nrows + 2.0 * rightStats.Nrows;
     }
 
     bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
         const std::shared_ptr<IBaseOptimizerNode>& right, 
         const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        EJoinImplType joinImpl) {
+        EJoinAlgoType joinAlgo) override {
 
         Y_UNUSED(left);
         Y_UNUSED(right);
         Y_UNUSED(joinConditions);
-        Y_UNUSED(joinImpl);
+        Y_UNUSED(joinAlgo);
 
         return true;
     }
@@ -139,10 +139,11 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> RightArg;
     std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> JoinConditions;
     EJoinKind JoinType;
+    EJoinAlgoType JoinAlgo;
     bool IsReorderable;
 
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right, 
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, const EJoinKind joinType, bool nonReorderable=false);
+        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable=false);
     virtual ~TJoinOptimizerNode() {}
     virtual TVector<TString> Labels();
     virtual void Print(std::stringstream& stream, int ntabs=0);

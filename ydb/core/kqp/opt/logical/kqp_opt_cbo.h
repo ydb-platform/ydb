@@ -7,6 +7,9 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+/**
+ * KQP specific Rel node, includes a pointer to ExprNode
+*/
 struct TKqpRelOptimizerNode : public NYql::TRelOptimizerNode {
     const NYql::TExprNode::TPtr Node;
 
@@ -14,17 +17,21 @@ struct TKqpRelOptimizerNode : public NYql::TRelOptimizerNode {
         TRelOptimizerNode(label, stats), Node(node) { }
 };
 
+/**
+ * KQP Specific cost function and join applicability cost function
+*/
 struct TKqpProviderContext : public NYql::IProviderContext {
-    TKqpProviderContext(const TKqpOptimizeContext& kqpCtx) : KqpCtx(kqpCtx) {}
+    TKqpProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel) : KqpCtx(kqpCtx), OptLevel(optLevel) {}
 
     virtual bool IsJoinApplicable(const std::shared_ptr<NYql::IBaseOptimizerNode>& left, 
         const std::shared_ptr<NYql::IBaseOptimizerNode>& right, 
         const std::set<std::pair<NYql::NDq::TJoinColumn, NYql::NDq::TJoinColumn>>& joinConditions,
-        NYql::EJoinImplType joinImpl);
+        NYql::EJoinAlgoType joinAlgo) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, NYql::EJoinImplType joinImpl) const;
+    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, NYql::EJoinAlgoType joinAlgo) const override;
 
     const TKqpOptimizeContext& KqpCtx;
+    int OptLevel;
 };
 
 }

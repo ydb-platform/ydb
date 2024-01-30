@@ -125,22 +125,37 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left, 
     const std::shared_ptr<IBaseOptimizerNode>& right, 
     const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    EJoinImplType joinImpl) {
+    EJoinAlgoType joinAlgo)  {
 
-    switch( joinImpl ) {
-        case EJoinImplType::LookupJoin:
+    switch( joinAlgo ) {
+        case EJoinAlgoType::LookupJoin:
+            if (OptLevel==2 && left->Stats->Nrows > 10e3) {
+                return false;
+            }
             return IsLookupJoinApplicable(left, right, joinConditions, *this);
-        default:
+
+        case EJoinAlgoType::DictJoin:
+            return right->Stats->Nrows < 10e5;
+        case EJoinAlgoType::MapJoin:
+            return right->Stats->Nrows < 10e6;
+        case EJoinAlgoType::GraceJoin:
             return true;
     }
 }
 
-double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinImplType joinImpl) const {
+double TKqpProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, EJoinAlgoType joinAlgo) const  {
 
-    switch(joinImpl) {
-        case EJoinImplType::LookupJoin:
-            return -1;
-        default:
+    switch(joinAlgo) {
+        case EJoinAlgoType::LookupJoin:
+            if (OptLevel==1) {
+                return -1;
+            }
+            return leftStats.Nrows;
+        case EJoinAlgoType::DictJoin:
+            return leftStats.Nrows + 1.7 * rightStats.Nrows;
+        case EJoinAlgoType::MapJoin:
+            return leftStats.Nrows + 1.8 * rightStats.Nrows;
+        case EJoinAlgoType::GraceJoin:
             return leftStats.Nrows + 2.0 * rightStats.Nrows;
     }
 }

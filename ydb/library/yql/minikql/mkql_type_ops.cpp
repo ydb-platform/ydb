@@ -1240,29 +1240,29 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
 
 ui32 ParseTime(ui32 pos, NUdf::TStringRef buf, ui32& timeValue) {
     if (pos == buf.Size() || buf.Data()[pos] != 'T') {
-        return 0;
+        return buf.Size();
     }
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
-        return 0;
+        return buf.Size();
     }
 
     // skip ':'
     ++pos;
     if (!ParseNumber(pos, buf, minute, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
-        return 0;
+        return buf.Size();
     }
 
     // skip ':'
     ++pos;
     if (!ParseNumber(pos, buf, second, 2) || pos == buf.Size()) {
-        return 0;
+        return buf.Size();
     }
 
     if (!MakeTime(hour, minute, second, timeValue)) {
-        return 0;
+        return buf.Size();
     }
     return pos;
 }

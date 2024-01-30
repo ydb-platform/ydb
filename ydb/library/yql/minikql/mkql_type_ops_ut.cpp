@@ -152,6 +152,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         TestTimestamp64FromToString(NUdf::MIN_TIMESTAMP64, "-144169-01-01T00:00:00Z");
     }
 
+    Y_UNIT_TEST(ParseTimeStamp64) {
+        const auto v = ValueFromString(NUdf::EDataSlot::Timestamp64, "1970-1-1T0:0:1");
+        UNIT_ASSERT(v.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(1, v.Get<i64>());
+    }
+
     Y_UNIT_TEST(TimestampOldVsNew) {
         TScopedAlloc alloc(__LOCATION__);
         alloc.DisableStrictAllocationCheck();

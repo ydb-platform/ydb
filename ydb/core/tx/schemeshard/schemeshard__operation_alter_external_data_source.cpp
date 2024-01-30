@@ -92,7 +92,6 @@ class TAlterExternalDataSource : public TSubOperation {
                                        const TPath& dstPath,
                                        const TString& acl) {
         const auto checks = dstPath.Check();
-        // ReSharper disable once CppExpressionWithoutSideEffects
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()

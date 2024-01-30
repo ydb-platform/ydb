@@ -110,7 +110,7 @@ public:
                     ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
                     if (itemsLimit || bytesLimit) {
                         if (!firstChild) {
-                            // do not apply limit on first child because beginRowId/key1 position is uncertain
+                            // do not apply limit on the first child because beginRowId/key1 position is uncertain
                             firstChild = child;
                         } else {
                             if (itemsLimit) {
@@ -231,11 +231,9 @@ public:
         endRowId++; // current interface accepts inclusive row1 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
         
-        bool ready = true;
+        bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
-        
-        Y_UNUSED(itemsLimit);
-        Y_UNUSED(bytesLimit);
+        ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -246,6 +244,7 @@ public:
             chargeGroups = false;
         }
 
+        // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
@@ -254,6 +253,9 @@ public:
             // tryHandleChild may update them, copy for simplicity
             // always load endRowId - 1 regardless of keys
             const TRowId levelBeginRowId = Min(beginRowId, endRowId - 1), levelEndRowId = endRowId;
+            
+            const TChild* lastChild = nullptr;
+            const TChild* prevLastChild = nullptr;
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
                     continue;
@@ -266,18 +268,44 @@ public:
                 if (node.EndRowId > levelEndRowId) {
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
-                for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
-                    auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
+                for (TRecIdx posExt = to; posExt > from; posExt--) {
+                    auto child = node.GetChildRef(posExt - 1);
+                    auto prevChild = posExt - 1 ? node.GetChildRef(posExt - 2) : nullptr;
                     TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
+                    TRowId endRowId = child->RowCount;
+                    if (itemsLimit || bytesLimit) {
+                        if (!lastChild) {
+                            // do not apply limit on the last child because endRowId/key1 position is uncertain
+                            lastChild = child;
+                        } else {
+                            if (!prevLastChild) {
+                                prevLastChild = child;
+                            }
+                            if (itemsLimit) {
+                                ui64 items = prevLastChild->GetNonErasedRowCount() - child->GetNonErasedRowCount();
+                                if (LimitExceeded(items, itemsLimit)) {
+                                    overshot = false;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
                 }
             }
         };
 
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
+                if (chargeGroups && chargeGroupsItemsLimit) {
+                    // TODO: use erased count
+                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    if (unloadedItems < chargeGroupsItemsLimit) {
+                        chargeGroupsItemsLimit -= unloadedItems;
+                    } else {
+                        chargeGroups = false;
+                    }
+                }
                 endRowId = Min(endRowId, child.BeginRowId);
             }
             if (child.PageId == key2PageId) {
@@ -358,13 +386,13 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        bool overshot = beginRowId == sliceBeginRowId;
+        overshot &= beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
@@ -372,7 +400,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, itemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -394,6 +422,23 @@ private:
         return ready;
     }
 
+    bool DoPrechargeGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+        bool ready = true;
+        
+        if (chargeGroups && beginRowId < endRowId) {
+            if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
+                beginRowId = endRowId - itemsLimit - 1;
+            }
+
+            for (auto groupId : Groups) {
+                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
+            }
+        }
+
+        return ready;
+    }
+
+private:
     bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
 

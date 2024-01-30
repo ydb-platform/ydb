@@ -336,6 +336,18 @@ namespace NTable {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
                         }
                     }
+                    if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
+                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
+                        if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
+                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
+                        }
+                    }
+                    if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
+                        if (!items) {
+                            prechargedFirstRowId = prechargeCurrentFirstRowId;
+                        }
+                        items += prechargeCurrentFirstRowId - prechargeCurrentLastRowId + 1;
+                    }
                     if (key2Page && key2Page >= current) {
                         if (key2Page == current) {
                             if (needExactBounds && page) {
@@ -350,25 +362,13 @@ namespace NTable {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
                         }
                     }
-
-                    if (itemsLimit && prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        ui64 left = itemsLimit - items; // we count only foolproof taken rows, so here we may precharge some extra rows
-                        if (prechargeCurrentFirstRowId - prechargeCurrentLastRowId > left) {
-                            prechargeCurrentLastRowId = prechargeCurrentFirstRowId - left;
-                        }
-                    }
-
                     if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
-                        }
                         prechargedLastRowId = prechargeCurrentLastRowId;
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroupReverse(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
                             }
                         }
-                        items += prechargeCurrentFirstRowId - prechargeCurrentLastRowId + 1;
                     }
 
                     if (current.Off() == 0) {

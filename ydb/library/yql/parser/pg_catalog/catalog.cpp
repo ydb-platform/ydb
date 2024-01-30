@@ -1402,26 +1402,28 @@ struct TCatalog {
             "lo_unlink"
         }),
         StaticTables({
-            {"pg_catalog", "pg_type"},
-            {"pg_catalog", "pg_database"},
-            {"pg_catalog", "pg_tablespace"},
-            {"pg_catalog", "pg_shdescription"},
-            {"pg_catalog", "pg_trigger"},
-            {"pg_catalog", "pg_locks"},
-            {"pg_catalog", "pg_stat_gssapi"},
-            {"pg_catalog", "pg_inherits"},
-            {"pg_catalog", "pg_stat_activity"},
-            {"pg_catalog", "pg_timezone_names"},
-            {"pg_catalog", "pg_timezone_abbrevs"},
-            {"pg_catalog", "pg_tables"},
-            {"pg_catalog", "pg_description"},
-            {"pg_catalog", "pg_am"},
-            {"pg_catalog", "pg_namespace"},
-            {"pg_catalog", "pg_auth_members"},
-            {"pg_catalog", "pg_roles"},
-            {"information_schema", "tables"},
-            {"information_schema", "columns"},
-            {"information_schema", "table_constraints"},
+            {{"pg_catalog", "pg_type"}, ERelKind::Relation, TypeRelationOid},
+            {{"pg_catalog", "pg_database"}, ERelKind::Relation, DatabaseRelationOid},
+            {{"pg_catalog", "pg_tablespace"}, ERelKind::Relation, TableSpaceRelationOid},
+            {{"pg_catalog", "pg_shdescription"}, ERelKind::Relation, SharedDescriptionRelationOid},
+            {{"pg_catalog", "pg_trigger"}, ERelKind::Relation, TriggerRelationOid},
+            {{"pg_catalog", "pg_locks"}, ERelKind::View, 10000},
+            {{"pg_catalog", "pg_stat_gssapi"}, ERelKind::View, 10001},
+            {{"pg_catalog", "pg_inherits"}, ERelKind::Relation, InheritsRelationOid},
+            {{"pg_catalog", "pg_stat_activity"}, ERelKind::View, 10002},
+            {{"pg_catalog", "pg_timezone_names"}, ERelKind::View, 10003},
+            {{"pg_catalog", "pg_timezone_abbrevs"}, ERelKind::View, 10004},
+            {{"pg_catalog", "pg_tables"}, ERelKind::View, 10005},
+            {{"pg_catalog", "pg_description"}, ERelKind::Relation, DescriptionRelationOid},
+            {{"pg_catalog", "pg_am"}, ERelKind::Relation, AccessMethodRelationOid},
+            {{"pg_catalog", "pg_namespace"}, ERelKind::Relation, NamespaceRelationOid},
+            {{"pg_catalog", "pg_auth_members"}, ERelKind::Relation, AuthMemRelationOid},
+            {{"pg_catalog", "pg_roles"}, ERelKind::View, 10006},
+            {{"pg_catalog", "pg_stat_database"}, ERelKind::View, 10007},
+            {{"pg_catalog", "pg_class"}, ERelKind::Relation, RelationRelationOid},
+            {{"information_schema", "tables"}, ERelKind::View, 10008},
+            {{"information_schema", "columns"}, ERelKind::View, 10009},
+            {{"information_schema", "table_constraints"}, ERelKind::View, 10010},
         }),
         AllStaticColumns({
             {"pg_catalog", "pg_type", "oid", "oid"},
@@ -1510,6 +1512,24 @@ struct TCatalog {
             {"pg_catalog", "pg_roles", "rolsuper", "bool"},
             {"pg_catalog", "pg_roles", "rolvaliduntil", "timestamptz"},
 
+            {"pg_catalog", "pg_stat_database", "datid", "oid"},
+            {"pg_catalog", "pg_stat_database", "blks_hit", "int8"},
+            {"pg_catalog", "pg_stat_database", "blks_read", "int8"},
+            {"pg_catalog", "pg_stat_database", "tup_deleted", "int8"},
+            {"pg_catalog", "pg_stat_database", "tup_fetched", "int8"},
+            {"pg_catalog", "pg_stat_database", "tup_inserted", "int8"},
+            {"pg_catalog", "pg_stat_database", "tup_returned", "int8"},
+            {"pg_catalog", "pg_stat_database", "tup_updated", "int8"},
+            {"pg_catalog", "pg_stat_database", "xact_commit", "int8"},
+            {"pg_catalog", "pg_stat_database", "xact_rollback", "int8"},
+
+            {"pg_catalog", "pg_class", "oid", "oid"},
+            {"pg_catalog", "pg_class", "relispartition", "bool"},
+            {"pg_catalog", "pg_class", "relkind", "char"},
+            {"pg_catalog", "pg_class", "relname", "name"},
+            {"pg_catalog", "pg_class", "relnamespace", "oid"},
+            {"pg_catalog", "pg_class", "relowner", "oid"},
+
             {"information_schema", "tables", "table_schema", "name"},
             {"information_schema", "tables", "table_name", "name"},
 
@@ -1523,12 +1543,14 @@ struct TCatalog {
             {"information_schema", "table_constraints", "constraint_type", "varchar"},
         })
     {
+        THashSet<ui32> usedTableOids;
         for (const auto& t : StaticTables) {
             StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+            Y_ENSURE(usedTableOids.insert(t.Oid).first);
         }
 
         for (const auto& c: AllStaticColumns) {
-            auto tablePtr = StaticColumns.FindPtr(TTableInfo{c.Schema, c.TableName});
+            auto tablePtr = StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
         }
@@ -1740,7 +1762,7 @@ struct TCatalog {
 
     TVector<TTableInfo> StaticTables;
     TVector<TColumnInfo> AllStaticColumns;
-    THashMap<TTableInfo, TVector<TColumnInfo>> StaticColumns;
+    THashMap<TTableInfoKey, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -2904,7 +2926,7 @@ const TVector<TTableInfo>& GetStaticTables() {
     return catalog.StaticTables;
 }
 
-const THashMap<TTableInfo, TVector<TColumnInfo>>& GetStaticColumns() {
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns() {
     const auto& catalog = TCatalog::Instance();
     return catalog.StaticColumns;
 }

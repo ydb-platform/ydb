@@ -283,7 +283,7 @@ public:
 
     TActorId SysPartitionStatsCollector;
 
-    TActorId SVPMigrator;
+    TActorId TabletMigrator;
     TActorId CdcStreamScanFinalizer;
 
     TDuration StatsMaxExecuteTime;
@@ -384,6 +384,8 @@ public:
     void BreakTabletAndRestart(const TActorContext& ctx);
 
     bool IsSchemeShardConfigured() const;
+
+    void InitializeTabletMigrations();
 
     ui64 Generation() const;
 

@@ -83,33 +83,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     }
 
     if (IsDomainSchemeShard) {
-        std::queue<TSVPMigrationInfo> migrations;
-        for (auto& [pathId, subdomain] : SubDomains) {
-            if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
-                continue;
-            }
-            if (subdomain->GetTenantSysViewProcessorID() != InvalidTabletId) { // tenant has SVP
-                continue;
-            }
-
-            auto path = TPath::Init(pathId, this);
-            if (path->IsRoot()) { // do not migrate main domain
-                continue;
-            }
-
-            auto workingDir = path.Parent().PathString();
-            auto dbName = path.LeafName();
-            TSVPMigrationInfo migration{workingDir, dbName};
-            migrations.push(std::move(migration));
-
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SVPMigrator - creating SVP"
-                << ", working dir: " << workingDir
-                << ", db name: " << dbName
-                << ", at schemeshard: " << TabletID());
-        }
-
-        SVPMigrator = Register(CreateSVPMigrator(TabletID(), SelfId(), std::move(migrations)).Release());
+        InitializeTabletMigrations();
     }
 
     ResumeExports(opts.ExportIds, ctx);
@@ -133,6 +107,57 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     InitializeStatistics(ctx);
 
     Become(&TThis::StateWork);
+}
+
+void TSchemeShard::InitializeTabletMigrations() {
+    std::queue<TMigrationInfo> migrations;
+
+    for (auto& [pathId, subdomain] : SubDomains) {
+        auto path = TPath::Init(pathId, this);
+        if (path->IsRoot()) { // do not migrate main domain
+            continue;
+        }
+        if (subdomain->GetTenantSchemeShardID() == InvalidTabletId) { // no tenant schemeshard
+            continue;
+        }
+
+        bool createSVP = false;
+        bool createSA = false;
+
+        if (subdomain->GetTenantSysViewProcessorID() == InvalidTabletId) {
+            createSVP = true;
+        }
+
+        if (EnableStatistics &&
+            !IsServerlessDomain(subdomain) &&
+            subdomain->GetTenantStatisticsAggregatorID() == InvalidTabletId)
+        {
+            createSA = true;
+        }
+
+        if (!createSVP && !createSA) {
+            continue;
+        }
+
+        auto workingDir = path.Parent().PathString();
+        auto dbName = path.LeafName();
+        TMigrationInfo migration{workingDir, dbName, createSVP, createSA};
+        migrations.push(std::move(migration));
+
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TabletMigrator - creating tablets"
+            << ", working dir: " << workingDir
+            << ", db name: " << dbName
+            << ", create SVP: " << createSVP
+            << ", create SA: " << createSA
+            << ", at schemeshard: " << TabletID());
+    }
+
+    if (migrations.empty()) {
+        return;
+    }
+
+    TabletMigrator = Register(CreateTabletMigrator(TabletID(), SelfId(), std::move(migrations)).Release());
 }
 
 ui64 TSchemeShard::Generation() const {
@@ -4204,8 +4229,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
 
-    if (SVPMigrator) {
-        ctx.Send(SVPMigrator, new TEvents::TEvPoisonPill());
+    if (TabletMigrator) {
+        ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
 
     if (CdcStreamScanFinalizer) {
@@ -6990,9 +7015,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
-    if (!EnableStatistics) {
-        return;
-    }
     ResolveSA();
     ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
 }
@@ -7037,8 +7059,15 @@ void TSchemeShard::ConnectToSA() {
 }
 
 void TSchemeShard::SendBaseStatsToSA() {
-    if (!EnableStatistics || !SAPipeClientId) {
+    if (!EnableStatistics) {
         return;
+    }
+
+    if (!SAPipeClientId) {
+        ResolveSA();
+        if (!StatisticsAggregatorId) {
+            return;
+        }
     }
 
     int count = 0;

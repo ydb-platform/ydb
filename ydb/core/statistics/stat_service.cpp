@@ -43,6 +43,7 @@ public:
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvStatistics::TEvStatisticsIsDisabled, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
@@ -51,20 +52,21 @@ public:
     }
 
 private:
-    bool IsSAUnavailable() {
-        return ResolveSAStage == RSA_FINISHED && StatisticsAggregatorId == 0;
-    }
-
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Subscribed for config changes");
+            "Subscribed for config changes on node " << SelfId().NodeId());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        const auto& featureFlags = record.GetConfig().GetFeatureFlags();
-        EnableStatistics = featureFlags.GetEnableStatistics();
-
+        const auto& config = record.GetConfig();
+        if (config.HasFeatureFlags()) {
+            const auto& featureFlags = config.GetFeatureFlags();
+            EnableStatistics = featureFlags.GetEnableStatistics();
+            if (!EnableStatistics) {
+                ReplyAllFailed();
+            }
+        }
         auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
@@ -77,7 +79,7 @@ private:
         request.EvCookie = ev->Cookie;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
-        if (!EnableStatistics || IsSAUnavailable()) {
+        if (!EnableStatistics) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -106,12 +108,12 @@ private:
             auto& entry = navigate->ResultSet.back();
             if (entry.Status != TNavigate::EStatus::Ok) {
                 StatisticsAggregatorId = 0;
-            } else {
+            } else if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
                 StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
             }
-            ResolveSAStage = RSA_FINISHED;
+            ResolveSAStage = StatisticsAggregatorId ? RSA_FINISHED : RSA_INITIAL;
 
-            if (StatisticsAggregatorId != 0) {
+            if (StatisticsAggregatorId) {
                 ConnectToSA();
                 SyncNode();
             } else {
@@ -127,7 +129,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        if (!EnableStatistics || IsSAUnavailable()) {
+        if (!EnableStatistics) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -135,7 +137,7 @@ private:
         std::unordered_set<ui64> ssIds;
         bool isServerless = false;
         ui64 aggregatorId = 0;
-        TPathId resourcesDomainKey;
+        TPathId domainKey, resourcesDomainKey;
         for (const auto& entry : navigate->ResultSet) {
             if (entry.Status != TNavigate::EStatus::Ok) {
                 continue;
@@ -144,6 +146,7 @@ private:
             ssIds.insert(domainInfo->ExtractSchemeShard());
             aggregatorId = domainInfo->Params.GetStatisticsAggregator();
             isServerless = domainInfo->IsServerless();
+            domainKey = domainInfo->DomainKey;
             resourcesDomainKey = domainInfo->ResourcesDomainKey;
         }
         if (ssIds.size() != 1) {
@@ -157,22 +160,31 @@ private:
             return;
         }
 
+        auto navigateDomainKey = [this] (TPathId domainKey) {
+            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+            auto navigate = std::make_unique<TNavigate>();
+            auto& entry = navigate->ResultSet.emplace_back();
+            entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+            entry.Operation = TNavigate::EOp::OpPath;
+            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+            entry.RedirectRequired = false;
+            navigate->Cookie = ResolveSACookie;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+            ResolveSAStage = RSA_IN_FLIGHT;
+        };
+
         switch (ResolveSAStage) {
-        case RSA_NOT_RUN:
+        case RSA_INITIAL:
             if (!isServerless) {
-                StatisticsAggregatorId = aggregatorId;
-                ResolveSAStage = RSA_FINISHED;
+                if (aggregatorId) {
+                    StatisticsAggregatorId = aggregatorId;
+                    ResolveSAStage = RSA_FINISHED;
+                } else {
+                    navigateDomainKey(domainKey);
+                    return;
+                }
             } else {
-                using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-                auto navigate = std::make_unique<TNavigate>();
-                auto& entry = navigate->ResultSet.emplace_back();
-                entry.TableId = TTableId(resourcesDomainKey.OwnerId, resourcesDomainKey.LocalPathId);
-                entry.Operation = TNavigate::EOp::OpPath;
-                entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-                entry.RedirectRequired = false;
-                navigate->Cookie = ResolveSACookie;
-                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
-                ResolveSAStage = RSA_IN_FLIGHT;
+                navigateDomainKey(resourcesDomainKey);
                 return;
             }
             break;
@@ -182,7 +194,7 @@ private:
             break;
         }
 
-        if (IsSAUnavailable()) {
+        if (!StatisticsAggregatorId) {
             ReplyFailed(requestId, true);
             return;
         }
@@ -301,6 +313,10 @@ private:
         SAPipeClientId = TActorId();
         ConnectToSA();
         SyncNode();
+    }
+
+    void Handle(TEvStatistics::TEvStatisticsIsDisabled::TPtr&) {
+        ReplyAllFailed();
     }
 
     void ConnectToSA() {
@@ -465,11 +481,11 @@ private:
 
     static const ui64 ResolveSACookie = std::numeric_limits<ui64>::max();
     enum EResolveSAStage {
-        RSA_NOT_RUN,
+        RSA_INITIAL,
         RSA_IN_FLIGHT,
         RSA_FINISHED
     };
-    EResolveSAStage ResolveSAStage = RSA_NOT_RUN;
+    EResolveSAStage ResolveSAStage = RSA_INITIAL;
 };
 
 THolder<IActor> CreateStatService() {

@@ -152,10 +152,27 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
         TestTimestamp64FromToString(NUdf::MIN_TIMESTAMP64, "-144169-01-01T00:00:00Z");
     }
 
-    Y_UNIT_TEST(ParseTimeStamp64) {
-        const auto v = ValueFromString(NUdf::EDataSlot::Timestamp64, "1970-1-1T0:0:1");
-        UNIT_ASSERT(v.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(1, v.Get<i64>());
+    Y_UNIT_TEST(ParseDateTime64) {
+        {
+            const auto v = ValueFromString(NUdf::EDataSlot::Datetime64, "1970-1-2T0:0:0-1:0");
+            UNIT_ASSERT(v.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(90000, v.Get<i64>());
+        }
+        {
+            const auto v = ValueFromString(NUdf::EDataSlot::Datetime64, "1970-1-2T0:0:0+1:0");
+            UNIT_ASSERT(v.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(82800, v.Get<i64>());
+        }
+        {
+            const auto v = ValueFromString(NUdf::EDataSlot::Datetime, "1970-1-2T0:0:0-1:0");
+            UNIT_ASSERT(v.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(90000, v.Get<ui32>());
+        }
+        {
+            const auto v = ValueFromString(NUdf::EDataSlot::Datetime, "1970-1-2T0:0:0+1:0");
+            UNIT_ASSERT(v.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(82800, v.Get<ui32>());
+        }
     }
 
     Y_UNIT_TEST(TimestampOldVsNew) {

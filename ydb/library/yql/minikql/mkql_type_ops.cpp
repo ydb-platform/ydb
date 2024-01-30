@@ -1306,7 +1306,7 @@ ui32 ParseTimezoneOffset(ui32 pos, NUdf::TStringRef buf, i32& offset) {
         ++pos;
     }
 
-    offset = is_offset_negative ? -offset_value : offset_value;
+    offset = is_offset_negative ? offset_value : -offset_value;
     return pos;
 }
 
@@ -1329,7 +1329,8 @@ NUdf::TUnboxedValuePod ParseDatetime64(NUdf::TStringRef buf) {
     if (Y_LIKELY(pos == buf.Size())) {
         i64 value = 86400;
         value *= date;
-        value += time + zoneOffset;
+        value += time;
+        value += zoneOffset;
         return NUdf::TUnboxedValuePod(value);
     }
     return NUdf::TUnboxedValuePod();

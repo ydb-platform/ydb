@@ -1,6 +1,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
 
 #include "mkql_type_ops.h"
+#include "mkql_alloc.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -40,13 +41,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             UNIT_ASSERT(strDate16.HasValue());
             auto value32 = ValueFromString(NUdf::EDataSlot::Date32, strDate16.AsStringRef());
             UNIT_ASSERT(value32.HasValue());
-            UNIT_ASSERT_EQUAL(value16, value32.Get<i32>());
+            UNIT_ASSERT_VALUES_EQUAL(value16, value32.Get<i32>());
             const NUdf::TUnboxedValue& strDate32 = ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(value32.Get<i32>()));
             UNIT_ASSERT(strDate32.HasValue());
-            UNIT_ASSERT_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
-            auto val32 = ValueFromString(NUdf::EDataSlot::Date32, strDate32.AsStringRef());
-            UNIT_ASSERT(val32.HasValue());
-            UNIT_ASSERT_EQUAL(value16, val32.Get<i32>());
+            UNIT_ASSERT_VALUES_EQUAL(strDate16.AsStringRef(), strDate32.AsStringRef());
         }
     }
 
@@ -60,7 +58,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
             if (year < 0) {
                 year++;
             }
-            UNIT_ASSERT_EQUAL(value, date2j(year, month, day) - UNIX_EPOCH_JDATE);
+            UNIT_ASSERT_VALUES_EQUAL(value, date2j(year, month, day) - UNIX_EPOCH_JDATE);
         }
     }
 
@@ -73,71 +71,101 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
                 year--;
             }
             UNIT_ASSERT(MakeDate32(year, static_cast<ui32>(month), static_cast<ui32>(day), date32));
-            UNIT_ASSERT_EQUAL(date32, value - UNIX_EPOCH_JDATE);
+            UNIT_ASSERT_VALUES_EQUAL(date32, value - UNIX_EPOCH_JDATE);
             if (date32 == NUdf::MAX_DATE32) {
                 break;
             }
         }
     }
 
-    /*
-    Y_UNIT_TEST(IntervalBackwardsCompatibility) {
-        for (i64 v = -NUdf::MAX_TIMESTAMP + 1; v < (i64)NUdf::MAX_TIMESTAMP; ++v) {
-            const auto str = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(v));
-            UNIT_ASSERT(str.HasValue());
-            auto v64 = ValueFromString(NUdf::EDataSlot::Interval64, str.AsStringRef());
-            UNIT_ASSERT(v64.HasValue());
-            UNIT_ASSERT_EQUAL(v, v64.Get<i64>());
-            const auto str64 = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v));
-            UNIT_ASSERT(str64.HasValue());
-            UNIT_ASSERT_EQUAL(str.AsStringRef(), str64.AsStringRef());
-        }
-    }
-
-    Y_UNIT_TEST(Interval64FromToString) {
-        for (i64 v = -NUdf::MAX_INTERVAL64; v <= NUdf::MAX_INTERVAL64; ++v) {
-            const auto str = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(v));
-            UNIT_ASSERT(str.HasValue());
-            auto vv = ValueFromString(NUdf::EDataSlot::Interval64, str.AsStringRef());
-            UNIT_ASSERT(vv.HasValue());
-            UNIT_ASSERT_EQUAL(v, vv.Get<i64>());
-        }
-    }
-
-    Y_UNIT_TEST(IntervalFromToString) {
-        for (i64 v = -NUdf::MAX_TIMESTAMP + 1; v < (i64)NUdf::MAX_TIMESTAMP; ++v) {
-            const auto str = ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(v));
-            UNIT_ASSERT(str.HasValue());
-            auto vv = ValueFromString(NUdf::EDataSlot::Interval, str.AsStringRef());
-            UNIT_ASSERT(vv.HasValue());
-            UNIT_ASSERT_EQUAL(v, vv.Get<i64>());
-        }
+    void TestInterval64FromToString(i64 value, NUdf::TStringRef expected) {
+        const auto str = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(value));
+        UNIT_ASSERT(str.HasValue());
+        const auto v = ValueFromString(NUdf::EDataSlot::Interval64, str.AsStringRef());
+        UNIT_ASSERT(v.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(value, v.Get<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(expected, str.AsStringRef());
     }
 
     Y_UNIT_TEST(Interval64) {
-        auto v = ValueFromString(NUdf::EDataSlot::Interval64, "P1D");
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck();
+        TestInterval64FromToString(0, "PT0S");
+        TestInterval64FromToString(NUdf::MAX_INTERVAL64, "P106751616DT23H59M59.999999S");
+        TestInterval64FromToString(-NUdf::MAX_INTERVAL64, "-P106751616DT23H59M59.999999S");
+    }
+
+    void TestDatetime64FromToString(i64 value, NUdf::TStringRef expected) {
+        const auto str = ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(value));
+        UNIT_ASSERT(str.HasValue());
+        const auto v = ValueFromString(NUdf::EDataSlot::Datetime64, str.AsStringRef());
         UNIT_ASSERT(v.HasValue());
-        Cerr << "amikish v=" << v.Get<i64>() << Endl;
-
-        const auto vv = ValueToString(NUdf::EDataSlot::Interval64, v);
-        UNIT_ASSERT(vv.HasValue());
-        Cerr << "amikish v=" << vv.AsStringRef() << Endl;
-
-        auto vplus = v.Get<i64>() + 1 * 1000000;
-        const auto vvv = ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(vplus));
-        UNIT_ASSERT(vvv.HasValue());
-        Cerr << "amikish v=" << vvv.AsStringRef() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(value, v.Get<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(expected, str.AsStringRef());
     }
 
     Y_UNIT_TEST(Datetime64) {
-        auto v = ValueFromString(NUdf::EDataSlot::Datetime64, "1970-01-01T01:01:01Z");
-        UNIT_ASSERT(v.HasValue());
-        Cerr << "amikish v=" << v.Get<i64>() << Endl;
-        const auto vv = ValueToString(NUdf::EDataSlot::Datetime64, v);
-        UNIT_ASSERT(vv.HasValue());
-        Cerr << "amikish v=" << vv.AsStringRef() << Endl;
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck();
+        TestDatetime64FromToString(-86400, "1969-12-31T00:00:00Z");
+        TestDatetime64FromToString(-86399, "1969-12-31T00:00:01Z");
+        TestDatetime64FromToString(-1, "1969-12-31T23:59:59Z");
+        TestDatetime64FromToString(0, "1970-01-01T00:00:00Z");
+        TestDatetime64FromToString(1, "1970-01-01T00:00:01Z");
+        TestDatetime64FromToString(86399, "1970-01-01T23:59:59Z");
+        TestDatetime64FromToString(86400, "1970-01-02T00:00:00Z");
+        TestDatetime64FromToString(NUdf::MAX_DATETIME64, "148107-12-31T23:59:59Z");
+        TestDatetime64FromToString(NUdf::MIN_DATETIME64, "-144169-01-01T00:00:00Z");
     }
-    */
+
+    Y_UNIT_TEST(Datetime32vs64) {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck();
+        for (ui32 v32 = 0; v32 < NUdf::MAX_DATETIME/256; ++v32) {
+            const auto str32 = ValueToString(NUdf::EDataSlot::Datetime, NUdf::TUnboxedValuePod(v32));
+            UNIT_ASSERT(str32.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Datetime64, str32.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(v32, v64.Get<i64>());
+            const auto str64 = ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
+        }
+    }
+
+    void TestTimestamp64FromToString(i64 value, NUdf::TStringRef expected) {
+        const auto str = ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(value));
+        UNIT_ASSERT(str.HasValue());
+        const auto v = ValueFromString(NUdf::EDataSlot::Timestamp64, str.AsStringRef());
+        UNIT_ASSERT(v.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(value, v.Get<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(expected, str.AsStringRef());
+    }
+
+    Y_UNIT_TEST(Timestamp64) {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck();
+        TestTimestamp64FromToString(-1, "1969-12-31T23:59:59.999999Z");
+        TestTimestamp64FromToString(0, "1970-01-01T00:00:00Z");
+        TestTimestamp64FromToString(1, "1970-01-01T00:00:00.000001Z");
+        TestTimestamp64FromToString(NUdf::MAX_TIMESTAMP64, "148107-12-31T23:59:59.999999Z");
+        TestTimestamp64FromToString(NUdf::MIN_TIMESTAMP64, "-144169-01-01T00:00:00Z");
+    }
+
+    Y_UNIT_TEST(TimestampOldVsNew) {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck();
+        for (ui64 val = 0; val < NUdf::MAX_TIMESTAMP/(1024*1024*1024); ++val) {
+            const auto str32 = ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(val));
+            UNIT_ASSERT(str32.HasValue());
+            auto v64 = ValueFromString(NUdf::EDataSlot::Timestamp64, str32.AsStringRef());
+            UNIT_ASSERT(v64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(val, v64.Get<i64>());
+            const auto str64 = ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(v64.Get<i64>()));
+            UNIT_ASSERT(str64.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(str32.AsStringRef(), str64.AsStringRef());
+        }
+    }
 
     Y_UNIT_TEST(DateInOut) {
         ui32 year = 1970;

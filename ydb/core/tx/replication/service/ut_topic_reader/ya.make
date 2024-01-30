@@ -1,17 +1,20 @@
-LIBRARY()
+UNITTEST_FOR(ydb/core/tx/replication/service)
+
+FORK_SUBTESTS()
+
+SIZE(MEDIUM)
+
+TIMEOUT(600)
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/protos
-    ydb/core/testlib/default
+    ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/client/ydb_topic
     library/cpp/testing/unittest
 )
 
 SRCS(
-    test_env.h
-    write_topic.h
+    topic_reader_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -2,6 +2,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -132,6 +133,10 @@ public:
 
     const TActorId& GetSender() const {
         return Sender;
+    }
+
+    const TActorId& GetYdbProxy() const {
+        return YdbProxy;
     }
 
 private:

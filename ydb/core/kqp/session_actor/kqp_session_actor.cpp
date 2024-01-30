@@ -677,6 +677,12 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        if ((::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery))
+            && (::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery))) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Transactions between column and row tables are disabled at current time.");
+            return false;
+        }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);

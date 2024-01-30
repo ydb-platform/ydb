@@ -413,18 +413,6 @@ private:
         return source.FreeSpace;
     }
 
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() override {
-        return TypeEnv->BindAllocator();
-    }
-
-    std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() override {
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard;
-        if (TypeEnv) {
-            guard.emplace(TypeEnv->BindAllocator());
-        }
-        return guard;
-    }
-
     void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {
         const auto& secureParams = ev->Get()->SecureParams;
         const auto& taskParams = ev->Get()->TaskParams;

@@ -354,7 +354,7 @@ public:
     }
 
     void CountPDiskResponse() {
-        Bucket.IsAvail();
+        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 };
 

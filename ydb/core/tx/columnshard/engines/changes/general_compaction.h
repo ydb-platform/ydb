@@ -54,7 +54,6 @@ public:
         ui64 SumMemoryFix = 0;
         ui32 PortionsCount = 0;
         THashMap<ui32, ui64> MaxMemoryByColumnChunk;
-        std::map<ui64, std::vector<ui32>> RatedColumnIds;
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;
     };

@@ -283,7 +283,7 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
         SumMemoryFix += i.BlobRange.Size;
         auto it = maxChunkSizeByColumn.find(i.GetColumnId());
         if (it == maxChunkSizeByColumn.end()) {
-            it = maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified()).first;
+            maxChunkSizeByColumn.emplace(i.GetColumnId(), i.GetMeta().GetRawBytesVerified());
         } else {
             if (it->second < i.GetMeta().GetRawBytesVerified()) {
                 it->second = i.GetMeta().GetRawBytesVerified();

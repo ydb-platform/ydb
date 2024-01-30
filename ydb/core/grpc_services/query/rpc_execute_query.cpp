@@ -409,9 +409,7 @@ private:
                 response.mutable_issues()->CopyFrom(issueMessage);
                 TString out;
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
-                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus(), finishStreamFlag);
-                this->PassAway();
+                ReplySerializedAndFinishStream(record.GetYdbStatus(), std::move(out));
             }
         }
 
@@ -432,6 +430,12 @@ private:
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
             "Client should not see this message, if so... may the force be with you");
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
+    }
+
+    void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
+        const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+        Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        this->PassAway();
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {

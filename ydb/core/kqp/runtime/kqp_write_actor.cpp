@@ -239,7 +239,7 @@ private:
                     || std::find(
                         std::begin(batchesQueue.front().OldTxIds),
                         std::end(batchesQueue.front().OldTxIds),
-                        ev->Get()->Record.GetTxId()) == std::end(batchesQueue.front().OldTxIds))) {
+                        ev->Get()->Record.GetTxId()) != std::end(batchesQueue.front().OldTxIds))) {
                 const bool needToResume = (GetFreeSpace() <= 0);
 
                 EgressStats.Bytes += batchesQueue.front().Data.size();

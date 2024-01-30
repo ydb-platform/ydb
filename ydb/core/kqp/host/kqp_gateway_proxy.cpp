@@ -1293,52 +1293,57 @@ public:
             bool createDir, bool existingOk) override {
         CHECK_PREPARED_DDL(CreateColumnTable);
 
-        const auto& cluster = metadata->Cluster;
+        try {
+            const auto& cluster = metadata->Cluster;
 
-        if (cluster != SessionCtx->GetCluster()) {
-            return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-        }
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-        std::pair<TString, TString> pathPair;
-        {
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, createDir)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, createDir)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
+
+            NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
+
+            tableDesc->SetName(pathPair.second);
+            FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata);
+
+            if (!FillCreateColumnTableDesc(metadata, *tableDesc, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                return MakeFuture(std::move(errResult));
+            }
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateTable()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
             }
         }
-
-        TRemoveLastPhyTxHelper phyTxRemover;
-        auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableCreateColumnTable();
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        Ydb::StatusIds::StatusCode code;
-        TString error;
-
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
-        schemeTx.SetFailedOnAlreadyExists(!existingOk);
-
-        NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
-
-        tableDesc->SetName(pathPair.second);
-        FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata);
-
-        if (!FillCreateColumnTableDesc(metadata, *tableDesc, code, error)) {
-            IKqpGateway::TGenericResult errResult;
-            errResult.AddIssue(NYql::TIssue(error));
-            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-            return MakeFuture(std::move(errResult));
-        }
-
-        if (IsPrepare()) {
-            TGenericResult result;
-            result.SetSuccess();
-            phyTxRemover.Forget();
-            return MakeFuture(result);
-        } else {
-            return Gateway->ModifyScheme(std::move(schemeTx));
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -1347,36 +1352,41 @@ public:
     {
         CHECK_PREPARED_DDL(AlterColumnTable);
 
-        if (cluster != SessionCtx->GetCluster()) {
-            return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-        std::pair<TString, TString> pathPair;
-        {
-            TString error;
-            if (!NSchemeHelpers::SplitTablePath(settings.Table, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Table, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
+            NKikimrSchemeOp::TAlterColumnTable* alter = schemeTx.MutableAlterColumnTable();
+            alter->SetName(settings.Table);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
             }
         }
-
-        TRemoveLastPhyTxHelper phyTxRemover;
-        auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableCreateColumnTable();
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-        NKikimrSchemeOp::TAlterColumnTable* alter = schemeTx.MutableAlterColumnTable();
-        alter->SetName(settings.Table);
-
-        if (IsPrepare()) {
-            TGenericResult result;
-            result.SetSuccess();
-            phyTxRemover.Forget();
-            return MakeFuture(result);
-        } else {
-            return Gateway->ModifyScheme(std::move(schemeTx));
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -1385,43 +1395,48 @@ public:
     {
         CHECK_PREPARED_DDL(CreateTableStore);
 
-        if (cluster != SessionCtx->GetCluster()) {
-            return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-        std::pair<TString, TString> pathPair;
-        {
-            TString error;
-            if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnStore);
+            schemeTx.SetFailedOnAlreadyExists(!existingOk);
+
+            NKikimrSchemeOp::TColumnStoreDescription* storeDesc = schemeTx.MutableCreateColumnStore();
+            storeDesc->SetName(pathPair.second);
+            storeDesc->SetColumnShardCount(settings.ShardsCount);
+
+            NKikimrSchemeOp::TColumnTableSchemaPreset* schemaPreset = storeDesc->AddSchemaPresets();
+            schemaPreset->SetName("default");
+            FillColumnTableSchema(*schemaPreset->MutableSchema(), settings);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateTableStore()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
             }
         }
-
-        TRemoveLastPhyTxHelper phyTxRemover;
-        auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableCreateTableStore();
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnStore);
-        schemeTx.SetFailedOnAlreadyExists(!existingOk);
-
-        NKikimrSchemeOp::TColumnStoreDescription* storeDesc = schemeTx.MutableCreateColumnStore();
-        storeDesc->SetName(pathPair.second);
-        storeDesc->SetColumnShardCount(settings.ShardsCount);
-
-        NKikimrSchemeOp::TColumnTableSchemaPreset* schemaPreset = storeDesc->AddSchemaPresets();
-        schemaPreset->SetName("default");
-        FillColumnTableSchema(*schemaPreset->MutableSchema(), settings);
-
-        if (IsPrepare()) {
-            TGenericResult result;
-            result.SetSuccess();
-            phyTxRemover.Forget();
-            return MakeFuture(result);
-        } else {
-            return Gateway->ModifyScheme(std::move(schemeTx));
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -1430,36 +1445,41 @@ public:
     {
         CHECK_PREPARED_DDL(AlterTableStore);
 
-        if (cluster != SessionCtx->GetCluster()) {
-            return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-        std::pair<TString, TString> pathPair;
-        {
-            TString error;
-            if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnStore);
+            NKikimrSchemeOp::TAlterColumnStore* alter = schemeTx.MutableAlterColumnStore();
+            alter->SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterTableStore()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
             }
         }
-
-        TRemoveLastPhyTxHelper phyTxRemover;
-        auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableAlterTableStore();
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnStore);
-        NKikimrSchemeOp::TAlterColumnStore* alter = schemeTx.MutableAlterColumnStore();
-        alter->SetName(pathPair.second);
-
-        if (IsPrepare()) {
-            TGenericResult result;
-            result.SetSuccess();
-            phyTxRemover.Forget();
-            return MakeFuture(result);
-        } else {
-            return Gateway->ModifyScheme(std::move(schemeTx));
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -1468,36 +1488,41 @@ public:
     {
         CHECK_PREPARED_DDL(DropTableStore);
 
-        if (cluster != SessionCtx->GetCluster()) {
-            return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
 
-        std::pair<TString, TString> pathPair;
-        {
-            TString error;
-            if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            std::pair<TString, TString> pathPair;
+            {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.TableStore, GetDatabase(), pathPair, error, false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            }
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetWorkingDir(pathPair.first);
+            schemeTx.SetSuccessOnNotExist(missingOk);
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnStore);
+            NKikimrSchemeOp::TDrop* drop = schemeTx.MutableDrop();
+            drop->SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableDropTableStore()->Swap(&schemeTx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(schemeTx));
             }
         }
-
-        TRemoveLastPhyTxHelper phyTxRemover;
-        auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto& schemeTx = *phyTx.MutableSchemeOperation()->MutableDropTableStore();
-        schemeTx.SetWorkingDir(pathPair.first);
-        schemeTx.SetSuccessOnNotExist(missingOk);
-        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropColumnStore);
-        NKikimrSchemeOp::TDrop* drop = schemeTx.MutableDrop();
-        drop->SetName(pathPair.second);
-
-        if (IsPrepare()) {
-            TGenericResult result;
-            result.SetSuccess();
-            phyTxRemover.Forget();
-            return MakeFuture(result);
-        } else {
-            return Gateway->ModifyScheme(std::move(schemeTx));
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 

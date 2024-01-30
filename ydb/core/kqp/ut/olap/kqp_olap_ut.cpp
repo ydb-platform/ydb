@@ -5514,6 +5514,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         const TString query = R"(
+            CREATE TABLE `/Root/ColumnSource` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+
             CREATE TABLE `/Root/DataShard1` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
@@ -5553,13 +5562,58 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto client = kikimr.GetQueryClient();
-        auto prepareResult = client.ExecuteQuery(R"(
-            REPLACE INTO `/Root/DataShard1` (Col1, Col2, Col3) VALUES
-                (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/ColumnSource` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
 
         {
+            // Missing Nullable column
+            const TString sql = R"(
+                REPLACE INTO `/Root/ColumnShard`
+                SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/ColumnSource`
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2, Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
+        }
+
+        {
+            // column -> column
+            const TString sql = R"(
+                REPLACE INTO `/Root/ColumnShard2`
+                SELECT * FROM `/Root/ColumnSource`
+            )";
+            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/ColumnShard2` ORDER BY Col1, Col2, Col3;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(
+                output,
+                R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])");
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
             // row -> column
             const TString sql = R"(
                 REPLACE INTO `/Root/ColumnShard1`
@@ -5574,44 +5628,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])");
-        }
-
-        {
-            // Missing Nullable column
-            const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard1`
-                SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/DataShard1`
-            )";
-            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
-
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(
-                output,
-                R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
-        }
-
-        {
-            // column -> column
-            const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard2`
-                SELECT * FROM `/Root/ColumnShard1`
-            )";
-            auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
-
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard2` ORDER BY Col1, Col2, Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(
-                output,
-                R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
         }
 
         {

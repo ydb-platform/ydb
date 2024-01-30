@@ -62,12 +62,39 @@ INSERT INTO num_exp_mul VALUES (0,1,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (0,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (0,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (0,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,2,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,2,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_add VALUES (0,2,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,2,'34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,2,'34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34338492.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (0,2,'34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,2,'0');
 </sql-statement>
@@ -77,9 +104,27 @@ INSERT INTO num_exp_div VALUES (0,2,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,3,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,3,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_add VALUES (0,3,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,3,'-4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,3,'-4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-4.31"
+
+        	INSERT INTO num_exp_sub VALUES (0,3,'-4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,3,'0');
 </sql-statement>
@@ -89,9 +134,27 @@ INSERT INTO num_exp_div VALUES (0,3,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,4,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,4,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_add VALUES (0,4,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,4,'-7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,4,'-7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7799461.4119"
+
+        	INSERT INTO num_exp_sub VALUES (0,4,'-7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,4,'0');
 </sql-statement>
@@ -101,9 +164,27 @@ INSERT INTO num_exp_div VALUES (0,4,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,5,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,5,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_add VALUES (0,5,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,5,'-16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,5,'-16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-16397.038491"
+
+        	INSERT INTO num_exp_sub VALUES (0,5,'-16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,5,'0');
 </sql-statement>
@@ -113,9 +194,27 @@ INSERT INTO num_exp_div VALUES (0,5,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,6,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,6,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_add VALUES (0,6,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,6,'-93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,6,'-93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-93901.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (0,6,'-93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,6,'0');
 </sql-statement>
@@ -149,9 +248,27 @@ INSERT INTO num_exp_div VALUES (0,8,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (0,9,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (0,9,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_add VALUES (0,9,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (0,9,'24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (0,9,'24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "24926804.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (0,9,'24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (0,9,'0');
 </sql-statement>
@@ -170,6 +287,15 @@ INSERT INTO num_exp_mul VALUES (1,0,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (1,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (1,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (1,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,1,'0');
 </sql-statement>
@@ -182,12 +308,39 @@ INSERT INTO num_exp_mul VALUES (1,1,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (1,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (1,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (1,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,2,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,2,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_add VALUES (1,2,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,2,'34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,2,'34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34338492.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (1,2,'34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,2,'0');
 </sql-statement>
@@ -197,9 +350,27 @@ INSERT INTO num_exp_div VALUES (1,2,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,3,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,3,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_add VALUES (1,3,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,3,'-4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,3,'-4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-4.31"
+
+        	INSERT INTO num_exp_sub VALUES (1,3,'-4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,3,'0');
 </sql-statement>
@@ -209,9 +380,27 @@ INSERT INTO num_exp_div VALUES (1,3,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,4,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,4,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_add VALUES (1,4,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,4,'-7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,4,'-7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7799461.4119"
+
+        	INSERT INTO num_exp_sub VALUES (1,4,'-7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,4,'0');
 </sql-statement>
@@ -221,9 +410,27 @@ INSERT INTO num_exp_div VALUES (1,4,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,5,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,5,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_add VALUES (1,5,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,5,'-16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,5,'-16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-16397.038491"
+
+        	INSERT INTO num_exp_sub VALUES (1,5,'-16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,5,'0');
 </sql-statement>
@@ -233,9 +440,27 @@ INSERT INTO num_exp_div VALUES (1,5,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,6,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,6,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_add VALUES (1,6,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,6,'-93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,6,'-93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-93901.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (1,6,'-93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,6,'0');
 </sql-statement>
@@ -269,9 +494,27 @@ INSERT INTO num_exp_div VALUES (1,8,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (1,9,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (1,9,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_add VALUES (1,9,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (1,9,'24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (1,9,'24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "24926804.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (1,9,'24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (1,9,'0');
 </sql-statement>
@@ -281,603 +524,2268 @@ INSERT INTO num_exp_div VALUES (1,9,'0');
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,0,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,0,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_add VALUES (2,0,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,0,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,0,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (2,0,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (2,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,1,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,1,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_add VALUES (2,1,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,1,'-34338492.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,1,'-34338492.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338492.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (2,1,'-34338492.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (2,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,2,'-68676984.430794094');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,2,'-68676984.430794094');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-68676984.430794094"
+
+        	INSERT INTO num_exp_add VALUES (2,2,'-68676984.430794094');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,2,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,2,'1179132047626883.596862135856320209');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,2,'1179132047626883.596862135856320209');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "1179132047626883.596862135856320209" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,2,'1179132047626883.596862135856320209');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,2,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,2,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (2,2,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,3,'-34338487.905397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,3,'-34338487.905397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338487.905397047"
+
+        	INSERT INTO num_exp_add VALUES (2,3,'-34338487.905397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,3,'-34338496.525397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,3,'-34338496.525397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338496.525397047"
+
+        	INSERT INTO num_exp_sub VALUES (2,3,'-34338496.525397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,3,'-147998901.44836127257');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,3,'-147998901.44836127257');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-147998901.44836127257"
+
+        	INSERT INTO num_exp_mul VALUES (2,3,'-147998901.44836127257');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,3,'-7967167.56737750510440835266');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,3,'-7967167.56737750510440835266');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7967167.56737750510440835266"
+
+        	INSERT INTO num_exp_div VALUES (2,3,'-7967167.56737750510440835266');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,4,'-26539030.803497047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,4,'-26539030.803497047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-26539030.803497047"
+
+        	INSERT INTO num_exp_add VALUES (2,4,'-26539030.803497047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,4,'-42137953.627297047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,4,'-42137953.627297047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-42137953.627297047"
+
+        	INSERT INTO num_exp_sub VALUES (2,4,'-42137953.627297047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,4,'-267821744976817.8111137106593');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,4,'-267821744976817.8111137106593');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-267821744976817.8111137106593" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,4,'-267821744976817.8111137106593');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,4,'-4.40267480046830116685');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,4,'-4.40267480046830116685');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-4.40267480046830116685"
+
+        	INSERT INTO num_exp_div VALUES (2,4,'-4.40267480046830116685');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,5,'-34322095.176906047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,5,'-34322095.176906047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34322095.176906047"
+
+        	INSERT INTO num_exp_add VALUES (2,5,'-34322095.176906047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,5,'-34354889.253888047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,5,'-34354889.253888047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34354889.253888047"
+
+        	INSERT INTO num_exp_sub VALUES (2,5,'-34354889.253888047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,5,'-563049578578.769242506736077');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,5,'-563049578578.769242506736077');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-563049578578.769242506736077" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,5,'-563049578578.769242506736077');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,5,'-2094.18866914563535496429');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,5,'-2094.18866914563535496429');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-2094.18866914563535496429"
+
+        	INSERT INTO num_exp_div VALUES (2,5,'-2094.18866914563535496429');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,6,'-34244590.637766787');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,6,'-34244590.637766787');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34244590.637766787"
+
+        	INSERT INTO num_exp_add VALUES (2,6,'-34244590.637766787');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,6,'-34432393.793027307');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,6,'-34432393.793027307');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34432393.793027307"
+
+        	INSERT INTO num_exp_sub VALUES (2,6,'-34432393.793027307');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,6,'-3224438592470.18449811926184222');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,6,'-3224438592470.18449811926184222');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-3224438592470.18449811926184222" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,6,'-3224438592470.18449811926184222');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,6,'-365.68599891479766440940');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,6,'-365.68599891479766440940');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-365.68599891479766440940"
+
+        	INSERT INTO num_exp_div VALUES (2,6,'-365.68599891479766440940');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,7,'-117366977.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,7,'-117366977.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-117366977.215397047"
+
+        	INSERT INTO num_exp_add VALUES (2,7,'-117366977.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,7,'48689992.784602953');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,7,'48689992.784602953');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "48689992.784602953"
+
+        	INSERT INTO num_exp_sub VALUES (2,7,'48689992.784602953');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,7,'2851072985828710.485883795');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,7,'2851072985828710.485883795');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "2851072985828710.485883795" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,7,'2851072985828710.485883795');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,7,'.41357483778485235518');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,7,'.41357483778485235518');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".41357483778485235518"
+
+        	INSERT INTO num_exp_div VALUES (2,7,'.41357483778485235518');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,8,'-34263611.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,8,'-34263611.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34263611.215397047"
+
+        	INSERT INTO num_exp_add VALUES (2,8,'-34263611.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,8,'-34413373.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,8,'-34413373.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34413373.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (2,8,'-34413373.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,8,'-2571300635581.146276407');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,8,'-2571300635581.146276407');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-2571300635581.146276407" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,8,'-2571300635581.146276407');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,8,'-458.57416721727870888476');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,8,'-458.57416721727870888476');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-458.57416721727870888476"
+
+        	INSERT INTO num_exp_div VALUES (2,8,'-458.57416721727870888476');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (2,9,'-59265296.260444467');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (2,9,'-59265296.260444467');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-59265296.260444467"
+
+        	INSERT INTO num_exp_add VALUES (2,9,'-59265296.260444467');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (2,9,'-9411688.170349627');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (2,9,'-9411688.170349627');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-9411688.170349627"
+
+        	INSERT INTO num_exp_sub VALUES (2,9,'-9411688.170349627');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (2,9,'855948866655588.453741509242968740');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (2,9,'855948866655588.453741509242968740');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "855948866655588.453741509242968740" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (2,9,'855948866655588.453741509242968740');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (2,9,'1.37757299946438931811');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (2,9,'1.37757299946438931811');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.37757299946438931811"
+
+        	INSERT INTO num_exp_div VALUES (2,9,'1.37757299946438931811');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,0,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,0,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_add VALUES (3,0,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,0,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,0,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_sub VALUES (3,0,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (3,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,1,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,1,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_add VALUES (3,1,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,1,'4.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,1,'4.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.31"
+
+        	INSERT INTO num_exp_sub VALUES (3,1,'4.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (3,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,2,'-34338487.905397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,2,'-34338487.905397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34338487.905397047"
+
+        	INSERT INTO num_exp_add VALUES (3,2,'-34338487.905397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,2,'34338496.525397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,2,'34338496.525397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34338496.525397047"
+
+        	INSERT INTO num_exp_sub VALUES (3,2,'34338496.525397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,2,'-147998901.44836127257');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,2,'-147998901.44836127257');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-147998901.44836127257"
+
+        	INSERT INTO num_exp_mul VALUES (3,2,'-147998901.44836127257');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,2,'-.00000012551512084352');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,2,'-.00000012551512084352');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00000012551512084352"
+
+        	INSERT INTO num_exp_div VALUES (3,2,'-.00000012551512084352');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,3,'8.62');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,3,'8.62');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "8.62"
+
+        	INSERT INTO num_exp_add VALUES (3,3,'8.62');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,3,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,3,'18.5761');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,3,'18.5761');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "18.5761"
+
+        	INSERT INTO num_exp_mul VALUES (3,3,'18.5761');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,3,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,3,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (3,3,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,4,'7799465.7219');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,4,'7799465.7219');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799465.7219"
+
+        	INSERT INTO num_exp_add VALUES (3,4,'7799465.7219');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,4,'-7799457.1019');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,4,'-7799457.1019');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7799457.1019"
+
+        	INSERT INTO num_exp_sub VALUES (3,4,'-7799457.1019');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,4,'33615678.685289');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,4,'33615678.685289');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "33615678.685289"
+
+        	INSERT INTO num_exp_mul VALUES (3,4,'33615678.685289');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,4,'.00000055260225961552');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,4,'.00000055260225961552');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00000055260225961552"
+
+        	INSERT INTO num_exp_div VALUES (3,4,'.00000055260225961552');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,5,'16401.348491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,5,'16401.348491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16401.348491"
+
+        	INSERT INTO num_exp_add VALUES (3,5,'16401.348491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,5,'-16392.728491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,5,'-16392.728491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-16392.728491"
+
+        	INSERT INTO num_exp_sub VALUES (3,5,'-16392.728491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,5,'70671.23589621');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,5,'70671.23589621');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "70671.23589621"
+
+        	INSERT INTO num_exp_mul VALUES (3,5,'70671.23589621');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,5,'.00026285234387695504');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,5,'.00026285234387695504');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00026285234387695504"
+
+        	INSERT INTO num_exp_div VALUES (3,5,'.00026285234387695504');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,6,'93905.88763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,6,'93905.88763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93905.88763026"
+
+        	INSERT INTO num_exp_add VALUES (3,6,'93905.88763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,6,'-93897.26763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,6,'-93897.26763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-93897.26763026"
+
+        	INSERT INTO num_exp_sub VALUES (3,6,'-93897.26763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,6,'404715.7995864206');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,6,'404715.7995864206');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "404715.7995864206"
+
+        	INSERT INTO num_exp_mul VALUES (3,6,'404715.7995864206');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,6,'.00004589912234457595');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,6,'.00004589912234457595');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00004589912234457595"
+
+        	INSERT INTO num_exp_div VALUES (3,6,'.00004589912234457595');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,7,'-83028480.69');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,7,'-83028480.69');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83028480.69"
+
+        	INSERT INTO num_exp_add VALUES (3,7,'-83028480.69');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,7,'83028489.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,7,'83028489.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "83028489.31"
+
+        	INSERT INTO num_exp_sub VALUES (3,7,'83028489.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,7,'-357852770.35');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,7,'-357852770.35');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-357852770.35"
+
+        	INSERT INTO num_exp_mul VALUES (3,7,'-357852770.35');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,7,'-.00000005190989574240');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,7,'-.00000005190989574240');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00000005190989574240"
+
+        	INSERT INTO num_exp_div VALUES (3,7,'-.00000005190989574240');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,8,'74885.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,8,'74885.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "74885.31"
+
+        	INSERT INTO num_exp_add VALUES (3,8,'74885.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,8,'-74876.69');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,8,'-74876.69');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-74876.69"
+
+        	INSERT INTO num_exp_sub VALUES (3,8,'-74876.69');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,8,'322737.11');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,8,'322737.11');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "322737.11"
+
+        	INSERT INTO num_exp_mul VALUES (3,8,'322737.11');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,8,'.00005755799201399553');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,8,'.00005755799201399553');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00005755799201399553"
+
+        	INSERT INTO num_exp_div VALUES (3,8,'.00005755799201399553');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (3,9,'-24926799.735047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (3,9,'-24926799.735047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926799.735047420"
+
+        	INSERT INTO num_exp_add VALUES (3,9,'-24926799.735047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (3,9,'24926808.355047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (3,9,'24926808.355047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "24926808.355047420"
+
+        	INSERT INTO num_exp_sub VALUES (3,9,'24926808.355047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (3,9,'-107434525.43415438020');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (3,9,'-107434525.43415438020');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-107434525.43415438020"
+
+        	INSERT INTO num_exp_mul VALUES (3,9,'-107434525.43415438020');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (3,9,'-.00000017290624149854');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (3,9,'-.00000017290624149854');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00000017290624149854"
+
+        	INSERT INTO num_exp_div VALUES (3,9,'-.00000017290624149854');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,0,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,0,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_add VALUES (4,0,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,0,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,0,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_sub VALUES (4,0,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (4,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,1,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,1,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_add VALUES (4,1,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,1,'7799461.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,1,'7799461.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799461.4119"
+
+        	INSERT INTO num_exp_sub VALUES (4,1,'7799461.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (4,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,2,'-26539030.803497047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,2,'-26539030.803497047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-26539030.803497047"
+
+        	INSERT INTO num_exp_add VALUES (4,2,'-26539030.803497047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,2,'42137953.627297047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,2,'42137953.627297047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "42137953.627297047"
+
+        	INSERT INTO num_exp_sub VALUES (4,2,'42137953.627297047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,2,'-267821744976817.8111137106593');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,2,'-267821744976817.8111137106593');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-267821744976817.8111137106593" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,2,'-267821744976817.8111137106593');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,2,'-.22713465002993920385');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,2,'-.22713465002993920385');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.22713465002993920385"
+
+        	INSERT INTO num_exp_div VALUES (4,2,'-.22713465002993920385');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,3,'7799465.7219');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,3,'7799465.7219');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799465.7219"
+
+        	INSERT INTO num_exp_add VALUES (4,3,'7799465.7219');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,3,'7799457.1019');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,3,'7799457.1019');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7799457.1019"
+
+        	INSERT INTO num_exp_sub VALUES (4,3,'7799457.1019');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,3,'33615678.685289');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,3,'33615678.685289');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "33615678.685289"
+
+        	INSERT INTO num_exp_mul VALUES (4,3,'33615678.685289');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,3,'1809619.81714617169373549883');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,3,'1809619.81714617169373549883');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1809619.81714617169373549883"
+
+        	INSERT INTO num_exp_div VALUES (4,3,'1809619.81714617169373549883');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,4,'15598922.8238');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,4,'15598922.8238');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "15598922.8238"
+
+        	INSERT INTO num_exp_add VALUES (4,4,'15598922.8238');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,4,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,4,'60831598315717.14146161');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,4,'60831598315717.14146161');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "60831598315717.14146161" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,4,'60831598315717.14146161');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,4,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,4,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (4,4,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,5,'7815858.450391');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,5,'7815858.450391');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7815858.450391"
+
+        	INSERT INTO num_exp_add VALUES (4,5,'7815858.450391');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,5,'7783064.373409');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,5,'7783064.373409');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7783064.373409"
+
+        	INSERT INTO num_exp_sub VALUES (4,5,'7783064.373409');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,5,'127888068979.9935054429');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,5,'127888068979.9935054429');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "127888068979.9935054429" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,5,'127888068979.9935054429');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,5,'475.66281046305802686061');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,5,'475.66281046305802686061');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "475.66281046305802686061"
+
+        	INSERT INTO num_exp_div VALUES (4,5,'475.66281046305802686061');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,6,'7893362.98953026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,6,'7893362.98953026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7893362.98953026"
+
+        	INSERT INTO num_exp_add VALUES (4,6,'7893362.98953026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,6,'7705559.83426974');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,6,'7705559.83426974');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7705559.83426974"
+
+        	INSERT INTO num_exp_sub VALUES (4,6,'7705559.83426974');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,6,'732381731243.745115764094');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,6,'732381731243.745115764094');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "732381731243.745115764094" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,6,'732381731243.745115764094');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,6,'83.05996138436129499606');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,6,'83.05996138436129499606');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "83.05996138436129499606"
+
+        	INSERT INTO num_exp_div VALUES (4,6,'83.05996138436129499606');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,7,'-75229023.5881');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,7,'-75229023.5881');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-75229023.5881"
+
+        	INSERT INTO num_exp_add VALUES (4,7,'-75229023.5881');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,7,'90827946.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,7,'90827946.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "90827946.4119"
+
+        	INSERT INTO num_exp_sub VALUES (4,7,'90827946.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,7,'-647577464846017.9715');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,7,'-647577464846017.9715');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-647577464846017.9715" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,7,'-647577464846017.9715');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,7,'-.09393717604145131637');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,7,'-.09393717604145131637');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.09393717604145131637"
+
+        	INSERT INTO num_exp_div VALUES (4,7,'-.09393717604145131637');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,8,'7874342.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,8,'7874342.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7874342.4119"
+
+        	INSERT INTO num_exp_add VALUES (4,8,'7874342.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,8,'7724580.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,8,'7724580.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7724580.4119"
+
+        	INSERT INTO num_exp_sub VALUES (4,8,'7724580.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,8,'584031469984.4839');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,8,'584031469984.4839');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "584031469984.4839" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,8,'584031469984.4839');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,8,'104.15808298366741897143');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,8,'104.15808298366741897143');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "104.15808298366741897143"
+
+        	INSERT INTO num_exp_div VALUES (4,8,'104.15808298366741897143');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (4,9,'-17127342.633147420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (4,9,'-17127342.633147420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-17127342.633147420"
+
+        	INSERT INTO num_exp_add VALUES (4,9,'-17127342.633147420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (4,9,'32726265.456947420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (4,9,'32726265.456947420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "32726265.456947420"
+
+        	INSERT INTO num_exp_sub VALUES (4,9,'32726265.456947420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (4,9,'-194415646271340.1815956522980');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (4,9,'-194415646271340.1815956522980');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-194415646271340.1815956522980" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (4,9,'-194415646271340.1815956522980');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (4,9,'-.31289456112403769409');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (4,9,'-.31289456112403769409');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.31289456112403769409"
+
+        	INSERT INTO num_exp_div VALUES (4,9,'-.31289456112403769409');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,0,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,0,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_add VALUES (5,0,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,0,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,0,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_sub VALUES (5,0,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (5,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,1,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,1,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_add VALUES (5,1,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,1,'16397.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,1,'16397.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16397.038491"
+
+        	INSERT INTO num_exp_sub VALUES (5,1,'16397.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (5,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,2,'-34322095.176906047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,2,'-34322095.176906047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34322095.176906047"
+
+        	INSERT INTO num_exp_add VALUES (5,2,'-34322095.176906047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,2,'34354889.253888047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,2,'34354889.253888047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34354889.253888047"
+
+        	INSERT INTO num_exp_sub VALUES (5,2,'34354889.253888047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,2,'-563049578578.769242506736077');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,2,'-563049578578.769242506736077');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-563049578578.769242506736077" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (5,2,'-563049578578.769242506736077');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,2,'-.00047751189505192446');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,2,'-.00047751189505192446');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00047751189505192446"
+
+        	INSERT INTO num_exp_div VALUES (5,2,'-.00047751189505192446');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,3,'16401.348491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,3,'16401.348491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16401.348491"
+
+        	INSERT INTO num_exp_add VALUES (5,3,'16401.348491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,3,'16392.728491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,3,'16392.728491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "16392.728491"
+
+        	INSERT INTO num_exp_sub VALUES (5,3,'16392.728491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,3,'70671.23589621');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,3,'70671.23589621');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "70671.23589621"
+
+        	INSERT INTO num_exp_mul VALUES (5,3,'70671.23589621');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,3,'3804.41728329466357308584');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,3,'3804.41728329466357308584');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "3804.41728329466357308584"
+
+        	INSERT INTO num_exp_div VALUES (5,3,'3804.41728329466357308584');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,4,'7815858.450391');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,4,'7815858.450391');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7815858.450391"
+
+        	INSERT INTO num_exp_add VALUES (5,4,'7815858.450391');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,4,'-7783064.373409');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,4,'-7783064.373409');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7783064.373409"
+
+        	INSERT INTO num_exp_sub VALUES (5,4,'-7783064.373409');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,4,'127888068979.9935054429');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,4,'127888068979.9935054429');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "127888068979.9935054429" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (5,4,'127888068979.9935054429');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,4,'.00210232958726897192');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,4,'.00210232958726897192');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00210232958726897192"
+
+        	INSERT INTO num_exp_div VALUES (5,4,'.00210232958726897192');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,5,'32794.076982');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,5,'32794.076982');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "32794.076982"
+
+        	INSERT INTO num_exp_add VALUES (5,5,'32794.076982');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,5,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,5,'268862871.275335557081');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,5,'268862871.275335557081');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "268862871.275335557081"
+
+        	INSERT INTO num_exp_mul VALUES (5,5,'268862871.275335557081');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,5,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,5,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (5,5,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,6,'110298.61612126');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,6,'110298.61612126');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "110298.61612126"
+
+        	INSERT INTO num_exp_add VALUES (5,6,'110298.61612126');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,6,'-77504.53913926');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,6,'-77504.53913926');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-77504.53913926"
+
+        	INSERT INTO num_exp_sub VALUES (5,6,'-77504.53913926');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,6,'1539707782.76899778633766');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,6,'1539707782.76899778633766');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1539707782.76899778633766"
+
+        	INSERT INTO num_exp_mul VALUES (5,6,'1539707782.76899778633766');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,6,'.17461941433576102689');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,6,'.17461941433576102689');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".17461941433576102689"
+
+        	INSERT INTO num_exp_div VALUES (5,6,'.17461941433576102689');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,7,'-83012087.961509');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,7,'-83012087.961509');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83012087.961509"
+
+        	INSERT INTO num_exp_add VALUES (5,7,'-83012087.961509');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,7,'83044882.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,7,'83044882.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "83044882.038491"
+
+        	INSERT INTO num_exp_sub VALUES (5,7,'83044882.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,7,'-1361421264394.416135');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,7,'-1361421264394.416135');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-1361421264394.416135" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (5,7,'-1361421264394.416135');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,7,'-.00019748690453643710');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,7,'-.00019748690453643710');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00019748690453643710"
+
+        	INSERT INTO num_exp_div VALUES (5,7,'-.00019748690453643710');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,8,'91278.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,8,'91278.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "91278.038491"
+
+        	INSERT INTO num_exp_add VALUES (5,8,'91278.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,8,'-58483.961509');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,8,'-58483.961509');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-58483.961509"
+
+        	INSERT INTO num_exp_sub VALUES (5,8,'-58483.961509');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,8,'1227826639.244571');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,8,'1227826639.244571');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1227826639.244571"
+
+        	INSERT INTO num_exp_mul VALUES (5,8,'1227826639.244571');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,8,'.21897461960978085228');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,8,'.21897461960978085228');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".21897461960978085228"
+
+        	INSERT INTO num_exp_div VALUES (5,8,'.21897461960978085228');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (5,9,'-24910407.006556420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (5,9,'-24910407.006556420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24910407.006556420"
+
+        	INSERT INTO num_exp_add VALUES (5,9,'-24910407.006556420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (5,9,'24943201.083538420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (5,9,'24943201.083538420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "24943201.083538420"
+
+        	INSERT INTO num_exp_sub VALUES (5,9,'24943201.083538420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (5,9,'-408725765384.257043660243220');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (5,9,'-408725765384.257043660243220');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-408725765384.257043660243220" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (5,9,'-408725765384.257043660243220');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (5,9,'-.00065780749354660427');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (5,9,'-.00065780749354660427');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00065780749354660427"
+
+        	INSERT INTO num_exp_div VALUES (5,9,'-.00065780749354660427');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,0,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,0,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_add VALUES (6,0,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,0,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,0,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (6,0,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (6,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,1,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,1,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_add VALUES (6,1,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,1,'93901.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,1,'93901.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93901.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (6,1,'93901.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (6,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,2,'-34244590.637766787');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,2,'-34244590.637766787');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34244590.637766787"
+
+        	INSERT INTO num_exp_add VALUES (6,2,'-34244590.637766787');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,2,'34432393.793027307');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,2,'34432393.793027307');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34432393.793027307"
+
+        	INSERT INTO num_exp_sub VALUES (6,2,'34432393.793027307');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,2,'-3224438592470.18449811926184222');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,2,'-3224438592470.18449811926184222');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-3224438592470.18449811926184222" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,2,'-3224438592470.18449811926184222');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,2,'-.00273458651128995823');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,2,'-.00273458651128995823');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00273458651128995823"
+
+        	INSERT INTO num_exp_div VALUES (6,2,'-.00273458651128995823');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,3,'93905.88763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,3,'93905.88763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93905.88763026"
+
+        	INSERT INTO num_exp_add VALUES (6,3,'93905.88763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,3,'93897.26763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,3,'93897.26763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "93897.26763026"
+
+        	INSERT INTO num_exp_sub VALUES (6,3,'93897.26763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,3,'404715.7995864206');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,3,'404715.7995864206');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "404715.7995864206"
+
+        	INSERT INTO num_exp_mul VALUES (6,3,'404715.7995864206');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,3,'21786.90896293735498839907');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,3,'21786.90896293735498839907');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "21786.90896293735498839907"
+
+        	INSERT INTO num_exp_div VALUES (6,3,'21786.90896293735498839907');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,4,'7893362.98953026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,4,'7893362.98953026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7893362.98953026"
+
+        	INSERT INTO num_exp_add VALUES (6,4,'7893362.98953026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,4,'-7705559.83426974');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,4,'-7705559.83426974');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7705559.83426974"
+
+        	INSERT INTO num_exp_sub VALUES (6,4,'-7705559.83426974');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,4,'732381731243.745115764094');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,4,'732381731243.745115764094');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "732381731243.745115764094" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,4,'732381731243.745115764094');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,4,'.01203949512295682469');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,4,'.01203949512295682469');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".01203949512295682469"
+
+        	INSERT INTO num_exp_div VALUES (6,4,'.01203949512295682469');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,5,'110298.61612126');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,5,'110298.61612126');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "110298.61612126"
+
+        	INSERT INTO num_exp_add VALUES (6,5,'110298.61612126');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,5,'77504.53913926');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,5,'77504.53913926');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "77504.53913926"
+
+        	INSERT INTO num_exp_sub VALUES (6,5,'77504.53913926');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,5,'1539707782.76899778633766');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,5,'1539707782.76899778633766');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1539707782.76899778633766"
+
+        	INSERT INTO num_exp_mul VALUES (6,5,'1539707782.76899778633766');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,5,'5.72674008674192359679');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,5,'5.72674008674192359679');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "5.72674008674192359679"
+
+        	INSERT INTO num_exp_div VALUES (6,5,'5.72674008674192359679');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,6,'187803.15526052');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,6,'187803.15526052');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "187803.15526052"
+
+        	INSERT INTO num_exp_add VALUES (6,6,'187803.15526052');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,6,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,6,'8817506281.4517452372676676');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,6,'8817506281.4517452372676676');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "8817506281.4517452372676676" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,6,'8817506281.4517452372676676');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,6,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,6,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (6,6,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,7,'-82934583.42236974');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,7,'-82934583.42236974');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-82934583.42236974"
+
+        	INSERT INTO num_exp_add VALUES (6,7,'-82934583.42236974');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,7,'83122386.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,7,'83122386.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "83122386.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (6,7,'83122386.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,7,'-7796505729750.37795610');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,7,'-7796505729750.37795610');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-7796505729750.37795610" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,7,'-7796505729750.37795610');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,7,'-.00113095617281538980');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,7,'-.00113095617281538980');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00113095617281538980"
+
+        	INSERT INTO num_exp_div VALUES (6,7,'-.00113095617281538980');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,8,'168782.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,8,'168782.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "168782.57763026"
+
+        	INSERT INTO num_exp_add VALUES (6,8,'168782.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,8,'19020.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,8,'19020.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "19020.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (6,8,'19020.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,8,'7031444034.53149906');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,8,'7031444034.53149906');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "7031444034.53149906" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,8,'7031444034.53149906');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,8,'1.25401073209839612184');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,8,'1.25401073209839612184');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.25401073209839612184"
+
+        	INSERT INTO num_exp_div VALUES (6,8,'1.25401073209839612184');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (6,9,'-24832902.467417160');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (6,9,'-24832902.467417160');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24832902.467417160"
+
+        	INSERT INTO num_exp_add VALUES (6,9,'-24832902.467417160');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (6,9,'25020705.622677680');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (6,9,'25020705.622677680');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "25020705.622677680"
+
+        	INSERT INTO num_exp_sub VALUES (6,9,'25020705.622677680');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (6,9,'-2340666225110.29929521292692920');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (6,9,'-2340666225110.29929521292692920');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-2340666225110.29929521292692920" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (6,9,'-2340666225110.29929521292692920');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (6,9,'-.00376709254265256789');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (6,9,'-.00376709254265256789');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00376709254265256789"
+
+        	INSERT INTO num_exp_div VALUES (6,9,'-.00376709254265256789');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,0,'-83028485');
 </sql-statement>
@@ -890,6 +2798,15 @@ INSERT INTO num_exp_mul VALUES (7,0,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (7,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,1,'-83028485');
 </sql-statement>
@@ -902,66 +2819,255 @@ INSERT INTO num_exp_mul VALUES (7,1,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (7,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,2,'-117366977.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,2,'-117366977.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-117366977.215397047"
+
+        	INSERT INTO num_exp_add VALUES (7,2,'-117366977.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,2,'-48689992.784602953');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,2,'-48689992.784602953');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-48689992.784602953"
+
+        	INSERT INTO num_exp_sub VALUES (7,2,'-48689992.784602953');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,2,'2851072985828710.485883795');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,2,'2851072985828710.485883795');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "2851072985828710.485883795" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,2,'2851072985828710.485883795');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,2,'2.41794207151503385700');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,2,'2.41794207151503385700');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "2.41794207151503385700"
+
+        	INSERT INTO num_exp_div VALUES (7,2,'2.41794207151503385700');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,3,'-83028480.69');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,3,'-83028480.69');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83028480.69"
+
+        	INSERT INTO num_exp_add VALUES (7,3,'-83028480.69');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,3,'-83028489.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,3,'-83028489.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83028489.31"
+
+        	INSERT INTO num_exp_sub VALUES (7,3,'-83028489.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,3,'-357852770.35');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,3,'-357852770.35');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-357852770.35"
+
+        	INSERT INTO num_exp_mul VALUES (7,3,'-357852770.35');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,3,'-19264149.65197215777262180974');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,3,'-19264149.65197215777262180974');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-19264149.65197215777262180974"
+
+        	INSERT INTO num_exp_div VALUES (7,3,'-19264149.65197215777262180974');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,4,'-75229023.5881');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,4,'-75229023.5881');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-75229023.5881"
+
+        	INSERT INTO num_exp_add VALUES (7,4,'-75229023.5881');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,4,'-90827946.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,4,'-90827946.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-90827946.4119"
+
+        	INSERT INTO num_exp_sub VALUES (7,4,'-90827946.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,4,'-647577464846017.9715');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,4,'-647577464846017.9715');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-647577464846017.9715" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,4,'-647577464846017.9715');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,4,'-10.64541262725136247686');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,4,'-10.64541262725136247686');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-10.64541262725136247686"
+
+        	INSERT INTO num_exp_div VALUES (7,4,'-10.64541262725136247686');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,5,'-83012087.961509');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,5,'-83012087.961509');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83012087.961509"
+
+        	INSERT INTO num_exp_add VALUES (7,5,'-83012087.961509');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,5,'-83044882.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,5,'-83044882.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83044882.038491"
+
+        	INSERT INTO num_exp_sub VALUES (7,5,'-83044882.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,5,'-1361421264394.416135');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,5,'-1361421264394.416135');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-1361421264394.416135" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,5,'-1361421264394.416135');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,5,'-5063.62688881730941836574');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,5,'-5063.62688881730941836574');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-5063.62688881730941836574"
+
+        	INSERT INTO num_exp_div VALUES (7,5,'-5063.62688881730941836574');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,6,'-82934583.42236974');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,6,'-82934583.42236974');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-82934583.42236974"
+
+        	INSERT INTO num_exp_add VALUES (7,6,'-82934583.42236974');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,6,'-83122386.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,6,'-83122386.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-83122386.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (7,6,'-83122386.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,6,'-7796505729750.37795610');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,6,'-7796505729750.37795610');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-7796505729750.37795610" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,6,'-7796505729750.37795610');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,6,'-884.20756174009028770294');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,6,'-884.20756174009028770294');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-884.20756174009028770294"
+
+        	INSERT INTO num_exp_div VALUES (7,6,'-884.20756174009028770294');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,7,'-166056970');
 </sql-statement>
@@ -971,9 +3077,27 @@ INSERT INTO num_exp_sub VALUES (7,7,'0');
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,7,'6893729321395225');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,7,'6893729321395225');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "6893729321395225" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,7,'6893729321395225');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,7,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,7,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (7,7,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,8,'-82953604');
 </sql-statement>
@@ -983,21 +3107,75 @@ INSERT INTO num_exp_sub VALUES (7,8,'-83103366');
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,8,'-6217255985285');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,8,'-6217255985285');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-6217255985285" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,8,'-6217255985285');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,8,'-1108.80577182462841041118');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,8,'-1108.80577182462841041118');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-1108.80577182462841041118"
+
+        	INSERT INTO num_exp_div VALUES (7,8,'-1108.80577182462841041118');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (7,9,'-107955289.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (7,9,'-107955289.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-107955289.045047420"
+
+        	INSERT INTO num_exp_add VALUES (7,9,'-107955289.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (7,9,'-58101680.954952580');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (7,9,'-58101680.954952580');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-58101680.954952580"
+
+        	INSERT INTO num_exp_sub VALUES (7,9,'-58101680.954952580');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (7,9,'2069634775752159.035758700');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (7,9,'2069634775752159.035758700');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "2069634775752159.035758700" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (7,9,'2069634775752159.035758700');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (7,9,'3.33089171198810413382');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (7,9,'3.33089171198810413382');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "3.33089171198810413382"
+
+        	INSERT INTO num_exp_div VALUES (7,9,'3.33089171198810413382');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,0,'74881');
 </sql-statement>
@@ -1010,6 +3188,15 @@ INSERT INTO num_exp_mul VALUES (8,0,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (8,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,1,'74881');
 </sql-statement>
@@ -1022,66 +3209,255 @@ INSERT INTO num_exp_mul VALUES (8,1,'0');
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (8,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,2,'-34263611.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,2,'-34263611.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-34263611.215397047"
+
+        	INSERT INTO num_exp_add VALUES (8,2,'-34263611.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,2,'34413373.215397047');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,2,'34413373.215397047');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "34413373.215397047"
+
+        	INSERT INTO num_exp_sub VALUES (8,2,'34413373.215397047');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,2,'-2571300635581.146276407');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,2,'-2571300635581.146276407');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-2571300635581.146276407" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,2,'-2571300635581.146276407');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,2,'-.00218067233500788615');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,2,'-.00218067233500788615');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00218067233500788615"
+
+        	INSERT INTO num_exp_div VALUES (8,2,'-.00218067233500788615');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,3,'74885.31');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,3,'74885.31');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "74885.31"
+
+        	INSERT INTO num_exp_add VALUES (8,3,'74885.31');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,3,'74876.69');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,3,'74876.69');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "74876.69"
+
+        	INSERT INTO num_exp_sub VALUES (8,3,'74876.69');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,3,'322737.11');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,3,'322737.11');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "322737.11"
+
+        	INSERT INTO num_exp_mul VALUES (8,3,'322737.11');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,3,'17373.78190255220417633410');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,3,'17373.78190255220417633410');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "17373.78190255220417633410"
+
+        	INSERT INTO num_exp_div VALUES (8,3,'17373.78190255220417633410');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,4,'7874342.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,4,'7874342.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7874342.4119"
+
+        	INSERT INTO num_exp_add VALUES (8,4,'7874342.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,4,'-7724580.4119');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,4,'-7724580.4119');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-7724580.4119"
+
+        	INSERT INTO num_exp_sub VALUES (8,4,'-7724580.4119');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,4,'584031469984.4839');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,4,'584031469984.4839');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "584031469984.4839" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,4,'584031469984.4839');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,4,'.00960079113741758956');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,4,'.00960079113741758956');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".00960079113741758956"
+
+        	INSERT INTO num_exp_div VALUES (8,4,'.00960079113741758956');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,5,'91278.038491');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,5,'91278.038491');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "91278.038491"
+
+        	INSERT INTO num_exp_add VALUES (8,5,'91278.038491');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,5,'58483.961509');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,5,'58483.961509');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "58483.961509"
+
+        	INSERT INTO num_exp_sub VALUES (8,5,'58483.961509');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,5,'1227826639.244571');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,5,'1227826639.244571');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1227826639.244571"
+
+        	INSERT INTO num_exp_mul VALUES (8,5,'1227826639.244571');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,5,'4.56673929509287019456');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,5,'4.56673929509287019456');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.56673929509287019456"
+
+        	INSERT INTO num_exp_div VALUES (8,5,'4.56673929509287019456');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,6,'168782.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,6,'168782.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "168782.57763026"
+
+        	INSERT INTO num_exp_add VALUES (8,6,'168782.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,6,'-19020.57763026');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,6,'-19020.57763026');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-19020.57763026"
+
+        	INSERT INTO num_exp_sub VALUES (8,6,'-19020.57763026');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,6,'7031444034.53149906');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,6,'7031444034.53149906');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "7031444034.53149906" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,6,'7031444034.53149906');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,6,'.79744134113322314424');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,6,'.79744134113322314424');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".79744134113322314424"
+
+        	INSERT INTO num_exp_div VALUES (8,6,'.79744134113322314424');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,7,'-82953604');
 </sql-statement>
@@ -1091,9 +3467,27 @@ INSERT INTO num_exp_sub VALUES (8,7,'83103366');
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,7,'-6217255985285');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,7,'-6217255985285');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-6217255985285" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,7,'-6217255985285');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,7,'-.00090187120721280172');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,7,'-.00090187120721280172');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00090187120721280172"
+
+        	INSERT INTO num_exp_div VALUES (8,7,'-.00090187120721280172');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,8,'149762');
 </sql-statement>
@@ -1103,141 +3497,528 @@ INSERT INTO num_exp_sub VALUES (8,8,'0');
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,8,'5607164161');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,8,'5607164161');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "5607164161" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,8,'5607164161');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,8,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,8,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (8,8,'1.00000000000000000000');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (8,9,'-24851923.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (8,9,'-24851923.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24851923.045047420"
+
+        	INSERT INTO num_exp_add VALUES (8,9,'-24851923.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (8,9,'25001685.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (8,9,'25001685.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "25001685.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (8,9,'25001685.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (8,9,'-1866544013697.195857020');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (8,9,'-1866544013697.195857020');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-1866544013697.195857020" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (8,9,'-1866544013697.195857020');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (8,9,'-.00300403532938582735');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (8,9,'-.00300403532938582735');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-.00300403532938582735"
+
+        	INSERT INTO num_exp_div VALUES (8,9,'-.00300403532938582735');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,0,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,0,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_add VALUES (9,0,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,0,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,0,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (9,0,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,0,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,0,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,0,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (9,0,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,1,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,1,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_add VALUES (9,1,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,1,'-24926804.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,1,'-24926804.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926804.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (9,1,'-24926804.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,1,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_div VALUES (9,1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,2,'-59265296.260444467');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,2,'-59265296.260444467');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-59265296.260444467"
+
+        	INSERT INTO num_exp_add VALUES (9,2,'-59265296.260444467');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,2,'9411688.170349627');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,2,'9411688.170349627');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "9411688.170349627"
+
+        	INSERT INTO num_exp_sub VALUES (9,2,'9411688.170349627');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,2,'855948866655588.453741509242968740');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,2,'855948866655588.453741509242968740');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "855948866655588.453741509242968740" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,2,'855948866655588.453741509242968740');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,2,'.72591434384152961526');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,2,'.72591434384152961526');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".72591434384152961526"
+
+        	INSERT INTO num_exp_div VALUES (9,2,'.72591434384152961526');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,3,'-24926799.735047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,3,'-24926799.735047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926799.735047420"
+
+        	INSERT INTO num_exp_add VALUES (9,3,'-24926799.735047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,3,'-24926808.355047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,3,'-24926808.355047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24926808.355047420"
+
+        	INSERT INTO num_exp_sub VALUES (9,3,'-24926808.355047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,3,'-107434525.43415438020');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,3,'-107434525.43415438020');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-107434525.43415438020"
+
+        	INSERT INTO num_exp_mul VALUES (9,3,'-107434525.43415438020');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,3,'-5783481.21694835730858468677');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,3,'-5783481.21694835730858468677');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-5783481.21694835730858468677"
+
+        	INSERT INTO num_exp_div VALUES (9,3,'-5783481.21694835730858468677');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,4,'-17127342.633147420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,4,'-17127342.633147420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-17127342.633147420"
+
+        	INSERT INTO num_exp_add VALUES (9,4,'-17127342.633147420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,4,'-32726265.456947420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,4,'-32726265.456947420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-32726265.456947420"
+
+        	INSERT INTO num_exp_sub VALUES (9,4,'-32726265.456947420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,4,'-194415646271340.1815956522980');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,4,'-194415646271340.1815956522980');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-194415646271340.1815956522980" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,4,'-194415646271340.1815956522980');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,4,'-3.19596478892958416484');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,4,'-3.19596478892958416484');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-3.19596478892958416484"
+
+        	INSERT INTO num_exp_div VALUES (9,4,'-3.19596478892958416484');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,5,'-24910407.006556420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,5,'-24910407.006556420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24910407.006556420"
+
+        	INSERT INTO num_exp_add VALUES (9,5,'-24910407.006556420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,5,'-24943201.083538420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,5,'-24943201.083538420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24943201.083538420"
+
+        	INSERT INTO num_exp_sub VALUES (9,5,'-24943201.083538420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,5,'-408725765384.257043660243220');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,5,'-408725765384.257043660243220');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-408725765384.257043660243220" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,5,'-408725765384.257043660243220');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,5,'-1520.20159364322004505807');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,5,'-1520.20159364322004505807');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-1520.20159364322004505807"
+
+        	INSERT INTO num_exp_div VALUES (9,5,'-1520.20159364322004505807');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,6,'-24832902.467417160');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,6,'-24832902.467417160');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24832902.467417160"
+
+        	INSERT INTO num_exp_add VALUES (9,6,'-24832902.467417160');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,6,'-25020705.622677680');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,6,'-25020705.622677680');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-25020705.622677680"
+
+        	INSERT INTO num_exp_sub VALUES (9,6,'-25020705.622677680');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,6,'-2340666225110.29929521292692920');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,6,'-2340666225110.29929521292692920');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-2340666225110.29929521292692920" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,6,'-2340666225110.29929521292692920');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,6,'-265.45671195426965751280');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,6,'-265.45671195426965751280');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-265.45671195426965751280"
+
+        	INSERT INTO num_exp_div VALUES (9,6,'-265.45671195426965751280');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,7,'-107955289.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,7,'-107955289.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-107955289.045047420"
+
+        	INSERT INTO num_exp_add VALUES (9,7,'-107955289.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,7,'58101680.954952580');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,7,'58101680.954952580');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "58101680.954952580"
+
+        	INSERT INTO num_exp_sub VALUES (9,7,'58101680.954952580');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,7,'2069634775752159.035758700');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,7,'2069634775752159.035758700');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "2069634775752159.035758700" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,7,'2069634775752159.035758700');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,7,'.30021990699995814689');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,7,'.30021990699995814689');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".30021990699995814689"
+
+        	INSERT INTO num_exp_div VALUES (9,7,'.30021990699995814689');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,8,'-24851923.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,8,'-24851923.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-24851923.045047420"
+
+        	INSERT INTO num_exp_add VALUES (9,8,'-24851923.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,8,'-25001685.045047420');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sub VALUES (9,8,'-25001685.045047420');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-25001685.045047420"
+
+        	INSERT INTO num_exp_sub VALUES (9,8,'-25001685.045047420');
+	^
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,8,'-1866544013697.195857020');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,8,'-1866544013697.195857020');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-1866544013697.195857020" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,8,'-1866544013697.195857020');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,8,'-332.88556569820675471748');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,8,'-332.88556569820675471748');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-332.88556569820675471748"
+
+        	INSERT INTO num_exp_div VALUES (9,8,'-332.88556569820675471748');
+	^
 <sql-statement>
 INSERT INTO num_exp_add VALUES (9,9,'-49853608.090094840');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_add VALUES (9,9,'-49853608.090094840');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "-49853608.090094840"
+
+        	INSERT INTO num_exp_add VALUES (9,9,'-49853608.090094840');
+	^
 <sql-statement>
 INSERT INTO num_exp_sub VALUES (9,9,'0');
 </sql-statement>
 <sql-statement>
 INSERT INTO num_exp_mul VALUES (9,9,'621345559900192.420120630048656400');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_mul VALUES (9,9,'621345559900192.420120630048656400');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "621345559900192.420120630048656400" is out of range for type integer
+
+        	INSERT INTO num_exp_mul VALUES (9,9,'621345559900192.420120630048656400');
+	^
 <sql-statement>
 INSERT INTO num_exp_div VALUES (9,9,'1.00000000000000000000');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_div VALUES (9,9,'1.00000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.00000000000000000000"
+
+        	INSERT INTO num_exp_div VALUES (9,9,'1.00000000000000000000');
+	^
 <sql-statement>
 COMMIT TRANSACTION;
 </sql-statement>
@@ -1253,27 +4034,99 @@ INSERT INTO num_exp_sqrt VALUES (1,'0');
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (2,'5859.90547836712524903505');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (2,'5859.90547836712524903505');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "5859.90547836712524903505"
+
+        	INSERT INTO num_exp_sqrt VALUES (2,'5859.90547836712524903505');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (3,'2.07605394920266944396');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (3,'2.07605394920266944396');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "2.07605394920266944396"
+
+        	INSERT INTO num_exp_sqrt VALUES (3,'2.07605394920266944396');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (4,'2792.75158435189147418923');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (4,'2792.75158435189147418923');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "2792.75158435189147418923"
+
+        	INSERT INTO num_exp_sqrt VALUES (4,'2792.75158435189147418923');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (5,'128.05092147657509145473');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (5,'128.05092147657509145473');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "128.05092147657509145473"
+
+        	INSERT INTO num_exp_sqrt VALUES (5,'128.05092147657509145473');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (6,'306.43364311096782703406');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (6,'306.43364311096782703406');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "306.43364311096782703406"
+
+        	INSERT INTO num_exp_sqrt VALUES (6,'306.43364311096782703406');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (7,'9111.99676251039939975230');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (7,'9111.99676251039939975230');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "9111.99676251039939975230"
+
+        	INSERT INTO num_exp_sqrt VALUES (7,'9111.99676251039939975230');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (8,'273.64392922189960397542');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (8,'273.64392922189960397542');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "273.64392922189960397542"
+
+        	INSERT INTO num_exp_sqrt VALUES (8,'273.64392922189960397542');
+	^
 <sql-statement>
 INSERT INTO num_exp_sqrt VALUES (9,'4992.67503899937593364766');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_sqrt VALUES (9,'4992.67503899937593364766');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4992.67503899937593364766"
+
+        	INSERT INTO num_exp_sqrt VALUES (9,'4992.67503899937593364766');
+	^
 <sql-statement>
 COMMIT TRANSACTION;
 </sql-statement>
@@ -1286,30 +4139,111 @@ INSERT INTO num_exp_ln VALUES (0,'NaN');
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_ln VALUES (1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (2,'17.35177750493897715514');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (2,'17.35177750493897715514');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "17.35177750493897715514"
+
+        	INSERT INTO num_exp_ln VALUES (2,'17.35177750493897715514');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (3,'1.46093790411565641971');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (3,'1.46093790411565641971');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "1.46093790411565641971"
+
+        	INSERT INTO num_exp_ln VALUES (3,'1.46093790411565641971');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (4,'15.86956523951936572464');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (4,'15.86956523951936572464');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "15.86956523951936572464"
+
+        	INSERT INTO num_exp_ln VALUES (4,'15.86956523951936572464');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (5,'9.70485601768871834038');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (5,'9.70485601768871834038');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "9.70485601768871834038"
+
+        	INSERT INTO num_exp_ln VALUES (5,'9.70485601768871834038');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (6,'11.45000246622944403127');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (6,'11.45000246622944403127');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "11.45000246622944403127"
+
+        	INSERT INTO num_exp_ln VALUES (6,'11.45000246622944403127');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (7,'18.23469429965478772991');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (7,'18.23469429965478772991');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "18.23469429965478772991"
+
+        	INSERT INTO num_exp_ln VALUES (7,'18.23469429965478772991');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (8,'11.22365546576315513668');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (8,'11.22365546576315513668');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "11.22365546576315513668"
+
+        	INSERT INTO num_exp_ln VALUES (8,'11.22365546576315513668');
+	^
 <sql-statement>
 INSERT INTO num_exp_ln VALUES (9,'17.03145425013166006962');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_ln VALUES (9,'17.03145425013166006962');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "17.03145425013166006962"
+
+        	INSERT INTO num_exp_ln VALUES (9,'17.03145425013166006962');
+	^
 <sql-statement>
 COMMIT TRANSACTION;
 </sql-statement>
@@ -1322,30 +4256,111 @@ INSERT INTO num_exp_log10 VALUES (0,'NaN');
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_log10 VALUES (1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (2,'7.53578122160797276459');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (2,'7.53578122160797276459');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7.53578122160797276459"
+
+        	INSERT INTO num_exp_log10 VALUES (2,'7.53578122160797276459');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (3,'.63447727016073160075');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (3,'.63447727016073160075');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: ".63447727016073160075"
+
+        	INSERT INTO num_exp_log10 VALUES (3,'.63447727016073160075');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (4,'6.89206461372691743345');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (4,'6.89206461372691743345');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "6.89206461372691743345"
+
+        	INSERT INTO num_exp_log10 VALUES (4,'6.89206461372691743345');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (5,'4.21476541614777768626');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (5,'4.21476541614777768626');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.21476541614777768626"
+
+        	INSERT INTO num_exp_log10 VALUES (5,'4.21476541614777768626');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (6,'4.97267288886207207671');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (6,'4.97267288886207207671');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.97267288886207207671"
+
+        	INSERT INTO num_exp_log10 VALUES (6,'4.97267288886207207671');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (7,'7.91922711353275546914');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (7,'7.91922711353275546914');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7.91922711353275546914"
+
+        	INSERT INTO num_exp_log10 VALUES (7,'7.91922711353275546914');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (8,'4.87437163556421004138');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (8,'4.87437163556421004138');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "4.87437163556421004138"
+
+        	INSERT INTO num_exp_log10 VALUES (8,'4.87437163556421004138');
+	^
 <sql-statement>
 INSERT INTO num_exp_log10 VALUES (9,'7.39666659961986567059');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_log10 VALUES (9,'7.39666659961986567059');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "7.39666659961986567059"
+
+        	INSERT INTO num_exp_log10 VALUES (9,'7.39666659961986567059');
+	^
 <sql-statement>
 COMMIT TRANSACTION;
 </sql-statement>
@@ -1358,30 +4373,111 @@ INSERT INTO num_exp_power_10_ln VALUES (0,'NaN');
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (1,'NaN');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (1,'NaN');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "NaN"
+
+        	INSERT INTO num_exp_power_10_ln VALUES (1,'NaN');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (2,'224790267919917955.13261618583642653184');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (2,'224790267919917955.13261618583642653184');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "224790267919917955.13261618583642653184" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (2,'224790267919917955.13261618583642653184');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (3,'28.90266599445155957393');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (3,'28.90266599445155957393');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "28.90266599445155957393"
+
+        	INSERT INTO num_exp_power_10_ln VALUES (3,'28.90266599445155957393');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (4,'7405685069594999.07733999469386277636');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (4,'7405685069594999.07733999469386277636');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "7405685069594999.07733999469386277636" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (4,'7405685069594999.07733999469386277636');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (5,'5068226527.32127265408584640098');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (5,'5068226527.32127265408584640098');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "5068226527.32127265408584640098" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (5,'5068226527.32127265408584640098');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (6,'281839893606.99372343357047819067');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (6,'281839893606.99372343357047819067');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "281839893606.99372343357047819067" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (6,'281839893606.99372343357047819067');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (7,'1716699575118597095.42330819910640247627');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (7,'1716699575118597095.42330819910640247627');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "1716699575118597095.42330819910640247627" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (7,'1716699575118597095.42330819910640247627');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (8,'167361463828.07491320069016125952');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (8,'167361463828.07491320069016125952');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "167361463828.07491320069016125952" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (8,'167361463828.07491320069016125952');
+	^
 <sql-statement>
 INSERT INTO num_exp_power_10_ln VALUES (9,'107511333880052007.04141124673540337457');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_exp_power_10_ln VALUES (9,'107511333880052007.04141124673540337457');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "107511333880052007.04141124673540337457" is out of range for type integer
+
+        	INSERT INTO num_exp_power_10_ln VALUES (9,'107511333880052007.04141124673540337457');
+	^
 <sql-statement>
 COMMIT TRANSACTION;
 </sql-statement>

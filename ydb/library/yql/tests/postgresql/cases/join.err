@@ -523,18 +523,54 @@ INSERT INTO t2 VALUES ( 'bb', 12 );
 <sql-statement>
 INSERT INTO t2 VALUES ( 'cc', 22 );
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO t2 VALUES ( 'cc', 22 );
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "cc"
+
+        	INSERT INTO t2 VALUES ( 'cc', 22 );
+	^
 <sql-statement>
 INSERT INTO t2 VALUES ( 'ee', 42 );
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO t2 VALUES ( 'ee', 42 );
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "ee"
+
+        	INSERT INTO t2 VALUES ( 'ee', 42 );
+	^
 <sql-statement>
 INSERT INTO t3 VALUES ( 'bb', 13 );
 </sql-statement>
 <sql-statement>
 INSERT INTO t3 VALUES ( 'cc', 23 );
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO t3 VALUES ( 'cc', 23 );
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "cc"
+
+        	INSERT INTO t3 VALUES ( 'cc', 23 );
+	^
 <sql-statement>
 INSERT INTO t3 VALUES ( 'dd', 33 );
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO t3 VALUES ( 'dd', 33 );
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "dd"
+
+        	INSERT INTO t3 VALUES ( 'dd', 33 );
+	^
 <sql-statement>
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
 </sql-statement>

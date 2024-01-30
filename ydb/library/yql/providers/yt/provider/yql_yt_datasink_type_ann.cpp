@@ -445,9 +445,8 @@ private:
             }
         }
 
-        TMaybe<TColumnOrder> contentColumnOrder;
+        const TMaybe<TColumnOrder> contentColumnOrder = outTableInfo.RowSpec->GetColumnOrder();
         if (content) {
-            contentColumnOrder = State_->Types->LookupColumnOrder(*content);
             if (content->IsCallable("AssumeColumnOrder")) {
                 YQL_ENSURE(contentColumnOrder);
                 YQL_CLOG(INFO, ProviderYt) << "Dropping top level " << content->Content() << " from WriteTable input";

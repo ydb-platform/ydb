@@ -1475,7 +1475,7 @@ bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
 bool RenamePgSelectColumns(
     const TCoPgSelect& node,
     TExprNode::TPtr& output,
-    TMaybe<TVector<TString>> tableColumnOrder,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
     TTypeAnnotationContext& types) {
 

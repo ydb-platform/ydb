@@ -1856,6 +1856,15 @@ insert into datetimes values
 (9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
 (10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	insert into datetimes values
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "11:00 BST"
+
+        	insert into datetimes values
+	^
 <sql-statement>
 select id, f_time, first_value(id) over w, last_value(id) over w
 from datetimes

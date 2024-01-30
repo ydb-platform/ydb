@@ -2,9 +2,23 @@
 CREATE TABLE truncate_a (col1 integer primary key);
 INSERT INTO truncate_a VALUES (1);
 INSERT INTO truncate_a VALUES (2);
+SELECT * FROM truncate_a;
+ col1 
+------
+    1
+    2
+(2 rows)
+
 -- Roll truncate back
 BEGIN;
 ROLLBACK;
+SELECT * FROM truncate_a;
+ col1 
+------
+    1
+    2
+(2 rows)
+
 -- Commit the truncate this time
 BEGIN;
 COMMIT;
@@ -26,6 +40,13 @@ ROLLBACK;
 BEGIN;
 ROLLBACK;
 BEGIN;
+SELECT * FROM trunc_f;
+ col1 
+------
+    1
+    2
+(2 rows)
+
 ROLLBACK;
 -- Test ON TRUNCATE triggers
 CREATE TABLE trunc_trigger_test (f1 int, f2 text, f3 text);

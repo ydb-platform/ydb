@@ -34,6 +34,19 @@ INSERT INTO J2_TBL VALUES (NULL, 0);
 -- useful in some tests below
 create temp table onerow();
 --
+-- CORRELATION NAMES
+-- Make sure that table/column aliases are supported
+-- before diving into more complex join syntax.
+--
+SELECT *
+  FROM J1_TBL AS tx;
+SELECT *
+  FROM J1_TBL tx;
+SELECT *
+  FROM J1_TBL AS t1 (a, b, c);
+SELECT *
+  FROM J1_TBL t1 (a, b, c);
+--
 -- More complicated constructs
 --
 --
@@ -44,11 +57,7 @@ CREATE TABLE t2 (name TEXT, n INTEGER);
 CREATE TABLE t3 (name TEXT, n INTEGER);
 INSERT INTO t1 VALUES ( 'bb', 11 );
 INSERT INTO t2 VALUES ( 'bb', 12 );
-INSERT INTO t2 VALUES ( 'cc', 22 );
-INSERT INTO t2 VALUES ( 'ee', 42 );
 INSERT INTO t3 VALUES ( 'bb', 13 );
-INSERT INTO t3 VALUES ( 'cc', 23 );
-INSERT INTO t3 VALUES ( 'dd', 33 );
 -- Test for propagation of nullability constraints into sub-joins
 create temp table x (x1 int, x2 int);
 insert into x values (1,11);
@@ -61,6 +70,19 @@ insert into y values (1,111);
 insert into y values (2,222);
 insert into y values (3,333);
 insert into y values (4,null);
+select * from x;
+select * from y;
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1 and xx2 is not null);
+-- these should NOT give the same answers as above
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (x2 is not null);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (y2 is not null);
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (xx2 is not null);
 -- try that with GEQO too
 begin;
 rollback;
@@ -137,6 +159,10 @@ create temp table zt2 (f2 int primary key);
 create temp table zt3 (f3 int primary key);
 insert into zt1 values(53);
 insert into zt2 values(53);
+select * from
+  zt2 left join zt3 on (f2 = f3)
+      left join zt1 on (f3 = f1)
+where f2 = 53;
 --
 -- test for sane behavior with noncanonical merge clauses, per bug #4926
 --

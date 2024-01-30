@@ -65,6 +65,8 @@ SELECT covar_pop(1::float8,'nan'::float8), covar_samp(3::float8,'nan'::float8);
 -- test accum and combine functions directly
 CREATE TABLE regr_test (x float8, y float8);
 INSERT INTO regr_test VALUES (10,150),(20,250),(30,350),(80,540),(100,200);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test;
 SELECT float8_accum('{4,140,2900}'::float8[], 100);
 SELECT float8_regr_accum('{4,140,2900,1290,83075,15050}'::float8[], 200, 100);
 SELECT float8_combine('{3,60,200}'::float8[], '{0,0,0}'::float8[]);

@@ -3453,9 +3453,27 @@ INSERT INTO foo VALUES (847001,'t15','GE1043');
 <sql-statement>
 INSERT INTO foo VALUES (847002,'t16','GE1043');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO foo VALUES (847002,'t16','GE1043');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "t16"
+
+        	INSERT INTO foo VALUES (847002,'t16','GE1043');
+	^
 <sql-statement>
 INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
 </sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "sub-alpha"
+
+        	INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
+	^
 <sql-statement>
 SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
 FROM foo;
@@ -3480,30 +3498,12 @@ FROM foo;
 <sql-statement>
 SELECT json_object_agg(name, type) FROM foo;
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT json_object_agg(name, type) FROM foo;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  field name must not be null
-
-        	SELECT json_object_agg(name, type) FROM foo;
-	^
 <sql-statement>
 INSERT INTO foo VALUES (999999, NULL, 'bar');
 </sql-statement>
 <sql-statement>
 SELECT json_object_agg(name, type) FROM foo;
 </sql-statement>
--stdin-:<main>: Fatal: Execution
-
-    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
-    	SELECT json_object_agg(name, type) FROM foo;
-	^
-        -stdin-:<main>:1:1: Fatal: ERROR:  field name must not be null
-
-        	SELECT json_object_agg(name, type) FROM foo;
-	^
 <sql-statement>
 -- json_object
 -- empty object, one dimension

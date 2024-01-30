@@ -117,11 +117,11 @@ private:
     IComputationNode* const Count;
 };
 
-class TWideSkipWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
+class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64> {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
      TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded, count)
         , Flow(flow)
         , Count(count)
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))
@@ -145,27 +145,8 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value *state, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
-
-        const auto valueType = Type::getInt128Ty(context);
-
-        const auto init = BasicBlock::Create(context, "init", ctx.Func);
-        const auto main = BasicBlock::Create(context, "main", ctx.Func);
-
-        const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto state = PHINode::Create(valueType, 2U, "state", main);
-        state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
-
-        block = init;
-
-        GetNodeValue(statePtr, Count, ctx, block);
-        const auto save = new LoadInst(valueType, statePtr, "save", block);
-        state->addIncoming(save, block);
-        BranchInst::Create(main, block);
-
-        block = main;
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);

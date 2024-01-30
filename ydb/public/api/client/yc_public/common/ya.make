@@ -4,8 +4,6 @@ EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
 SRCS(
-    operation.proto
-    options.proto
     validation.proto
 )
 

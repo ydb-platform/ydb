@@ -11,6 +11,9 @@
 namespace NYql {
     struct TTypeAnnotationContext;
     struct TDqSettings;
+    struct IProviderContext;
+    struct TRelOptimizerNode;
+    struct TOptimizerStatistics;
 }
 
 namespace NYql::NDq {
@@ -19,14 +22,21 @@ NNodes::TExprBase DqRewriteAggregate(NNodes::TExprBase node, TExprContext& ctx, 
 
 NNodes::TExprBase DqRewriteTakeSortToTopSort(NNodes::TExprBase node, TExprContext& ctx, const TParentsMap& parents);
 
-NNodes::TExprBase DqOptimizeEquiJoinWithCosts(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool isRuleEnabled, ui32 maxDPccpDPTableSize);
+NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
+    const NNodes::TExprBase& node, 
+    TExprContext& ctx, 
+    TTypeAnnotationContext& typesCtx, 
+    ui32 optLevel, 
+    ui32 maxDPccpDPTableSize,
+    IProviderContext& providerCtx, 
+    const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& providerCollect);
 
 NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
     const NNodes::TExprBase& node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
     const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
-    bool ruleEnabled);
+    ui32 optLevel);
 
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 

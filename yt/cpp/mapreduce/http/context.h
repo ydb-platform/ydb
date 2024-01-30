@@ -25,7 +25,6 @@ struct TClientContext
 };
 
 bool operator==(const TClientContext& lhs, const TClientContext& rhs);
-bool operator!=(const TClientContext& lhs, const TClientContext& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -546,6 +546,30 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    // graph settings
+    if (opts.GraphBackendType_) {
+        app.GraphConfig.SetBackendType(opts.GraphBackendType_.value());
+    }
+    app.GraphConfig.SetAggregateCheckPeriodSeconds(5); // 5 seconds
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(60); // 1 minute to clear
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(40); // 40 seconds
+        set.SetSampleSizeSeconds(10); // 10 seconds
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(5); // 4 seconds
+        set.SetSampleSizeSeconds(5); // 5 seconds
+        set.SetMinimumStepSeconds(5); // 5 seconds
+    }
+    //
+                                                        
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }

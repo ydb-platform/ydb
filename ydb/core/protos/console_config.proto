@@ -113,6 +113,7 @@ message TConfigItem {
         MeteringConfigItem = 45;
         HiveConfigItem = 46;
         DataShardConfigItem = 49;
+        GraphConfigItem = 50;
         FederatedQueryConfigItem = 58;
         CompactionConfigItem = 52;
         HttpProxyConfigItem = 53;

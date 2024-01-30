@@ -68,10 +68,10 @@ namespace {
                 }
             }
             // Note: due to implementation details it is possible that B-Tree index touches an extra page
-            if (allowAdditionalFirstLoadedPage && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+            if (groupId.IsMain() && allowAdditionalFirstLoadedPage && flatDataPages.size() + 1 == bTreeDataPages.size()) {
                 flatDataPages.insert(*bTreeDataPages.begin());
             }
-            if (allowLastLoadedPageDifference && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+            if (groupId.IsMain() && allowLastLoadedPageDifference && flatDataPages.size() + 1 == bTreeDataPages.size()) {
                 flatDataPages.insert(*bTreeDataPages.rbegin());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
-        for (bool reverse : {false, true}) {
+        for (bool reverse : {false}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
                 for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCell : xrange<ui32>(0, 14)) {

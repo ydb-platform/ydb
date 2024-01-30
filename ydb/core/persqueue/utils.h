@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_id.h"
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -14,7 +16,7 @@ ui64 PutUnitsSize(const ui64 size);
 
 TString SourceIdHash(const TString& sourceId);
 
-const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
+const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId);
 
 // The graph of split-merge operations. 
 class TPartitionGraph {
@@ -23,9 +25,9 @@ public:
 
         Node() = default;
         Node(Node&&) = default;
-        Node(ui32 id, ui64 tabletId);
+        Node(const TPartitionId& id, ui64 tabletId);
 
-        ui32 Id;
+        TPartitionId Id;
         ui64 TabletId;
 
         // Direct parents of this node
@@ -37,13 +39,13 @@ public:
     };
 
     TPartitionGraph();
-    TPartitionGraph(std::unordered_map<ui32, Node>&& partitions);
+    TPartitionGraph(std::unordered_map<TPartitionId, Node>&& partitions);
 
-    const Node* GetPartition(ui32 id) const;
-    std::set<ui32> GetActiveChildren(ui32 id) const;
+    const Node* GetPartition(const TPartitionId& id) const;
+    std::set<TPartitionId> GetActiveChildren(const TPartitionId& id) const;
 
 private:
-    std::unordered_map<ui32, Node> Partitions;
+    std::unordered_map<TPartitionId, Node> Partitions;
 };
 
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config);

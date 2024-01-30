@@ -53,7 +53,6 @@ bool TPartitionSourceManager::HasParents() const {
     return node && !node->Parents.empty();
 }
 
-
 //
 // TPartitionSourceManager::TModificationBatch
 //

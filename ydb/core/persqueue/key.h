@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_id.h"
+
 #include <util/digest/multi.h>
 #include <util/generic/buffer.h>
 #include <util/string/cast.h>
@@ -8,53 +10,6 @@
 
 namespace NKikimr {
 namespace NPQ {
-
-class TPartitionId {
-public:
-    explicit TPartitionId(ui32 partition) :
-        OriginalPartitionId(partition),
-        InternalPartitionId(partition)
-    {
-    }
-
-    size_t GetHash() const
-    {
-        return MultiHash(OriginalPartitionId, WriteId);
-    }
-
-    bool IsEqual(const TPartitionId& rhs) const
-    {
-        return
-            (OriginalPartitionId == rhs.OriginalPartitionId) &&
-            (WriteId == rhs.WriteId);
-    }
-
-    void ToStream(IOutputStream& s) const
-    {
-        if (WriteId.Defined()) {
-            s << '{' << OriginalPartitionId << ", " << *WriteId << ", " << InternalPartitionId << '}';
-        } else {
-            s << OriginalPartitionId;
-        }
-    }
-
-    ui32 OriginalPartitionId;
-    TMaybe<ui64> WriteId;
-    ui32 InternalPartitionId;
-};
-
-inline
-bool operator==(const TPartitionId& lhs, const TPartitionId& rhs)
-{
-    return lhs.IsEqual(rhs);
-}
-
-inline
-IOutputStream& operator<<(IOutputStream& s, const TPartitionId& v)
-{
-    v.ToStream(s);
-    return s;
-}
 
 // {char type; ui32 partiton; (char mark)}
 class TKeyPrefix : public TBuffer
@@ -331,12 +286,5 @@ public:
         res += THash<TString>()(key.SessionId);
         res += THash<ui64>()(key.PartitionSessionId);
         return res;
-    }
-};
-
-template <>
-struct THash<NKikimr::NPQ::TPartitionId> {
-    inline size_t operator()(const NKikimr::NPQ::TPartitionId& v) const {
-        return v.GetHash();
     }
 };

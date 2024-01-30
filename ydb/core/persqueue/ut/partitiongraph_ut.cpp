@@ -46,12 +46,12 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         TPartitionGraph graph;
         graph = std::move(MakePartitionGraph(config));
 
-        const auto n0 = graph.GetPartition(0);
-        const auto n1 = graph.GetPartition(1);
-        const auto n2 = graph.GetPartition(2);
-        const auto n3 = graph.GetPartition(3);
-        const auto n4 = graph.GetPartition(4);
-        const auto n5 = graph.GetPartition(5);
+        const auto n0 = graph.GetPartition(TPartitionId(0));
+        const auto n1 = graph.GetPartition(TPartitionId(1));
+        const auto n2 = graph.GetPartition(TPartitionId(2));
+        const auto n3 = graph.GetPartition(TPartitionId(3));
+        const auto n4 = graph.GetPartition(TPartitionId(4));
+        const auto n5 = graph.GetPartition(TPartitionId(5));
 
         UNIT_ASSERT(n0);
         UNIT_ASSERT(n1);

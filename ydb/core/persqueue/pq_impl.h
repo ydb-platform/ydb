@@ -187,7 +187,7 @@ private:
     bool ConfigInited;
     ui32 PartitionsInited;
     bool InitCompleted = false;
-    THashMap<ui32, TPartitionInfo> Partitions;
+    THashMap<TPartitionId, TPartitionInfo> Partitions;
     THashMap<TString, TIntrusivePtr<TEvTabletCounters::TInFlightCookie>> CounterEventsInflight;
 
     TActorId CacheActor;
@@ -335,7 +335,7 @@ private:
     void SendEvProposePartitionConfig(const TActorContext& ctx,
                                       TDistributedTransaction& tx);
 
-    TPartition* CreatePartitionActor(ui32 partitionId,
+    TPartition* CreatePartitionActor(const TPartitionId& partitionId,
                                      const NPersQueue::TTopicConverterPtr topicConverter,
                                      const NKikimrPQ::TPQTabletConfig& config,
                                      bool newPartition,
@@ -406,6 +406,8 @@ private:
 
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
     TMaybe<ui64> TabletGeneration;
+
+    TPartitionId MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const;
 };
 
 

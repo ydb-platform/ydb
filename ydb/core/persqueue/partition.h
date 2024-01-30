@@ -353,7 +353,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
     }
 
-    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
+    TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
@@ -574,7 +574,7 @@ private:
 private:
     ui64 TabletID;
     ui32 TabletGeneration;
-    ui32 Partition;
+    TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;

@@ -597,10 +597,8 @@ private:
 
     void Handle(TEvPQ::TEvMonResponse::TPtr& ev, const TActorContext& ctx)
     {
-        if (ev->Get()->Partition != Max<ui32>()) {
-            Results[ev->Get()->Partition] = ev->Get()->Res;
-        } else {
-            Y_ABORT_UNLESS(ev->Get()->Partition == Max<ui32>());
+        if (ev->Get()->Partition.Defined()) {
+            Results[ev->Get()->Partition->InternalPartitionId] = ev->Get()->Res;
         }
         Str.push_back(ev->Get()->Str);
         if(++TotalResponses == TotalRequests) {
@@ -682,7 +680,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     ChangePartitionConfigInflight += Partitions.size();
 
     for (const auto& partition : Config.GetPartitions()) {
-        const auto partitionId = partition.GetPartitionId();
+        const TPartitionId partitionId(partition.GetPartitionId());
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId,
                 TPartitionInfo(ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, true, ctx)),
@@ -897,7 +895,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     InitTransactions(readRange, partitionTxs);
 
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
-        const auto partitionId = partition.GetPartitionId();
+        const TPartitionId partitionId(partition.GetPartitionId());
         Partitions.emplace(partitionId, TPartitionInfo(
             ctx.Register(CreatePartitionActor(partitionId, TopicConverter, Config, false, ctx)),
             GetPartitionKeyRange(Config, partition),
@@ -916,7 +914,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     UpdateConfigRequests.clear();
 
     for (auto& req : HasDataRequests) {
-        auto it = Partitions.find(req->Record.GetPartition());
+        const TPartitionId partitionId(req->Record.GetPartition());
+        auto it = Partitions.find(partitionId);
         if (it != Partitions.end()) {
             if (ctx.Now().MilliSeconds() < req->Record.GetDeadline()) { //otherwise there is no need to send event - proxy will generate event itself
                 ctx.Send(it->second.Actor, req.Release());
@@ -1505,7 +1504,7 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
     }
 
     for (const auto& partition : cfg.GetPartitions()) {
-        sourceIdWriter.FillRequest(request, partition.GetPartitionId());
+        sourceIdWriter.FillRequest(request, TPartitionId(partition.GetPartitionId()));
     }
 }
 
@@ -2398,7 +2397,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
   
-    ui32 partition = req.GetPartition();
+    TPartitionId partition(req.GetPartition());
     auto it = Partitions.find(partition);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic '" 
@@ -2554,7 +2553,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
     TMap<ui32, TActorId> res;
     for (auto& p : Partitions) {
-        res.insert({p.first, p.second.Actor});
+        res.emplace(p.first.InternalPartitionId, p.second.Actor);
     }
     ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, res, CacheActor, TopicName, TabletID(), ResponseProxy.size()));
     return true;
@@ -2809,7 +2808,10 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         //
         Y_ABORT_UNLESS(txBody.OperationsSize() > 0);
 
-        auto i = Partitions.find(txBody.GetOperations(0).GetPartitionId());
+        TPartitionId partitionId =
+            MakePartitionId(txBody.GetOperations(0).GetPartitionId(),
+                            txBody.HasWriteId() ? txBody.GetWriteId() : Nothing());
+        auto i = Partitions.find(partitionId);
         Y_ABORT_UNLESS(i != Partitions.end());
 
         ctx.Send(i->second.Actor, ev.Release());
@@ -3286,13 +3288,20 @@ void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
     }
 }
 
+TPartitionId TPersQueue::MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const
+{
+    Y_ABORT_UNLESS(!writeId.Defined());
+    return {originalPartitionId};
+}
+
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                                    TDistributedTransaction& tx)
 {
-    THashMap<ui32, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
+    THashMap<TPartitionId, std::unique_ptr<TEvPQ::TEvTxCalcPredicate>> events;
 
     for (auto& operation : tx.Operations) {
-        auto& event = events[operation.GetPartitionId()];
+        TPartitionId partitionId = MakePartitionId(operation.GetPartitionId(), tx.WriteId);
+        auto& event = events[partitionId];
         if (!event) {
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
@@ -3321,7 +3330,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId);
 
-        auto p = Partitions.find(partitionId);
+        auto p = Partitions.find(MakePartitionId(partitionId, tx.WriteId));
         Y_ABORT_UNLESS(p != Partitions.end());
 
         ctx.Send(p->second.Actor, event.release());
@@ -3339,7 +3348,7 @@ void TPersQueue::SendEvTxRollbackToPartitions(const TActorContext& ctx,
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxRollback>(tx.Step, tx.TxId);
 
-        auto p = Partitions.find(partitionId);
+        auto p = Partitions.find(MakePartitionId(partitionId, tx.WriteId));
         Y_ABORT_UNLESS(p != Partitions.end());
 
         ctx.Send(p->second.Actor, event.release());
@@ -3712,7 +3721,7 @@ void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
     tx.PartitionRepliesExpected = Partitions.size();
 }
 
-TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
+TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              const NPersQueue::TTopicConverterPtr topicConverter,
                                              const NKikimrPQ::TPQTabletConfig& config,
                                              bool newPartition,
@@ -3751,7 +3760,7 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
     }
 
     for (const auto& partition : config.GetPartitions()) {
-        const auto partitionId = partition.GetPartitionId();
+        const TPartitionId partitionId(partition.GetPartitionId());
         if (Partitions.contains(partitionId)) {
             continue;
         }

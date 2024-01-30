@@ -235,7 +235,6 @@ private:
     void MakeMutable();
 
     friend bool operator == (const TError& lhs, const TError& rhs);
-    friend bool operator != (const TError& lhs, const TError& rhs);
 
     friend void ToProto(NProto::TError* protoError, const TError& error);
     friend void FromProto(TError* error, const NProto::TError& protoError);
@@ -250,7 +249,6 @@ private:
 };
 
 bool operator == (const TError& lhs, const TError& rhs);
-bool operator != (const TError& lhs, const TError& rhs);
 
 void ToProto(NProto::TError* protoError, const TError& error);
 void FromProto(TError* error, const NProto::TError& protoError);

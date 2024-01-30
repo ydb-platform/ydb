@@ -59,6 +59,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
         OPTION(std::optional<bool>, EnableServerlessExclusiveDynamicNodes, std::nullopt);
         OPTION(std::optional<bool>, EnableAddColumsWithDefaults, std::nullopt);
+        OPTION(std::optional<bool>, EnableReplaceIfExists, std::nullopt);
 
         #undef OPTION
     };
@@ -116,7 +117,7 @@ namespace NSchemeShardUT_Private {
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
-        void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path, 
+        void TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime, const TString& path,
                                                       NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode,
                                                       ui64 hive = TTestTxConfig::Hive);
 

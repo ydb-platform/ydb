@@ -4297,6 +4297,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
+    EnableReplaceIfExists = appData->FeatureFlags.GetEnableReplaceIfExists();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -5483,7 +5484,7 @@ void TSchemeShard::Handle(TEvHive::TEvUpdateDomainReply::TPtr &ev, const TActorC
                        << ", at schemeshard: " << TabletID());
         return;
     }
-    
+
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
 }
 

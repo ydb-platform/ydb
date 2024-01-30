@@ -272,6 +272,7 @@ public:
     bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
+    bool EnableReplaceIfExists = true;
 
     TShardDeleter ShardDeleter;
 

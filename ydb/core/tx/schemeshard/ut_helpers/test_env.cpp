@@ -537,6 +537,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
+    app.SetEnableReplaceIfExists(opts.EnableReplaceIfExists_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -826,8 +827,8 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
-    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
-{   
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive)
+{
     auto record = DescribePath(runtime, path);
     const auto& pathDescr = record.GetPathDescription();
     const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());

@@ -806,12 +806,7 @@ public:
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
 
-            settings.WithExternalDatasources_ = !CheckCluster(cluster);
-            // In the case of reading from an external data source,
-            // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
-            // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
-            // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
-            return MetadataLoader->LoadTableMetadata(settings.WithExternalDatasources_ ? GetDefaultCluster() : cluster, settings.WithExternalDatasources_ ? cluster : table, settings, Database, UserToken);
+            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
         }

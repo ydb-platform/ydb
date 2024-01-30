@@ -87,6 +87,7 @@ static __thread bool NeedCanonizeFp = false;
 
 struct TMainContext {
     MemoryContextData Data;
+    MemoryContextData ErrorData;
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
     MemoryContext PrevCacheMemoryContext = nullptr;
@@ -3499,9 +3500,9 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
 }
 
 template <bool PassByValue, bool IsArray>
-class TPgHash : public NUdf::IHash, public NUdf::TBlockItemHasherBase<TPgHash<PassByValue, IsArray>, true> {
+class TPgHashBase {
 public:
-    TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
+    TPgHashBase(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
         auto hashProcId = TypeDesc.HashProcId;
@@ -3520,10 +3521,25 @@ public:
         Y_ENSURE(FInfoHash.fn_nargs == 1);
     }
 
+protected:
+    const NYql::NPg::TTypeDesc TypeDesc;
+
+    FmgrInfo FInfoHash;
+};
+
+template <bool PassByValue, bool IsArray>
+class TPgHash : public TPgHashBase<PassByValue, IsArray>, public NUdf::IHash {
+public:
+    using TBase = TPgHashBase<PassByValue, IsArray>;
+
+    TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
+        : TBase(typeDesc)
+    {}
+
     ui64 Hash(NUdf::TUnboxedValuePod lhs) const override {
         LOCAL_FCINFO(callInfo, 1);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash); // don't copy becase of IHash isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoHash); // don't copy becase of IHash isn't threadsafe
         callInfo->nargs = 1;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3535,15 +3551,25 @@ public:
             ScalarDatumFromPod(lhs) :
             PointerDatumFromPod(lhs), false };
 
-        auto x = FInfoHash.fn_addr(callInfo);
+        auto x = this->FInfoHash.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetUInt32(x);
     }
+};
+
+template <bool PassByValue, bool IsArray>
+class TPgHashItem : public TPgHashBase<PassByValue, IsArray>, public NUdf::TBlockItemHasherBase<TPgHashItem<PassByValue, IsArray>, true> {
+public:
+    using TBase = TPgHashBase<PassByValue, IsArray>;
+
+    TPgHashItem(const NYql::NPg::TTypeDesc& typeDesc)
+        : TBase(typeDesc)
+    {}
 
     ui64 DoHash(NUdf::TBlockItem value) const {
         LOCAL_FCINFO(callInfo, 1);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash); // don't copy becase of IHash isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoHash); // don't copy becase of IHash isn't threadsafe
         callInfo->nargs = 1;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3551,14 +3577,10 @@ public:
             ScalarDatumFromItem(value) :
             PointerDatumFromItem(value), false };
 
-        auto x = FInfoHash.fn_addr(callInfo);
+        auto x = this->FInfoHash.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetUInt32(x);
     }
-private:
-    const NYql::NPg::TTypeDesc TypeDesc;
-
-    FmgrInfo FInfoHash;
 };
 
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
@@ -3575,18 +3597,18 @@ NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
 NUdf::IBlockItemHasher::TPtr MakePgItemHasher(ui32 typeId) {
     const auto& typeDesc = NYql::NPg::LookupType(typeId);
     if (typeDesc.PassByValue) {
-        return new TPgHash<true, false>(typeDesc);
+        return new TPgHashItem<true, false>(typeDesc);
     } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
-        return new TPgHash<false, true>(typeDesc);
+        return new TPgHashItem<false, true>(typeDesc);
     } else {
-        return new TPgHash<false, false>(typeDesc);
+        return new TPgHashItem<false, false>(typeDesc);
     }
 }
 
 template <bool PassByValue, bool IsArray>
-class TPgCompare : public NUdf::ICompare, public NUdf::TBlockItemComparatorBase<TPgCompare<PassByValue, IsArray>, true> {
+class TPgCompareBase {
 public:
-    TPgCompare(const NYql::NPg::TTypeDesc& typeDesc)
+    TPgCompareBase(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
         Zero(FInfoLess);
@@ -3623,6 +3645,21 @@ public:
         Y_ENSURE(FInfoCompare.fn_nargs == 2);
     }
 
+protected:
+    const NYql::NPg::TTypeDesc TypeDesc;
+
+    FmgrInfo FInfoLess, FInfoCompare, FInfoEquals;
+};
+
+template <bool PassByValue, bool IsArray>
+class TPgCompare : public TPgCompareBase<PassByValue, IsArray>, public NUdf::ICompare {
+public:
+    using TBase = TPgCompareBase<PassByValue, IsArray>;
+
+    TPgCompare(const NYql::NPg::TTypeDesc& typeDesc)
+        : TBase(typeDesc)
+    {}
+
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         if constexpr (IsArray) {
             return Compare(lhs, rhs) < 0;
@@ -3630,7 +3667,7 @@ public:
 
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoLess); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3653,7 +3690,7 @@ public:
             ScalarDatumFromPod(rhs) :
             PointerDatumFromPod(rhs), false };
 
-        auto x = FInfoLess.fn_addr(callInfo);
+        auto x = this->FInfoLess.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetBool(x);
     }
@@ -3661,7 +3698,7 @@ public:
     int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare); // don't copy becase of ICompare isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoCompare); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3684,15 +3721,25 @@ public:
             ScalarDatumFromPod(rhs) :
             PointerDatumFromPod(rhs), false };
 
-        auto x = FInfoCompare.fn_addr(callInfo);
+        auto x = this->FInfoCompare.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetInt32(x);
     }
+};
+
+template <bool PassByValue, bool IsArray>
+class TPgCompareItem : public TPgCompareBase<PassByValue, IsArray>, public NUdf::TBlockItemComparatorBase<TPgCompareItem<PassByValue, IsArray>, true> {
+public:
+    using TBase = TPgCompareBase<PassByValue, IsArray>;
+
+    TPgCompareItem(const NYql::NPg::TTypeDesc& typeDesc)
+        : TBase(typeDesc)
+    {}
 
     i64 DoCompare(NUdf::TBlockItem lhs, NUdf::TBlockItem rhs) const {
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare); // don't copy becase of ICompare isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoCompare); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3703,7 +3750,7 @@ public:
             ScalarDatumFromItem(rhs) :
             PointerDatumFromItem(rhs), false };
 
-        auto x = FInfoCompare.fn_addr(callInfo);
+        auto x = this->FInfoCompare.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetInt32(x);
     }
@@ -3715,7 +3762,7 @@ public:
 
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquals); // don't copy becase of ICompare isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoEquals); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3726,7 +3773,7 @@ public:
             ScalarDatumFromItem(rhs) :
             PointerDatumFromItem(rhs), false };
 
-        auto x = FInfoEquals.fn_addr(callInfo);
+        auto x = this->FInfoEquals.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetBool(x);
     }
@@ -3738,7 +3785,7 @@ public:
 
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
+        callInfo->flinfo = const_cast<FmgrInfo*>(&this->FInfoLess); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -3749,15 +3796,10 @@ public:
             ScalarDatumFromItem(rhs) :
             PointerDatumFromItem(rhs), false };
 
-        auto x = FInfoLess.fn_addr(callInfo);
+        auto x = this->FInfoLess.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         return DatumGetBool(x);
     }
-
-private:
-    const NYql::NPg::TTypeDesc TypeDesc;
-
-    FmgrInfo FInfoLess, FInfoCompare, FInfoEquals;
 };
 
 NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
@@ -3774,11 +3816,11 @@ NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
 NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
     const auto& typeDesc = NYql::NPg::LookupType(typeId);
     if (typeDesc.PassByValue) {
-        return new TPgCompare<true, false>(typeDesc);
+        return new TPgCompareItem<true, false>(typeDesc);
     } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
-        return new TPgCompare<false, true>(typeDesc);
+        return new TPgCompareItem<false, true>(typeDesc);
     } else {
-        return new TPgCompare<false, false>(typeDesc);
+        return new TPgCompareItem<false, false>(typeDesc);
     }
 }
 
@@ -3864,6 +3906,11 @@ void* PgInitializeMainContext() {
         &MkqlMethods,
         nullptr,
         "mkql");
+    MemoryContextCreate((MemoryContext)&ctx->ErrorData,
+        T_AllocSetContext,
+        &MkqlMethods,
+        nullptr,
+        "mkql-err");
     ctx->StartTimestamp = GetCurrentTimestamp();
     return ctx;
 }
@@ -3881,7 +3928,8 @@ void PgAcquireThreadContext(void* ctx) {
         main->PrevCacheMemoryContext = CacheMemoryContext;
         SaveRecordCacheState(&main->PrevRecordCacheState);
         LoadRecordCacheState(&main->CurrentRecordCacheState);
-        CurrentMemoryContext = ErrorContext = CacheMemoryContext = (MemoryContext)&main->Data;
+        CurrentMemoryContext = CacheMemoryContext = (MemoryContext)&main->Data;
+        ErrorContext = (MemoryContext)&main->ErrorData;
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;
@@ -3952,7 +4000,7 @@ public:
 
     NUdf::TStringRef AsCStringBuffer(const NUdf::TUnboxedValue& value) const override {
         auto x = (const char*)PointerDatumFromPod(value);
-        return { x, strlen(x) + 1};
+        return { x, ui32(strlen(x) + 1)};
     }
 
     NUdf::TStringRef AsTextBuffer(const NUdf::TUnboxedValue& value) const override {

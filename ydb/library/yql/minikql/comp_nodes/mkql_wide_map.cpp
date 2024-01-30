@@ -125,8 +125,6 @@ public:
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto valueType = Type::getInt128Ty(context);
-
         const auto result = GetNodeValues(Flow, ctx, block);
 
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, result.first, ConstantInt::get(result.first->getType(), 0), "good", block);

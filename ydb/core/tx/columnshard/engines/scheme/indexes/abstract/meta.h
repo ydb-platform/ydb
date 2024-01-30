@@ -26,6 +26,7 @@ namespace NKikimr::NOlap::NIndexes {
 
 class IIndexMeta {
 private:
+    YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
 protected:
     virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
@@ -39,8 +40,9 @@ public:
     using TProto = NKikimrSchemeOp::TOlapIndexDescription;
 
     IIndexMeta() = default;
-    IIndexMeta(const ui32 indexId)
-        : IndexId(indexId)
+    IIndexMeta(const ui32 indexId, const TString& indexName)
+        : IndexName(indexName)
+        , IndexId(indexId)
     {
 
     }
@@ -68,12 +70,16 @@ public:
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
         IndexId = proto.GetId();
         AFL_VERIFY(IndexId);
+        IndexName = proto.GetName();
+        AFL_VERIFY(IndexName);
         return DoDeserializeFromProto(proto);
     }
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
         AFL_VERIFY(IndexId);
         proto.SetId(IndexId);
+        AFL_VERIFY(IndexName);
+        proto.SetName(IndexName);
         return DoSerializeToProto(proto);
     }
 
@@ -96,6 +102,7 @@ class TPortionIndexChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
     const ui32 RecordsCount;
+    const ui64 RawBytes;
     const TString Data;
 protected:
     virtual const TString& DoGetData() const override {
@@ -121,9 +128,10 @@ protected:
     }
     virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
 public:
-    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const TString& data)
+    TPortionIndexChunk(const ui32 entityId, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
         : TBase(entityId, 0)
         , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
         , Data(data)
     {
     }
@@ -145,7 +153,7 @@ protected:
 
 public:
     TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const std::set<ui32>& columnIds);
+    TIndexByColumns(const ui32 indexId, const TString& indexName, const std::set<ui32>& columnIds);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

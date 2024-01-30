@@ -3,8 +3,6 @@ UNITTEST_FOR(ydb/library/yql/parser/pg_wrapper)
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-NO_COMPILER_WARNINGS()
-
 INCLUDE(../cflags.inc)
 
 SRCS(

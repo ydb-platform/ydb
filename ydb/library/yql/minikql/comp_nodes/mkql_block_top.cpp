@@ -83,7 +83,6 @@ public:
         const auto width = Columns_.size() + 1U;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto flagType = Type::getInt1Ty(context);

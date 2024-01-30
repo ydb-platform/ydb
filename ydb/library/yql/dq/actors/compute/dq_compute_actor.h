@@ -22,7 +22,7 @@ struct TEvDqCompute {
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
-        TEvResumeExecution(EResumeSource source) 
+        TEvResumeExecution(EResumeSource source)
             : Source(source)
         { }
 

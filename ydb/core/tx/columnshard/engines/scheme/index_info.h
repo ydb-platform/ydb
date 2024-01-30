@@ -116,6 +116,29 @@ public:
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
+        auto f = GetColumnFieldOptional(columnId);
+        if (!f) {
+            return {};
+        }
+        return f->name();
+    }
+
+    NIndexes::TIndexMetaContainer GetIndexOptional(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        if (it == Indexes.end()) {
+            return NIndexes::TIndexMetaContainer();
+        }
+        return it->second;
+    }
+
+    std::optional<TString> GetIndexNameOptional(const ui32 indexId) const {
+        auto meta = GetIndexOptional(indexId);
+        if (!meta) {
+            return {};
+        }
+        return meta->GetIndexName();
+    }
 
     void AppendIndexes(std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
         for (auto&& i : Indexes) {

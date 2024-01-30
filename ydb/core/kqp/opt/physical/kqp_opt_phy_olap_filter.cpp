@@ -503,10 +503,8 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap,
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos)
 {
     if constexpr (NSsa::RuntimeVersion >= 4U) {
-        if (!FindNode(coalesce.Ptr(), [](const TExprNode::TPtr& node) { return TCoJsonValue::Match(node.Get()); })) {
-            if (const auto node = YqlCoalescePushdown(coalesce, ctx)) {
-                return node;
-            }
+        if (const auto node = YqlCoalescePushdown(coalesce, ctx)) {
+            return node;
         }
     }
 
@@ -648,7 +646,7 @@ void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPu
 }
 
 bool IsGoodTypeForPushdown(const TTypeAnnotationNode& type) {
-    return NUdf::EDataTypeFeatures::IntegralType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
 }
 
 bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo) {

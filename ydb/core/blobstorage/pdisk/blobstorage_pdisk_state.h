@@ -196,6 +196,7 @@ struct TOwnerData {
         CurrentFirstLsnToKeep = 0;
         LastWrittenCommitLsn = 0;
         CutLogId = TActorId();
+        LogEndPosition = TLogEndPosition(0, 0);
         WhiteboardProxyId = TActorId();
         LogRecordsInitiallyRead = 0;
         LogRecordsConsequentlyRead = 0;

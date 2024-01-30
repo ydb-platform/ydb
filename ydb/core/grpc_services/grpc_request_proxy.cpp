@@ -606,20 +606,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
         HFunc(TEvCommitOffsetRequest, PreHandle);
         HFunc(TEvPQReadInfoRequest, PreHandle);
-        HFunc(TEvPQDropTopicRequest, PreHandle);
-        HFunc(TEvPQCreateTopicRequest, PreHandle);
-        HFunc(TEvPQAlterTopicRequest, PreHandle);
-        HFunc(TEvPQAddReadRuleRequest, PreHandle);
-        HFunc(TEvPQRemoveReadRuleRequest, PreHandle);
-        HFunc(TEvPQDescribeTopicRequest, PreHandle);
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
-        HFunc(TEvDropTopicRequest, PreHandle);
-        HFunc(TEvCreateTopicRequest, PreHandle);
-        HFunc(TEvAlterTopicRequest, PreHandle);
-        HFunc(TEvDescribeTopicRequest, PreHandle);
-        HFunc(TEvDescribeConsumerRequest, PreHandle);
-        HFunc(TEvDescribePartitionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 

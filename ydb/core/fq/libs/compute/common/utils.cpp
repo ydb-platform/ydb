@@ -338,7 +338,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, ui32& 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -358,6 +358,9 @@ TString GetV1StatFromV2Plan(const TString& plan) {
                         totals.MaxMemoryUsage.Write(writer, "MaxMemoryUsage");
                         totals.CpuTimeUs.Write(writer, "CpuTimeUs");
                         totals.SourceCpuTimeUs.Write(writer, "SourceCpuTimeUs");
+                        if (cpuUsage) {
+                            *cpuUsage = (totals.CpuTimeUs.Sum + totals.SourceCpuTimeUs.Sum) / 1000000.0;
+                        }
                         totals.InputBytes.Write(writer, "InputBytes");
                         totals.InputRows.Write(writer, "InputRows");
                         totals.OutputBytes.Write(writer, "OutputBytes");

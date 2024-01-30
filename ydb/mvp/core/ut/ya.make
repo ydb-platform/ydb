@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib/actors
+    ydb/mvp/core/testlib
     contrib/libs/jwt-cpp
 )
 

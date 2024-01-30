@@ -14,8 +14,8 @@ SRCS(
 
 PEERDIR(
     ydb/mvp/core
+    ydb/mvp/core/testlib
     ydb/core/testlib/actors
-    kikimr/yndx/testlib/service_mocks
 )
 
 END()

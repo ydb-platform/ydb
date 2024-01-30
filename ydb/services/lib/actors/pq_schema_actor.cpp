@@ -952,6 +952,12 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             if (settings.partition_count_limit() > 0) {
                 maxParts = settings.partition_count_limit();
+
+                if (maxParts < parts) {
+                    error = TStringBuilder() << "Partitions count limit must be greater than or equal to partitions count, provided " 
+                                             << settings.partition_count_limit() << " and " << settings.min_active_partitions();
+                    return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
             }
         }
 

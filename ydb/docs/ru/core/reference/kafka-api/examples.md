@@ -237,6 +237,7 @@
   topics=Topic-1
 ```
 
+#### Из файла в YDB
 Пример файла настроек FileSource коннектора `/etc/kafka-connect-worker/file-sink.properties` для переноса данных из файла в топик:
 ```ini
   name=local-file-source

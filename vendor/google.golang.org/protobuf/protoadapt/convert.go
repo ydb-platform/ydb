@@ -11,21 +11,21 @@ import (
 	"google.golang.org/protobuf/runtime/protoimpl"
 )
 
-// MessageV1 is the original "github.com/golang/protobuf/proto".Message type.
+// MessageV1 is the original [github.com/golang/protobuf/proto.Message] type.
 type MessageV1 = protoiface.MessageV1
 
-// MessageV2 is the Message type used by the current google.golang.org/protobuf
-// module, adding support for reflection.
+// MessageV2 is the [google.golang.org/protobuf/proto.Message] type used by the
+// current [google.golang.org/protobuf] module, adding support for reflection.
 type MessageV2 = proto.Message
 
 // MessageV1Of converts a v2 message to a v1 message.
 // It returns nil if m is nil.
-func MessageV1Of(m MessageV2) protoiface.MessageV1 {
+func MessageV1Of(m MessageV2) MessageV1 {
 	return protoimpl.X.ProtoMessageV1Of(m)
 }
 
 // MessageV2Of converts a v1 message to a v2 message.
 // It returns nil if m is nil.
-func MessageV2Of(m MessageV1) proto.Message {
+func MessageV2Of(m MessageV1) MessageV2 {
 	return protoimpl.X.ProtoMessageV2Of(m)
 }

@@ -208,7 +208,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                std::optional<std::pair<TRowId, TRowId>> prechargedRowIds;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowsRange;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first; 
@@ -261,10 +261,10 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        if (prechargedRowIds) {
-                            prechargedRowIds->second = prechargeCurrentLastRowId;
+                        if (prechargedRowsRange) {
+                            prechargedRowsRange->second = prechargeCurrentLastRowId;
                         } else {
-                            prechargedRowIds.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
+                            prechargedRowsRange.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
                         }
                         if (Groups) {
                             for (auto& g : Groups) {
@@ -274,8 +274,8 @@ namespace NTable {
                     }
                 }
 
-                if (prechargedRowIds && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedRowIds->first, prechargedRowIds->second);
+                if (prechargedRowsRange && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowsRange->first, prechargedRowsRange->second);
                 }
             }
 
@@ -306,7 +306,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                std::optional<std::pair<TRowId, TRowId>> prechargedRowIds;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowsRange;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first;
@@ -361,10 +361,10 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        if (prechargedRowIds) {
-                            prechargedRowIds->second = prechargeCurrentLastRowId;
+                        if (prechargedRowsRange) {
+                            prechargedRowsRange->second = prechargeCurrentLastRowId;
                         } else {
-                            prechargedRowIds.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
+                            prechargedRowsRange.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
                         }
                         if (Groups) {
                             for (auto& g : Groups) {
@@ -378,8 +378,8 @@ namespace NTable {
                     }
                 }
 
-                if (prechargedRowIds && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedRowIds->first, prechargedRowIds->second);
+                if (prechargedRowsRange && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowsRange->first, prechargedRowsRange->second);
                 }
             }
 

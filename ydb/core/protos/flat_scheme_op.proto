@@ -1806,7 +1806,7 @@ message TExternalTableDescription {
     optional string Location = 6;
     repeated TColumnDescription Columns = 7;
     optional bytes Content = 8;
-    optional bool ReplaceIfExists = 9;
+    optional bool ReplaceIfExists = 9; // Only applicable for `create external table` operation
 }
 
 // Access without authorization

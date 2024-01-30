@@ -184,7 +184,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             if (replaceIfExists && tableType != ETableType::ExternalTable) {
                 Context().Error(GetPos(rule.GetBlock2().GetToken1()))
-                    << "OR REPLACE is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE";
+                    << "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE";
                 return false;
             }
 

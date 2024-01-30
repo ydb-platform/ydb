@@ -5606,6 +5606,26 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(CreateOrReplaceForUnsupportedTableTypesShouldFail) {
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE OR REPLACE TABLE t (a int32 not null, primary key(a, a));
+            )sql" , "<main>:3:23: Error: OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE\n");
+
+        ExpectFailWithError(R"sql(
+                USE plato;
+                CREATE OR REPLACE TABLE t (
+                    Key Uint64,
+                    Value1 String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                );
+            )sql" , "<main>:3:23: Error: OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE\n");
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
         ExpectFailWithError(R"sql(
                 USE plato;

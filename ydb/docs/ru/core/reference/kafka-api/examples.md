@@ -271,7 +271,8 @@
   auto.evolve=true
 ```
 
-Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из топика в таблицу Postgres:
+#### Из PostgreSQL в YDB
+Пример файла настроек JDBCSource коннектора `/etc/kafka-connect-worker/jdbc-source.properties` для переноса данных из PostgreSQL таблицы в файл:
 ```ini
   name=postgres-source
   connector.class=io.confluent.connect.jdbc.JdbcSourceConnector

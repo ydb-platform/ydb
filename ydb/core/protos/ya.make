@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     alloc.proto
+    backup_events.proto
     base.proto
     bind_channel_storage_pool.proto
     blob_depot.proto

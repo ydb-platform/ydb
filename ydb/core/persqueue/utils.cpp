@@ -35,7 +35,7 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
 }
 
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return config.GetPartitionStrategy().GetMinPartitionCount() < config.GetPartitionStrategy().GetMaxPartitionCount();// && AppData()->FeatureFlags.GetEnableTopicSplitMerge(); 
+    return 0 < config.GetPartitionStrategy().GetMaxPartitionCount();
 }
 
 static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb

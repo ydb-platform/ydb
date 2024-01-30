@@ -44,7 +44,7 @@ NKikimrSchemeOp::TPersQueueGroupDescription CreateConfig0(bool SplitMergeEnabled
 
     auto* partitionStrategy = config->MutablePartitionStrategy();
     partitionStrategy->SetMinPartitionCount(3);
-    partitionStrategy->SetMaxPartitionCount(SplitMergeEnabled ? 10 : 3);
+    partitionStrategy->SetMaxPartitionCount(SplitMergeEnabled ? 10 : 0);
 
     config->SetTopicName("/Root/topic-1");
     config->SetTopicPath("/Root");

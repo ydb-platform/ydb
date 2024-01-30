@@ -459,6 +459,26 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
+    {
+        TCmsTestEnv env(16, 3);
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(3);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+        env.SetCmsConfig(config);
+
+        auto rec1 = env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+                                               MakeAction(TAction::REPLACE_DEVICES, env.GetNodeId(0),
+                                                          60000000, env.PDiskName(0, 0),
+                                                          env.PDiskName(0, 1), env.PDiskName(0, 2)));
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+
+        auto rec2 = env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+                                               MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9),
+                                                          60000000));
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+    }
+
     Y_UNIT_TEST(RequestReplaceBrokenDevices)
     {
         TCmsTestEnv env(8);

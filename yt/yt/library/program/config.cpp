@@ -63,6 +63,8 @@ void TStockpileConfig::Register(TRegistrar registrar)
 
 void THeapProfilerConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("sampling_rate", &TThis::SamplingRate)
+        .Default();
     registrar.Parameter("snapshot_update_period", &TThis::SnapshotUpdatePeriod)
         .Default(TDuration::Seconds(5));
 }
@@ -106,6 +108,8 @@ void TSingletonsConfig::Register(TRegistrar registrar)
     registrar.Parameter("resource_tracker_vcpu_factor", &TThis::ResourceTrackerVCpuFactor)
         .Optional();
     registrar.Parameter("heap_profiler", &TThis::HeapProfiler)
+        .DefaultNew();
+    registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();
 
     registrar.Postprocessor([] (TThis* config) {

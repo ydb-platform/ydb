@@ -1,5 +1,5 @@
 #include "schemeshard_info_types.h"
-#include "schemeshard_olap_types.h"
+#include "olap/columns/schema.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
@@ -8,13 +8,13 @@ namespace NSchemeShard {
 // Helper accessors for OLTP and OLAP tables that use different TColumn's
 namespace {
     inline
-    bool IsDropped(const TOlapSchema::TColumn& col) {
+    bool IsDropped(const TOlapColumnsDescription::TColumn& col) {
         Y_UNUSED(col);
         return false;
     }
 
     inline
-    ui32 GetType(const TOlapSchema::TColumn& col) {
+    ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
         Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
         return col.GetType().GetTypeId();
     }
@@ -118,8 +118,8 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 }
 
 static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
-    const THashMap<ui32, TOlapSchema::TColumn>& sourceColumns,
-    const THashMap<ui32, TOlapSchema::TColumn>& alterColumns,
+    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
+    const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     IErrorCollector& errors)
 {
@@ -131,7 +131,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
         return false;
     }
 
-    const TOlapSchema::TColumn* column = nullptr;
+    const TOlapColumnsDescription::TColumn* column = nullptr;
     const ui32 colId = it->second;
     if (alterColumns.contains(colId)) {
         column = &alterColumns.at(colId);
@@ -179,7 +179,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
 
     switch (ttl.GetStatusCase()) {
         case TTtlProto::kEnabled:
-            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns, ColumnsByName, errors);
+            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         case TTtlProto::kDisabled:
         default:
             break;

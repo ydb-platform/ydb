@@ -179,7 +179,6 @@ private:
 
         ctx.Ctx = &*args;
         const auto containerArg = &*++args;
-        const auto valuePtr = &*++args;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;

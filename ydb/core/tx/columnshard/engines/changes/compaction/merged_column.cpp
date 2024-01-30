@@ -29,7 +29,7 @@ void TMergedColumn::AppendSlice(const std::shared_ptr<arrow::Array>& data, const
     }
 }
 
-std::vector<NKikimr::NOlap::NCompaction::TColumnPortionResult> TMergedColumn::BuildResult() {
+std::vector<TColumnPortionResult> TMergedColumn::BuildResult() {
     std::vector<TColumnPortionResult> result;
     if (Portions.size()) {
         Portions.back().FlushBuffer();

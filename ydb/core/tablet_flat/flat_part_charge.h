@@ -16,7 +16,7 @@ namespace NTable {
         using TDataPage = NPage::TDataPage;
         using TGroupId = NPage::TGroupId;
 
-        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory = false)
+        TCharge(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
             : Env(env)
             , Part(&part)
             , Scheme(*Part->Scheme)
@@ -326,7 +326,11 @@ namespace NTable {
                     if (key1Page && key1Page == current) {
                         if (needExactBounds && page) {
                             auto key1RowId = LookupRowIdReverse(key1, page, Scheme.Groups[0], ESeek::Lower, keyDefaults);
-                            prechargeCurrentFirstRowId = Min(prechargeCurrentFirstRowId, key1RowId);
+                            if (key1RowId != Max<TRowId>()) { // Max<TRowId>() means that lower bound is before current page, so doesn't charge current page
+                                prechargeCurrentFirstRowId = Min(prechargeCurrentFirstRowId, key1RowId);
+                            } else {
+                                prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
+                            }
                         } else {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
                         }

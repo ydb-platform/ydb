@@ -56,3 +56,7 @@ message TEvPropagateStatistics {
     }
     repeated TStatsEntry Entries = 2;
 }
+
+// SA -> nodes
+message TEvStatisticsIsDisabled {
+}

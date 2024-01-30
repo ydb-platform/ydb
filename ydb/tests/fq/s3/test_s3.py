@@ -358,9 +358,6 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr", [{"compute": 3}], indirect=True)
     def test_write_result(self, kikimr, s3, client, yq_version):
-
-        pytest.skip("Test is not stable in OSS")
-
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -386,7 +383,10 @@ Pear,15,33'''
                 fruit += "A" + str(j) + ",1,1\n"
             s3_client.put_object(Body=fruit, Bucket='wbucket', Key='fruits' + str(j) + '.csv', ContentType='text/plain')
         kikimr.control_plane.wait_bootstrap(1)
+        kikimr.compute_plane.wait_bootstrap()
         client.create_storage_connection("fruitbucket", "wbucket")
+
+        time.sleep(10) # 2 x node info update period 
 
         sql = R'''
             SELECT Fruit, sum(Price) as Price, sum(Weight) as Weight

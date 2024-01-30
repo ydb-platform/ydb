@@ -153,6 +153,8 @@ struct TSelectRowsOptionsBase
     bool NewRangeInference = true;
     //! Enables canonical SQL behaviour for relational operators, i.e. null </=/> value -> null.
     bool UseCanonicalNullRelations = false;
+    //! Merge versioned rows from different stores when reading.
+    bool MergeVersionedRows = true;
 };
 
 struct TSelectRowsOptions

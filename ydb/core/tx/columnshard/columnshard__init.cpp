@@ -38,8 +38,6 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedTxId = 0;
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
-    Self->AltersInFlight.clear();
-    Self->CommitsInFlight.clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
 }
@@ -180,18 +178,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
 
-    {
-        TMemoryProfileGuard g("TTxInit/CommitsInFlight");
-        for (const auto& pr : Self->CommitsInFlight) {
-            ui64 txId = pr.first;
-            for (TWriteId writeId : pr.second.WriteIds) {
-                Y_ABORT_UNLESS(Self->LongTxWrites.contains(writeId),
-                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
-                    Self->TabletID(), txId, writeId);
-                Self->AddLongTxWrite(writeId, txId);
-            }
-        }
-    }
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
     Self->UpdateResourceMetrics(ctx, {});
@@ -219,6 +205,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    Self->ProgressTxController->OnTabletInit();
     Self->SwitchToWork(ctx);
 }
 
@@ -375,33 +362,6 @@ ITransaction* TColumnShard::CreateTxInitSchema() {
 
 void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
-}
-
-bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody) {
-    switch (txKind) {
-        case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
-            TColumnShard::TAlterMeta meta;
-            Y_ABORT_UNLESS(meta.Body.ParseFromString(txBody));
-            AltersInFlight.emplace(txId, std::move(meta));
-            break;
-        }
-        case NKikimrTxColumnShard::TX_KIND_COMMIT: {
-            NKikimrTxColumnShard::TCommitTxBody body;
-            Y_ABORT_UNLESS(body.ParseFromString(txBody));
-
-            TColumnShard::TCommitMeta meta;
-            for (auto& id : body.GetWriteIds()) {
-                meta.AddWriteId(TWriteId{id});
-            }
-
-            CommitsInFlight.emplace(txId, std::move(meta));
-            break;
-        }
-        default: {
-            Y_ABORT("Unsupported TxKind stored in the TxInfo table");
-        }
-    }
-    return true;
 }
 
 }

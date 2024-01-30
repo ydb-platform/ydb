@@ -110,6 +110,7 @@ public:
         case TCacheCacheConfig::CacheGenNone: // place in fresh
         case TCacheCacheConfig::CacheGenEvicted: // corner case: was evicted from staging and touched in same update
             AddToFresh(item, evictedList);
+	    [[fallthrough]];
         case TCacheCacheConfig::CacheGenFresh: // just update inside fresh
             xitem->Unlink();
             FreshList.PushFront(xitem);

@@ -114,83 +114,6 @@ SRCS(
     write_err.go
 )
 
-GO_TEST_SRCS(
-    align_runtime_test.go
-    export_debuglog_test.go
-    export_test.go
-    importx_test.go
-    proc_runtime_test.go
-    symtabinl_test.go
-    tracebackx_test.go
-)
-
-GO_XTEST_SRCS(
-    abi_test.go
-    align_test.go
-    arena_test.go
-    callers_test.go
-    chan_test.go
-    chanbarrier_test.go
-    checkptr_test.go
-    closure_test.go
-    complex_test.go
-    crash_cgo_test.go
-    crash_test.go
-    debuglog_test.go
-    defer_test.go
-    ehooks_test.go
-    env_test.go
-    example_test.go
-    fastlog2_test.go
-    float_test.go
-    gc_test.go
-    gcinfo_test.go
-    hash_test.go
-    heap_test.go
-    histogram_test.go
-    iface_test.go
-    import_test.go
-    lfstack_test.go
-    lockrank_test.go
-    malloc_test.go
-    map_benchmark_test.go
-    map_test.go
-    memmove_test.go
-    metrics_test.go
-    mfinal_test.go
-    mgclimit_test.go
-    mgcpacer_test.go
-    mgcscavenge_test.go
-    minmax_test.go
-    mpagealloc_test.go
-    mpagecache_test.go
-    mpallocbits_test.go
-    mranges_test.go
-    netpoll_os_test.go
-    norace_test.go
-    panic_test.go
-    panicnil_test.go
-    pinner_test.go
-    proc_test.go
-    profbuf_test.go
-    rand_test.go
-    runtime-gdb_test.go
-    runtime-lldb_test.go
-    runtime_test.go
-    rwmutex_test.go
-    sema_test.go
-    sizeof_test.go
-    slice_test.go
-    softfloat64_test.go
-    stack_test.go
-    start_line_test.go
-    string_test.go
-    symtab_test.go
-    time_test.go
-    trace_cgo_test.go
-    traceback_test.go
-)
-
 IF (ARCH_X86_64)
     SRCS(
         asm_amd64.s
@@ -206,7 +129,6 @@ IF (ARCH_X86_64)
         test_amd64.s
     )
 
-    GO_XTEST_SRCS(start_line_amd64_test.go)
 ENDIF()
 
 IF (ARCH_ARM64)
@@ -253,28 +175,6 @@ IF (OS_LINUX)
         vdso_linux.go
     )
 
-    GO_TEST_SRCS(
-        export_debug_test.go
-        export_linux_test.go
-        export_mmap_test.go
-        export_pipe2_test.go
-        export_unix_test.go
-    )
-
-    GO_XTEST_SRCS(
-        crash_unix_test.go
-        debug_test.go
-        nbpipe_fcntl_unix_test.go
-        nbpipe_test.go
-        norace_linux_test.go
-        runtime-gdb_unix_test.go
-        runtime_linux_test.go
-        runtime_mmap_test.go
-        runtime_unix_test.go
-        security_test.go
-        semasleep_test.go
-        syscall_unix_test.go
-    )
 ENDIF()
 
 IF (OS_LINUX AND ARCH_X86_64)
@@ -291,10 +191,6 @@ IF (OS_LINUX AND ARCH_X86_64)
         tls_stub.go
         vdso_linux_amd64.go
     )
-
-    GO_TEST_SRCS(export_debug_amd64_test.go)
-
-    GO_XTEST_SRCS(memmove_linux_amd64_test.go)
 ENDIF()
 
 IF (OS_LINUX AND ARCH_ARM64)
@@ -309,8 +205,6 @@ IF (OS_LINUX AND ARCH_ARM64)
         timestub2.go
         vdso_linux_arm64.go
     )
-
-    GO_TEST_SRCS(export_debug_arm64_test.go)
 ENDIF()
 
 IF (OS_DARWIN)
@@ -335,26 +229,6 @@ IF (OS_DARWIN)
         sys_libc.go
         timestub.go
         vdso_in_none.go
-    )
-
-    GO_TEST_SRCS(
-        export_darwin_test.go
-        export_mmap_test.go
-        export_pipe_test.go
-        export_unix_test.go
-    )
-
-    GO_XTEST_SRCS(
-        crash_unix_test.go
-        nbpipe_fcntl_libc_test.go
-        nbpipe_pipe_test.go
-        nbpipe_test.go
-        runtime-gdb_unix_test.go
-        runtime_mmap_test.go
-        runtime_unix_test.go
-        security_test.go
-        semasleep_test.go
-        syscall_unix_test.go
     )
 ENDIF()
 
@@ -399,14 +273,6 @@ IF (OS_WINDOWS)
         timeasm.go
         vdso_in_none.go
         zcallback_windows.go
-    )
-
-    GO_TEST_SRCS(export_windows_test.go)
-
-    GO_XTEST_SRCS(
-        runtime-seh_windows_test.go
-        signal_windows_test.go
-        syscall_windows_test.go
     )
 ENDIF()
 
@@ -460,7 +326,6 @@ ELSE()
     )
 ENDIF()
 
-
 END()
 
 RECURSE(
@@ -478,3 +343,4 @@ IF (CGO_ENABLED)
         cgo
     )
 ENDIF()
+

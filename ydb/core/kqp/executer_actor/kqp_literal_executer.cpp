@@ -19,7 +19,7 @@ using namespace NYql::NDq;
 
 namespace {
 
-std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx, NMiniKQL::TScopedAlloc* alloc,
+std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* computeCtx,
     NMiniKQL::TTypeEnvironment* typeEnv)
 {
     std::unique_ptr<TDqTaskRunnerContext> context = std::make_unique<TDqTaskRunnerContext>();
@@ -44,7 +44,6 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         return nullptr;
     };
 
-    context->Alloc = alloc;
     context->TypeEnv = typeEnv;
     context->ApplyCtx = nullptr;
     return context;
@@ -167,12 +166,12 @@ public:
 
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
-        RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->Alloc, &Request.TxAlloc->TypeEnv);
+        RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->TypeEnv);
         RunnerContext->PatternCache = GetKqpResourceManager()->GetPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
         for (auto& task : TasksGraph.GetTasks()) {
-            RunTask(task, *RunnerContext, settings);
+            RunTask(Request.TxAlloc->Alloc, task, *RunnerContext, settings);
 
             if (TerminateIfTimeout()) {
                 return;
@@ -183,7 +182,7 @@ public:
         UpdateCounters();
     }
 
-    void RunTask(TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
+    void RunTask(NMiniKQL::TScopedAlloc& alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
         auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -218,7 +217,7 @@ public:
                 << message);
         };
 
-        auto taskRunner = CreateKqpTaskRunner(context, settings, log);
+        auto taskRunner = MakeDqTaskRunner(alloc, context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
         auto taskSettings = NDq::TDqTaskSettings(&protoTask);
@@ -228,7 +227,7 @@ public:
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);
 
-        with_lock (*context.Alloc) { // allocator is used only by outputChannel->PopAll()
+        with_lock (alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);

@@ -105,12 +105,13 @@ public:
     TS3ExternalStorage(const Aws::Client::ClientConfiguration& config,
         const Aws::Auth::AWSCredentials& credentials,
         const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
-        bool verbose = true)
+        bool verbose = true,
+        bool useVirtualAdressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-            /*useVirtualAddressing=*/ true))
+            useVirtualAdressing))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)

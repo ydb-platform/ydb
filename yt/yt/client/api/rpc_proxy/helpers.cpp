@@ -349,7 +349,7 @@ void FromProto(
         std::fill(result->StateCounts->begin(), result->StateCounts->end(), 0);
         for (const auto& stateCount: proto.state_counts().entries()) {
             auto state = ConvertOperationStateFromProto(stateCount.state());
-            YT_VERIFY(result->StateCounts->IsDomainValue(state));
+            YT_VERIFY(result->StateCounts->IsValidIndex(state));
             YT_VERIFY((*result->StateCounts)[state] == 0);
             (*result->StateCounts)[state] = stateCount.count();
         }
@@ -361,7 +361,7 @@ void FromProto(
         std::fill(result->TypeCounts->begin(), result->TypeCounts->end(), 0);
         for (const auto& typeCount: proto.type_counts().entries()) {
             auto type = ConvertOperationTypeFromProto(typeCount.type());
-            YT_VERIFY(result->TypeCounts->IsDomainValue(type));
+            YT_VERIFY(result->TypeCounts->IsValidIndex(type));
             YT_VERIFY((*result->TypeCounts)[type] == 0);
             (*result->TypeCounts)[type] = typeCount.count();
         }
@@ -1113,7 +1113,7 @@ void FromProto(
     std::fill(statistics->StateCounts.begin(), statistics->StateCounts.end(), 0);
     for (const auto& stateCount: protoStatistics.state_counts().entries()) {
         auto state = ConvertJobStateFromProto(stateCount.state());
-        YT_VERIFY(statistics->StateCounts.IsDomainValue(state));
+        YT_VERIFY(statistics->StateCounts.IsValidIndex(state));
         YT_VERIFY(statistics->StateCounts[state] == 0);
         statistics->StateCounts[state] = stateCount.count();
     }
@@ -1121,7 +1121,7 @@ void FromProto(
     std::fill(statistics->TypeCounts.begin(), statistics->TypeCounts.end(), 0);
     for (const auto& typeCount: protoStatistics.type_counts().entries()) {
         auto type = ConvertJobTypeFromProto(typeCount.type());
-        YT_VERIFY(statistics->TypeCounts.IsDomainValue(type));
+        YT_VERIFY(statistics->TypeCounts.IsValidIndex(type));
         YT_VERIFY(statistics->TypeCounts[type] == 0);
         statistics->TypeCounts[type] = typeCount.count();
     }

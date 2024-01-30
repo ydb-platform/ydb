@@ -18,7 +18,7 @@ Y_TEST_HOOK_BEFORE_RUN(InitTest) {
 Y_UNIT_TEST(PgJoinSearch2Rels) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TInput input = {{rel1, rel2}};
+    IOptimizer::TInput input = {.Rels={rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq {
         {{1, 1}, {2, 1}}
@@ -56,7 +56,7 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
 Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TInput input = {{rel1, rel2}};
+    IOptimizer::TInput input = {.Rels={rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq {
         {{1, 1}}
@@ -102,7 +102,7 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
 Y_UNIT_TEST(PgJoinSearch2RelsRight) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TInput input = {{rel1, rel2}};
+    IOptimizer::TInput input = {.Rels={rel1, rel2}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq {
         {{1, 1}}
@@ -149,7 +149,7 @@ Y_UNIT_TEST(PgJoinSearch3Rels) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
     IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
-    IOptimizer::TInput input = {{rel1, rel2, rel3}};
+    IOptimizer::TInput input = {.Rels={rel1, rel2, rel3}};
 
     input.EqClasses.emplace_back(IOptimizer::TEq {
         {{1, 1}, {2, 1}, {3, 1}}

@@ -284,6 +284,11 @@ public:
         for (const NKikimrHive::THiveNodeStats& nodeStat : nodeStats) {
             auto nodeId = nodeStat.GetNodeId();
             if (IsRequiredNode(nodeId)) {
+                const auto& nodeDomain = nodeStat.GetNodeDomain();
+                const TPathId subDomain(nodeDomain.GetSchemeShard(), nodeDomain.GetPathId());
+                if (FilterSubDomain && FilterSubDomain != subDomain) {
+                    continue;
+                }
                 NodeIds.emplace_back(nodeId); // order is important
                 TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
                 THolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();

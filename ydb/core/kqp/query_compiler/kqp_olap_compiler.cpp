@@ -108,7 +108,7 @@ public:
             return ExprContext.MakeType<TBlockExprType>(resultItemType);
     }
 
-    const TTypeAnnotationNode* GetReturnType(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right, const TTypeAnnotationNode* resultItemType) const {
+    const TTypeAnnotationNode* GetReturnType(TPositionHandle pos, const TTypeAnnotationNode& left, const TTypeAnnotationNode& right, const TTypeAnnotationNode* resultItemType) const {
         bool isScalarLeft, isScalarRight;
         const auto leftItemType = GetBlockItemType(left, isScalarLeft);
         const auto rightItemType = GetBlockItemType(right, isScalarRight);
@@ -116,8 +116,7 @@ public:
         if (!resultItemType) {
             const auto& leftCleanType = RemoveOptionality(*leftItemType);
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
-            YQL_ENSURE(IsSameAnnotation(leftCleanType, rightCleanType), "Expected same type kind.");
-            resultItemType = &rightCleanType;
+            resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
         }
 
         if (ETypeAnnotationKind::Optional == leftItemType->GetKind() || ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
@@ -130,15 +129,15 @@ public:
             return ExprContext.MakeType<TBlockExprType>(resultItemType);
     }
 
-    std::pair<ui32, const TTypeAnnotationNode*> AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp op, const TTypeAnnotationNode& argTypeOne, const TTypeAnnotationNode& argTypeTwo, const TTypeAnnotationNode* retType) const {
-        const auto retBlockType = GetReturnType(argTypeOne, argTypeTwo, retType);
+    std::pair<ui32, const TTypeAnnotationNode*> AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op, const TTypeAnnotationNode& argTypeOne, const TTypeAnnotationNode& argTypeTwo, const TTypeAnnotationNode* retType) const {
+        const auto retBlockType = GetReturnType(pos, argTypeOne, argTypeTwo, retType);
         return std::make_pair(YqlKernelRequestBuilder->AddBinaryOp(op, &argTypeOne, &argTypeTwo, retBlockType), retBlockType);
     }
 
-    ui32 AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp op, const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) const {
+    ui32 AddYqlKernelBinaryFunc(TPositionHandle pos, TKernelRequestBuilder::EBinaryOp op, const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) const {
         const auto arg1Type = GetArgType(arg1);
         const auto arg2Type = GetArgType(arg2);
-        return AddYqlKernelBinaryFunc(op, *arg1Type, *arg2Type, retType).first;
+        return AddYqlKernelBinaryFunc(pos, op, *arg1Type, *arg2Type, retType).first;
     }
 
     ui32 AddYqlKernelJsonExists(const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) const {
@@ -516,7 +515,7 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
         function = TProgram::TAssignment::FUNC_STR_MATCH;
         if (isYqlKernelsSupported) {
             cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp::StringContains,
+            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StringContains,
                 comparison.Left(),
                 comparison.Right(),
                 ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
@@ -527,7 +526,7 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
         function = TProgram::TAssignment::FUNC_STR_STARTS_WITH;
         if (isYqlKernelsSupported) {
             cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp::StartsWith,
+            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::StartsWith,
                 comparison.Left(),
                 comparison.Right(),
                 ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
@@ -538,7 +537,7 @@ ui64 CompileYqlKernelComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOl
         function = TProgram::TAssignment::FUNC_STR_ENDS_WITH;
         if (isYqlKernelsSupported) {
             cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
-            auto idx = ctx.AddYqlKernelBinaryFunc(TKernelRequestBuilder::EBinaryOp::EndsWith,
+            auto idx = ctx.AddYqlKernelBinaryFunc(comparison.Pos(), TKernelRequestBuilder::EBinaryOp::EndsWith,
                 comparison.Left(),
                 comparison.Right(),
                 ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
@@ -673,7 +672,8 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp& opera
         YQL_ENSURE(false, "Unknown binary OLAP operation: " << oper);
     }
 
-    const auto kernel = ctx.AddYqlKernelBinaryFunc(op, *leftColumn.Type, *rightColumn.Type, type);
+    const auto kernel = ctx.AddYqlKernelBinaryFunc(operation.Pos(), op, *leftColumn.Type, *rightColumn.Type, type);
+    cmpFunc->SetYqlOperationId((ui32)op);
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
     cmpFunc->SetKernelIdx(kernel.first);
     cmpFunc->AddArguments()->SetId(leftColumn.Id);
@@ -706,8 +706,10 @@ const TTypedColumn BuildLogicalProgram(const TExprNode::TChildrenType& args, con
         const auto idx = ctx.GetKernelRequestBuilder().AddBinaryOp(function, block, block, block);
         logicalFunc->SetKernelIdx(idx);
         logicalFunc->SetFunctionType(TProgram::YQL_KERNEL);
+        logicalFunc->SetYqlOperationId((ui32)function);
     } else {
         logicalFunc->SetFunctionType(function);
+        logicalFunc->SetId((ui32)function);
     }
 
     return {logicalOp->GetColumn().GetId(), block};

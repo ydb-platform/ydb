@@ -1,5 +1,6 @@
 #include "dq_compute_actor.h"
 #include "dq_async_compute_actor.h"
+#include "dq_compute_actor_async_input_helper.h"
 #include "dq_task_runner_exec_ctx.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
@@ -24,11 +25,49 @@ bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
 
 } // anonymous namespace
 
-class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor>
+struct TComputeActorAsyncInputHelperForTaskRunnerActor : public TComputeActorAsyncInputHelper
+{
+public:
+    TComputeActorAsyncInputHelperForTaskRunnerActor(
+            const TString& logPrefix,
+            ui64 index,
+            NDqProto::EWatermarksMode watermarksMode,
+            ui64& cookie,
+            int& inflight
+    )
+        : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
+        , TaskRunnerActor(nullptr)
+        , Cookie(cookie)
+        , Inflight(inflight)
+        , FreeSpace(1)
+        , PushStarted(false)
+    {}
+
+    i64 GetFreeSpace() const override
+    {
+        return FreeSpace;
+    }
+
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override
+    {
+        Inflight++;
+        PushStarted = true;
+        Finished = finished;
+        Y_ABORT_UNLESS(TaskRunnerActor);
+        TaskRunnerActor->AsyncInputPush(Cookie++, Index, std::move(batch), space, finished);
+    }
+
+    NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor;
+    ui64& Cookie;
+    int& Inflight;
+    i64 FreeSpace;
+    bool PushStarted;
+};
+
+class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>
                            , public NTaskRunnerActor::ITaskRunnerActor::ICallbacks
 {
-    using TBase = TDqComputeActorBase<TDqAsyncComputeActor>;
-
+    using TBase = TDqComputeActorBase<TDqAsyncComputeActor, TComputeActorAsyncInputHelperForTaskRunnerActor>;
 public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
@@ -81,11 +120,19 @@ public:
         limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
+        for (auto& [_, source]: SourcesMap) {
+            source.TaskRunnerActor = TaskRunnerActor;
+        }
+
+        for (auto& [_, source]: InputTransformsMap) {
+            source.TaskRunnerActor = TaskRunnerActor;
+        }
+
+
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
         auto wakeup = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
-        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(
-            TxId, RuntimeSettings.UseSpilling, std::move(wakeup));
+        std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeup));
 
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
@@ -104,6 +151,20 @@ public:
             CpuTime = taskCounters->GetCounter("CpuTimeMs", true);
             CpuTime->Add(0);
         }
+    }
+
+    template<typename T>
+    requires(std::is_base_of<TComputeActorAsyncInputHelperForTaskRunnerActor, T>::value)
+    T CreateInputHelper(const TString& logPrefix,
+        ui64 index,
+        NDqProto::EWatermarksMode watermarksMode
+    ) 
+    {
+        return T(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
+    }
+
+    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperForTaskRunnerActor&) const {
+        return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
 private:
@@ -188,10 +249,6 @@ private:
 
     const IDqAsyncOutputBuffer* GetSink(ui64 outputIdx, const TAsyncOutputInfoBase&) const override {
         return TaskRunnerStats.GetSink(outputIdx);
-    }
-
-    const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TAsyncInputTransformInfo&) const override {
-        return TaskRunnerStats.GetInputTransform(inputIdx);
     }
 
     void DrainOutputChannel(TOutputChannelInfo& outputChannel) override {
@@ -281,12 +338,6 @@ private:
         DoExecute();
     }
 
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) override {
-        ProcessSourcesState.Inflight++;
-        source.PushStarted = true;
-        source.Finished = finished;
-        TaskRunnerActor->AsyncInputPush(Cookie++, source.Index, std::move(batch), space, finished);
-    }
 
     void TakeInputChannelData(TChannelDataOOB&& channelDataOOB, bool ack) override {
         CA_LOG_T("took input");
@@ -410,10 +461,6 @@ private:
         return inputChannel->FreeSpace;
     }
 
-    i64 AsyncInputFreeSpace(TAsyncInputInfoBase& source) override {
-        return source.FreeSpace;
-    }
-
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() override {
         return TypeEnv->BindAllocator();
     }
@@ -509,7 +556,7 @@ private:
         }
         ProcessOutputsImpl(status);
         if (status == ERunStatus::Finished) {
-            ReportStats(TInstant::Now());
+            ReportStats(TInstant::Now(), ESendStats::IfPossible);
         }
 
         if (UseCpuQuota()) {

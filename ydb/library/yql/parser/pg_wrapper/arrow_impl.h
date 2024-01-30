@@ -22,7 +22,7 @@ std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Arra
     auto input = data->GetValues<T>(1);
     for (size_t i = 0; i < length; ++i) {
         if (value->IsNull(i)) {
-            builder.AppendNull();
+            ARROW_OK(builder.AppendNull());
             continue;
         }
         T item = input[i];

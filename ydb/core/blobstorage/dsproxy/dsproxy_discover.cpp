@@ -499,7 +499,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         // Feed more data when possible
         bool isAllRead = true;
         bool isAllDisksAbleToStep = true;
-        ui32 unableToStepDiskCount = 0;
         bool isFirst = true;
         TLogoBlobID stepToId;
 
@@ -515,7 +514,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             } else {
                 if (!curVDisk.IsError && curVDisk.IsMoreRequested) {
                     isAllDisksAbleToStep = false;
-                    ++unableToStepDiskCount;
                 }
             }
             if (!curVDisk.IsError && !curVDisk.IsAllRead) {

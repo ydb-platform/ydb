@@ -21,7 +21,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    bool usesMvccSnapshot)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId.ToPair())
+    , EngineBay(self, txc, ctx, stepTxId)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , TxCacheUsage(0)
@@ -40,6 +40,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
         ErrStr = "Failed to parse TxBody";
         return;
     }
+
+    auto& typeRegistry = *AppData()->TypeRegistry;
 
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
@@ -62,7 +64,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             auto* info = self->TableInfos[tx.GetTableId().GetTableId()].Get();
             Y_ABORT_UNLESS(info, "Unexpected missing table info");
             TSerializedTableRange range(tx.GetRange());
-            EngineBay.AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
+            EngineBay.GetKeyValidator().AddReadRange(TTableId(tx.GetTableId().GetOwnerId(),
                                             tx.GetTableId().GetTableId()),
                                    {}, range.ToTableRange(), info->KeyColumnTypes);
         } else {
@@ -79,7 +81,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             return;
         }
 
-        auto& typeRegistry = *AppData()->TypeRegistry;
         auto& computeCtx = EngineBay.GetKqpComputeCtx();
 
         try {
@@ -140,7 +141,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                     }
                 }
 
-                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay);
+                KqpSetTxKeys(tabletId, task.GetId(), tableInfo, meta, typeRegistry, ctx, EngineBay.GetKeyValidator());
 
                 for (auto& output : task.GetOutputs()) {
                     for (auto& channel : output.GetChannels()) {
@@ -156,7 +157,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             IsReadOnly = IsReadOnly && Tx.GetReadOnly();
 
-            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay);
+            KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), EngineBay.GetKeyValidator());
             EngineBay.MarkTxLoaded();
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
@@ -227,7 +228,8 @@ bool TValidatedDataTx::ReValidateKeys()
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
     if (IsKqpTx()) {
-        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+        TKeyValidator::TValidateOptions options(EngineBay.GetUserDb());
+        auto [result, error] = EngineBay.GetKeyValidator().ValidateKeys(options);
         if (result != EResult::Ok) {
             ErrStr = std::move(error);
             ErrCode = ConvertErrCode(result);

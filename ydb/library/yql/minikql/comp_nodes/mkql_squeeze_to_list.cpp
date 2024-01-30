@@ -87,7 +87,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         TLLVMFieldsStructureForState fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());

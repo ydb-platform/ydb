@@ -75,7 +75,8 @@ struct IYqlPlugin
         TString impersonationUser,
         TString queryText,
         NYson::TYsonString settings,
-        std::vector<TQueryFile> files) noexcept = 0;
+        std::vector<TQueryFile> files,
+        int executeMode) noexcept = 0;
     virtual TQueryResult GetProgress(TQueryId queryId) noexcept = 0;
 
     virtual TAbortResult Abort(TQueryId queryId) noexcept = 0;

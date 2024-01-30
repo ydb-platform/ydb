@@ -62,6 +62,8 @@ SRCS(
     flat_table_part.cpp
     flat_table_part.h
     flat_table_misc.cpp
+    flat_table_observer.cpp
+    flat_table_observer.h
     flat_update_op.h
     probes.cpp
     shared_handle.cpp

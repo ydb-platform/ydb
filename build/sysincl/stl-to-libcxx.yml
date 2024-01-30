@@ -88,6 +88,7 @@
   - cwctype:                   contrib/libs/cxxsupp/libcxx/include/cwctype
   - deque:                     contrib/libs/cxxsupp/libcxx/include/deque
   - exception:                 contrib/libs/cxxsupp/libcxx/include/exception
+  - expected:                  contrib/libs/cxxsupp/libcxx/include/expected
   - filesystem:                contrib/libs/cxxsupp/libcxx/include/filesystem
   - forward_list:              contrib/libs/cxxsupp/libcxx/include/forward_list
   - fstream:                   contrib/libs/cxxsupp/libcxx/include/fstream
@@ -119,6 +120,7 @@
   - scoped_allocator:          contrib/libs/cxxsupp/libcxx/include/scoped_allocator
   - set:                       contrib/libs/cxxsupp/libcxx/include/set
   - shared_mutex:              contrib/libs/cxxsupp/libcxx/include/shared_mutex
+  - source_location:           contrib/libs/cxxsupp/libcxx/include/source_location
   - span:                      contrib/libs/cxxsupp/libcxx/include/span
   - sstream:                   contrib/libs/cxxsupp/libcxx/include/sstream
   - stack:                     contrib/libs/cxxsupp/libcxx/include/stack
@@ -168,7 +170,6 @@
   - __assert:                                              contrib/libs/cxxsupp/libcxx/include/__assert
   - __availability:                                        contrib/libs/cxxsupp/libcxx/include/__availability
   - __bit_reference:                                       contrib/libs/cxxsupp/libcxx/include/__bit_reference
-  - __bits:                                                contrib/libs/cxxsupp/libcxx/include/__bits
   - __bsd_locale_defaults.h:                               contrib/libs/cxxsupp/libcxx/include/__bsd_locale_defaults.h
   - __bsd_locale_fallbacks.h:                              contrib/libs/cxxsupp/libcxx/include/__bsd_locale_fallbacks.h
   - __config:                                              contrib/libs/cxxsupp/libcxx/include/__config
@@ -185,7 +186,6 @@
   - __std_stream:                                          contrib/libs/cxxsupp/libcxx/include/__std_stream
   - __threading_support:                                   contrib/libs/cxxsupp/libcxx/include/__threading_support
   - __tree:                                                contrib/libs/cxxsupp/libcxx/include/__tree
-  - __tuple:                                               contrib/libs/cxxsupp/libcxx/include/__tuple
   - __undef_macros:                                        contrib/libs/cxxsupp/libcxx/include/__undef_macros
   - __verbose_abort:                                       contrib/libs/cxxsupp/libcxx/include/__verbose_abort
   - __algorithm/adjacent_find.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/adjacent_find.h
@@ -198,6 +198,7 @@
   - __algorithm/copy.h:                                    contrib/libs/cxxsupp/libcxx/include/__algorithm/copy.h
   - __algorithm/copy_backward.h:                           contrib/libs/cxxsupp/libcxx/include/__algorithm/copy_backward.h
   - __algorithm/copy_if.h:                                 contrib/libs/cxxsupp/libcxx/include/__algorithm/copy_if.h
+  - __algorithm/copy_move_common.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/copy_move_common.h
   - __algorithm/copy_n.h:                                  contrib/libs/cxxsupp/libcxx/include/__algorithm/copy_n.h
   - __algorithm/count.h:                                   contrib/libs/cxxsupp/libcxx/include/__algorithm/count.h
   - __algorithm/count_if.h:                                contrib/libs/cxxsupp/libcxx/include/__algorithm/count_if.h
@@ -379,7 +380,18 @@
   - __algorithm/unwrap_range.h:                            contrib/libs/cxxsupp/libcxx/include/__algorithm/unwrap_range.h
   - __algorithm/upper_bound.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/upper_bound.h
   - __bit/bit_cast.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/bit_cast.h
+  - __bit/bit_ceil.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/bit_ceil.h
+  - __bit/bit_floor.h:                                     contrib/libs/cxxsupp/libcxx/include/__bit/bit_floor.h
+  - __bit/bit_log2.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/bit_log2.h
+  - __bit/bit_width.h:                                     contrib/libs/cxxsupp/libcxx/include/__bit/bit_width.h
+  - __bit/blsr.h:                                          contrib/libs/cxxsupp/libcxx/include/__bit/blsr.h
   - __bit/byteswap.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/byteswap.h
+  - __bit/countl.h:                                        contrib/libs/cxxsupp/libcxx/include/__bit/countl.h
+  - __bit/countr.h:                                        contrib/libs/cxxsupp/libcxx/include/__bit/countr.h
+  - __bit/endian.h:                                        contrib/libs/cxxsupp/libcxx/include/__bit/endian.h
+  - __bit/has_single_bit.h:                                contrib/libs/cxxsupp/libcxx/include/__bit/has_single_bit.h
+  - __bit/popcount.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/popcount.h
+  - __bit/rotate.h:                                        contrib/libs/cxxsupp/libcxx/include/__bit/rotate.h
   - __charconv/chars_format.h:                             contrib/libs/cxxsupp/libcxx/include/__charconv/chars_format.h
   - __charconv/from_chars_result.h:                        contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_result.h
   - __charconv/tables.h:                                   contrib/libs/cxxsupp/libcxx/include/__charconv/tables.h
@@ -387,15 +399,20 @@
   - __charconv/to_chars_result.h:                          contrib/libs/cxxsupp/libcxx/include/__charconv/to_chars_result.h
   - __chrono/calendar.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/calendar.h
   - __chrono/convert_to_timespec.h:                        contrib/libs/cxxsupp/libcxx/include/__chrono/convert_to_timespec.h
+  - __chrono/convert_to_tm.h:                              contrib/libs/cxxsupp/libcxx/include/__chrono/convert_to_tm.h
   - __chrono/day.h:                                        contrib/libs/cxxsupp/libcxx/include/__chrono/day.h
   - __chrono/duration.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/duration.h
   - __chrono/file_clock.h:                                 contrib/libs/cxxsupp/libcxx/include/__chrono/file_clock.h
+  - __chrono/formatter.h:                                  contrib/libs/cxxsupp/libcxx/include/__chrono/formatter.h
   - __chrono/hh_mm_ss.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/hh_mm_ss.h
   - __chrono/high_resolution_clock.h:                      contrib/libs/cxxsupp/libcxx/include/__chrono/high_resolution_clock.h
   - __chrono/literals.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/literals.h
   - __chrono/month.h:                                      contrib/libs/cxxsupp/libcxx/include/__chrono/month.h
   - __chrono/month_weekday.h:                              contrib/libs/cxxsupp/libcxx/include/__chrono/month_weekday.h
   - __chrono/monthday.h:                                   contrib/libs/cxxsupp/libcxx/include/__chrono/monthday.h
+  - __chrono/ostream.h:                                    contrib/libs/cxxsupp/libcxx/include/__chrono/ostream.h
+  - __chrono/parser_std_format_spec.h:                     contrib/libs/cxxsupp/libcxx/include/__chrono/parser_std_format_spec.h
+  - __chrono/statically_widen.h:                           contrib/libs/cxxsupp/libcxx/include/__chrono/statically_widen.h
   - __chrono/steady_clock.h:                               contrib/libs/cxxsupp/libcxx/include/__chrono/steady_clock.h
   - __chrono/system_clock.h:                               contrib/libs/cxxsupp/libcxx/include/__chrono/system_clock.h
   - __chrono/time_point.h:                                 contrib/libs/cxxsupp/libcxx/include/__chrono/time_point.h
@@ -444,6 +461,10 @@
   - __coroutine/noop_coroutine_handle.h:                   contrib/libs/cxxsupp/libcxx/include/__coroutine/noop_coroutine_handle.h
   - __coroutine/trivial_awaitables.h:                      contrib/libs/cxxsupp/libcxx/include/__coroutine/trivial_awaitables.h
   - __debug_utils/randomize_range.h:                       contrib/libs/cxxsupp/libcxx/include/__debug_utils/randomize_range.h
+  - __expected/bad_expected_access.h:                      contrib/libs/cxxsupp/libcxx/include/__expected/bad_expected_access.h
+  - __expected/expected.h:                                 contrib/libs/cxxsupp/libcxx/include/__expected/expected.h
+  - __expected/unexpect.h:                                 contrib/libs/cxxsupp/libcxx/include/__expected/unexpect.h
+  - __expected/unexpected.h:                               contrib/libs/cxxsupp/libcxx/include/__expected/unexpected.h
   - __filesystem/copy_options.h:                           contrib/libs/cxxsupp/libcxx/include/__filesystem/copy_options.h
   - __filesystem/directory_entry.h:                        contrib/libs/cxxsupp/libcxx/include/__filesystem/directory_entry.h
   - __filesystem/directory_iterator.h:                     contrib/libs/cxxsupp/libcxx/include/__filesystem/directory_iterator.h
@@ -462,13 +483,16 @@
   - __filesystem/u8path.h:                                 contrib/libs/cxxsupp/libcxx/include/__filesystem/u8path.h
   - __format/buffer.h:                                     contrib/libs/cxxsupp/libcxx/include/__format/buffer.h
   - __format/concepts.h:                                   contrib/libs/cxxsupp/libcxx/include/__format/concepts.h
+  - __format/container_adaptor.h:                          contrib/libs/cxxsupp/libcxx/include/__format/container_adaptor.h
   - __format/enable_insertable.h:                          contrib/libs/cxxsupp/libcxx/include/__format/enable_insertable.h
+  - __format/escaped_output_table.h:                       contrib/libs/cxxsupp/libcxx/include/__format/escaped_output_table.h
   - __format/extended_grapheme_cluster_table.h:            contrib/libs/cxxsupp/libcxx/include/__format/extended_grapheme_cluster_table.h
   - __format/format_arg.h:                                 contrib/libs/cxxsupp/libcxx/include/__format/format_arg.h
   - __format/format_arg_store.h:                           contrib/libs/cxxsupp/libcxx/include/__format/format_arg_store.h
   - __format/format_args.h:                                contrib/libs/cxxsupp/libcxx/include/__format/format_args.h
   - __format/format_context.h:                             contrib/libs/cxxsupp/libcxx/include/__format/format_context.h
   - __format/format_error.h:                               contrib/libs/cxxsupp/libcxx/include/__format/format_error.h
+  - __format/format_functions.h:                           contrib/libs/cxxsupp/libcxx/include/__format/format_functions.h
   - __format/format_fwd.h:                                 contrib/libs/cxxsupp/libcxx/include/__format/format_fwd.h
   - __format/format_parse_context.h:                       contrib/libs/cxxsupp/libcxx/include/__format/format_parse_context.h
   - __format/format_string.h:                              contrib/libs/cxxsupp/libcxx/include/__format/format_string.h
@@ -482,7 +506,10 @@
   - __format/formatter_output.h:                           contrib/libs/cxxsupp/libcxx/include/__format/formatter_output.h
   - __format/formatter_pointer.h:                          contrib/libs/cxxsupp/libcxx/include/__format/formatter_pointer.h
   - __format/formatter_string.h:                           contrib/libs/cxxsupp/libcxx/include/__format/formatter_string.h
+  - __format/formatter_tuple.h:                            contrib/libs/cxxsupp/libcxx/include/__format/formatter_tuple.h
   - __format/parser_std_format_spec.h:                     contrib/libs/cxxsupp/libcxx/include/__format/parser_std_format_spec.h
+  - __format/range_default_formatter.h:                    contrib/libs/cxxsupp/libcxx/include/__format/range_default_formatter.h
+  - __format/range_formatter.h:                            contrib/libs/cxxsupp/libcxx/include/__format/range_formatter.h
   - __format/unicode.h:                                    contrib/libs/cxxsupp/libcxx/include/__format/unicode.h
   - __functional/binary_function.h:                        contrib/libs/cxxsupp/libcxx/include/__functional/binary_function.h
   - __functional/binary_negate.h:                          contrib/libs/cxxsupp/libcxx/include/__functional/binary_negate.h
@@ -512,8 +539,16 @@
   - __functional/unary_negate.h:                           contrib/libs/cxxsupp/libcxx/include/__functional/unary_negate.h
   - __functional/unwrap_ref.h:                             contrib/libs/cxxsupp/libcxx/include/__functional/unwrap_ref.h
   - __functional/weak_result_type.h:                       contrib/libs/cxxsupp/libcxx/include/__functional/weak_result_type.h
+  - __fwd/array.h:                                         contrib/libs/cxxsupp/libcxx/include/__fwd/array.h
+  - __fwd/get.h:                                           contrib/libs/cxxsupp/libcxx/include/__fwd/get.h
+  - __fwd/hash.h:                                          contrib/libs/cxxsupp/libcxx/include/__fwd/hash.h
+  - __fwd/memory_resource.h:                               contrib/libs/cxxsupp/libcxx/include/__fwd/memory_resource.h
+  - __fwd/pair.h:                                          contrib/libs/cxxsupp/libcxx/include/__fwd/pair.h
   - __fwd/span.h:                                          contrib/libs/cxxsupp/libcxx/include/__fwd/span.h
+  - __fwd/string.h:                                        contrib/libs/cxxsupp/libcxx/include/__fwd/string.h
   - __fwd/string_view.h:                                   contrib/libs/cxxsupp/libcxx/include/__fwd/string_view.h
+  - __fwd/subrange.h:                                      contrib/libs/cxxsupp/libcxx/include/__fwd/subrange.h
+  - __fwd/tuple.h:                                         contrib/libs/cxxsupp/libcxx/include/__fwd/tuple.h
   - __ios/fpos.h:                                          contrib/libs/cxxsupp/libcxx/include/__ios/fpos.h
   - __iterator/access.h:                                   contrib/libs/cxxsupp/libcxx/include/__iterator/access.h
   - __iterator/advance.h:                                  contrib/libs/cxxsupp/libcxx/include/__iterator/advance.h
@@ -537,6 +572,7 @@
   - __iterator/iter_swap.h:                                contrib/libs/cxxsupp/libcxx/include/__iterator/iter_swap.h
   - __iterator/iterator.h:                                 contrib/libs/cxxsupp/libcxx/include/__iterator/iterator.h
   - __iterator/iterator_traits.h:                          contrib/libs/cxxsupp/libcxx/include/__iterator/iterator_traits.h
+  - __iterator/iterator_with_data.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/iterator_with_data.h
   - __iterator/mergeable.h:                                contrib/libs/cxxsupp/libcxx/include/__iterator/mergeable.h
   - __iterator/move_iterator.h:                            contrib/libs/cxxsupp/libcxx/include/__iterator/move_iterator.h
   - __iterator/move_sentinel.h:                            contrib/libs/cxxsupp/libcxx/include/__iterator/move_sentinel.h
@@ -549,21 +585,26 @@
   - __iterator/readable_traits.h:                          contrib/libs/cxxsupp/libcxx/include/__iterator/readable_traits.h
   - __iterator/reverse_access.h:                           contrib/libs/cxxsupp/libcxx/include/__iterator/reverse_access.h
   - __iterator/reverse_iterator.h:                         contrib/libs/cxxsupp/libcxx/include/__iterator/reverse_iterator.h
+  - __iterator/segmented_iterator.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/segmented_iterator.h
   - __iterator/size.h:                                     contrib/libs/cxxsupp/libcxx/include/__iterator/size.h
   - __iterator/sortable.h:                                 contrib/libs/cxxsupp/libcxx/include/__iterator/sortable.h
   - __iterator/unreachable_sentinel.h:                     contrib/libs/cxxsupp/libcxx/include/__iterator/unreachable_sentinel.h
   - __iterator/wrap_iter.h:                                contrib/libs/cxxsupp/libcxx/include/__iterator/wrap_iter.h
   - __memory/addressof.h:                                  contrib/libs/cxxsupp/libcxx/include/__memory/addressof.h
+  - __memory/align.h:                                      contrib/libs/cxxsupp/libcxx/include/__memory/align.h
   - __memory/allocate_at_least.h:                          contrib/libs/cxxsupp/libcxx/include/__memory/allocate_at_least.h
   - __memory/allocation_guard.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/allocation_guard.h
   - __memory/allocator.h:                                  contrib/libs/cxxsupp/libcxx/include/__memory/allocator.h
   - __memory/allocator_arg_t.h:                            contrib/libs/cxxsupp/libcxx/include/__memory/allocator_arg_t.h
+  - __memory/allocator_destructor.h:                       contrib/libs/cxxsupp/libcxx/include/__memory/allocator_destructor.h
   - __memory/allocator_traits.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/allocator_traits.h
   - __memory/assume_aligned.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/assume_aligned.h
   - __memory/auto_ptr.h:                                   contrib/libs/cxxsupp/libcxx/include/__memory/auto_ptr.h
+  - __memory/builtin_new_allocator.h:                      contrib/libs/cxxsupp/libcxx/include/__memory/builtin_new_allocator.h
   - __memory/compressed_pair.h:                            contrib/libs/cxxsupp/libcxx/include/__memory/compressed_pair.h
   - __memory/concepts.h:                                   contrib/libs/cxxsupp/libcxx/include/__memory/concepts.h
   - __memory/construct_at.h:                               contrib/libs/cxxsupp/libcxx/include/__memory/construct_at.h
+  - __memory/destruct_n.h:                                 contrib/libs/cxxsupp/libcxx/include/__memory/destruct_n.h
   - __memory/pointer_safety.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/pointer_safety.h
   - __memory/pointer_traits.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/pointer_traits.h
   - __memory/ranges_construct_at.h:                        contrib/libs/cxxsupp/libcxx/include/__memory/ranges_construct_at.h
@@ -571,11 +612,19 @@
   - __memory/raw_storage_iterator.h:                       contrib/libs/cxxsupp/libcxx/include/__memory/raw_storage_iterator.h
   - __memory/shared_ptr.h:                                 contrib/libs/cxxsupp/libcxx/include/__memory/shared_ptr.h
   - __memory/swap_allocator.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/swap_allocator.h
+  - __memory/temp_value.h:                                 contrib/libs/cxxsupp/libcxx/include/__memory/temp_value.h
   - __memory/temporary_buffer.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/temporary_buffer.h
   - __memory/uninitialized_algorithms.h:                   contrib/libs/cxxsupp/libcxx/include/__memory/uninitialized_algorithms.h
   - __memory/unique_ptr.h:                                 contrib/libs/cxxsupp/libcxx/include/__memory/unique_ptr.h
   - __memory/uses_allocator.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/uses_allocator.h
+  - __memory/uses_allocator_construction.h:                contrib/libs/cxxsupp/libcxx/include/__memory/uses_allocator_construction.h
   - __memory/voidify.h:                                    contrib/libs/cxxsupp/libcxx/include/__memory/voidify.h
+  - __memory_resource/memory_resource.h:                   contrib/libs/cxxsupp/libcxx/include/__memory_resource/memory_resource.h
+  - __memory_resource/monotonic_buffer_resource.h:         contrib/libs/cxxsupp/libcxx/include/__memory_resource/monotonic_buffer_resource.h
+  - __memory_resource/polymorphic_allocator.h:             contrib/libs/cxxsupp/libcxx/include/__memory_resource/polymorphic_allocator.h
+  - __memory_resource/pool_options.h:                      contrib/libs/cxxsupp/libcxx/include/__memory_resource/pool_options.h
+  - __memory_resource/synchronized_pool_resource.h:        contrib/libs/cxxsupp/libcxx/include/__memory_resource/synchronized_pool_resource.h
+  - __memory_resource/unsynchronized_pool_resource.h:      contrib/libs/cxxsupp/libcxx/include/__memory_resource/unsynchronized_pool_resource.h
   - __numeric/accumulate.h:                                contrib/libs/cxxsupp/libcxx/include/__numeric/accumulate.h
   - __numeric/adjacent_difference.h:                       contrib/libs/cxxsupp/libcxx/include/__numeric/adjacent_difference.h
   - __numeric/exclusive_scan.h:                            contrib/libs/cxxsupp/libcxx/include/__numeric/exclusive_scan.h
@@ -628,6 +677,7 @@
   - __random/weibull_distribution.h:                       contrib/libs/cxxsupp/libcxx/include/__random/weibull_distribution.h
   - __ranges/access.h:                                     contrib/libs/cxxsupp/libcxx/include/__ranges/access.h
   - __ranges/all.h:                                        contrib/libs/cxxsupp/libcxx/include/__ranges/all.h
+  - __ranges/as_rvalue_view.h:                             contrib/libs/cxxsupp/libcxx/include/__ranges/as_rvalue_view.h
   - __ranges/common_view.h:                                contrib/libs/cxxsupp/libcxx/include/__ranges/common_view.h
   - __ranges/concepts.h:                                   contrib/libs/cxxsupp/libcxx/include/__ranges/concepts.h
   - __ranges/copyable_box.h:                               contrib/libs/cxxsupp/libcxx/include/__ranges/copyable_box.h
@@ -635,12 +685,15 @@
   - __ranges/dangling.h:                                   contrib/libs/cxxsupp/libcxx/include/__ranges/dangling.h
   - __ranges/data.h:                                       contrib/libs/cxxsupp/libcxx/include/__ranges/data.h
   - __ranges/drop_view.h:                                  contrib/libs/cxxsupp/libcxx/include/__ranges/drop_view.h
+  - __ranges/drop_while_view.h:                            contrib/libs/cxxsupp/libcxx/include/__ranges/drop_while_view.h
+  - __ranges/elements_view.h:                              contrib/libs/cxxsupp/libcxx/include/__ranges/elements_view.h
   - __ranges/empty.h:                                      contrib/libs/cxxsupp/libcxx/include/__ranges/empty.h
   - __ranges/empty_view.h:                                 contrib/libs/cxxsupp/libcxx/include/__ranges/empty_view.h
   - __ranges/enable_borrowed_range.h:                      contrib/libs/cxxsupp/libcxx/include/__ranges/enable_borrowed_range.h
   - __ranges/enable_view.h:                                contrib/libs/cxxsupp/libcxx/include/__ranges/enable_view.h
   - __ranges/filter_view.h:                                contrib/libs/cxxsupp/libcxx/include/__ranges/filter_view.h
   - __ranges/iota_view.h:                                  contrib/libs/cxxsupp/libcxx/include/__ranges/iota_view.h
+  - __ranges/istream_view.h:                               contrib/libs/cxxsupp/libcxx/include/__ranges/istream_view.h
   - __ranges/join_view.h:                                  contrib/libs/cxxsupp/libcxx/include/__ranges/join_view.h
   - __ranges/lazy_split_view.h:                            contrib/libs/cxxsupp/libcxx/include/__ranges/lazy_split_view.h
   - __ranges/non_propagating_cache.h:                      contrib/libs/cxxsupp/libcxx/include/__ranges/non_propagating_cache.h
@@ -652,8 +705,10 @@
   - __ranges/reverse_view.h:                               contrib/libs/cxxsupp/libcxx/include/__ranges/reverse_view.h
   - __ranges/single_view.h:                                contrib/libs/cxxsupp/libcxx/include/__ranges/single_view.h
   - __ranges/size.h:                                       contrib/libs/cxxsupp/libcxx/include/__ranges/size.h
+  - __ranges/split_view.h:                                 contrib/libs/cxxsupp/libcxx/include/__ranges/split_view.h
   - __ranges/subrange.h:                                   contrib/libs/cxxsupp/libcxx/include/__ranges/subrange.h
   - __ranges/take_view.h:                                  contrib/libs/cxxsupp/libcxx/include/__ranges/take_view.h
+  - __ranges/take_while_view.h:                            contrib/libs/cxxsupp/libcxx/include/__ranges/take_while_view.h
   - __ranges/transform_view.h:                             contrib/libs/cxxsupp/libcxx/include/__ranges/transform_view.h
   - __ranges/view_interface.h:                             contrib/libs/cxxsupp/libcxx/include/__ranges/view_interface.h
   - __ranges/views.h:                                      contrib/libs/cxxsupp/libcxx/include/__ranges/views.h
@@ -673,13 +728,22 @@
   - __support/solaris/wchar.h:                             contrib/libs/cxxsupp/libcxx/include/__support/solaris/wchar.h
   - __support/solaris/xlocale.h:                           contrib/libs/cxxsupp/libcxx/include/__support/solaris/xlocale.h
   - __support/win32/atomic_win32.h:                        contrib/libs/cxxsupp/libcxx/include/__support/win32/atomic_win32.h
-  - __support/win32/limits_msvc_win32.h:                   contrib/libs/cxxsupp/libcxx/include/__support/win32/limits_msvc_win32.h
   - __support/win32/locale_win32.h:                        contrib/libs/cxxsupp/libcxx/include/__support/win32/locale_win32.h
   - __support/xlocale/__nop_locale_mgmt.h:                 contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__nop_locale_mgmt.h
   - __support/xlocale/__posix_l_fallback.h:                contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__posix_l_fallback.h
   - __support/xlocale/__strtonum_fallback.h:               contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__strtonum_fallback.h
   - __thread/poll_with_backoff.h:                          contrib/libs/cxxsupp/libcxx/include/__thread/poll_with_backoff.h
   - __thread/timed_backoff_policy.h:                       contrib/libs/cxxsupp/libcxx/include/__thread/timed_backoff_policy.h
+  - __tuple_dir/apply_cv.h:                                contrib/libs/cxxsupp/libcxx/include/__tuple_dir/apply_cv.h
+  - __tuple_dir/make_tuple_types.h:                        contrib/libs/cxxsupp/libcxx/include/__tuple_dir/make_tuple_types.h
+  - __tuple_dir/pair_like.h:                               contrib/libs/cxxsupp/libcxx/include/__tuple_dir/pair_like.h
+  - __tuple_dir/sfinae_helpers.h:                          contrib/libs/cxxsupp/libcxx/include/__tuple_dir/sfinae_helpers.h
+  - __tuple_dir/tuple_element.h:                           contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_element.h
+  - __tuple_dir/tuple_indices.h:                           contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_indices.h
+  - __tuple_dir/tuple_like.h:                              contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_like.h
+  - __tuple_dir/tuple_like_ext.h:                          contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_like_ext.h
+  - __tuple_dir/tuple_size.h:                              contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_size.h
+  - __tuple_dir/tuple_types.h:                             contrib/libs/cxxsupp/libcxx/include/__tuple_dir/tuple_types.h
   - __type_traits/add_const.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/add_const.h
   - __type_traits/add_cv.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/add_cv.h
   - __type_traits/add_lvalue_reference.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/add_lvalue_reference.h
@@ -690,6 +754,7 @@
   - __type_traits/aligned_union.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/aligned_union.h
   - __type_traits/alignment_of.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/alignment_of.h
   - __type_traits/apply_cv.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/apply_cv.h
+  - __type_traits/can_extract_key.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/can_extract_key.h
   - __type_traits/common_reference.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/common_reference.h
   - __type_traits/common_type.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/common_type.h
   - __type_traits/conditional.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/conditional.h
@@ -697,6 +762,7 @@
   - __type_traits/copy_cv.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/copy_cv.h
   - __type_traits/copy_cvref.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/copy_cvref.h
   - __type_traits/decay.h:                                 contrib/libs/cxxsupp/libcxx/include/__type_traits/decay.h
+  - __type_traits/dependent_type.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/dependent_type.h
   - __type_traits/disjunction.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/disjunction.h
   - __type_traits/enable_if.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/enable_if.h
   - __type_traits/extent.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/extent.h
@@ -705,12 +771,15 @@
   - __type_traits/integral_constant.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/integral_constant.h
   - __type_traits/is_abstract.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_abstract.h
   - __type_traits/is_aggregate.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_aggregate.h
+  - __type_traits/is_allocator.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_allocator.h
+  - __type_traits/is_always_bitcastable.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/is_always_bitcastable.h
   - __type_traits/is_arithmetic.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_arithmetic.h
   - __type_traits/is_array.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_array.h
   - __type_traits/is_assignable.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/is_assignable.h
   - __type_traits/is_base_of.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_base_of.h
   - __type_traits/is_bounded_array.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/is_bounded_array.h
   - __type_traits/is_callable.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_callable.h
+  - __type_traits/is_char_like_type.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_char_like_type.h
   - __type_traits/is_class.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_class.h
   - __type_traits/is_compound.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_compound.h
   - __type_traits/is_const.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/is_const.h
@@ -728,6 +797,7 @@
   - __type_traits/is_floating_point.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_floating_point.h
   - __type_traits/is_function.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_function.h
   - __type_traits/is_fundamental.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_fundamental.h
+  - __type_traits/is_implicitly_default_constructible.h:   contrib/libs/cxxsupp/libcxx/include/__type_traits/is_implicitly_default_constructible.h
   - __type_traits/is_integral.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_integral.h
   - __type_traits/is_literal_type.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_literal_type.h
   - __type_traits/is_member_function_pointer.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_member_function_pointer.h
@@ -758,7 +828,9 @@
   - __type_traits/is_scoped_enum.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_scoped_enum.h
   - __type_traits/is_signed.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/is_signed.h
   - __type_traits/is_signed_integer.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_signed_integer.h
+  - __type_traits/is_specialization.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_specialization.h
   - __type_traits/is_standard_layout.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/is_standard_layout.h
+  - __type_traits/is_swappable.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/is_swappable.h
   - __type_traits/is_trivial.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivial.h
   - __type_traits/is_trivially_assignable.h:               contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_assignable.h
   - __type_traits/is_trivially_constructible.h:            contrib/libs/cxxsupp/libcxx/include/__type_traits/is_trivially_constructible.h
@@ -778,20 +850,26 @@
   - __type_traits/is_volatile.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_volatile.h
   - __type_traits/lazy.h:                                  contrib/libs/cxxsupp/libcxx/include/__type_traits/lazy.h
   - __type_traits/make_32_64_or_128_bit.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/make_32_64_or_128_bit.h
+  - __type_traits/make_const_lvalue_ref.h:                 contrib/libs/cxxsupp/libcxx/include/__type_traits/make_const_lvalue_ref.h
   - __type_traits/make_signed.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/make_signed.h
   - __type_traits/make_unsigned.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/make_unsigned.h
+  - __type_traits/maybe_const.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/maybe_const.h
   - __type_traits/nat.h:                                   contrib/libs/cxxsupp/libcxx/include/__type_traits/nat.h
   - __type_traits/negation.h:                              contrib/libs/cxxsupp/libcxx/include/__type_traits/negation.h
+  - __type_traits/noexcept_move_assign_container.h:        contrib/libs/cxxsupp/libcxx/include/__type_traits/noexcept_move_assign_container.h
   - __type_traits/promote.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/promote.h
   - __type_traits/rank.h:                                  contrib/libs/cxxsupp/libcxx/include/__type_traits/rank.h
   - __type_traits/remove_all_extents.h:                    contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_all_extents.h
   - __type_traits/remove_const.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_const.h
+  - __type_traits/remove_const_ref.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_const_ref.h
   - __type_traits/remove_cv.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_cv.h
   - __type_traits/remove_cvref.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_cvref.h
   - __type_traits/remove_extent.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_extent.h
   - __type_traits/remove_pointer.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_pointer.h
   - __type_traits/remove_reference.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_reference.h
   - __type_traits/remove_volatile.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/remove_volatile.h
+  - __type_traits/result_of.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/result_of.h
+  - __type_traits/strip_signature.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/strip_signature.h
   - __type_traits/type_identity.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/type_identity.h
   - __type_traits/type_list.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/type_list.h
   - __type_traits/underlying_type.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/underlying_type.h
@@ -799,9 +877,12 @@
   - __utility/as_const.h:                                  contrib/libs/cxxsupp/libcxx/include/__utility/as_const.h
   - __utility/auto_cast.h:                                 contrib/libs/cxxsupp/libcxx/include/__utility/auto_cast.h
   - __utility/cmp.h:                                       contrib/libs/cxxsupp/libcxx/include/__utility/cmp.h
+  - __utility/convert_to_integral.h:                       contrib/libs/cxxsupp/libcxx/include/__utility/convert_to_integral.h
   - __utility/declval.h:                                   contrib/libs/cxxsupp/libcxx/include/__utility/declval.h
+  - __utility/exception_guard.h:                           contrib/libs/cxxsupp/libcxx/include/__utility/exception_guard.h
   - __utility/exchange.h:                                  contrib/libs/cxxsupp/libcxx/include/__utility/exchange.h
   - __utility/forward.h:                                   contrib/libs/cxxsupp/libcxx/include/__utility/forward.h
+  - __utility/forward_like.h:                              contrib/libs/cxxsupp/libcxx/include/__utility/forward_like.h
   - __utility/in_place.h:                                  contrib/libs/cxxsupp/libcxx/include/__utility/in_place.h
   - __utility/integer_sequence.h:                          contrib/libs/cxxsupp/libcxx/include/__utility/integer_sequence.h
   - __utility/move.h:                                      contrib/libs/cxxsupp/libcxx/include/__utility/move.h
@@ -811,7 +892,6 @@
   - __utility/rel_ops.h:                                   contrib/libs/cxxsupp/libcxx/include/__utility/rel_ops.h
   - __utility/swap.h:                                      contrib/libs/cxxsupp/libcxx/include/__utility/swap.h
   - __utility/to_underlying.h:                             contrib/libs/cxxsupp/libcxx/include/__utility/to_underlying.h
-  - __utility/transaction.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/transaction.h
   - __utility/unreachable.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/unreachable.h
   - __variant/monostate.h:                                 contrib/libs/cxxsupp/libcxx/include/__variant/monostate.h
 # END OF GENERATION

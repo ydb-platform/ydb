@@ -16,5 +16,6 @@ public:
     static ui64 GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode txMode);
     static NKikimrDataEvents::TEvWrite::ETxMode GetTxMode(ui64 flags);
     static NKikimrTxDataShard::TEvProposeTransactionResult::EStatus GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
+    static NKikimrDataEvents::TEvWriteResult::EStatus ConvertErrCode(NKikimrTxDataShard::TError::EKind code);
 };
 }

@@ -9,7 +9,26 @@
 
 namespace NKikimr::NArrow::NHash {
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const {
+void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+    AFL_VERIFY(scalar);
+    NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
+        using TWrap = std::decay_t<decltype(type)>;
+        using T = typename TWrap::T;
+        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+
+        auto& typedScalar = static_cast<const TScalar&>(*scalar);
+        if constexpr (arrow::has_string_view<T>()) {
+            hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.value->data()), typedScalar.value->size());
+        } else if constexpr (arrow::has_c_type<T>()) {
+            hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.data()), sizeof(typedScalar.value));
+        } else {
+            static_assert(arrow::is_decimal_type<T>());
+        }
+        return true;
+    });
+}
+
+void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
     NArrow::SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
@@ -21,12 +40,7 @@ void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int ro
             if constexpr (arrow::has_string_view<T>()) {
                 hashCalcer.Update((const ui8*)value.data(), value.size());
             } else if constexpr (arrow::has_c_type<T>()) {
-                if constexpr (arrow::is_physical_integer_type<T>()) {
-                    hashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
-                } else {
-                    // Do not use bool or floats for sharding
-                    static_assert(arrow::is_boolean_type<T>() || arrow::is_floating_type<T>());
-                }
+                hashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
             } else {
                 static_assert(arrow::is_decimal_type<T>());
             }
@@ -114,6 +128,13 @@ std::vector<std::shared_ptr<arrow::Array>> TXX64::GetColumns(const std::shared_p
             ("field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
     }
     return columns;
+}
+
+ui64 TXX64::CalcHash(const std::shared_ptr<arrow::Scalar>& scalar) {
+    NXX64::TStreamStringHashCalcer calcer(0);
+    calcer.Start();
+    AppendField(scalar, calcer);
+    return calcer.Finish();
 }
 
 }

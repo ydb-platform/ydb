@@ -397,7 +397,7 @@ public:
             {
                 // YQL-16284
                 const char* node_name = CAST_NODE(VariableSetStmt, node)->name;
-                char* skip_statements[] = {
+                const char* skip_statements[] = {
                     "extra_float_digits",                   // jdbc
                     "application_name",                     // jdbc
                     "statement_timeout",                    // pg_dump
@@ -446,7 +446,6 @@ public:
         }
 
         auto* tuples = listOfTuples.mutable_value()->mutable_items();
-        size_t idx = 0;
         size_t cols = columnTypes.size();
         for (size_t idx = 0; idx < autoParamLiterals.size(); idx += cols){
             auto* tuple = tuples->Add();
@@ -636,9 +635,9 @@ public:
         auto length = ListLength(value->args);
         if (length != 3) {
             AddError(TStringBuilder() << "Expected 3 arguments, but got: " << length);
-            return;
+            return nullptr;
         }
-        auto loc = value->location;
+
         VariableSetStmt config;
         config.kind = VAR_SET_VALUE;
         auto arg0 = ListNodeNth(value->args, 0);
@@ -646,7 +645,7 @@ public:
         auto arg2 = ListNodeNth(value->args, 2);
         if (NodeTag(arg2) != T_TypeCast) {
             AddError(TStringBuilder() << "Expected type cast node as is_local arg, but got node with tag");
-            return;
+            return nullptr;
         }
         auto isLocalCast = CAST_NODE(TypeCast, arg2)->arg;
         if (NodeTag(isLocalCast) != T_A_Const) {
@@ -661,7 +660,7 @@ public:
         auto rawVal = TString(StrVal(isLocalConst->val));
         if (rawVal != "t" && rawVal != "f") {
             AddError(TStringBuilder() << "Expected t/f, but got " << rawVal);
-            return;
+            return nullptr;
         }
         config.is_local = rawVal == "t";
 
@@ -674,7 +673,7 @@ public:
         auto val = CAST_NODE(A_Const, arg1)->val;
         if (NodeTag(name) != T_String || NodeTag(val) != T_String) {
             AddError(TStringBuilder() << "Expected string const as name arg, but got something else: " << NodeTag(name));
-            return;
+            return nullptr;
         }
         config.name = (char*)StrVal(name);
         config.args = list_make1((void*)(&val));
@@ -1320,7 +1319,7 @@ public:
             return {};
         }
         ui32 index = 0;
-        for (size_t i = 0; i < ListLength(returningList); i++) {
+        for (int i = 0; i < ListLength(returningList); i++) {
             auto node = ListNodeNth(returningList, i);
             if (NodeTag(node) != T_ResTarget) {
                 NodeNotImplemented(returningList, node);
@@ -1375,7 +1374,7 @@ public:
 
         TVector <TAstNode*> targetColumns;
         if (value->cols) {
-            for (size_t i = 0; i < ListLength(value->cols); i++) {
+            for (int i = 0; i < ListLength(value->cols); i++) {
                 auto node = ListNodeNth(value->cols, i);
                 if (NodeTag(node) != T_ResTarget) {
                     NodeNotImplemented(value, node);
@@ -1612,7 +1611,7 @@ private:
         if (!CheckConstraintSupported(pk))
             return false;
 
-        for (auto i = 0; i < ListLength(pk->keys); ++i) {
+        for (int i = 0; i < ListLength(pk->keys); ++i) {
             auto node = ListNodeNth(pk->keys, i);
             auto nodeName = StrVal(node);
 
@@ -1677,7 +1676,7 @@ private:
         TColumnInfo cinfo{.Name = node->colname};
 
         if (node->constraints) {
-            for (ui32 i = 0; i < ListLength(node->constraints); ++i) {
+            for (int i = 0; i < ListLength(node->constraints); ++i) {
                 auto constraintNode =
                         CAST_NODE(Constraint, ListNodeNth(node->constraints, i));
 
@@ -1899,7 +1898,7 @@ public:
             return nullptr;
         }
 
-        for (ui32 i = 0; i < ListLength(value->tableElts); ++i) {
+        for (int i = 0; i < ListLength(value->tableElts); ++i) {
             auto rawNode = ListNodeNth(value->tableElts, i);
 
             switch (NodeTag(rawNode)) {
@@ -2284,6 +2283,10 @@ public:
         auto select = L(A("PgSelect"), QVL(selectOptions.data(), selectOptions.size()));
 
         auto [sink, key] = ParseWriteRangeVar(value->relation);
+
+        if (!sink || !key) {
+            return nullptr;
+        }
 
         std::vector<TAstNode*> options;
         options.push_back(QL(QA("pg_delete"), select));
@@ -4338,7 +4341,7 @@ private:
         auto it = LowerBound(RowStarts.begin(), RowStarts.end(), Min((ui32)location, QuerySize));
         Y_ENSURE(it != RowStarts.end());
 
-        if (*it == location) {
+        if (*it == (ui32)location) {
             auto row = 1 + it - RowStarts.begin();
             auto column = 1;
             return NYql::TPosition(column, row);

@@ -1321,8 +1321,6 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
-        ui64 nodes = 0;
-        ui64 tablets = 0;
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
         THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
@@ -1342,7 +1340,6 @@ public:
                     ++runningTablets;
                     ++tabletsByNodeByType[sl.NodeId][GetTabletType(pr.second.Type) + "s"];
                 }
-                ++tablets;
             }
             {
                 auto it = tabletTypesToChannels.find(pr.second.Type);
@@ -1351,14 +1348,10 @@ public:
                     tabletTypesToChannels.emplace(pr.second.Type, channels);
                 }
             }
-            ++tablets;
         }
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
                 ++aliveNodes;
-            }
-            if (!pr.second.IsUnknown()) {
-                ++nodes;
             }
         }
 

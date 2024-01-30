@@ -1,27 +1,78 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    search.go
-    slice.go
-    sort.go
-    zsortfunc.go
-    zsortinterface.go
-)
-
-GO_TEST_SRCS(export_test.go)
-
-GO_XTEST_SRCS(
-    example_interface_test.go
-    example_keys_test.go
-    example_multi_test.go
-    example_search_test.go
-    example_test.go
-    example_wrapper_test.go
-    search_test.go
-    sort_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		search.go
+		slice.go
+		sort.go
+		zsortfunc.go
+		zsortinterface.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

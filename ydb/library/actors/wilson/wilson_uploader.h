@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <opentelemetry/proto/trace/v1/trace.pb.h>
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <grpc++/grpc++.h>
 
 namespace NWilson {

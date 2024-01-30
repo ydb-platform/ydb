@@ -1162,7 +1162,6 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
         const auto size = LeftOutputColumns.size() + RightOutputColumns.size();
         const auto arrayType = ArrayType::get(valueType, size);
@@ -1185,6 +1184,7 @@ public:
             initF = InsertValueInst::Create(initF, pointers.back(), {i}, (TString("insert_") += ToString(i)).c_str(), atTop);
 
             getters[i] = [i, values, valueType, indexType, arrayType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
                 return new LoadInst(valueType, pointer, (TString("load_") += ToString(i)).c_str(), block);
             };
@@ -1306,7 +1306,6 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto resultType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(resultType, {PointerType::getUnqual(contextType), PointerType::getUnqual(arrayType)}, false);
-        const auto indexType = Type::getInt32Ty(context);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());

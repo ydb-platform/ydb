@@ -232,8 +232,19 @@ void RunMain(int argc, const char* argv[]) {
     RunScript(executionOptions, runnerOptions);
 }
 
+void KqprunTerminateHandler() {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
+
+    abort();
+}
 
 int main(int argc, const char* argv[]) {
+    std::set_terminate(KqprunTerminateHandler);
+
     try {
         RunMain(argc, argv);
     } catch (...) {

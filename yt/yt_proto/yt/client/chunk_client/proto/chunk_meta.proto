@@ -88,6 +88,9 @@ message TMiscExt
     // If present, is used by corresponding block reader to distinguish between block versions.
     optional int32 block_format_version = 23;
 
+    // If present, chunk is a compression dictionary of respective policy.
+    optional int32 dictionary_compression_policy = 24; // EDictionaryCompressionPolicy
+
     reserved 20;
 }
 

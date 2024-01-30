@@ -1,5 +1,7 @@
 #include "yql_cost_function.h"
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+
 using namespace NYql;
 
 namespace {
@@ -16,6 +18,7 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
     }
     return true;
 }
+
 }
 
 bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
@@ -36,8 +39,7 @@ bool NDq::operator < (const NDq::TJoinColumn& c1, const NDq::TJoinColumn& c2) {
 */
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinImplType joinImpl) {
-    Y_UNUSED(joinImpl);
+    const TVector<TString>& leftJoinKeys, const TVector<TString>& rightJoinKeys, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     double newCard;
     EStatisticsType outputType;
@@ -68,7 +70,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 
     int newNCols = leftStats.Ncols + rightStats.Ncols;
 
-    double cost = leftStats.Nrows + 2.0 * rightStats.Nrows 
+    double cost = ctx.ComputeJoinCost(leftStats, rightStats, joinAlgo)
         + newCard 
         + leftStats.Cost + rightStats.Cost;
 
@@ -76,7 +78,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
 }
 
 TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, 
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinImplType joinImpl) {
+    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, EJoinAlgoType joinAlgo, const IProviderContext& ctx) {
 
     TVector<TString> leftJoinKeys;
     TVector<TString> rightJoinKeys;
@@ -86,5 +88,5 @@ TOptimizerStatistics NYql::ComputeJoinStats(const TOptimizerStatistics& leftStat
         rightJoinKeys.emplace_back(c.second.AttributeName);
     }
 
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinImpl);
+    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, ctx);
 }

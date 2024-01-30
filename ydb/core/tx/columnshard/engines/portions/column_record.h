@@ -16,6 +16,30 @@ namespace NKikimr::NOlap {
 class TColumnChunkLoadContext;
 struct TIndexInfo;
 
+class TIndexChunk {
+private:
+    YDB_READONLY(ui32, IndexId, 0);
+    YDB_READONLY(ui32, ChunkIdx, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY(ui32, RawBytes, 0);
+    YDB_READONLY_DEF(TBlobRange, BlobRange);
+
+public:
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRange& blobRange)
+        : IndexId(indexId)
+        , ChunkIdx(chunkIdx)
+        , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
+        , BlobRange(blobRange) {
+
+    }
+
+    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        BlobRange.BlobId = blobId;
+    }
+};
+
 struct TChunkMeta: public TSimpleChunkMeta {
 private:
     using TBase = TSimpleChunkMeta;
@@ -56,6 +80,12 @@ public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
     TBlobRange BlobRange;
+
+
+    void RegisterBlobId(const TUnifiedBlobId& blobId) {
+//        AFL_VERIFY(!BlobRange.BlobId.GetTabletId())("original", BlobRange.BlobId.ToStringNew())("new", blobId.ToStringNew());
+        BlobRange.BlobId = blobId;
+    }
 
     TColumnRecord(const TChunkAddress& address, const TBlobRange& range, TChunkMeta&& meta)
         : Meta(std::move(meta))
@@ -155,10 +185,11 @@ protected:
     virtual const TString& DoGetData() const override {
         return Data;
     }
-    virtual ui32 DoGetRecordsCount() const override {
+    virtual ui32 DoGetRecordsCountImpl() const override {
         return ColumnRecord.GetMeta().GetNumRowsVerified();
     }
-    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& /*saver*/, std::shared_ptr<NColumnShard::TSplitterCounters> /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
+                                                                                const std::vector<ui64>& /*splitSizes*/) const override {
         Y_ABORT_UNLESS(false);
         return {};
     }
@@ -173,10 +204,9 @@ protected:
     }
 public:
     TSimpleOrderedColumnChunk(const TColumnRecord& cRecord, const TString& data)
-        : TBase(cRecord.ColumnId)
+        : TBase(cRecord.ColumnId, cRecord.Chunk)
         , ColumnRecord(cRecord)
         , Data(data) {
-        ChunkIdx = cRecord.Chunk;
     }
 };
 

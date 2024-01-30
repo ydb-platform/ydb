@@ -33,6 +33,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -1304,8 +1305,8 @@ class TDataShard
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     // change sending
-    void Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
+    void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -2630,9 +2631,6 @@ private:
     TControlWrapper DataTxProfileBufferThresholdMs;
     TControlWrapper DataTxProfileBufferSize;
 
-    TControlWrapper ReadColumnsScanEnabled;
-    TControlWrapper ReadColumnsScanInUserPool;
-
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
 
@@ -2729,7 +2727,7 @@ private:
         }
     };
 
-    using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
+    using TRequestedRecord = NChangeExchange::TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     // split/merge
     TChangeSenderActivator ChangeSenderActivator;
@@ -2972,8 +2970,8 @@ protected:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted);
             IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
-            HFunc(TEvChangeExchange::TEvRequestRecords, Handle);
-            HFunc(TEvChangeExchange::TEvRemoveRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
+            HFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             HFunc(TEvPrivate::TEvRequestChangeRecords, Handle);
             HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle);
             HFunc(TEvChangeExchange::TEvHandshake, Handle);

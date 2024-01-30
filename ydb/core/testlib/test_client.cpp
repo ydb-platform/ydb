@@ -307,8 +307,11 @@ namespace Tests {
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig->GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
         grpcRequestProxies.reserve(proxyCount);
+
+        auto& appData = Runtime->GetAppData();
+
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
+            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig, appData.Icb);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
@@ -319,8 +322,6 @@ namespace Tests {
 
         GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = GRpcServerRootCounters;
-
-        auto& appData = Runtime->GetAppData();
 
         // Setup discovery for typically used services on the node
         {
@@ -819,7 +820,7 @@ namespace Tests {
         }
         {
             const auto& appData = Runtime->GetAppData(nodeIdx);
-            IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName).release();
+            IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName, appData.Counters).release();
             TActorId metadataCacheId = Runtime->Register(metadataCache, nodeIdx);
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }

@@ -98,6 +98,10 @@ TTopicSdkTestSetup CreateSetup() {
 
     setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
+
+    setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
 
     return setup;
 }
@@ -209,7 +213,41 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
 
     Y_UNIT_TEST(PartitionSplit) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1");
+
+        TTestReadSession ReadSession(client, 2);
+
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 2)));
+
+        ui64 txId = 1006;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.2", 3)));
+
+        ReadSession.WaitAllMessages();
+
+        for(const auto& info : ReadSession.ReceivedMessages) {
+            if (info.Data == "message_1.1") {
+                UNIT_ASSERT_EQUAL(0, info.PartitionId);
+                UNIT_ASSERT_EQUAL(2, info.SeqNo);
+            } else if (info.Data == "message_1.2") {
+                UNIT_ASSERT(1 == info.PartitionId || 2 == info.PartitionId);
+                UNIT_ASSERT_EQUAL(3, info.SeqNo);
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected message: " << info.Data);
+            }
+        }
+
+        writeSession->Close(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(PartitionSplit_PreferedPartition) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -269,9 +307,9 @@ Y_UNIT_TEST_SUITE(TopicSplitMerge) {
         writeSession3->Close(TDuration::Seconds(1));
     }
 
-    Y_UNIT_TEST(PartitionMerge) {
+    Y_UNIT_TEST(PartitionMerge_PreferedPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 

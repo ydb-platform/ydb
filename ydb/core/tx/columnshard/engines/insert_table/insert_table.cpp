@@ -61,15 +61,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds
 }
 
 THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
-    // TODO: This protection does not save us from real flooder activity.
-    // This cleanup is for seldom aborts caused by rare reasons. So there's a temporary simple O(N) here
-    // keeping in mind we need a smarter cleanup logic here not a better algo.
-    if (LastCleanup > now - CleanDelay) {
-        return {};
-    }
-    LastCleanup = now;
-
-    return Summary.GetDeprecatedInsertions(now - WaitCommitDelay);
+    return Summary.GetExpiredInsertions(now - WaitCommitDelay, CleanupPackageSize);
 }
 
 THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {

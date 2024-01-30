@@ -1,34 +1,105 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    aes_gcm.go
-    block.go
-    cipher.go
-    cipher_asm.go
-    const.go
-    modes.go
-)
-
-GO_TEST_SRCS(
-    aes_test.go
-    modes_test.go
-)
-
-IF (ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        asm_amd64.s
-        gcm_amd64.s
+		aes_gcm.go
+		asm_amd64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_amd64.s
+		modes.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		aes_gcm.go
+		asm_amd64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_amd64.s
+		modes.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		aes_gcm.go
+		asm_amd64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_amd64.s
+		modes.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		aes_gcm.go
+		asm_arm64.s
+		block.go
+		cipher.go
+		cipher_asm.go
+		const.go
+		gcm_arm64.s
+		modes.go
     )
 ENDIF()
-
-IF (ARCH_ARM64)
-    SRCS(
-        asm_arm64.s
-        gcm_arm64.s
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

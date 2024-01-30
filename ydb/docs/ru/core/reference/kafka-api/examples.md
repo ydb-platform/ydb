@@ -288,6 +288,7 @@
   validate.non.null=false
 ```
 
+### Запуск Kafka Connect
 Для запуска процесса-исполнителя выполните:
 ```bash
   cd ~/opt/kafka/bin/ && \

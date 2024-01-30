@@ -82,6 +82,7 @@ public:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
+        ui64 prevKey1Items = 0, prevKey1Bytes = 0, key1Items = 0, key1Bytes = 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
@@ -119,6 +120,14 @@ public:
                                     return;
                                 }
                             }
+                            if (bytesLimit) {
+                                ui64 bytes = child->DataSize - firstChild->DataSize;
+                                Cerr << child->RowCount << " " << bytes << Endl;
+                                if (LimitExceeded(bytes, bytesLimit)) {
+                                    overshot = false;
+                                    return;
+                                }
+                            }
                         }
                     }
                 }
@@ -128,8 +137,7 @@ public:
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
                 if (chargeGroups && chargeGroupsItemsLimit) {
-                    // TODO: use erased count
-                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    ui64 unloadedItems = key1Items - prevKey1Items;
                     if (unloadedItems < chargeGroupsItemsLimit) {
                         chargeGroupsItemsLimit -= unloadedItems;
                     } else {
@@ -149,14 +157,20 @@ public:
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1PageId = node.GetShortChild(pos).PageId;
+                        auto& key1Child = node.GetChild(pos);
+                        key1PageId = key1Child.PageId;
+                        key1Items = key1Child.GetNonErasedRowCount();
+                        key1Bytes = key1Child.DataSize;
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
+                            auto& prevKey1Child = node.GetChild(pos - 1);
+                            prevKey1Items = prevKey1Child.GetNonErasedRowCount();
+                            prevKey1Bytes = prevKey1Child.DataSize;
+                            beginRowId = Max(beginRowId, prevKey1Child.RowCount); // move beginRowId to the first key >= key1
                         }
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        auto& key2Child = node.GetShortChild(pos);
+                        auto& key2Child = node.GetChild(pos);
                         key2PageId = key2Child.PageId;
                         endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
                         if (key2Child.RowCount <= beginRowId) {
@@ -319,15 +333,15 @@ public:
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        auto& key1Child = node.GetShortChild(pos);
+                        auto& key1Child = node.GetChild(pos);
                         key1PageId = key1Child.PageId;
                         endRowId = Min(endRowId, key1Child.RowCount); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2PageId = node.GetShortChild(pos).PageId;
+                        key2PageId = node.GetChild(pos).PageId;
                         if (pos) {
-                            auto& prevKey2Child = node.GetShortChild(pos - 1);
+                            auto& prevKey2Child = node.GetChild(pos - 1);
                             beginRowId = Max(beginRowId, prevKey2Child.RowCount - 1); // move beginRowId to the last key < key2
                             if (prevKey2Child.RowCount >= endRowId) {
                                 chargeGroups = false; // key2 is after current slice

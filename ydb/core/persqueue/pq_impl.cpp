@@ -1570,7 +1570,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     if (!ConfigInited) {
         HasDataRequests.push_back(ev->Release());
     } else {
-        auto it = Partitions.find(record.GetPartition());
+        auto it = Partitions.find(TPartitionId(record.GetPartition()));
         if (it != Partitions.end()) {
             ctx.Send(it->second.Actor, ev->Release().Release());
         }
@@ -1580,7 +1580,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
 void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     for (auto partition : ev->Get()->Record.GetPartitions()) {
-        auto it = Partitions.find(partition);
+        auto it = Partitions.find(TPartitionId(partition));
         if (it != Partitions.end()) {
             ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie);
         } else {
@@ -2810,7 +2810,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 
         TPartitionId partitionId =
             MakePartitionId(txBody.GetOperations(0).GetPartitionId(),
-                            txBody.HasWriteId() ? txBody.GetWriteId() : Nothing());
+                            txBody.HasWriteId() ? TMaybe<ui64>(txBody.GetWriteId()) : Nothing());
         auto i = Partitions.find(partitionId);
         Y_ABORT_UNLESS(i != Partitions.end());
 
@@ -3291,7 +3291,7 @@ void TPersQueue::SendEvReadSetAckToSenders(const TActorContext& ctx,
 TPartitionId TPersQueue::MakePartitionId(ui32 originalPartitionId, TMaybe<ui64> writeId) const
 {
     Y_ABORT_UNLESS(!writeId.Defined());
-    return {originalPartitionId};
+    return TPartitionId{originalPartitionId};
 }
 
 void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
@@ -3897,7 +3897,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
 
 void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    auto it = Partitions.find(record.GetPartition());
+    auto it = Partitions.find(TPartitionId(TPartitionId(record.GetPartition())));
     if (it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
@@ -3915,14 +3915,16 @@ void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 }
 
-void TPersQueue::ProcessCheckPartitionStatusRequests(ui32 partitionId) {
-    auto sit = CheckPartitionStatusRequests.find(partitionId);
+void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId) {
+    Y_ABORT_UNLESS(!partitionId.WriteId.Defined());
+    ui32 originalPartitionId = partitionId.OriginalPartitionId;
+    auto sit = CheckPartitionStatusRequests.find(originalPartitionId);
     if (sit != CheckPartitionStatusRequests.end()) {
         auto it = Partitions.find(partitionId);
         for (auto& r : sit->second) {
             Forward(r, it->second.Actor);
         }
-        CheckPartitionStatusRequests.erase(partitionId);
+        CheckPartitionStatusRequests.erase(originalPartitionId);
     }
 }
 

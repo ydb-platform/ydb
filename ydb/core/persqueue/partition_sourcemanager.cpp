@@ -41,7 +41,7 @@ TPartitionSourceManager::TModificationBatch TPartitionSourceManager::CreateModif
 }
 
 const TPartitionSourceManager::TPartitionNode* TPartitionSourceManager::GetPartitionNode() const {
-    return Partition.PartitionGraph.GetPartition(Partition.Partition);
+    return Partition.PartitionGraph.GetPartition(Partition.Partition.OriginalPartitionId);
 }
 
 TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
@@ -49,9 +49,10 @@ TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
 }
 
 bool TPartitionSourceManager::HasParents() const {
-    auto node = Partition.PartitionGraph.GetPartition(Partition.Partition);
+    auto node = GetPartitionNode();
     return node && !node->Parents.empty();
 }
+
 
 //
 // TPartitionSourceManager::TModificationBatch

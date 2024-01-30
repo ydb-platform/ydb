@@ -150,12 +150,12 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
     TPartitionGraph graph = MakePartitionGraph(TabletConfig);
 
     for (const auto& p : TabletConfig.GetPartitions()) {
-        TPartitionId partitionId(p.GetPartitionId());
-        auto node = graph.GetPartition(partitionId);
+        auto node = graph.GetPartition(p.GetPartitionId());
         if (!node) {
             // Old configuration format without AllPartitions. Split/Merge is not supported.
             continue;
         }
+
         if (node->Children.empty()) {
             for (const auto* r : node->Parents) {
                 if (extractTabletId != r->TabletId) {

@@ -764,6 +764,8 @@ private:
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
+
+    const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 };
 
 } // namespace NKikimr::NPQ

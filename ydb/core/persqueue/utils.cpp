@@ -47,9 +47,9 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
-const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
+const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {
     for(const auto& p : config.GetPartitions()) {
-        if (partitionId.OriginalPartitionId == p.GetPartitionId()) {
+        if (partitionId == p.GetPartitionId()) {
             return &p;
         }
     }
@@ -59,11 +59,11 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
 TPartitionGraph::TPartitionGraph() {
 }
 
-TPartitionGraph::TPartitionGraph(std::unordered_map<TPartitionId, Node>&& partitions) {
+TPartitionGraph::TPartitionGraph(std::unordered_map<ui32, Node>&& partitions) {
     Partitions = std::move(partitions);
 }
 
-const TPartitionGraph::Node* TPartitionGraph::GetPartition(const TPartitionId& id) const {
+const TPartitionGraph::Node* TPartitionGraph::GetPartition(ui32 id) const {
     auto it = Partitions.find(id);
     if (it == Partitions.end()) {
         return nullptr;
@@ -71,7 +71,7 @@ const TPartitionGraph::Node* TPartitionGraph::GetPartition(const TPartitionId& i
     return &it->second;
 }
 
-std::set<TPartitionId> TPartitionGraph::GetActiveChildren(const TPartitionId& id) const {
+std::set<ui32> TPartitionGraph::GetActiveChildren(ui32 id) const {
     const auto* p = GetPartition(id);
     if (!p) {
         return {};
@@ -80,7 +80,7 @@ std::set<TPartitionId> TPartitionGraph::GetActiveChildren(const TPartitionId& id
     std::deque<const Node*> queue;
     queue.push_back(p);
 
-    std::set<TPartitionId> result;
+    std::set<ui32> result;
     while(!queue.empty()) {
         const auto* n = queue.front();
         queue.pop_front();
@@ -96,33 +96,29 @@ std::set<TPartitionId> TPartitionGraph::GetActiveChildren(const TPartitionId& id
 }
 
 template<typename TPartition>
-std::unordered_map<TPartitionId, TPartitionGraph::Node> BuildGraph(const ::google::protobuf::RepeatedPtrField<TPartition>& partitions) {
-    std::unordered_map<TPartitionId, TPartitionGraph::Node> result;
+std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const ::google::protobuf::RepeatedPtrField<TPartition>& partitions) {
+    std::unordered_map<ui32, TPartitionGraph::Node> result;
 
     if (0 == partitions.size()) {
         return result;
     }
 
     for (const auto& p : partitions) {
-        TPartitionId partitionId(p.GetPartitionId());
-        result.emplace(partitionId, TPartitionGraph::Node(partitionId, p.GetTabletId()));
+        result.emplace(p.GetPartitionId(), TPartitionGraph::Node(p.GetPartitionId(), p.GetTabletId()));
     }
 
     std::deque<TPartitionGraph::Node*> queue;
     for(const auto& p : partitions) {
-        TPartitionId partitionId(p.GetPartitionId());
-        auto& node = result[partitionId];
+        auto& node = result[p.GetPartitionId()];
 
         node.Children.reserve(p.ChildPartitionIdsSize());
         for (auto id : p.GetChildPartitionIds()) {
-            TPartitionId partitionId(id);
-            node.Children.push_back(&result[partitionId]);
+            node.Children.push_back(&result[id]);
         }
 
         node.Parents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            TPartitionId partitionId(id);
-            node.Parents.push_back(&result[partitionId]);
+            node.Parents.push_back(&result[id]);
         }
 
         if (p.GetParentPartitionIds().empty()) {
@@ -155,7 +151,7 @@ std::unordered_map<TPartitionId, TPartitionGraph::Node> BuildGraph(const ::googl
 }
 
 
-TPartitionGraph::Node::Node(const TPartitionId& id, ui64 tabletId)
+TPartitionGraph::Node::Node(ui32 id, ui64 tabletId)
     : Id(id)
     , TabletId(tabletId) {
 }

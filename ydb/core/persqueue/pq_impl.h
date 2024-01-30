@@ -166,7 +166,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     ui64 GetAllowedStep() const;
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
-    void ProcessCheckPartitionStatusRequests(ui32 partitionId);
+    void ProcessCheckPartitionStatusRequests(const TPartitionId& partitionId);
 
     TString LogPrefix() const;
 

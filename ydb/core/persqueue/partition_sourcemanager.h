@@ -1,7 +1,5 @@
 #pragma once
 
-#include "partition_id.h"
-
 #include <util/generic/fwd.h>
 #include <ydb/core/persqueue/events/internal.h>
 
@@ -17,6 +15,7 @@ private:
     using TPartitionNode = TPartitionGraph::Node;
 
 public:
+    using TPartitionId = ui32;
     using TSourceIds = std::unordered_set<TString>;
 
     class TModificationBatch;
@@ -107,8 +106,6 @@ private:
     TSourceIdStorage& GetSourceIdStorage() const;
     bool HasParents() const;
 
-    TActorId PartitionRequester(const TPartitionId& id, ui64 tabletId);
-    std::unique_ptr<TEvPQ::TEvSourceIdRequest> CreateRequest(const TPartitionId& id) const;
 
 private:
     TPartition& Partition;

@@ -170,8 +170,6 @@ struct TEvPQ {
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
         EvFetchResponse,
-        EvSourceIdRequest,
-        EvSourceIdResponse,
         EvPublishRead,
         EvForgetRead,
         EvRegisterDirectReadSession,

@@ -1547,7 +1547,7 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
     } else if (t.ProposeConfig) {
         t.Predicate = BeginTransaction(*t.ProposeConfig);
 
-        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config, Partition);
+        PendingPartitionConfig = GetPartitionConfig(t.ProposeConfig->Config);
         //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
 
         ctx.Send(Tablet,
@@ -1560,7 +1560,7 @@ bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
         Y_ABORT_UNLESS(!ChangeConfig);
 
         ChangeConfig = t.ChangeConfig;
-        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config, Partition);
+        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
         SendChangeConfigReply = t.SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config, ctx);
 
@@ -1640,7 +1640,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
-    PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config, Partition);
+    PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
 
     SendChangeConfigReply = false;
     return true;
@@ -1846,7 +1846,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
                                           const TActorContext& ctx)
 {
     Config = config;
-    PartitionConfig = GetPartitionConfig(Config, Partition);
+    PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
     TopicConverter = topicConverter;
     NewPartition = false;
@@ -2618,6 +2618,11 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     }
 
     Send(ev->Sender, response.Release());
+}
+
+const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
+{
+    return NPQ::GetPartitionConfig(config, Partition.OriginalPartitionId);
 }
 
 } // namespace NKikimr::NPQ

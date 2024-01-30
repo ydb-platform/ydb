@@ -18,8 +18,8 @@ using namespace NKikimrPQ;
 
 void AddPartition(NKikimrSchemeOp::TPersQueueGroupDescription& conf,
                   ui32 id,
-                  const std::optional<TString>&& boundaryFrom,
-                  const std::optional<TString>&& boundaryTo,
+                  const std::optional<TString>&& boundaryFrom = std::nullopt,
+                  const std::optional<TString>&& boundaryTo = std::nullopt,
                   std::vector<ui32> children = {}) { 
     auto* p = conf.AddPartitions();
     p->SetPartitionId(id);
@@ -621,49 +621,75 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_OtherPart
     AssertTable(server, "A_Source_10", 0, 13);
 }
 
-Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Test) {
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_NewSourceId_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
-    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 1, ETopicPartitionStatus::Active);
-    CreatePQTabletMock(server, 2, ETopicPartitionStatus::Active);
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0);
 
-    {
-        auto r = ChoosePartition(server, SMDisabled, "A_Source");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    }   
-    {
-        auto r = ChoosePartition(server, SMDisabled, "C_Source");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 2);
-    }
-    {
-        WriteToTable(server, "A_Source_w_0", 0);
-        auto r = ChoosePartition(server, SMDisabled, "A_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    }
-    {
-        // Redefine partition  for sourceId. Check that partition changed;
-        WriteToTable(server, "A_Source_w_0", 1);
-        auto r = ChoosePartition(server, SMDisabled, "A_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    }
-    {
-        // Redefine partition for sourceId to inactive partition. Select new partition.
-        WriteToTable(server, "A_Source_w_0", 3);
-        auto r = ChoosePartition(server, SMDisabled, "A_Source_w_0");
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    }
-    {
-        // Use prefered partition, and save it in table
-        auto r = ChoosePartition(server, SMDisabled, "A_Source_1", 1);
-        UNIT_ASSERT(r->Result);
-        UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    }
+    auto r = ChoosePartition(server, config, "A_Source");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_RegisteredSourceId_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    WriteToTable(server, "A_Source", 0);
+    auto r = ChoosePartition(server, config, "A_Source");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+
+    WriteToTable(server, "A_Source", 1);
+    r = ChoosePartition(server, config, "A_Source");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_Inactive_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0, {}, {}, {1});
+    AddPartition(config, 1);
+
+    WriteToTable(server, "A_Source", 0);
+    auto r = ChoosePartition(server, config, "A_Source");
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0);
+    AddPartition(config, 1);
+
+    auto r = ChoosePartition(server, config, "A_Source", 0);
+
+    UNIT_ASSERT(r->Result);
+    UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
+}
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Inactive_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0, {}, {}, {1});
+    AddPartition(config, 1);
+
+    auto r = ChoosePartition(server, config, "A_Source", 0);
+
+    UNIT_ASSERT(r->Error);
 }
 
 }

@@ -686,6 +686,7 @@ namespace NActors {
 
         TActor(TDerivedReceiveFunc func)
             : IActorCallback(static_cast<TReceiveFunc>(func), GetActivityTypeIndex()) {
+            Cerr << "Come changes\n";
         }
 
         template <class TEnum = EActivityType>
@@ -695,6 +696,7 @@ namespace NActors {
 
         TActor(TDerivedReceiveFunc func, const TString& actorName)
             : IActorCallback(static_cast<TReceiveFunc>(func), TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)) {
+            Cerr << "Come changes\n";
         }
 
     public:
@@ -718,6 +720,7 @@ namespace NActors {
 
         template <typename T>
         void Become(T stateFunc) {
+            Cerr << "Come changes\n";
             // TODO(kruall): have to uncomment asserts after end of sync contrib/ydb
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc);
@@ -725,12 +728,14 @@ namespace NActors {
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, const TActorContext& ctx, TArgs&&... args) {
+            Cerr << "Come changes\n";
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc, ctx, std::forward<TArgs>(args)...);
         }
 
         template <typename T, typename... TArgs>
         void Become(T stateFunc, TArgs&&... args) {
+            Cerr << "Come changes\n";
             // static_assert(std::is_convertible_v<T, TDerivedReceiveFunc>);
             this->IActorCallback::Become(stateFunc, std::forward<TArgs>(args)...);
         }

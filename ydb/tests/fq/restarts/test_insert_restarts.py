@@ -93,6 +93,7 @@ class TestS3(object):
             assert time.time() < deadline, f"Insert not finished for already {time.time() - start} seconds"
             time.sleep(0.001)
 
+        print("Some changes")
         kikimr.compute_plane.wait_bootstrap()
         client.wait_query(query_id, statuses=[fq.QueryMeta.COMPLETED, fq.QueryMeta.ABORTED_BY_SYSTEM, fq.QueryMeta.FAILED], timeout=timeout)
 
@@ -114,3 +115,5 @@ class TestS3(object):
             assert final_number_rows == 0 or final_number_rows == number_rows
 
         assert len(list(bucket.multipart_uploads.all())) == 0, "Unexpected uncommited upload in bucket"
+##
+#

@@ -85,10 +85,56 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     checkResult<false>(expected, result, &reader, numeric_out);
 }
 
+Y_UNIT_TEST(PgConvertNumericDecimal128) {
+    TArenaMemoryContext arena;
+
+    std::string val = "";
+    for (int precision = 1; precision <= 5; ++precision) {
+        val.push_back('0' + precision);
+        for (int scale = 1; scale < precision; ++scale) {
+            std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+            arrow::Decimal128Builder builder(type);
+
+            std::string expected_val = val;
+
+            if (scale > 0) {
+                expected_val.insert(expected_val.size() - scale, 1, '.');
+            }
+
+            const char* expected[] = {
+                expected_val.data()
+            };
+            
+            arrow::Decimal128 v(expected_val);
+            builder.Append(v);
+            
+            std::shared_ptr<arrow::Array> array;
+            builder.Finish(&array);
+
+            auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+            NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            const auto& data = result->data();
+            if (result->IsNull(0)) {
+                UNIT_ASSERT(expected[0] == nullptr);
+            } else {
+                UNIT_ASSERT(expected[0] != nullptr);
+                Datum item;
+                item = Datum(reader.GetItem(*data, 0).AsStringRef().Data() + sizeof(void*));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    TString(DatumGetCString(DirectFunctionCall1(numeric_out, item))),
+                    expected[0]
+                );
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(PgConvertNumericInt) {
     TArenaMemoryContext arena;
  
     arrow::Int64Builder builder;
+
     builder.Append(11);
     builder.Append(3137);
     builder.AppendNull();

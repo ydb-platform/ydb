@@ -174,6 +174,37 @@ Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     }
 }
 
+std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow::Array>& value, int32_t precision, int32_t scale) {
+    TArenaMemoryContext arena;
+    const auto& data = value->data();
+    size_t length = data->length;
+    arrow::BinaryBuilder builder;
+
+    auto input = data->GetValues<arrow::Decimal128>(1);
+    for (size_t i = 0; i < length; ++i) {
+        if (value->IsNull(i)) {
+            builder.AppendNull();
+            continue;
+        }
+
+        Numeric v = PgDecimal128ToNumeric(input[i].high_bits(), input[i].low_bits(), precision, scale);
+       
+        auto datum = NumericGetDatum(v);
+        auto ptr = (char*)datum;
+        auto len = GetFullVarSize((const text*)datum);
+        NUdf::ZeroMemoryContext(ptr);
+        ARROW_OK(builder.Append(ptr - sizeof(void*), len + sizeof(void*)));  
+    }
+
+    std::shared_ptr<arrow::BinaryArray> ret;
+    ARROW_OK(builder.Finish(&ret));
+    return ret;
+}
+
+Numeric PgDecimal128ToNumeric(int64_t high_bits, uint64_t low_bits, int32_t precision, int32_t scale) {
+    return int64_div_fast_to_numeric(low_bits, scale);
+}
+
 TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
     switch (originalType->id()) {
     case arrow::Type::INT16:
@@ -190,11 +221,16 @@ TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::Data
         };
     case arrow::Type::FLOAT:
         return [](const std::shared_ptr<arrow::Array>& value) {
-            return PgConvertNumeric<float>(value);
+             return PgConvertNumeric<float>(value);
         };
     case arrow::Type::DOUBLE:
         return [](const std::shared_ptr<arrow::Array>& value) {
             return PgConvertNumeric<double>(value);
+        };
+    case arrow::Type::DECIMAL128:
+        return [originalType](const std::shared_ptr<arrow::Array>& value) {
+            auto decimal128Ptr = std::dynamic_pointer_cast<arrow::Decimal128Type>(originalType);
+            return PgDecimal128ConvertNumeric(value, decimal128Ptr->precision(), decimal128Ptr->scale());
         };
     default:
         return {};

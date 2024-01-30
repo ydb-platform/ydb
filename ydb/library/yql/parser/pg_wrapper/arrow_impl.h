@@ -11,6 +11,7 @@ extern "C" {
 namespace NYql {
 
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
+Numeric PgDecimal128ToNumeric(int64_t item_first, uint64_t item_last, int32_t precision, int32_t scale);
 TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);
 
 template<typename T>
@@ -27,9 +28,9 @@ std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Arra
         }
         T item = input[i];
         Numeric v;
-        if constexpr(std::is_same_v<T,double>) {
+        if constexpr(std::is_same_v<T, double>) {
             v = PgFloatToNumeric(item, 1000000000000LL, 12);
-        } else if constexpr(std::is_same_v<T,float>) {
+        } else if constexpr(std::is_same_v<T, float>) {
             v = PgFloatToNumeric(item, 1000000LL, 6);
         } else {
             v = int64_to_numeric(item);
@@ -45,6 +46,9 @@ std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Arra
     ARROW_OK(builder.Finish(&ret));
     return ret;
 }
+
+
+std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow::Array>& value, int32_t precision, int32_t scale);
 
 }
 

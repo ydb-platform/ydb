@@ -152,6 +152,8 @@ bool IsValidObjectId(const TFullObjectId& objectId);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 bool IsResourceDrainingState(TTabletInfo::EVolatileState state);
 bool IsAliveState(TTabletInfo::EVolatileState state);
+TString GetTabletTypeShortName(TTabletTypes::EType type);
+TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:
@@ -171,6 +173,7 @@ protected:
     friend class TDrainNodeWaitActor;
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
+    friend struct TLeaderTabletInfo;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -330,6 +333,7 @@ protected:
     ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
     double StorageScatter = 0;
+    std::set<TTabletTypes::EType> SeenTabletTypes;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }

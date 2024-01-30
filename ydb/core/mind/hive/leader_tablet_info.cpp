@@ -367,5 +367,10 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     }
 }
 
+void TLeaderTabletInfo::SetType(TTabletTypes::EType type) {
+    Type = type;
+    NodeFilter.TabletType = type;
+    Hive.SeenTabletTypes.insert(type);
+}
 }
 }

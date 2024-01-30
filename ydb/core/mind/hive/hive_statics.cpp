@@ -438,5 +438,72 @@ bool IsAliveState(TTabletInfo::EVolatileState state) {
     }
 }
 
+TString GetTabletTypeShortName(TTabletTypes::EType type) {
+    switch(type) {
+    case TTabletTypes::SchemeShard:
+        return "SS";
+    case TTabletTypes::Hive:
+        return "H";
+    case TTabletTypes::DataShard:
+        return "DS";
+    case TTabletTypes::ColumnShard:
+        return "CS";
+    case TTabletTypes::KeyValue:
+        return "KV";
+    case TTabletTypes::PersQueue:
+        return "PQ";
+    case TTabletTypes::PersQueueReadBalancer:
+        return "PQRB";
+    case TTabletTypes::Dummy:
+        return "DY";
+    case TTabletTypes::Coordinator:
+        return "C";
+    case TTabletTypes::Mediator:
+        return "M";
+    case TTabletTypes::BlockStoreVolume:
+        return "BV";
+    case TTabletTypes::BlockStorePartition:
+    case TTabletTypes::BlockStorePartition2:
+        return "BP";
+    case TTabletTypes::Kesus:
+        return "K";
+    case TTabletTypes::SysViewProcessor:
+        return "SV";
+    case TTabletTypes::FileStore:
+        return "FS";
+    case TTabletTypes::TestShard:
+        return "TS";
+    case TTabletTypes::SequenceShard:
+        return "S";
+    case TTabletTypes::ReplicationController:
+        return "RC";
+    case TTabletTypes::BlobDepot:
+        return "BD";
+    case TTabletTypes::StatisticsAggregator:
+        return "SA";
+    case TTabletTypes::GraphShard:
+        return "GS";
+    default:
+        return Sprintf("%d", (int)type);
+    }
+}
+
+TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits) {
+    TStringBuilder str;
+    for (auto type : typesToShow) {
+        if (!str.empty()) {
+            str << " ";
+        }
+        auto it = tabletLimits.find(type);
+        if (it == tabletLimits.end() || it->second.GetMaxCount() > 0) {
+            str << "<span class='box'>";
+        } else {
+            str << "<span class='box disabled'>";
+        }
+        str << GetTabletTypeShortName(type);
+        str << "</span>";
+    }
+    return str;
+}
 } // NHive
 } // NKikimr

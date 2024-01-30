@@ -339,10 +339,7 @@ public:
     TString GetChannelStoragePoolName(ui32 channelId);
     TStoragePoolInfo& GetStoragePool(ui32 channelId);
 
-    void SetType(TTabletTypes::EType type) {
-        Type = type;
-        NodeFilter.TabletType = type;
-    }
+    void SetType(TTabletTypes::EType type);
 };
 
 } // NHive

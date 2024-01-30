@@ -1410,76 +1410,21 @@ public:
         Y_UNUSED(ctx);
     }
 
-    //TODO: move to hive_statics.cpp as utility function
-    static TString GetTabletType(TTabletTypes::EType type) {
-        switch(type) {
-        case TTabletTypes::SchemeShard:
-            return "SS";
-        case TTabletTypes::Hive:
-            return "H";
-        case TTabletTypes::DataShard:
-            return "DS";
-        case TTabletTypes::ColumnShard:
-            return "CS";
-        case TTabletTypes::KeyValue:
-            return "KV";
-        case TTabletTypes::PersQueue:
-            return "PQ";
-        case TTabletTypes::PersQueueReadBalancer:
-            return "PQRB";
-        case TTabletTypes::Dummy:
-            return "DY";
-        case TTabletTypes::Coordinator:
-            return "C";
-        case TTabletTypes::Mediator:
-            return "M";
-        case TTabletTypes::BlockStoreVolume:
-            return "BV";
-        case TTabletTypes::BlockStorePartition:
-        case TTabletTypes::BlockStorePartition2:
-            return "BP";
-        case TTabletTypes::Kesus:
-            return "K";
-        case TTabletTypes::SysViewProcessor:
-            return "SV";
-        case TTabletTypes::FileStore:
-            return "FS";
-        case TTabletTypes::TestShard:
-            return "TS";
-        case TTabletTypes::SequenceShard:
-            return "S";
-        case TTabletTypes::ReplicationController:
-            return "RC";
-        case TTabletTypes::BlobDepot:
-            return "BD";
-        case TTabletTypes::StatisticsAggregator:
-            return "SA";
-        case TTabletTypes::GraphShard:
-            return "GS";
-        default:
-            return Sprintf("%d", (int)type);
-        }
-    }
-
     void RenderHTMLPage(IOutputStream &out) {
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
         THashMap<TTabletTypes::EType, ui32> tabletTypesToChannels;
 
         for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
                 ++runningTablets;
-                ++tabletsByNodeByType[pr.second.NodeId][GetTabletType(pr.second.Type)];
             }
             if (pr.second.IsLockedToActor()) {
                 ++runningTablets;
-                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][GetTabletType(pr.second.Type)];
             }
             for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()){
                     ++runningTablets;
-                    ++tabletsByNodeByType[sl.NodeId][GetTabletType(pr.second.Type) + "s"];
                 }
             }
             {
@@ -1514,6 +1459,8 @@ public:
         out << ".table-hover tbody tr:hover > td { background-color: #9dddf2; }";
         out << ".blinking { animation:blinkingText 0.8s infinite; }";
         out << "@keyframes blinkingText { 0% { color: #000; } 49% { color: #000; } 60% { color: transparent; } 99% { color:transparent; } 100% { color: #000; } }";
+        out <<  ".box { border: 1px solid grey; border-radius: 5px; padding-left: 2px; padding-right: 2px; display: inline-block; font: 11px Arial; cursor: pointer }";
+        out << ".disabled { text-decoration: line-through; }";
         out << "</style>";
         out << "</head>";
         out << "<body>";
@@ -1586,22 +1533,22 @@ public:
                "<th rowspan='2' style='min-width:50px'>DC</th>"
                "<th rowspan='2' style='min-width:280px'>Domain</th>"
                "<th rowspan='2' style='min-width:100px'>Uptime</th>"
-               "<th rowspan='2'>Unknown</th>"
-               "<th rowspan='2'>Starting</th>"
-               "<th rowspan='2'>Running</th>"
-               "<th rowspan='2' style='min-width:160px'>Types</th>"
-               "<th rowspan='2' style='min-width:100px'>Usage</th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-question-sign' title='Unknown state tablets' style='min-width:40px'></span></th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-time' title='Starting tablets' style='min-width:40px'></span></th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-flash' title='Running tablets' style='min-width:40px'></span></th>"
+               "<th style='min-width:160px; text-align:center'>Types</th>"
+               "<th rowspan='2'>Usage</th>"
                "<th colspan='4' style='text-align:center'>Resources</td>"
                "<th rowspan='2' style='text-align:center'>Active</th>"
                "<th rowspan='2' style='text-align:center'>Freeze</th>"
                "<th rowspan='2' style='text-align:center'>Kick</th>"
                "<th rowspan='2' style='text-align:center'>Drain</th>"
-               "<th rowspan='2' style='text-align:center'>Manage</th></tr>"
                "<tr>"
+               "<th style='text-align:center'>" << GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit()) << "</th>"
                "<th style='min-width:70px'>cnt</th>"
-               "<th style='min-width:70px'>cpu</th>"
-               "<th style='min-width:70px'>mem</th>"
-               "<th style='min-width:70px'>net</th></tr>"
+               "<th style='min-width:100px'>cpu</th>"
+               "<th style='min-width:100px'>mem</th>"
+               "<th style='min-width:100px'>net</th></tr>"
                "</thead>";
         out << "<tbody>";
         out << "<tr><td colspan=18 style='text-align:center'><button type='button' class='btn btn-info' onclick='updateData();' style='margin-top:30px;margin-bottom:30px'>View Nodes</button></td></tr>";
@@ -2033,6 +1980,16 @@ function clearAlert() {
     $('#alert-placeholder').removeClass('glyphicon-refresh');
 }
 
+function enableType(element, node, type) {
+    $(element).css('color', 'gray');
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
+}
+
+function disableType(element, node, type) {
+    $(element).css('color', 'gray');
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
+}
+
 var Empty = true;
 
 function getBalancerString(balancer) {
@@ -2137,7 +2094,6 @@ function onFreshDataLong(result) {
                         + '<td style="text-align:center"><span title="Toggle node freeze" onclick="toggleFreeze(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-play"></span></td>'
                         + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
                         + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
-                        + '<td style="text-align:center"><a href="?TabletID=' + hiveId + '&page=TabletAvailability&node=' + node.Id + '"><span title="Edit tablet availability"  style="cursor:pointer" class="glyphicon glyphicon-pencil"></span></a></td>'
                         + '</tr>').appendTo('#node_table > tbody').get(0);
                     nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
                     nodeElement.cells[2].innerHTML = node.DataCenter;
@@ -2309,14 +2265,51 @@ public:
         Y_UNUSED(ctx);
     }
 
+    struct TTabletsRunningInfo {
+        TNodeId NodeId;
+        TTabletTypes::EType TabletType;
+        ui64 LeaderCount = 0;
+        ui64 FollowerCount = 0;
+        ui64 MaxCount = 0;
+
+        TTabletsRunningInfo(TNodeId node, TTabletTypes::EType tabletType) : NodeId(node)
+                                                                          , TabletType(tabletType)
+        {
+        }
+
+        TString ToHTML() const {
+            auto totalCount = LeaderCount + FollowerCount;
+            TStringBuilder str;
+            if (MaxCount > 0) {
+                str << "<span class='box' ";
+            } else {
+                str << "<span class='box disabled' ";
+            }
+            if (totalCount > MaxCount) {
+                str << " style='color: red' ";
+            }
+            str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
+                << "(this," << NodeId << "," << (ui32)TabletType << ")";
+            str << "'>";
+            str << GetTabletTypeShortName(TabletType);
+            str << " ";
+            str << LeaderCount;
+            if (FollowerCount > 0) {
+                str << "; " << FollowerCount << "f";
+            }
+            str << "</span>";
+            return str;
+        }
+    };
+
     void RenderJSONPage(IOutputStream &out) {
         ui64 nodes = 0;
-        ui64 tablets = 0;
+        ui64 tablets = Self->Tablets.size();
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
+        THashMap<ui32, TVector<TTabletsRunningInfo>> tabletsByNodeByType;
 
-        for (const auto& pr : Self->Tablets) {
+        /*for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
                 ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
@@ -2333,13 +2326,35 @@ public:
                 ++tablets;
             }
             ++tablets;
-        }
+        }*/
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
                 ++aliveNodes;
             }
             if (!pr.second.IsUnknown()) {
                 ++nodes;
+            }
+            auto& tabletsByType = tabletsByNodeByType[pr.first];
+            tabletsByType.reserve(Self->SeenTabletTypes.size());
+            for (auto tabletType : Self->SeenTabletTypes) {
+                tabletsByType.emplace_back(pr.first, tabletType);
+                auto& current = tabletsByType.back();
+                current.MaxCount = pr.second.GetMaxCountForTabletType(tabletType);
+                auto tabletsRunningIt = pr.second.TabletsRunningByType.find(tabletType);
+                if (tabletsRunningIt == pr.second.TabletsRunningByType.end()) {
+                    continue;
+                }
+                for (const auto* tablet : tabletsRunningIt->second) {
+                    if (tablet == nullptr) {
+                        continue;
+                    }
+                    ++runningTablets;
+                    if (tablet->IsLeader()) {
+                        ++current.LeaderCount;
+                    } else {
+                        ++current.FollowerCount;
+                    }
+                }
             }
         }
 
@@ -2426,13 +2441,13 @@ public:
                             if (!types.empty()) {
                                 types += ' ';
                             }
-                            types += Sprintf("%s:%d", it->first.c_str(), it->second);
+                            types += it->ToHTML();
                         }
                     }
                     jsonNode["Types"] = types;
                 }
                 double nodeUsage = node.GetNodeUsage();
-                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.9f", nodeUsage), nodeUsage >= 1);
+                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
                 jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
                 jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
             }

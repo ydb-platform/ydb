@@ -253,7 +253,7 @@ while (true) {
     * `file` — имя файла, в который коннектор будет писать данные.
     * `topics` — имя топика, из которого коннектор будет читать данные.
 
-1. Запустите Kafka Connect в режиме Standalone
+1. Запустите Kafka Connect в режиме Standalone:
     ```bash
     cd ~/opt/kafka/bin/ && \
     sudo ./connect-standalone.sh \

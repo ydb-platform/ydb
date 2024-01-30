@@ -378,18 +378,18 @@ public:
                     {"oid", []() { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
                     {"rolbypassrls", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
                     {"rolsuper", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
-                        {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
-                        {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
-                        {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
-                            "search_path=public",
-                            "default_transaction_isolation=serializable",
-                            "standard_conforming_strings=on",
-                        })); }},
+                    {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
+                    {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
+                    {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
+                        "search_path=public",
+                        "default_transaction_isolation=serializable",
+                        "standard_conforming_strings=on",
+                    })); }},
                 };
 
                 ApplyFillers(AllPgRolesFillers, Y_ARRAY_SIZE(AllPgRolesFillers), PgRolesFillers_);

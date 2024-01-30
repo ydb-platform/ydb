@@ -908,7 +908,16 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
     }
 }
 
-static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& /*streamPart*/, TCollectedStreamResult& /*res*/) {}
+static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollectedStreamResult& res) {
+    if (streamPart.GetStats() ) {
+        res.QueryStats = NYdb::TProtoAccessor::GetProto(*streamPart.GetStats());
+
+        auto plan = res.QueryStats->query_plan();
+        if (!plan.empty()) {
+            res.PlanJson = plan;
+        }
+    }
+}
 
 template<typename TIterator>
 TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {

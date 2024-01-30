@@ -138,6 +138,8 @@ public:
         : Gateway(gateway)
         , Cluster(cluster)
         , TypesCtx(*typesCtx)
+        , SessionCtx(sessionCtx)
+        , FunctionRegistry(funcRegistry)
         , Config(sessionCtx->ConfigPtr())
         , TransformCtx(MakeIntrusive<TKqlTransformContext>(Config, sessionCtx->QueryPtr(), sessionCtx->TablesPtr()))
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
@@ -192,14 +194,19 @@ public:
         YQL_ENSURE(IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, TransformCtx->QueryCtx->Type));
         YQL_ENSURE(TMaybeNode<TKiDataQueryBlocks>(query));
 
+        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+
         return PrepareQueryInternal(cluster, TKiDataQueryBlocks(query), ctx, settings);
     }
 
 private:
+
     TIntrusivePtr<TAsyncQueryResult> PrepareQueryInternal(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks, TExprContext& ctx,
         const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
+        CreateGraphTransformer(&TypesCtx, SessionCtx, FunctionRegistry);
+
         YQL_ENSURE(cluster == Cluster);
         YQL_ENSURE(!settings.CommitTx);
         YQL_ENSURE(!settings.RollbackTx);
@@ -311,7 +318,7 @@ private:
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
             *TransformCtx,
             *OptimizeCtx,
-            TypesCtx,
+            *typesCtx,
             funcRegistry,
             Config));
 
@@ -349,6 +356,8 @@ private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;
     TTypeAnnotationContext& TypesCtx;
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    const NMiniKQL::IFunctionRegistry& FunctionRegistry;
     TKikimrConfiguration::TPtr Config;
 
     TIntrusivePtr<TKqlTransformContext> TransformCtx;

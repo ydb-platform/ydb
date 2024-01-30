@@ -34,9 +34,10 @@ namespace NKikimr::NPublicHttp {
         ReplySender(RequestContext, JsonSettings, resp, status);
     }
 
-    void TGrpcRequestContextWrapper::Reply(grpc::ByteBuffer* resp, ui32 status) {
+    void TGrpcRequestContextWrapper::Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
         Y_UNUSED(resp);
         Y_UNUSED(status);
+        Y_UNUSED(ctrl);
         Y_ABORT_UNLESS(false, "TGrpcRequestContextWrapper::Reply");
     }
 

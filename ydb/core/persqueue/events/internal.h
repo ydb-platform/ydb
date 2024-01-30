@@ -216,13 +216,14 @@ struct TEvPQ {
             std::optional<TRowVersion> HeartbeatVersion;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
         , Offset(offset)
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
+        , InitialSeqNo(initialSeqNo)
         {}
 
         ui64 Cookie;
@@ -231,6 +232,7 @@ struct TEvPQ {
         TMaybe<ui64> Offset;
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
+        std::optional<ui64> InitialSeqNo;
 
     };
 
@@ -937,12 +939,6 @@ struct TEvPQ {
         Ydb::StatusIds::StatusCode Status;
         TString Message;
         NKikimrClient::TPersQueueFetchResponse Response;
-    };
-
-    struct TEvSourceIdRequest : public TEventPB<TEvSourceIdRequest, NKikimrPQ::TEvSourceIdRequest, EvSourceIdRequest> {
-    };
-
-    struct TEvSourceIdResponse : public TEventPB<TEvSourceIdResponse, NKikimrPQ::TEvSourceIdResponse, EvSourceIdResponse> {
     };
 
     struct TEvRegisterDirectReadSession : public TEventLocal<TEvRegisterDirectReadSession, EvRegisterDirectReadSession> {

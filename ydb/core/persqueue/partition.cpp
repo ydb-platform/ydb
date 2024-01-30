@@ -10,6 +10,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -482,8 +483,6 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
 
     Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
 
-    SourceManager.PassAway();
-
     Die(ctx);
 }
 
@@ -935,50 +934,33 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    SourceManager.EnsureSourceIds(ev->Get()->SourceIds);
-    MaxSeqNoRequests.emplace_back(ev);
-    ProcessMaxSeqNoRequest(ctx);
-}
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
+    NKikimrClient::TResponse& resp = *response->Response;
 
-void TPartition::ProcessMaxSeqNoRequest(const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::ProcessMaxSeqNoRequest. Queue size: " << MaxSeqNoRequests.size());
+    resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    resp.SetErrorCode(NPersQueue::NErrorCode::OK);
 
-    while(!MaxSeqNoRequests.empty()) {
-        auto& ev =  MaxSeqNoRequests.front();
+    auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
+    for (const auto& sourceId : ev->Get()->SourceIds) {
+        auto& protoInfo = *result.AddSourceIdInfo();
+        protoInfo.SetSourceId(sourceId);
 
-        auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
-        NKikimrClient::TResponse& resp = *response->Response;
-
-        resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
-        resp.SetErrorCode(NPersQueue::NErrorCode::OK);
-
-        auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
-        for (const auto& sourceId : ev->Get()->SourceIds) {
-            auto& protoInfo = *result.AddSourceIdInfo();
-            protoInfo.SetSourceId(sourceId);
-
-            auto info = SourceManager.Get(sourceId);
-            if (!info) {
-                PQ_LOG_D("Stop MaxSeqNoRequest - scheduled a research. SourceId: " << sourceId);
-                return;
-            }
-            if (info.State == TSourceIdInfo::EState::Unknown) {
-                continue;
-            }
-
-            Y_ABORT_UNLESS(info.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, info.Offset);
-            Y_ABORT_UNLESS(info.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, info.SeqNo);
-
-            protoInfo.SetSeqNo(info.SeqNo);
-            protoInfo.SetOffset(info.Offset);
-            protoInfo.SetWriteTimestampMS(info.WriteTimestamp.MilliSeconds());
-            protoInfo.SetExplicit(info.Explicit);
-            protoInfo.SetState(TSourceIdInfo::ConvertState(info.State));
+        auto info = SourceManager.Get(sourceId);
+        if (info.State == TSourceIdInfo::EState::Unknown) {
+            continue;
         }
 
-        ctx.Send(Tablet, response.Release());
-        MaxSeqNoRequests.pop_front();
+        Y_ABORT_UNLESS(info.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, info.Offset);
+        Y_ABORT_UNLESS(info.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, info.SeqNo);
+
+        protoInfo.SetSeqNo(info.SeqNo);
+        protoInfo.SetOffset(info.Offset);
+        protoInfo.SetWriteTimestampMS(info.WriteTimestamp.MilliSeconds());
+        protoInfo.SetExplicit(info.Explicit);
+        protoInfo.SetState(TSourceIdInfo::ConvertState(info.State));
     }
+
+    ctx.Send(Tablet, response.Release());
 }
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
@@ -2612,42 +2594,6 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
     }
 }
 
-void TPartition::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-
-    if (Partition != record.GetPartition()) {
-        LOG_INFO_S(
-            ctx, NKikimrServices::PERSQUEUE,
-            "TEvSourceIdRequest for wrong partition " << record.GetPartition() << "." <<
-            " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition << "."
-        );
-        return;
-    }
-
-    auto& memoryStorage = SourceIdStorage.GetInMemorySourceIds();
-
-    auto response = MakeHolder<TEvPQ::TEvSourceIdResponse>();
-    for(auto& sourceId : record.GetSourceId()) {
-        auto* s = response->Record.AddSource();
-        s->SetId(sourceId);
-
-        auto it = memoryStorage.find(sourceId);
-        if (it != memoryStorage.end()) {
-            auto& info = it->second;
-            s->SetState(Convert(info.State));
-            s->SetSeqNo(info.SeqNo);
-            s->SetOffset(info.Offset);
-            s->SetExplicit(info.Explicit);
-            s->SetWriteTimestamp(info.WriteTimestamp.GetValue());
-        } else {
-            s->SetState(NKikimrPQ::TEvSourceIdResponse::EState::TEvSourceIdResponse_EState_Unknown);
-        }
-    }
-
-    Send(ev->Sender, response.Release());
-}
-
 void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
 
@@ -2663,6 +2609,13 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
     auto response = MakeHolder<TEvPQ::TEvCheckPartitionStatusResponse>();
     response->Record.SetStatus(PartitionConfig ? PartitionConfig->GetStatus() : NKikimrPQ::ETopicPartitionStatus::Active);
+
+    if (record.HasSourceId()) {
+        auto sit = SourceIdStorage.GetInMemorySourceIds().find(NSourceIdEncoding::EncodeSimple(record.GetSourceId()));
+        if (sit != SourceIdStorage.GetInMemorySourceIds().end()) {
+            response->Record.SetSeqNo(sit->second.SeqNo);
+        }
+    }
 
     Send(ev->Sender, response.Release());
 }

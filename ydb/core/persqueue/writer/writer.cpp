@@ -343,17 +343,17 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult(error, std::move(record));
         }
 
-        const auto& response = record.GetPartitionResponse();
+        auto& response = *record.MutablePartitionResponse();
         if (!response.HasCmdGetMaxSeqNoResult()) {
             return InitResult("Absent MaxSeqNo result", std::move(record));
         }
 
-        const auto& result = response.GetCmdGetMaxSeqNoResult();
+        auto& result = *response.MutableCmdGetMaxSeqNoResult();
         if (result.SourceIdInfoSize() < 1) {
             return InitResult("Empty source id info", std::move(record));
         }
 
-        const auto& sourceIdInfo = result.GetSourceIdInfo(0);
+        auto& sourceIdInfo = *result.MutableSourceIdInfo(0);
         if (Opts.CheckState) {
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
@@ -368,6 +368,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             default:
                 return InitResult("Unknown source state", std::move(record));
             }
+        }
+
+        Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
+        if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
+            sourceIdInfo.SetSeqNo(Opts.InitialSeqNo.value());
         }
 
         InitResult(OwnerCookie, sourceIdInfo, WriteId);
@@ -609,12 +614,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
+        if (Opts.InitialSeqNo) {
+            request.SetInitialSeqNo(Opts.InitialSeqNo.value());
+        }
 
         SetWriteId(request);
 
         if (!Opts.UseDeduplication) {
             request.SetPartition(PartitionId);
         }
+
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
         PendingWrite.emplace_back(cookie);

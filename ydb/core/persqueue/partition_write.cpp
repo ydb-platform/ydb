@@ -304,9 +304,14 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ui64 maxOffset = 0;
 
             if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
-                maxSeqNo = it->second.SeqNo;
+                maxSeqNo = std::max(it->second.SeqNo, writeResponse.InitialSeqNo.value_or(0));
                 maxOffset = it->second.Offset;
-                if (it->second.SeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
+                    already = true;
+                }
+            } else if (writeResponse.InitialSeqNo) {
+                maxSeqNo = writeResponse.InitialSeqNo.value();
+                if (maxSeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
                     already = true;
                 }
             }
@@ -658,10 +663,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
         bool needToChangeOffset = msg.PartNo + 1 == msg.TotalParts;
-        if (!msg.DisableDeduplication) {
-            SourceManager.EnsureSourceId(msg.SourceId);
-        }
-        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, ctx);
+        EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg), ev->Get()->InitialSeqNo}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
     }
@@ -868,10 +870,6 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
         auto& sourceIdBatch = parameters.SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-        if (!p.Msg.DisableDeduplication && !sourceId) {
-            return ProcessResult::Break;
-        }
-
         WriteInflightSize -= p.Msg.Data.size();
 
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
@@ -879,7 +877,19 @@ TPartition::ProcessResult TPartition::ProcessRequest(TWriteMsg& p, ProcessParame
 
         ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
-        if (!p.Msg.DisableDeduplication && sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) {
+        LOG_TRACE_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicName() << "' partition " << Partition
+                    << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
+                    << " DisableDeduplication=" << p.Msg.DisableDeduplication
+                    << " SeqNo=" << p.Msg.SeqNo
+                    << " LocalSeqNo=" << sourceId.SeqNo()
+                    << " InitialSeqNo=" << p.InitialSeqNo
+        );
+
+        if (!p.Msg.DisableDeduplication
+            && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
+            || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
             if (poffset >= curOffset) {
                 LOG_DEBUG_S(
                         ctx, NKikimrServices::PERSQUEUE,
@@ -1218,7 +1228,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-            }};
+            }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
             auto result = ProcessRequest(hbMsg, parameters, request, ctx);
@@ -1534,8 +1544,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Requests.empty()
                     || !WriteQuota->CanExaust(now)
                     || WaitingForPreviousBlobQuota()
-                    || WaitingForSubDomainQuota(ctx)
-                    || SourceManager.WaitSources()); //in this case all writes must be processed or no quota left
+                    || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;

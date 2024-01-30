@@ -15,6 +15,7 @@ CFLAGS(
     -Wno-unguarded-availability-new
     -Wno-int-conversion
     -Wno-deprecated-declarations
+    -Wno-null-pointer-subtraction
 )
 
 IF (OS_WINDOWS)

@@ -247,12 +247,13 @@
   topic=Topic-1
 ```
 
-Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу Postgres:
+#### Из YDB в PostgreSQL
+Пример файла настроек JDBCSink коннектора `/etc/kafka-connect-worker/jdbc-sink.properties` для переноса данных из топика в таблицу PostgreSQL:
 ```ini
-  name=postgres-sink
+  name=postgresql-sink
   connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
 
-  connection.url=jdbc:postgresql://<postgres-url>:<port>/<db>
+  connection.url=jdbc:postgresql://<postgresql-host>:<postgresql-port>/<db>
   connection.user=<pg-user>
   connection.password=<pg-user-pass>
 

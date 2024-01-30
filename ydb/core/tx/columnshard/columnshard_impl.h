@@ -21,6 +21,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/backup_events.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -54,6 +55,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
+IActor* CreatBackupActor(TActorId senderActorId, TActorIdentity csActorId, ui64 TxId, int PlanStep, ui64 TableId);
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 

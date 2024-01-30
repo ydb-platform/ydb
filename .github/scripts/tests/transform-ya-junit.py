@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import urllib.parse
+import zipfile
 from xml.etree import ElementTree as ET
 from mute_utils import mute_target, pattern_to_re
 from junit_utils import add_junit_link_property, is_faulty_testcase
@@ -53,6 +54,10 @@ class YTestReportTrace:
     def __init__(self, out_root):
         self.out_root = out_root
         self.traces = {}
+        self.logs_dir = None
+
+    def abs_path(self, path):
+        return path.replace("$(BUILD_ROOT)", self.out_root)
 
     def load(self, subdir):
         test_results_dir = os.path.join(self.out_root, f"{subdir}/test-results/")
@@ -61,6 +66,7 @@ class YTestReportTrace:
             log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
+        # find the test result
         for folder in os.listdir(test_results_dir):
             fn = os.path.join(self.out_root, test_results_dir, folder, "ytest.report.trace")
 
@@ -76,6 +82,9 @@ class YTestReportTrace:
                         subtest = event["subtest"]
                         cls = cls.replace("::", ".")
                         self.traces[(cls, subtest)] = event
+                        logs_dir = self.abs_path(event['logs']['logsdir'])
+                        self.logs_dir = logs_dir
+            break
 
     def has(self, cls, name):
         return (cls, name) in self.traces
@@ -93,7 +102,7 @@ class YTestReportTrace:
             if k == "logsdir":
                 continue
 
-            result[k] = path.replace("$(BUILD_ROOT)", self.out_root)
+            result[k] = self.abs_path(path)
 
         return result
 
@@ -135,7 +144,26 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
     return f"{log_url_prefix}{quoted_fpath}"
 
 
-def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size):
+def save_zip(suite_name, out_dir, url_prefix, logs_dir):
+    arc_name = f"{suite_name.replace('/', '-')}.zip"
+
+    arc_fn = os.path.join(out_dir, arc_name)
+
+    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
+
+    log_print(f"put {logs_dir} into {arc_name}")
+    for root, dirs, files in os.walk(logs_dir):
+        for f in files:
+            filename = os.path.join(root, f)
+            zf.write(filename, os.path.relpath(filename, logs_dir))
+    zf.close()
+
+    quoted_fpath = urllib.parse.quote(arc_name)
+    return f"{url_prefix}{quoted_fpath}"
+
+
+def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_trunc_size,
+              test_stuff_out, test_stuff_prefix):
     tree = ET.parse(fp)
     root = tree.getroot()
 
@@ -144,11 +172,14 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
         traces = YTestReportTrace(ya_out_dir)
         traces.load(suite_name)
 
+        has_fail_tests = False
+
         for case in suite.findall("testcase"):
             test_name = case.get("name")
             case.set("classname", suite_name)
 
             is_fail = is_faulty_testcase(case)
+            has_fail_tests |= is_fail
 
             if mute_check(suite_name, test_name):
                 log_print("mute", suite_name, test_name)
@@ -163,6 +194,16 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
                     for name, fn in logs.items():
                         url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_trunc_size)
                         add_junit_link_property(case, name, url)
+
+        if has_fail_tests:
+            if not traces.logs_dir:
+                log_print(f"no logsdir for {suite_name}")
+                continue
+
+            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, traces.logs_dir)
+
+            for case in suite.findall("testcase"):
+                add_junit_link_property(case, 'logsdir', url)
 
     if save_inplace:
         tree.write(fp.name)
@@ -187,6 +228,8 @@ def main():
         help="truncate log after specific size, 0 disables truncation",
     )
     parser.add_argument("--ya-out", help="ya make output dir (for searching logs and artifacts)")
+    parser.add_argument('--test-stuff-out', help='output folder for archive testing_out_stuff')
+    parser.add_argument('--test-stuff-prefix', help='url prefix for testing_out_stuff')
     parser.add_argument("in_file", type=argparse.FileType("r"))
 
     args = parser.parse_args()
@@ -204,6 +247,8 @@ def main():
         args.log_url_prefix,
         args.log_out_dir,
         args.log_trunc_size,
+        args.test_stuff_out,
+        args.test_stuff_prefix,
     )
 
 

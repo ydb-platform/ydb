@@ -141,13 +141,17 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
 
-    TAppData* appData = env->Runtime->GetNode(1)->AppData.get();
 
     auto updateCounters = [&]() {
-        dsproxyCost = GetServiceCounters(appData->Counters, "dsproxynode")->
-                GetSubgroup("subsystem", "request")->
-                GetSubgroup("storagePool", env->StoragePoolName)->
-                GetCounter("DSProxyDiskCostNs")->Val();
+        dsproxyCost = 0;
+
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+            dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
+                    GetSubgroup("subsystem", "request")->
+                    GetSubgroup("storagePool", env->StoragePoolName)->
+                    GetCounter("DSProxyDiskCostNs")->Val();
+        }
         vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
                 pdiskLayout, "cost", "SkeletonFrontUserCostNs");
     };

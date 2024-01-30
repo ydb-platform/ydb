@@ -678,9 +678,9 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
         if ((::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery))
-            && ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery)) {
+            && (::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery))) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Write to datashard not supported in the same transaction with columnshard operations.");
+                            "Transactions between column and row tables are disabled at current time.");
             return false;
         }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);

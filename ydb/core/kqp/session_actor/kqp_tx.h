@@ -442,6 +442,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
+bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp

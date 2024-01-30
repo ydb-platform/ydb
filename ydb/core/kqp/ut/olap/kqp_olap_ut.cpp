@@ -5549,6 +5549,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
 
+            CREATE TABLE `/Root/ColumnShard3` (
+                Col1 Uint64 NOT NULL,
+                Col2 String,
+                Col3 Int32 NOT NULL,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+
             CREATE TABLE `/Root/DataShard2` (
                 Col1 Uint64 NOT NULL,
                 Col2 String,
@@ -5573,14 +5582,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             // Missing Nullable column
             const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard`
+                REPLACE INTO `/Root/ColumnShard1`
                 SELECT 10u + Col1 AS Col1, 100 + Col3 AS Col3 FROM `/Root/ColumnSource`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 
             auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard` ORDER BY Col1, Col2, Col3;
+                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -5610,36 +5619,33 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto prepareResult = client.ExecuteQuery(R"(
-                REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                REPLACE INTO `/Root/DataShard1` (Col1, Col2, Col3) VALUES
                     (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+
             // row -> column
             const TString sql = R"(
-                REPLACE INTO `/Root/ColumnShard1`
+                REPLACE INTO `/Root/ColumnShard3`
                 SELECT * FROM `/Root/DataShard1`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
-
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/ColumnShard1` ORDER BY Col1, Col2, Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13]])");
+            UNIT_ASSERT(!insertResult.IsSuccess());
+            UNIT_ASSERT_C(
+                insertResult.GetIssues().ToString().Contains("Transactions between column and row tables are disabled at current time"),
+                insertResult.GetIssues().ToString());
         }
 
         {
             // column -> row
             const TString sql = R"(
                 REPLACE INTO `/Root/DataShard2`
-                SELECT * FROM `/Root/ColumnShard2`
+                SELECT * FROM `/Root/ColumnSource`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!insertResult.IsSuccess());
             UNIT_ASSERT_C(
-                insertResult.GetIssues().ToString().Contains("Write to datashard not supported in the same transaction with columnshard operations."),
+                insertResult.GetIssues().ToString().Contains("Transactions between column and row tables are disabled at current time"),
                 insertResult.GetIssues().ToString());
         }
     }

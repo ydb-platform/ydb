@@ -208,7 +208,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                TRowId prechargedFirstRowId, prechargedLastRowId;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowIds;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first; 
@@ -242,9 +242,6 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
-                        }
                         items += prechargeCurrentLastRowId - prechargeCurrentFirstRowId + 1;
                     }
                     if (key2Page && key2Page <= current) {
@@ -264,7 +261,11 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
-                        prechargedLastRowId = prechargeCurrentLastRowId;
+                        if (prechargedRowIds) {
+                            prechargedRowIds->second = prechargeCurrentLastRowId;
+                        } else {
+                            prechargedRowIds.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
+                        }
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroup(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
@@ -273,8 +274,8 @@ namespace NTable {
                     }
                 }
 
-                if (items && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedFirstRowId, prechargedLastRowId);
+                if (prechargedRowIds && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowIds->first, prechargedRowIds->second);
                 }
             }
 
@@ -305,7 +306,7 @@ namespace NTable {
                 ui64 items = 0;
                 ui64 bytes = 0;
 
-                TRowId prechargedFirstRowId, prechargedLastRowId;
+                std::optional<std::pair<TRowId, TRowId>> prechargedRowIds;
                 bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first;
@@ -343,9 +344,6 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        if (!items) {
-                            prechargedFirstRowId = prechargeCurrentFirstRowId;
-                        }
                         items += prechargeCurrentFirstRowId - prechargeCurrentLastRowId + 1;
                     }
                     if (key2Page && key2Page >= current) {
@@ -363,7 +361,11 @@ namespace NTable {
                         }
                     }
                     if (prechargeCurrentFirstRowId >= prechargeCurrentLastRowId) {
-                        prechargedLastRowId = prechargeCurrentLastRowId;
+                        if (prechargedRowIds) {
+                            prechargedRowIds->second = prechargeCurrentLastRowId;
+                        } else {
+                            prechargedRowIds.emplace(prechargeCurrentFirstRowId, prechargeCurrentLastRowId);
+                        }
                         if (Groups) {
                             for (auto& g : Groups) {
                                 ready &= DoPrechargeGroupReverse(g, prechargeCurrentFirstRowId, prechargeCurrentLastRowId, bytes);
@@ -376,8 +378,8 @@ namespace NTable {
                     }
                 }
 
-                if (items && HistoryIndex) {
-                    ready &= DoPrechargeHistory(prechargedFirstRowId, prechargedLastRowId);
+                if (prechargedRowIds && HistoryIndex) {
+                    ready &= DoPrechargeHistory(prechargedRowIds->first, prechargedRowIds->second);
                 }
             }
 

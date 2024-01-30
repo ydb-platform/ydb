@@ -5,6 +5,7 @@ RECURSE(
     iam
     kms
     operation
+    team
     quota
     resourcemanager
     servicecontrol

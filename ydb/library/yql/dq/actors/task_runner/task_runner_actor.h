@@ -49,7 +49,7 @@ struct ITaskRunnerActorFactory {
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
 };
 
-ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory);
+ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const TTaskRunnerFactory& factory);
 
 } // namespace NTaskRunnerActor
 

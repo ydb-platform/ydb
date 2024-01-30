@@ -607,9 +607,15 @@ SELECT 32767.5::int2; -- should fail
 SELECT 'NaN'::float8::numeric;
 SELECT 'Infinity'::float8::numeric;
 SELECT '-Infinity'::float8::numeric;
+SELECT 'NaN'::numeric::float8;
+SELECT 'Infinity'::numeric::float8;
+SELECT '-Infinity'::numeric::float8;
 SELECT 'NaN'::float4::numeric;
 SELECT 'Infinity'::float4::numeric;
 SELECT '-Infinity'::float4::numeric;
+SELECT 'NaN'::numeric::float4;
+SELECT 'Infinity'::numeric::float4;
+SELECT '-Infinity'::numeric::float4;
 SELECT '42'::int2::numeric;
 SELECT 'NaN'::numeric::int2;
 SELECT 'Infinity'::numeric::int2;
@@ -827,3 +833,114 @@ select exp(-123.456);
 select * from generate_series(0.0::numeric, 4.0::numeric);
 select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
 select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+-- Trigger errors
+select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
+select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+select * from generate_series('inf'::numeric, 'inf'::numeric, 10::numeric);
+select * from generate_series(0::numeric, 'inf'::numeric, 10::numeric);
+select * from generate_series(0::numeric, '42'::numeric, '-inf'::numeric);
+-- Checks maximum, output is truncated
+select (i / (10::numeric ^ 131071))::numeric(1,0)
+	from generate_series(6 * (10::numeric ^ 131071),
+			     9 * (10::numeric ^ 131071),
+			     10::numeric ^ 131071) as a(i);
+--
+-- Tests for LN()
+--
+-- Invalid inputs
+select ln(-12.34);
+select ln(0.0);
+-- Some random tests
+select ln(1.2345678e-28);
+select ln(0.0456789);
+select ln(0.349873948359354029493948309745709580730482050975);
+select ln(0.99949452);
+select ln(1.00049687395);
+select ln(1234.567890123456789);
+select ln(5.80397490724e5);
+select ln(9.342536355e34);
+--
+-- Tests for LOG() (base 10)
+--
+-- invalid inputs
+select log(-12.34);
+select log(0.0);
+--
+-- Tests for LOG() (arbitrary base)
+--
+-- invalid inputs
+select log(-12.34, 56.78);
+select log(-12.34, -56.78);
+select log(12.34, -56.78);
+select log(0.0, 12.34);
+select log(12.34, 0.0);
+select log(1.0, 12.34);
+-- some random tests
+select log(1.23e-89, 6.4689e45);
+select log(0.99923, 4.58934e34);
+select log(1.000016, 8.452010e18);
+select log(3.1954752e47, 9.4792021e-73);
+--
+-- Tests for scale()
+--
+select scale(numeric 'NaN');
+select scale(numeric 'inf');
+select scale(NULL::numeric);
+select scale(1.12);
+select scale(0);
+select scale(0.00);
+select scale(1.12345);
+select scale(110123.12475871856128);
+select scale(-1123.12471856128);
+select scale(-13.000000000000000);
+--
+-- Tests for min_scale()
+--
+select min_scale(numeric 'NaN') is NULL; -- should be true
+select min_scale(numeric 'inf') is NULL; -- should be true
+select min_scale(0);                     -- no digits
+select min_scale(0.00);                  -- no digits again
+select min_scale(1.0);                   -- no scale
+select min_scale(1.1);                   -- scale 1
+select min_scale(1.12);                  -- scale 2
+select min_scale(1.123);                 -- scale 3
+select min_scale(1.1234);                -- scale 4, filled digit
+select min_scale(1.12345);               -- scale 5, 2 NDIGITS
+select min_scale(1.1000);                -- 1 pos in NDIGITS
+select min_scale(1e100);                 -- very big number
+--
+-- Tests for trim_scale()
+--
+select trim_scale(numeric 'NaN');
+select trim_scale(numeric 'inf');
+select trim_scale(1.120);
+select trim_scale(1.1234500);
+select trim_scale(110123.12475871856128000);
+select trim_scale(-1123.124718561280000000);
+select trim_scale(-13.00000000000000000000);
+--
+-- Tests for SUM()
+--
+-- cases that need carry propagation
+SELECT SUM(9999::numeric) FROM generate_series(1, 100000);
+SELECT SUM((-9999)::numeric) FROM generate_series(1, 100000);
+SELECT lcm(9999 * (10::numeric)^131068 + (10::numeric^131068 - 1), 2); -- overflow
+--
+-- Tests for factorial
+--
+SELECT factorial(4);
+SELECT factorial(15);
+SELECT factorial(100000);
+SELECT factorial(0);
+SELECT factorial(-4);
+--
+-- Tests for pg_lsn()
+--
+SELECT pg_lsn(23783416::numeric);
+SELECT pg_lsn(0::numeric);
+SELECT pg_lsn(18446744073709551615::numeric);
+SELECT pg_lsn(-1::numeric);
+SELECT pg_lsn(18446744073709551616::numeric);
+SELECT pg_lsn('NaN'::numeric);

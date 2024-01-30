@@ -182,7 +182,7 @@ public:
             NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
             lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
             lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateTaskRunnerActorFactory(
-                lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
+                lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory, nullptr);
             auto localWM = CreateLocalWorkerManager(lwmOptions);
             ActorRuntime_->AddLocalService(MakeWorkerManagerActorID(NodeId(i)),
                 TActorSetupCmd{localWM, TMailboxType::Simple, 0}, i);

@@ -85,8 +85,6 @@ SRCS(
     schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
-    schemeshard__operation_alter_olap_store.cpp
-    schemeshard__operation_alter_olap_table.cpp
     schemeshard__operation_alter_pq.cpp
     schemeshard__operation_alter_solomon.cpp
     schemeshard__operation_alter_subdomain.cpp
@@ -96,6 +94,8 @@ SRCS(
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
+    schemeshard__operation_common_external_data_source.cpp
+    schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_table.cpp
@@ -109,8 +109,6 @@ SRCS(
     schemeshard__operation_create_indexed_table.cpp
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
-    schemeshard__operation_create_olap_store.cpp
-    schemeshard__operation_create_olap_table.cpp
     schemeshard__operation_create_pq.cpp
     schemeshard__operation_create_replication.cpp
     schemeshard__operation_create_restore.cpp
@@ -128,8 +126,6 @@ SRCS(
     schemeshard__operation_drop_indexed_table.cpp
     schemeshard__operation_drop_kesus.cpp
     schemeshard__operation_drop_lock.cpp
-    schemeshard__operation_drop_olap_store.cpp
-    schemeshard__operation_drop_olap_table.cpp
     schemeshard__operation_drop_pq.cpp
     schemeshard__operation_drop_replication.cpp
     schemeshard__operation_drop_sequence.cpp
@@ -182,7 +178,6 @@ SRCS(
     schemeshard_identificators.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
-    schemeshard_olap_types.cpp
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
     schemeshard_path_element.h
@@ -260,6 +255,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
     ydb/core/util

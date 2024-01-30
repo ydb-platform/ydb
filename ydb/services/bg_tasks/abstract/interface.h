@@ -3,7 +3,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/services/bg_tasks/protos/container.pb.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -110,7 +109,20 @@ public:
     TCommonInterfaceContainer() = default;
     TCommonInterfaceContainer(std::shared_ptr<IInterface> object)
         : Object(object) {
+    }
 
+    bool Initialize(const TString& className) {
+        AFL_VERIFY(!Object)("problem", "initialize for not-empty-object");
+        Object.reset(TFactory::Construct(className));
+        if (!Object) {
+            ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
+            return false;
+        }
+        return true;
+    }
+
+    TString GetClassName() const {
+        return Object ? Object->GetClassName() : "UNDEFINED";
     }
 
     bool HasObject() const {
@@ -135,6 +147,16 @@ public:
         return Object;
     }
 
+    std::shared_ptr<IInterface> GetObjectPtrVerified() const {
+        AFL_VERIFY(Object);
+        return Object;
+    }
+
+    const IInterface& GetObjectVerified() const {
+        AFL_VERIFY(Object);
+        return *Object;
+    }
+
     const IInterface* operator->() const {
         return Object.get();
     }
@@ -147,6 +169,13 @@ public:
         return !Object;
     }
 
+};
+
+class TStringContainerProcessor {
+public:
+    static bool DeserializeFromContainer(const TString& data, TString& className, TString& binary);
+
+    static TString SerializeToContainer(const TString& className, const TString& binary);
 };
 
 template <class IInterface>
@@ -162,13 +191,11 @@ public:
     }
 
     TString SerializeToString() const {
-        NKikimrProto::TStringContainer result;
         if (!Object) {
-            return result.SerializeAsString();
+            return TStringContainerProcessor::SerializeToContainer("__UNDEFINED", "");
+        } else {
+            return TStringContainerProcessor::SerializeToContainer(Object->GetClassName(), Object->SerializeToString());
         }
-        result.SetClassName(Object->GetClassName());
-        result.SetBinaryData(Object->SerializeToString());
-        return result.SerializeAsString();
     }
 
     bool DeserializeFromString(const TString& data) {
@@ -176,19 +203,22 @@ public:
             Object = nullptr;
             return true;
         }
-        NKikimrProto::TStringContainer protoData;
-        if (!protoData.ParseFromArray(data.data(), data.size())) {
+        TString className;
+        TString binaryData;
+        if (!TStringContainerProcessor::DeserializeFromContainer(data, className, binaryData)) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "cannot parse string as proto: " << Base64Encode(data);
-            return {};
+            return false;
         }
-        const TString& className = protoData.GetClassName();
-        std::shared_ptr<IInterface> object(TFactory::Construct(protoData.GetClassName()));
+        if (className == "__UNDEFINED") {
+            return true;
+        }
+        std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
             return false;
         }
 
-        if (!object->DeserializeFromString(protoData.GetBinaryData())) {
+        if (!object->DeserializeFromString(binaryData)) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "cannot parse class instance: " << className << " for " << typeid(IInterface).name();
             return false;
         }
@@ -218,6 +248,7 @@ public:
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         if (!Object) {
+            TOperatorPolicy::SetClassName(result, "__UNDEFINED");
             return result;
         }
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
@@ -227,6 +258,9 @@ public:
 
     bool DeserializeFromJson(const NJson::TJsonValue& data) {
         const TString& className = TOperatorPolicy::GetClassName(data);
+        if (className == "__UNDEFINED") {
+            return true;
+        }
         std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
@@ -265,6 +299,9 @@ public:
     using TBase::TBase;
     bool DeserializeFromProto(const TProto& data) {
         const TString& className = TOperatorPolicy::GetClassName(data);
+        if (className == "__UNDEFINED") {
+            return true;
+        }
         std::shared_ptr<IInterface> object(TFactory::Construct(className));
         if (!object) {
             ALS_ERROR(NKikimrServices::BG_TASKS) << "incorrect class name: " << className << " for " << typeid(IInterface).name();
@@ -286,6 +323,16 @@ public:
         result = Object->SerializeToProto();
         TOperatorPolicy::SetClassName(result, Object->GetClassName());
         return result;
+    }
+
+    template <class TProto>
+    void SerializeToProto(TProto& result) const {
+        if (!Object) {
+            TOperatorPolicy::SetClassName(result, "__UNDEFINED");
+            return;
+        }
+        Object->SerializeToProto(result);
+        TOperatorPolicy::SetClassName(result, Object->GetClassName());
     }
 };
 

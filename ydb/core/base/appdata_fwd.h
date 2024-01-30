@@ -233,6 +233,7 @@ struct TAppData {
     bool EnableMvccSnapshotWithLegacyDomainRoot = false;
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
+    bool EnableOlapSink = false;
     TVector<TString> AdministrationAllowedSIDs; // users/groups which allowed to perform administrative tasks
     TVector<TString> DefaultUserSIDs;
     TString AllAuthenticatedUsers = "all-users@well-known";

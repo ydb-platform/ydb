@@ -1619,7 +1619,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         for (size_t i = 0; i < proxyCount; ++i) {
             auto grpcReqProxy = Config.HasGRpcConfig() && Config.GetGRpcConfig().GetSkipSchemeCheck()
                 ? NGRpcService::CreateGRpcRequestProxySimple(Config)
-                : NGRpcService::CreateGRpcRequestProxy(Config);
+                : NGRpcService::CreateGRpcRequestProxy(Config, appData->Icb);
             setup->LocalServices.push_back(std::pair<TActorId,
                                            TActorSetupCmd>(NGRpcService::CreateGRpcRequestProxyId(i),
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
@@ -2677,7 +2677,7 @@ TDatabaseMetadataCacheInitializer::TDatabaseMetadataCacheInitializer(const TKiki
 void TDatabaseMetadataCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     setup->LocalServices.emplace_back(
         MakeDatabaseMetadataCacheId(NodeId),
-        TActorSetupCmd(CreateDatabaseMetadataCache(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
+        TActorSetupCmd(CreateDatabaseMetadataCache(appData->TenantName, appData->Counters), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
 TGraphServiceInitializer::TGraphServiceInitializer(const TKikimrRunConfig& runConfig)

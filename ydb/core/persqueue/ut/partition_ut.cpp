@@ -508,13 +508,13 @@ void TPartitionFixture::SendWrite(const ui64 cookie, const ui64 messageNo, const
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
     msgs.push_back(msg);
 
-    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), false);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), false, std::nullopt);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
-    auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force);
+    auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -950,6 +950,65 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionFixture)
+{
+    const ui32 partition = 0;
+    const ui64 begin = 0;
+    const ui64 end = 2'000;
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+
+    CreateSession(client, session);
+
+    for (ui64 txId = 1; txId <= 1'002; ++txId) {
+        SendProposeTransactionRequest(partition,
+                                      txId - 1, txId, // range
+                                      client,
+                                      "topic-path",
+                                      true,
+                                      txId);
+    }
+
+    //
+    // the first command in the queue will start writing
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1}}}});
+
+    //
+    // messages from 2 to 1001 will be queued and the OVERLOADED error will be returned to the last one
+    //
+    WaitProposeTransactionResponse({.TxId=1'002, .Status=NKikimrPQ::TEvProposeTransactionResult::OVERLOADED});
+
+    //
+    // the writing has ended
+    //
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    //
+    // the commands from the queue will be executed as one
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'001}}}});
+
+    //
+    // while the writing is in progress, another command has arrived
+    //
+    SendProposeTransactionRequest(partition,
+                                  1'001, 1'002, // range
+                                  client,
+                                  "topic-path",
+                                  true,
+                                  1'003);
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    //
+    // it will be processed
+    //
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=1'002}}}});
+}
+
 Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 {
     const ui32 partition = 0;
@@ -1278,13 +1337,10 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     SendCommitTx(step, txId_1);
 
     //
-    // consumer 'client-2' was deleted
+    // update config
     //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
-    SendRollbackTx(step, txId_2);
-
     WaitCmdWrite({.Count=8,
-                 .PlanStep=step, .TxId=txId_2,
+                 .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
                  {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
                  {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
@@ -1295,6 +1351,12 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitPartitionConfigChanged({.Partition=partition});
+
+    //
+    // consumer 'client-2' was deleted
+    //
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    SendRollbackTx(step, txId_2);
 }
 
 Y_UNIT_TEST_F(TabletConfig_Is_Newer_That_PartitionConfig, TPartitionFixture)

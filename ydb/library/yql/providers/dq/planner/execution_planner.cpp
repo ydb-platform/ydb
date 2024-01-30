@@ -443,8 +443,12 @@ namespace NYql::NDqs {
                 }
             }
 
+            bool enableSpilling = false;
+            if (task.Outputs.size() > 1) {
+                enableSpilling = Settings->IsSpillingEnabled();
+            }
             for (auto& output : task.Outputs) {
-                FillOutputDesc(*taskDesc.AddOutputs(), output);
+                FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
             }
 
             auto& program = *taskDesc.MutableProgram();
@@ -643,7 +647,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         }
     }
 
-    void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel) {
+    void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel, bool enableSpilling) {
         channelDesc.SetId(channel.Id);
         channelDesc.SetSrcStageId(std::get<2>(StagePrograms[channel.SrcStageId]));
         channelDesc.SetDstStageId(std::get<2>(StagePrograms[channel.DstStageId]));
@@ -651,6 +655,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
         channelDesc.SetTransportVersion(Settings->GetDataTransportVersion());
+        channelDesc.SetEnableSpilling(enableSpilling);
 
         if (channel.SrcTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,
@@ -691,11 +696,11 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
 
         for (ui64 channel : input.Channels) {
             auto& channelDesc = *inputDesc.AddChannels();
-            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel), /*enableSpilling*/false);
         }
     }
 
-    void TDqsExecutionPlanner::FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
+    void TDqsExecutionPlanner::FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, bool enableSpilling) {
         switch (output.Type) {
             case TTaskOutputType::Map:
                 YQL_ENSURE(output.Channels.size() == 1);
@@ -736,7 +741,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
 
         for (auto& channel : output.Channels) {
             auto& channelDesc = *outputDesc.AddChannels();
-            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+            FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel), enableSpilling);
         }
 
         if (output.Transform) {

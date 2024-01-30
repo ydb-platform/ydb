@@ -6,7 +6,6 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
-#include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 
@@ -39,6 +38,7 @@ struct Schema : NIceDb::Schema {
         ColumnsTableId,
         CountersTableId,
         OperationsTableId,
+        IndexesTableId
     };
 
     enum class ETierTables: ui32 {
@@ -290,6 +290,21 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<StorageId, BlobId>;
     };
 
+    struct IndexIndexes: NIceDb::Schema::Table<IndexesTableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct IndexId: Column<3, NScheme::NTypeIds::Uint32> {};
+        struct ChunkIdx: Column<4, NScheme::NTypeIds::Uint32> {};
+        struct Blob: Column<5, NScheme::NTypeIds::String> {};
+        struct Offset: Column<6, NScheme::NTypeIds::Uint32> {};
+        struct Size: Column<7, NScheme::NTypeIds::Uint32> {};
+        struct RecordsCount: Column<8, NScheme::NTypeIds::Uint32> {};
+        struct RawBytes: Column<9, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -310,7 +325,8 @@ struct Schema : NIceDb::Schema {
         OneToOneEvictedBlobs,
         Operations,
         TierBlobsDraft,
-        TierBlobsToDelete
+        TierBlobsToDelete,
+        IndexIndexes
         >;
 
     //
@@ -508,34 +524,6 @@ struct Schema : NIceDb::Schema {
                                  NOlap::TInsertTableAccessor& insertTable,
                                  const TInstant& loadTime);
 
-    // IndexColumns activities
-
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
-        auto rowProto = row.GetMeta().SerializeToProto();
-        if (proto) {
-            *rowProto.MutablePortionMeta() = std::move(*proto);
-        }
-        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
-                NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
-                NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
-                NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
-                NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
-                NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
-                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
-                NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId())
-            );
-    }
-
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(0, portion.GetDeprecatedGranuleId(), row.ColumnId,
-            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
-    }
-
-    static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector,
-        const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback);
-
     // IndexCounters
 
     static void IndexCounters_Write(NIceDb::TNiceDb& db, ui32 counterId, ui64 value) {
@@ -625,6 +613,34 @@ public:
         } else {
             return nullptr;
         }
+    }
+};
+
+class TIndexChunkLoadContext {
+private:
+    YDB_READONLY_DEF(TBlobRange, BlobRange);
+    TChunkAddress Address;
+    const ui32 RecordsCount;
+    const ui32 RawBytes;
+public:
+    TIndexChunk BuildIndexChunk() const {
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange);
+    }
+
+    template <class TSource>
+    TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
+        , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
+    {
+        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
+        Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+        TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+        BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
+        BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
+        BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
+        AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
     }
 };
 

@@ -22,7 +22,7 @@ struct TEvDqCompute {
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
-        TEvResumeExecution(EResumeSource source) 
+        TEvResumeExecution(EResumeSource source)
             : Source(source)
         { }
 
@@ -364,8 +364,11 @@ struct TComputeMemoryLimits {
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
 
+//temporary flag to integarate changes in interface
+#define Y_YQL_DQ_TASK_RUNNER_REQUIRES_ALLOCATOR 1
+
 using TTaskRunnerFactory = std::function<
-    TIntrusivePtr<IDqTaskRunner>(const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
+    TIntrusivePtr<IDqTaskRunner>(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
 >;
 
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);

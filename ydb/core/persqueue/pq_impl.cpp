@@ -1229,10 +1229,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
         ApplyNewConfigAndReply(ctx);
     }
 
-    ProcessSourceIdRequests(partitionId);
-    if (allInitialized) {
-        SourceIdRequests.clear();
-    }
+    ProcessCheckPartitionStatusRequests(partitionId);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -1979,11 +1976,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     " offset: " << (req.HasCmdWriteOffset() ? (req.GetCmdWriteOffset() + i) : -1));
     }
     InitResponseBuilder(responseCookie, msgs.size(), COUNTER_LATENCY_PQ_WRITE);
+    std::optional<ui64> initialSeqNo;
+    if (req.HasInitialSeqNo()) {
+        initialSeqNo = req.GetInitialSeqNo();
+    }
     THolder<TEvPQ::TEvWrite> event =
         MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
                                     req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
                                     req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite());
+                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
     ctx.Send(partActor, event.Release());
 }
 
@@ -2048,7 +2049,8 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
     it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
-    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender, req.GetCmdGetOwnership().GetForce());
+    THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
+            req.GetCmdGetOwnership().GetForce(), req.GetCmdGetOwnership().GetRegisterIfNotExists());
     ctx.Send(partActor, event.Release());
 }
 
@@ -3884,14 +3886,14 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr &ev, con
     ctx.Send(ev->Sender, new TEvPersQueue::TEvProposeTransactionAttachResult(TabletID(), txId, status), 0, ev->Cookie);
 }
 
-void TPersQueue::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx) {
+void TPersQueue::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     auto it = Partitions.find(record.GetPartition());
     if (it == Partitions.end()) {
         LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Unknown partition " << record.GetPartition());
 
-        auto response = THolder<TEvPQ::TEvSourceIdResponse>();
-        response->Record.SetError("Partition was not found");
+        auto response = THolder<TEvPQ::TEvCheckPartitionStatusResponse>();
+        response->Record.SetStatus(NKikimrPQ::ETopicPartitionStatus::Deleted);
         Send(ev->Sender, response.Release());
 
         return;
@@ -3900,18 +3902,18 @@ void TPersQueue::Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext
     if (it->second.InitDone) {
         Forward(ev, it->second.Actor);
     } else {
-        SourceIdRequests[record.GetPartition()].push_back(ev);
+        CheckPartitionStatusRequests[record.GetPartition()].push_back(ev);
     }
 }
 
-void TPersQueue::ProcessSourceIdRequests(ui32 partitionId) {
-    auto sit = SourceIdRequests.find(partitionId);
-    if (sit != SourceIdRequests.end()) {
+void TPersQueue::ProcessCheckPartitionStatusRequests(ui32 partitionId) {
+    auto sit = CheckPartitionStatusRequests.find(partitionId);
+    if (sit != CheckPartitionStatusRequests.end()) {
         auto it = Partitions.find(partitionId);
         for (auto& r : sit->second) {
             Forward(r, it->second.Actor);
         }
-        SourceIdRequests.erase(partitionId);
+        CheckPartitionStatusRequests.erase(partitionId);
     }
 }
 
@@ -3967,7 +3969,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
-        HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
+        HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         default:
             return false;
     }

@@ -140,16 +140,17 @@ Y_UNIT_TEST(RelCollector) {
         .Done();
 
     TTypeAnnotationContext typeCtx;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(typeCtx, equiJoin, [&](auto, auto) {}) == false);
+    TVector<std::shared_ptr<TRelOptimizerNode>> rels;
+    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
     typeCtx.StatisticsMap[tables[1].Ptr()->Child(0)] = std::make_shared<TOptimizerStatistics>(1, 1, 1);
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(typeCtx, equiJoin, [&](auto, auto) {}) == false);
+    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 
     typeCtx.StatisticsMap[tables[0].Ptr()->Child(0)] = std::make_shared<TOptimizerStatistics>(1, 1, 1);
     typeCtx.StatisticsMap[tables[2].Ptr()->Child(0)] = std::make_shared<TOptimizerStatistics>(1, 1, 1);
 
     TVector<TString> labels;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(typeCtx, equiJoin, [&](auto label, auto) { labels.emplace_back(label); }) == true);
+    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto label, auto, auto) { labels.emplace_back(label); }) == true);
     UNIT_ASSERT(labels.size() == 3);
     UNIT_ASSERT_STRINGS_EQUAL(labels[0], "orders");
     UNIT_ASSERT_STRINGS_EQUAL(labels[1], "customer");
@@ -167,7 +168,8 @@ Y_UNIT_TEST(RelCollectorBrokenEquiJoin) {
         .Done();
 
     TTypeAnnotationContext typeCtx;
-    UNIT_ASSERT(DqCollectJoinRelationsWithStats(typeCtx, equiJoin, [&](auto, auto) {}) == false);
+    TVector<std::shared_ptr<TRelOptimizerNode>> rels;
+    UNIT_ASSERT(DqCollectJoinRelationsWithStats(rels, typeCtx, equiJoin, [&](auto, auto, auto, auto) {}) == false);
 }
 
 void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory) {

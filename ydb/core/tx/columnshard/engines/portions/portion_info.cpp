@@ -1,5 +1,6 @@
 #include "portion_info.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <util/system/tls.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -103,17 +104,27 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
     return sum;
 }
 
-ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& columnIds) const {
+ui64 TPortionInfo::GetRawBytes(const std::set<ui32>& entityIds) const {
     ui64 sum = 0;
     const ui32 numRows = NumRows();
     for (auto&& i : TIndexInfo::GetSpecialColumnIds()) {
-        if (columnIds.contains(i)) {
+        if (entityIds.contains(i)) {
             sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
         }
     }
     for (auto&& r : Records) {
-        if (columnIds.contains(r.ColumnId)) {
+        if (entityIds.contains(r.ColumnId)) {
             sum += r.GetMeta().GetRawBytesVerified();
+        }
+    }
+    return sum;
+}
+
+ui64 TPortionInfo::GetIndexBytes(const std::set<ui32>& entityIds) const {
+    ui64 sum = 0;
+    for (auto&& r : Indexes) {
+        if (entityIds.contains(r.GetIndexId())) {
+            sum += r.GetBlobRange().Size;
         }
     }
     return sum;
@@ -204,6 +215,95 @@ size_t TPortionInfo::NumBlobs() const {
 bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
     return PathId == item.PathId && MinSnapshot == item.MinSnapshot
         && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+}
+
+void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
+    for (auto& record : Records) {
+        db.EraseColumn(*this, record);
+    }
+    for (auto& record : Indexes) {
+        db.EraseIndex(*this, record);
+    }
+}
+
+void TPortionInfo::SaveToDatabase(IDbWrapper& db) const {
+    for (auto& record : Records) {
+        db.WriteColumn(*this, record);
+    }
+    for (auto& record : Indexes) {
+        db.WriteIndex(*this, record);
+    }
+}
+
+std::vector<NKikimr::NOlap::TPortionInfo::TPage> TPortionInfo::BuildPages() const {
+    std::vector<TPage> pages;
+    struct TPart {
+    public:
+        const TColumnRecord* Record = nullptr;
+        const TIndexChunk* Index = nullptr;
+        const ui32 RecordsCount;
+        TPart(const TColumnRecord* record, const ui32 recordsCount)
+            : Record(record)
+            , RecordsCount(recordsCount) {
+
+        }
+        TPart(const TIndexChunk* record, const ui32 recordsCount)
+            : Index(record)
+            , RecordsCount(recordsCount) {
+
+        }
+    };
+    std::map<ui32, std::deque<TPart>> entities;
+    std::map<ui32, ui32> currentCursor;
+    ui32 currentSize = 0;
+    ui32 currentId = 0;
+    for (auto&& i : Records) {
+        if (currentId != i.GetColumnId()) {
+            currentSize = 0;
+            currentId = i.GetColumnId();
+        }
+        currentSize += i.GetMeta().GetNumRowsVerified();
+        ++currentCursor[currentSize];
+        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetNumRowsVerified());
+    }
+    for (auto&& i : Indexes) {
+        if (currentId != i.GetIndexId()) {
+            currentSize = 0;
+            currentId = i.GetIndexId();
+        }
+        currentSize += i.GetRecordsCount();
+        ++currentCursor[currentSize];
+        entities[i.GetIndexId()].emplace_back(&i, i.GetRecordsCount());
+    }
+    const ui32 entitiesCount = entities.size();
+    ui32 predCount = 0;
+    for (auto&& i : currentCursor) {
+        if (i.second != entitiesCount) {
+            continue;
+        }
+        std::vector<const TColumnRecord*> records;
+        std::vector<const TIndexChunk*> indexes;
+        for (auto&& c : entities) {
+            ui32 readyCount = 0;
+            while (readyCount < i.first - predCount && c.second.size()) {
+                if (c.second.front().Record) {
+                    records.emplace_back(c.second.front().Record);
+                } else {
+                    AFL_VERIFY(c.second.front().Index);
+                    indexes.emplace_back(c.second.front().Index);
+                }
+                readyCount += c.second.front().RecordsCount;
+                c.second.pop_front();
+            }
+            AFL_VERIFY(readyCount == i.first - predCount)("ready", readyCount)("cursor", i.first)("pred_cursor", predCount);
+        }
+        pages.emplace_back(std::move(records), std::move(indexes), i.first - predCount);
+        predCount = i.first;
+    }
+    for (auto&& i : entities) {
+        AFL_VERIFY(i.second.empty());
+    }
+    return pages;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

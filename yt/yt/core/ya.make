@@ -107,7 +107,6 @@ SRCS(
     misc/arithmetic_formula.cpp
     GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
-    misc/backoff_strategy_config.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
     misc/bit_packing.cpp

@@ -1,17 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    lex.go
-    node.go
-    parse.go
-)
-
-GO_TEST_SRCS(
-    lex_test.go
-    parse_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		lex.go
+		node.go
+		parse.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

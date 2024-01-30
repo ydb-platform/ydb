@@ -344,11 +344,17 @@ message TKqpExternalSink {
     string AuthInfo = 4;
 }
 
+message TKqpInternalSink {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+}
+
 message TKqpSink {
     uint32 OutputIndex = 1;
 
     oneof Type {
         TKqpExternalSink ExternalSink = 2;
+        TKqpInternalSink InternalSink = 3;
     }
 }
 

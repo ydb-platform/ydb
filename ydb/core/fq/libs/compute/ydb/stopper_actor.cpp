@@ -81,13 +81,13 @@ public:
 
     void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status != NYdb::EStatus::SUCCESS) {
+        if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND && response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
             LOG_E("Can't cancel operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvStopperResponse(ev->Get()->Issues, ev->Get()->Status));
+            Send(Parent, new TEvYdbCompute::TEvStopperResponse(response.Issues, response.Status));
             FailedAndPassAway();
             return;
         }
-        LOG_I("Operation successfully canceled");
+        LOG_I("Operation successfully canceled: " << response.Status);
         Send(Parent, new TEvYdbCompute::TEvStopperResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }

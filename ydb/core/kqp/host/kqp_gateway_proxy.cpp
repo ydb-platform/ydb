@@ -444,7 +444,8 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
+    TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
+        Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);
 
         std::pair<TString, TString> pathPair;
@@ -1243,7 +1244,7 @@ public:
     }
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings,
-        bool createDir, bool existingOk) override
+        bool createDir, bool existingOk, bool replaceIfExists) override
     {
         CHECK_PREPARED_DDL(CreateExternalTable);
 
@@ -1270,13 +1271,13 @@ public:
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
             TGenericResult result;
             result.SetSuccess();
             phyTxRemover.Forget();
             return MakeFuture(result);
         } else {
-            return Gateway->CreateExternalTable(cluster, settings, createDir, existingOk);
+            return Gateway->CreateExternalTable(cluster, settings, createDir, existingOk, replaceIfExists);
         }
     }
 

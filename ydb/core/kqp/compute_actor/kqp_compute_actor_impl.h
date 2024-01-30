@@ -15,7 +15,8 @@ using namespace NYql::NDq;
 class TKqpTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContext {
 public:
     TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, IDqChannelStorage::TWakeUpCallback&& wakeUp)
-        : TDqTaskRunnerExecutionContext(txId, withSpilling, std::move(wakeUp))
+        : TDqTaskRunnerExecutionContext(txId, std::move(wakeUp))
+        , WithSpilling_(withSpilling)
     {
     }
 
@@ -26,6 +27,13 @@ public:
     {
         return KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, holderFactory, std::move(outputs));
     }
+
+    IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const override {
+        return TDqTaskRunnerExecutionContext::CreateChannelStorage(channelId, WithSpilling_ || withSpilling);
+    }
+
+private:
+    bool WithSpilling_;
 };
 
 } // namespace NKqp

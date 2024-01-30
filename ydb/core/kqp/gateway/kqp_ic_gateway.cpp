@@ -806,12 +806,7 @@ public:
                 return InvalidCluster<TTableMetadataResult>(cluster);
             }
 
-            settings.WithExternalDatasources_ = !CheckCluster(cluster);
-            // In the case of reading from an external data source,
-            // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
-            // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
-            // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
-            return MetadataLoader->LoadTableMetadata(settings.WithExternalDatasources_ ? GetDefaultCluster() : cluster, settings.WithExternalDatasources_ ? cluster : table, settings, Database, UserToken);
+            return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken);
         } catch (yexception& e) {
             return MakeFuture(ResultFromException<TTableMetadataResult>(e));
         }
@@ -855,10 +850,11 @@ public:
         return profilesPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
+    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(metadata);
         Y_UNUSED(createDir);
         Y_UNUSED(existingOk);
+        Y_UNUSED(replaceIfExists);
         return NotImplemented<TGenericResult>();
     }
 
@@ -1187,7 +1183,7 @@ public:
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster,
                                                 const NYql::TCreateExternalTableSettings& settings,
-                                                bool createDir, bool existingOk) override {
+                                                bool createDir, bool existingOk, bool replaceIfExists) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1214,7 +1210,7 @@ public:
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {

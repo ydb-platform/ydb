@@ -291,6 +291,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -465,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }        
     }
 
-    Y_UNIT_TEST(AlterTableAddNotNullWithDefaultIndexed) {
+    Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
@@ -582,11 +583,105 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     }
 
+    Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
+        appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/AlterTableAddNotNullColumn` (
+                    Key Uint32,
+                    Value String,
+                    Value2 Int32 NOT NULL DEFAULT 1,
+                    PRIMARY KEY (Key),
+                    INDEX ByValue GLOBAL ON (Value) COVER (Value2)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        auto fQuery = [&](TString query) -> TString {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+            if (result.GetResultSets().size() > 0)
+                return NYdb::FormatResultSetYson(result.GetResultSet(0));
+            return "";
+        };
+
+        fQuery(R"(
+            UPSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (1, "Old");
+        )");
+
+        auto fCompareTable = [&](TString expected) {
+            TString query = R"(
+                SELECT * FROM `/Root/AlterTableAddNotNullColumn` ORDER BY Key;
+            )";
+            CompareYson(expected, fQuery(query));
+        };
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1]
+            ]
+        )");
+
+        fQuery(R"(
+            INSERT INTO `/Root/AlterTableAddNotNullColumn` (Key, Value) VALUES (2, "New");
+        )");
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1];[[2u];["New"];1]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7];[[2u];["New"];1;7]
+            ]
+        )");
+
+    }
+
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
         appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
+
+        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
@@ -661,7 +756,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["New"];[1]]
+                [[1u];["Old"];1];[[2u];["New"];1]
             ]
         )");
 
@@ -672,7 +767,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["New"];[2]]
+                [[1u];["Old"];1];[[2u];["New"];2]
             ]
         )");
 
@@ -686,7 +781,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         fCompareTable(R"(
             [
-                [[1u];["Old"];[1]];[[2u];["OldNew"];[2]];[[3u];["BrandNew"];[1]]
+                [[1u];["Old"];1];[[2u];["OldNew"];2];[[3u];["BrandNew"];1]
             ]
         )");
 

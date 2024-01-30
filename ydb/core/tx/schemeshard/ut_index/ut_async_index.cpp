@@ -1,6 +1,6 @@
 #include <ydb/core/base/path.h>
+#include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
 
             TVector<THolder<IEventHandle>> enqueued;
             runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-                if (ev->GetTypeRewrite() == NDataShard::TEvChangeExchange::EvEnqueueRecords) {
+                if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                     enqueued.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }

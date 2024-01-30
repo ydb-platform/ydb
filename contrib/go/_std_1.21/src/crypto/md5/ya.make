@@ -1,28 +1,69 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    md5.go
-    md5block.go
-    md5block_decl.go
-)
-
-GO_TEST_SRCS(md5_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
-IF (ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        md5block_amd64.s
+		md5.go
+		md5block.go
+		md5block_amd64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_amd64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_amd64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		md5.go
+		md5block.go
+		md5block_arm64.s
+		md5block_decl.go
     )
 ENDIF()
-
-IF (ARCH_ARM64)
-    SRCS(
-        md5block_arm64.s
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

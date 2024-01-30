@@ -130,9 +130,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
-    requestInfo->second.Done = true;
-
     Y_ABORT_UNLESS(requestInfo != CookieToRequestInfo.end());
+
+    requestInfo->second.Done = true;
     if (ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         KAFKA_LOG_CRIT("Commit offset error. status# " << EErrorCode_Name(ev->Get()->Record.GetErrorCode()) << ", reason# " << ev->Get()->Record.GetErrorReason());
     }

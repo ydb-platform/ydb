@@ -59,7 +59,10 @@ public:
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
-        ServerSettings = new TServerSettings(port);
+
+        NKikimrProto::TAuthConfig authConfig = appConfig.GetAuthConfig();
+        authConfig.SetUseBuiltinDomain(true);
+        ServerSettings = new TServerSettings(port, authConfig);
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
@@ -78,7 +81,6 @@ public:
             ServerSettings->AddStoragePoolType("hdd2");
         }
         ServerSettings->AppConfig->MergeFrom(appConfig);
-        ServerSettings->AuthConfig = appConfig.GetAuthConfig();
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);

@@ -626,7 +626,7 @@ protected:
             auto& record = channelsInfoEv->Record;
 
             for (auto& channelId : channelIds) {
-                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion);
+                FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
             }
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
@@ -737,28 +737,45 @@ protected:
         }
     }
 
+    void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& extSink = sink.GetExternalSink();
+        auto sinkName = extSink.GetSinkName();
+        if (sinkName) {
+            auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
+            task.Meta.SecureParams.emplace(sinkName, structuredToken);
+            if (GetUserRequestContext()->TraceId) {
+                task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
+                // "fq.restart_count"
+            }
+        }
+
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = extSink.GetType();
+        output.SinkSettings = extSink.GetSettings();
+    }
+
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+        const auto& intSink = sink.GetInternalSink();
+        auto& output = task.Outputs[sink.GetOutputIndex()];
+        output.Type = TTaskOutputType::Sink;
+        output.SinkType = intSink.GetType();
+        output.SinkSettings = intSink.GetSettings();
+    }
+
     void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
-            YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
-            const auto& extSink = sink.GetExternalSink();
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
-            auto sinkName = extSink.GetSinkName();
-            if (sinkName) {
-                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
-                task.Meta.SecureParams.emplace(sinkName, structuredToken);
-                if (GetUserRequestContext()->TraceId) {
-                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->CustomerSuppliedId);
-                    // "fq.restart_count"
-                }
+            if (sink.HasInternalSink()) {
+                BuildInternalSinks(sink, task);
+            } else if (sink.HasExternalSink()) {
+                BuildExternalSinks(sink, task);
+            } else {
+                YQL_ENSURE(false, "unknown sink type");
             }
-
-            auto& output = task.Outputs[sink.GetOutputIndex()];
-            output.Type = TTaskOutputType::Sink;
-            output.SinkType = extSink.GetType();
-            output.SinkSettings = extSink.GetSettings();
         }
     }
 
@@ -949,7 +966,7 @@ protected:
                 settings->SetMaxInFlightShards(*maxInFlightShards);
             }
 
-            if (!limitTasksPerNode && shardId) {
+            if (shardId) {
                 settings->SetShardIdHint(*shardId);
             }
 
@@ -1025,6 +1042,11 @@ protected:
                     NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
 
                     const auto& shardsRangesForTask = rangesDistribution[taskIndex];
+
+                    if (shardsRangesForTask.size() > 1) {
+                        settings->ClearShardIdHint();
+                    }
+
                     for (const auto& shardRanges : shardsRangesForTask) {
                         shardRanges->SerializeTo(settings);
                     }
@@ -1118,6 +1140,7 @@ protected:
 
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     UnknownAffectedShardCount = true;
+		    [[fallthrough]];
                 case NKqpProto::TKqpPhyConnection::kMap:
                     partitionsCount = originStageInfo.Tasks.size();
                     break;
@@ -1348,6 +1371,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
+                        BuildSinks(stage, task);
                     }
                 }
 
@@ -1375,6 +1399,7 @@ protected:
                         task.Meta.ScanTask = true;
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
+                        BuildSinks(stage, task);
                     }
                 }
             }
@@ -1744,7 +1769,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    const bool enableOlapSink);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

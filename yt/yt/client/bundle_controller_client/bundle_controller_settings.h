@@ -6,7 +6,6 @@
 
 #include <yt/yt/client/tablet_client/public.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
 #include <yt/yt_proto/yt/client/bundle_controller/proto/bundle_controller_service.pb.h>

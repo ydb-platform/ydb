@@ -1,28 +1,60 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    goos.go
-)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        unix.go
-        zgoos_linux.go
+		goos.go
+		unix.go
+		zgoos_linux.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		goos.go
+		unix.go
+		zgoos_linux.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		goos.go
+		unix.go
+		zgoos_linux.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		goos.go
+		unix.go
+		zgoos_darwin.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		goos.go
+		unix.go
+		zgoos_darwin.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		goos.go
+		unix.go
+		zgoos_darwin.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		goos.go
+		nonunix.go
+		zgoos_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		goos.go
+		nonunix.go
+		zgoos_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		goos.go
+		nonunix.go
+		zgoos_windows.go
     )
 ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        unix.go
-        zgoos_darwin.go
-    )
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        nonunix.go
-        zgoos_windows.go
-    )
-ENDIF()
-
 END()

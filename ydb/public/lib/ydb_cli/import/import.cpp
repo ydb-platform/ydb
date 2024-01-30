@@ -349,7 +349,7 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     auto finish = TInstant::Now();
     auto duration = finish - start;
     progressBar.SetProcess(100);
-    Cout << "Elapsed: " << duration.SecondsFloat() << " sec\n";
+    Cerr << "Elapsed: " << duration.SecondsFloat() << " sec\n";
 
     return MakeStatus(EStatus::SUCCESS);
 }

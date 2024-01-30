@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <util/string/builder.h>

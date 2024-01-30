@@ -1,18 +1,65 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    client.go
-    debug.go
-    server.go
-)
-
-GO_TEST_SRCS(
-    client_test.go
-    server_test.go
-)
-
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		client.go
+		debug.go
+		server.go
+    )
+ENDIF()
 END()
 
+
 RECURSE(
-    jsonrpc
+	jsonrpc
 )

@@ -173,6 +173,7 @@ int BuildAST(int argc, char* argv[]) {
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
     clusterMapping["pg_catalog"] = NYql::PgProviderName;
+    clusterMapping["information_schema"] = NYql::PgProviderName;
 
     THashMap<TString, TString> tables;
     THashSet<TString> flags;
@@ -251,7 +252,7 @@ int BuildAST(int argc, char* argv[]) {
             queries.push_back(queryString);
         }
 
-        for (const auto query: queries) {
+        for (const auto& query: queries) {
             if (query.empty()) {
                 continue;
             }

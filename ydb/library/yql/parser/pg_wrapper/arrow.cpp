@@ -19,7 +19,10 @@ extern "C" {
 namespace NYql {
 
 extern "C" {
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 #include "pg_kernels_fwd.inc"
+Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 struct TExecs {
@@ -114,7 +117,7 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
     for (size_t i = 0; i < length; ++i) {
         auto item = reader.GetItem(*data, i);
         if (!item) {
-            builder.AppendNull();
+            ARROW_OK(builder.AppendNull());
             continue;
         }
 

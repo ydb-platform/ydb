@@ -1,0 +1,101 @@
+<sql-statement>
+--
+-- CHAR
+--
+-- fixed-length by value
+-- internally passed by value if <= 4 bytes in storage
+SELECT char 'c' = char 'c' AS true;
+</sql-statement>
+<sql-statement>
+--
+-- Build a table for testing
+--
+CREATE TABLE CHAR_TBL(f1 char);
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('a');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('A');
+</sql-statement>
+<sql-statement>
+-- any of the following three input formats are acceptable
+INSERT INTO CHAR_TBL (f1) VALUES ('1');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES (2);
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('3');
+</sql-statement>
+<sql-statement>
+-- zero-length char
+INSERT INTO CHAR_TBL (f1) VALUES ('');
+</sql-statement>
+<sql-statement>
+-- try char's of greater than 1 length
+INSERT INTO CHAR_TBL (f1) VALUES ('cd');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('c     ');
+</sql-statement>
+<sql-statement>
+SELECT * FROM CHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 <> 'a';
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 = 'a';
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 < 'a';
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 <= 'a';
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 > 'a';
+</sql-statement>
+<sql-statement>
+SELECT c.*
+   FROM CHAR_TBL c
+   WHERE c.f1 >= 'a';
+</sql-statement>
+<sql-statement>
+DROP TABLE CHAR_TBL;
+</sql-statement>
+<sql-statement>
+--
+-- Now test longer arrays of char
+--
+CREATE TABLE CHAR_TBL(f1 char(4));
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('a');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('ab');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('abcd');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('abcde');
+</sql-statement>
+<sql-statement>
+INSERT INTO CHAR_TBL (f1) VALUES ('abcd    ');
+</sql-statement>
+<sql-statement>
+SELECT * FROM CHAR_TBL;
+</sql-statement>

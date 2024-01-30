@@ -1726,13 +1726,17 @@ struct Schema : NIceDb::Schema {
         struct ColumnNo : Column<2, NScheme::NTypeIds::Uint64> {};
         struct ColumnName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct DefaultFromLiteral : Column<4, NScheme::NTypeIds::String> {};
+        struct NotNull : Column<5, NScheme::NTypeIds::Bool> {};
+        struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
             Id,
             ColumnNo,
             ColumnName,
-            DefaultFromLiteral
+            DefaultFromLiteral,
+            NotNull,
+            FamilyName
         >;
     };
 

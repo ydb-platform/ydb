@@ -22,9 +22,8 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
     return out;
 }
 
-TIndexInfo::TIndexInfo(const TString& name, ui32 id)
+TIndexInfo::TIndexInfo(const TString& name)
     : NTable::TScheme::TTableSchema()
-    , Id(id)
     , Name(name)
 {}
 
@@ -326,6 +325,12 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     }
 }
 
+std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
+    auto result = GetColumnLoaderOptional(columnId);
+    AFL_VERIFY(result);
+    return result;
+}
+
 std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
     if (it == ColumnFeatures.end()) {
@@ -373,6 +378,12 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     if (schema.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "incorrect_engine_in_schema");
         return false;
+    }
+
+    for (const auto& idx : schema.GetIndexes()) {
+        NIndexes::TIndexMetaContainer meta;
+        AFL_VERIFY(meta.DeserializeFromProto(idx));
+        Indexes.emplace(meta->GetIndexId(), meta);
     }
 
     for (const auto& col : schema.GetColumns()) {
@@ -451,7 +462,7 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
 }
 
 std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    TIndexInfo result("", 0);
+    TIndexInfo result("");
     if (!result.DeserializeFromProto(schema)) {
         return std::nullopt;
     }

@@ -6,11 +6,11 @@
 
 namespace NKikimr::NOlap {
 
-std::vector<IPortionColumnChunk::TPtr> TSplittedColumnChunk::DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TSplittedColumnChunk::DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const {
     auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(Data.GetSlicedBatch(), Data.GetSerializedChunk(), splitSizes);
-    std::vector<IPortionColumnChunk::TPtr> newChunks;
+    std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
     for (auto&& i : chunks) {
-        newChunks.emplace_back(std::make_shared<TSplittedColumnChunk>(ColumnId, i, SchemaInfo));
+        newChunks.emplace_back(std::make_shared<TSplittedColumnChunk>(GetColumnId(), i, SchemaInfo));
     }
     return newChunks;
 }
@@ -19,7 +19,9 @@ TString TSplittedColumnChunk::DoDebugString() const {
     return TStringBuilder() << "records_count=" << GetRecordsCount() << ";data=" << NArrow::DebugJson(Data.GetSlicedBatch(), 3, 3) << ";";
 }
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::Array>& data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
+    AFL_VERIFY(data);
+    AFL_VERIFY(field);
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
     auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});
     return Split(batch, maxBlobSize);

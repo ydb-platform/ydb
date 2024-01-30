@@ -176,6 +176,25 @@ bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
     }
 }
 
+bool NeedReportAst(const Ydb::Query::ExecuteQueryRequest& req) {
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            return true;
+
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            switch (req.stats_mode()) {
+                case Ydb::Query::StatsMode::STATS_MODE_FULL:
+                case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+                    return true;
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -382,6 +401,9 @@ private:
             if (NeedReportStats(*Request_->GetProtoRequest())) {
                 hasTrailingMessage = true;
                 FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+                if (NeedReportAst(*Request_->GetProtoRequest())) {
+                    response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
+                }
             }
 
             if (hasTrailingMessage) {

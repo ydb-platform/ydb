@@ -37,6 +37,7 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
     externaDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
     externaDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externaDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
+    externaDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     TString authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {

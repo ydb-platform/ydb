@@ -58,7 +58,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
-    NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
+    NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> OptEnableConstantFolding;
 
     NCommon::TConfSetting<ui32, false> MaxDPccpDPTableSize;
@@ -81,7 +81,6 @@ struct TKikimrSettings {
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
-    bool HasOptEnableCostBasedOptimization() const;
     bool HasOptEnableConstantFolding() const;
 
 

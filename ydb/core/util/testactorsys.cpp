@@ -225,8 +225,7 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 }
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
-    auto *appData = GetAppData();
-    for (const auto& [id, domain] : appData->DomainsInfo->Domains) {
+    for (const auto& [id, domain] : GetDomainsInfo()->Domains) {
         const ui64 stateStorageGroup = domain->DefaultStateStorageGroup;
         ui32 numReplicas = 3;
 
@@ -282,5 +281,7 @@ TIntrusivePtr<IMonotonicTimeProvider> TTestActorSystem::CreateMonotonicTimeProvi
     };
     return MakeIntrusive<TTestActorMonotonicTimeProvider>();
 }
+
+const ui32 TTestActorSystem::SYSTEM_POOL_ID = 0;
 
 }

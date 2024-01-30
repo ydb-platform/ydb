@@ -46,7 +46,6 @@ void TKqpComputeActor::DoBootstrap() {
     execCtx.ComputeCtx = &ComputeCtx;
     execCtx.ComputationFactory = NMiniKQL::GetKqpActorComputeFactory(&ComputeCtx);
     execCtx.ApplyCtx = nullptr;
-    execCtx.Alloc = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
 
@@ -68,13 +67,12 @@ void TKqpComputeActor::DoBootstrap() {
         settings.ReadRanges.push_back(readRange);
     }
 
-    auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocator(), execCtx, settings, logger);
     SetTaskRunner(taskRunner);
 
     auto wakeup = [this]{ ContinueExecute(); };
     try {
-        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling,
-            std::move(wakeup)));
+        PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, std::move(wakeup)));
     } catch (const NMiniKQL::TKqpEnsureFail& e) {
         InternalError((TIssuesIds::EIssueCode) e.GetCode(), e.GetMessage());
         return;

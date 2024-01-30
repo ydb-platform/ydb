@@ -44,45 +44,37 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         p5->AddParentPartitionIds(4);
 
         TPartitionGraph graph;
-        graph.Rebuild(config);
+        graph = std::move(MakePartitionGraph(config));
 
-        const auto n0o = graph.GetPartition(0);
-        const auto n1o = graph.GetPartition(1);
-        const auto n2o = graph.GetPartition(2);
-        const auto n3o = graph.GetPartition(3);
-        const auto n4o = graph.GetPartition(4);
-        const auto n5o = graph.GetPartition(5);
+        const auto n0 = graph.GetPartition(0);
+        const auto n1 = graph.GetPartition(1);
+        const auto n2 = graph.GetPartition(2);
+        const auto n3 = graph.GetPartition(3);
+        const auto n4 = graph.GetPartition(4);
+        const auto n5 = graph.GetPartition(5);
 
-        UNIT_ASSERT(n0o);
-        UNIT_ASSERT(n1o);
-        UNIT_ASSERT(n2o);
-        UNIT_ASSERT(n3o);
-        UNIT_ASSERT(n4o);
-        UNIT_ASSERT(n5o);
+        UNIT_ASSERT(n0);
+        UNIT_ASSERT(n1);
+        UNIT_ASSERT(n2);
+        UNIT_ASSERT(n3);
+        UNIT_ASSERT(n4);
+        UNIT_ASSERT(n5);
 
-        auto& n0 = *n0o.value();
-        auto& n1 = *n1o.value();
-        auto& n2 = *n2o.value();
-        auto& n3 = *n3o.value();
-        auto& n4 = *n4o.value();
-        auto& n5 = *n5o.value();
+        UNIT_ASSERT_VALUES_EQUAL(n0->Parents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n0->Children.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n0->HierarhicalParents.size(), 0);
 
+        UNIT_ASSERT_VALUES_EQUAL(n1->Parents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n1->Children.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(n1->HierarhicalParents.size(), 0);
 
-        UNIT_ASSERT_EQUAL(n0.Parents.size(), 0);
-        UNIT_ASSERT_EQUAL(n0.Children.size(), 0);
-        UNIT_ASSERT_EQUAL(n0.HierarhicalParents.size(), 0);
-
-        UNIT_ASSERT_EQUAL(n1.Parents.size(), 0);
-        UNIT_ASSERT_EQUAL(n1.Children.size(), 1);
-        UNIT_ASSERT_EQUAL(n1.HierarhicalParents.size(), 0);
-
-        UNIT_ASSERT_EQUAL_C(n5.Parents.size(), 2, "n5.Parents.size() == " << n5.Parents.size() << " but expected 2");
-        UNIT_ASSERT_EQUAL_C(n5.Children.size(), 0, "n5.Children.size() == " << n5.Children.size() << " but expected 0");
-        UNIT_ASSERT_EQUAL_C(n5.HierarhicalParents.size(), 4, "n5.HierarhicalParents.size() == " << n5.HierarhicalParents.size() << " but expected 4");
-        UNIT_ASSERT(std::find(n5.HierarhicalParents.cbegin(),  n5.HierarhicalParents.cend(), &n0) == n5.HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5.HierarhicalParents.cbegin(),  n5.HierarhicalParents.cend(), &n1) != n5.HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5.HierarhicalParents.cbegin(),  n5.HierarhicalParents.cend(), &n2) != n5.HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5.HierarhicalParents.cbegin(),  n5.HierarhicalParents.cend(), &n3) != n5.HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5.HierarhicalParents.cbegin(),  n5.HierarhicalParents.cend(), &n4) != n5.HierarhicalParents.end());
+        UNIT_ASSERT_VALUES_EQUAL(n5->Parents.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(n5->Children.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(n5->HierarhicalParents.size(), 4);
+        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n0) == n5->HierarhicalParents.end());
+        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n1) != n5->HierarhicalParents.end());
+        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n2) != n5->HierarhicalParents.end());
+        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n3) != n5->HierarhicalParents.end());
+        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n4) != n5->HierarhicalParents.end());
     }
 }

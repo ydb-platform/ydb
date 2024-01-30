@@ -7,10 +7,12 @@
 
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include "indexes/abstract/meta.h"
 
 namespace arrow {
     class Array;
@@ -34,27 +36,31 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     THashMap<ui32, TColumnFeatures> ColumnFeatures;
     THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
-    TIndexInfo(const TString& name, ui32 id);
+    THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
+    TIndexInfo(const TString& name);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
     void BuildSchemaWithSpecials();
     void BuildArrowSchema();
     void InitializeCaches();
 public:
-    static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
-    static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";
+    static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
+    static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
     static const TString STORE_INDEX_STATS_TABLE;
     static const TString TABLE_INDEX_STATS_TABLE;
 
+    const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
+        return Indexes;
+    }
+
     enum class ESpecialColumn : ui32 {
-        PLAN_STEP = 0xffffff00,
-        TX_ID,
+        PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
+        TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX
     };
 
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
-            << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
             << ")";
@@ -92,16 +98,11 @@ public:
 
 public:
     static TIndexInfo BuildDefault() {
-        TIndexInfo result("dummy", 0);
+        TIndexInfo result("dummy");
         return result;
     }
 
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
-
-    /// Returns id of the index.
-    ui32 GetId() const noexcept {
-        return Id;
-    }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
         static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
@@ -114,6 +115,37 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
     std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const;
+    std::shared_ptr<TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
+    std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
+        auto f = GetColumnFieldOptional(columnId);
+        if (!f) {
+            return {};
+        }
+        return f->name();
+    }
+
+    NIndexes::TIndexMetaContainer GetIndexOptional(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        if (it == Indexes.end()) {
+            return NIndexes::TIndexMetaContainer();
+        }
+        return it->second;
+    }
+
+    std::optional<TString> GetIndexNameOptional(const ui32 indexId) const {
+        auto meta = GetIndexOptional(indexId);
+        if (!meta) {
+            return {};
+        }
+        return meta->GetIndexName();
+    }
+
+    void AppendIndexes(std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData) const {
+        for (auto&& i : Indexes) {
+            std::shared_ptr<IPortionDataChunk> chunk = i.second->BuildIndex(i.first, originalData, *this);
+            AFL_VERIFY(originalData.emplace(i.first, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
+        }
+    }
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnId(const std::string& name) const;
@@ -206,7 +238,6 @@ public:
     bool CheckCompatible(const TIndexInfo& other) const;
 
 private:
-    ui32 Id;
     ui64 Version = 0;
     TString Name;
     std::shared_ptr<arrow::Schema> Schema;

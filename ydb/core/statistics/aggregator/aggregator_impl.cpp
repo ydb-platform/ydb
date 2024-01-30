@@ -35,6 +35,27 @@ void TStatisticsAggregator::DefaultSignalTabletActive(const TActorContext& ctx) 
     Y_UNUSED(ctx);
 }
 
+void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) {
+    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+    ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+}
+
+void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    SA_LOG_I("[" << TabletID() << "] Subscribed for config changes");
+}
+
+void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    const auto& config = record.GetConfig();
+    if (config.HasFeatureFlags()) {
+        const auto& featureFlags = config.GetFeatureFlags();
+        EnableStatistics = featureFlags.GetEnableStatistics();
+    }
+    auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
+    Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 void TStatisticsAggregator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev) {
     auto pipeServerId = ev->Get()->ServerId;
 
@@ -97,6 +118,12 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectNode::TPtr& ev) {
         RequestedSchemeShards.insert(ssEntry.GetSchemeShardId());
     }
 
+    if (!EnableStatistics) {
+        auto disabled = std::make_unique<TEvStatistics::TEvStatisticsIsDisabled>();
+        Send(NStat::MakeStatServiceID(nodeId), disabled.release());
+        return;
+    }
+
     if (!IsPropagateInFlight) {
         Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
         IsPropagateInFlight = true;
@@ -123,6 +150,12 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvRequestStats::TPtr& ev) {
     SA_LOG_D("[" << TabletID() << "] EvRequestStats"
         << ", node id = " << nodeId
         << ", schemeshard count = " << record.NeedSchemeShardsSize());
+
+    if (!EnableStatistics) {
+        auto disabled = std::make_unique<TEvStatistics::TEvStatisticsIsDisabled>();
+        Send(NStat::MakeStatServiceID(nodeId), disabled.release());
+        return;
+    }
 
     std::vector<TSSId> ssIds;
     ssIds.reserve(record.NeedSchemeShardsSize());
@@ -151,6 +184,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvConnectSchemeShard::TPtr& e
 void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
     SA_LOG_D("[" << TabletID() << "] EvFastPropagateCheck");
 
+    if (!EnableStatistics) {
+        return;
+    }
+
     PropagateFastStatistics();
 
     FastCheckInFlight = false;
@@ -162,7 +199,9 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_D("[" << TabletID() << "] EvPropagate");
 
-    PropagateStatistics();
+    if (EnableStatistics) {
+        PropagateStatistics();
+    }
 
     Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
 }
@@ -176,10 +215,10 @@ void TStatisticsAggregator::ProcessRequests(TNodeId nodeId, const std::vector<TS
         for (const auto& ssId : ssIds) {
             FastSchemeShards.insert(ssId);
         }
-        if (!FastCheckInFlight) {
-            Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvFastPropagateCheck());
-            FastCheckInFlight = true;
-        }
+    }
+    if (!FastCheckInFlight) {
+        Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvFastPropagateCheck());
+        FastCheckInFlight = true;
     }
 }
 
@@ -247,6 +286,10 @@ void TStatisticsAggregator::PropagateFastStatistics() {
 void TStatisticsAggregator::PropagateStatisticsImpl(
     const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds)
 {
+    if (nodeIds.empty() || ssIds.empty()) {
+        return;
+    }
+
     TNodeId leadingNodeId = nodeIds[0];
 
     for (size_t index = 0; index < ssIds.size(); ) {

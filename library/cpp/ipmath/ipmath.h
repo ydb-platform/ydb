@@ -152,6 +152,11 @@ private:
 
 class TIpAddressRange::TIterator {
 public:
+    using value_type = TIpv6Address;
+    using difference_type = std::ptrdiff_t;
+    using reference = TIpv6Address&;
+    using iterator_category = std::forward_iterator_tag;
+
     TIterator(TIpv6Address val) noexcept;
 
     bool operator==(const TIpAddressRange::TIterator& other) noexcept;

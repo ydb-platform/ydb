@@ -28,6 +28,10 @@ using TCasts = THashMap<ui32, TCastDesc>;
 
 using TAggregations = THashMap<ui32, TAggregateDesc>;
 
+using TAms = THashMap<ui32, TAmDesc>;
+
+using TNamespaces = THashMap<decltype(TNamespaceDesc::Oid), TNamespaceDesc>;
+
 // We parse OpFamilies' IDs for now. If we ever needed oid_symbol,
 // create TOpFamilyDesc class alike other catalogs
 using TOpFamilies = THashMap<TString, ui32>;
@@ -274,6 +278,8 @@ public:
             LastOperator.OperId = FromString<ui32>(value);
         } else if (key == "oprname") {
             LastOperator.Name = value;
+        } else if (key == "descr") {
+            LastOperator.Descr = value;
         } else if (key == "oprkind") {
             if (value == "r") {
                 LastOperator.Kind = EOperKind::RightUnary;
@@ -355,6 +361,8 @@ public:
             LastProc.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
             IsSupported = false;
+        } else if (key == "descr") {
+            LastProc.Descr = value;
         } else if (key == "prokind") {
             if (value == "f") {
                 LastProc.Kind = EProcKind::Function;
@@ -493,6 +501,8 @@ public:
             LastType.TypeId = FromString<ui32>(value);
         } else if (key == "array_type_oid") {
             LastType.ArrayTypeId = FromString<ui32>(value);
+        } else if (key == "descr") {
+            LastType.Descr = value;
         } else if (key == "typname") {
             LastType.Name = value;
         } else if (key == "typcategory") {
@@ -1084,6 +1094,40 @@ private:
     bool IsSupported = true;
 };
 
+
+class TAmsParser : public TParser {
+public:
+    TAmsParser(TAms& ams) : Ams_(ams) {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            CurrDesc_.Oid = FromString<ui32>(value);
+        } else if (key == "descr") {
+            CurrDesc_.Descr = value;
+        } else if (key == "amname") {
+            CurrDesc_.AmName = value;
+        } else if (key == "amtype") {
+            Y_ENSURE(value.Size() == 1);
+            if ((char)EAmType::Index == value[0]) {
+                CurrDesc_.AmType = EAmType::Index;
+            } else if ((char)EAmType::Table == value[0]) {
+                CurrDesc_.AmType = EAmType::Table;
+            } else {
+                Y_ENSURE(false, "Expected correct AmType");
+            }
+        }
+    }
+
+    void OnFinish() override {
+        Ams_[CurrDesc_.Oid] = std::move(CurrDesc_);
+        CurrDesc_ = TAmDesc();
+    }
+
+private:
+    TAmDesc CurrDesc_;
+    TAms& Ams_;
+};
+
 class TAmProcsParser : public TParser {
 public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
@@ -1169,6 +1213,8 @@ public:
         } else if (key == "conforencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
             LastConversion.From = value.substr(3);
+        } else if (key == "descr") {
+            LastConversion.Descr = value;
         } else if (key == "contoencoding") {
             Y_ENSURE(value.StartsWith("PG_"));
             LastConversion.To = value.substr(3);
@@ -1274,6 +1320,24 @@ TConversions ParseConversions(const TString& dat, const THashMap<TString, TVecto
     return ret;
 }
 
+TAms ParseAms(const TString& dat) {
+    TAms ret;
+    TAmsParser parser(ret);
+    parser.Do(dat);
+    return ret;
+}
+
+TNamespaces FillNamespaces() {
+    const ui32 PgInformationSchemaNamepace = 1;
+    const ui32 PgCatalogNamepace = 11;
+    const ui32 PgPublicNamepace = 2200;
+    return TNamespaces{
+        {PgInformationSchemaNamepace, TNamespaceDesc{PgInformationSchemaNamepace, "information_schema", "information_schema namespace"}},
+        {PgPublicNamepace, TNamespaceDesc{PgPublicNamepace, "public", "public namespace"}},
+        {PgCatalogNamepace, TNamespaceDesc{PgCatalogNamepace, "pg_catalog", "pg_catalog namespace"}},
+    };
+}
+
 struct TCatalog {
     TCatalog()
         : ProhibitedProcs({
@@ -1336,8 +1400,123 @@ struct TCatalog {
             "lo_truncate64",
             "lo_close",
             "lo_unlink"
+        }),
+        StaticTables({
+            {"pg_catalog", "pg_type"},
+            {"pg_catalog", "pg_database"},
+            {"pg_catalog", "pg_tablespace"},
+            {"pg_catalog", "pg_shdescription"},
+            {"pg_catalog", "pg_trigger"},
+            {"pg_catalog", "pg_locks"},
+            {"pg_catalog", "pg_stat_gssapi"},
+            {"pg_catalog", "pg_inherits"},
+            {"pg_catalog", "pg_stat_activity"},
+            {"pg_catalog", "pg_timezone_names"},
+            {"pg_catalog", "pg_timezone_abbrevs"},
+            {"pg_catalog", "pg_tables"},
+            {"pg_catalog", "pg_description"},
+            {"pg_catalog", "pg_am"},
+            {"pg_catalog", "pg_namespace"},
+            {"information_schema", "tables"},
+            {"information_schema", "columns"},
+            {"information_schema", "table_constraints"},
+        }),
+        AllStaticColumns({
+            {"pg_catalog", "pg_type", "oid", "oid"},
+            {"pg_catalog", "pg_type", "typname", "name"},
+            {"pg_catalog", "pg_type", "typinput", "regproc"},
+            {"pg_catalog", "pg_type", "typnamespace", "oid"},
+            {"pg_catalog", "pg_type", "typtype", "char"},
+
+            {"pg_catalog", "pg_database", "oid", "oid"},
+            {"pg_catalog", "pg_database", "datname", "name"},
+            {"pg_catalog", "pg_database", "encoding", "int4"},
+            {"pg_catalog", "pg_database", "datallowconn", "bool"},
+            {"pg_catalog", "pg_database", "datistemplate", "bool"},
+            {"pg_catalog", "pg_database", "datdba", "oid"},
+
+            {"pg_catalog", "pg_tablespace", "oid", "oid"},
+            {"pg_catalog", "pg_tablespace", "spcname", "name"},
+
+            {"pg_catalog", "pg_shdescription", "objoid", "oid"},
+            {"pg_catalog", "pg_shdescription", "classoid", "oid"},
+            {"pg_catalog", "pg_shdescription", "description", "text"},
+
+            {"pg_catalog", "pg_trigger", "tgrelid", "oid"},
+            {"pg_catalog", "pg_trigger", "tgenabled", "char"},
+
+            {"pg_catalog", "pg_locks", "transactionid", "xid"},
+
+            {"pg_catalog", "pg_stat_gssapi", "encrypted", "bool"},
+            {"pg_catalog", "pg_stat_gssapi", "gss_authenticated", "bool"},
+            {"pg_catalog", "pg_stat_gssapi", "pid", "int4"},
+
+            {"pg_catalog", "pg_inherits", "inhrelid", "oid"},
+            {"pg_catalog", "pg_inherits", "inhparent", "oid"},
+
+            {"pg_catalog", "pg_stat_activity", "application_name", "text"},
+            {"pg_catalog", "pg_stat_activity", "backend_start", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "backend_type", "text"},
+            {"pg_catalog", "pg_stat_activity", "client_addr", "inet"},
+            {"pg_catalog", "pg_stat_activity", "datname", "name"},
+            {"pg_catalog", "pg_stat_activity", "pid", "int4"},
+            {"pg_catalog", "pg_stat_activity", "query", "text"},
+            {"pg_catalog", "pg_stat_activity", "query_start", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "state", "text"},
+            {"pg_catalog", "pg_stat_activity", "state_change", "timestamptz"},
+            {"pg_catalog", "pg_stat_activity", "usename", "name"},
+            {"pg_catalog", "pg_stat_activity", "wait_event", "text"},
+            {"pg_catalog", "pg_stat_activity", "wait_event_type", "text"},
+            {"pg_catalog", "pg_stat_activity", "xact_start", "timestamptz"},
+
+            {"pg_catalog", "pg_timezone_names", "name", "text"},
+            {"pg_catalog", "pg_timezone_names", "is_dst", "bool"},
+
+            {"pg_catalog", "pg_timezone_abbrevs", "abbrev", "text"},
+            {"pg_catalog", "pg_timezone_abbrevs", "is_dst", "bool"},
+
+            {"pg_catalog", "pg_tables", "schemaname", "name"},
+            {"pg_catalog", "pg_tables", "tablename", "name"},
+
+            {"pg_catalog", "pg_description", "objoid", "oid"},
+            {"pg_catalog", "pg_description", "classoid", "oid"},
+            {"pg_catalog", "pg_description", "objsubid", "int4"},
+            {"pg_catalog", "pg_description", "description", "text"},
+
+            {"pg_catalog", "pg_am", "oid", "oid"},
+            {"pg_catalog", "pg_am", "amname", "name"},
+            {"pg_catalog", "pg_am", "amtype", "char"},
+
+            {"pg_catalog", "pg_namespace", "nspname", "name"},
+            {"pg_catalog", "pg_namespace", "oid", "oid"},
+
+            {"information_schema", "tables", "table_schema", "name"},
+            {"information_schema", "tables", "table_name", "name"},
+
+            {"information_schema", "columns", "table_schema", "name"},
+            {"information_schema", "columns", "table_name", "name"},
+            {"information_schema", "columns", "column_name", "name"},
+            {"information_schema", "columns", "udt_name", "name"},
+
+            {"information_schema", "table_constraints", "constraint_schema", "name"},
+            {"information_schema", "table_constraints", "table_name", "name"},
+            {"information_schema", "table_constraints", "constraint_type", "varchar"},
         })
     {
+        for (const auto& t : StaticTables) {
+            StaticColumns.insert(std::make_pair(t, TVector<TColumnInfo>()));
+        }
+
+        for (const auto& c: AllStaticColumns) {
+            auto tablePtr = StaticColumns.FindPtr(TTableInfo{c.Schema, c.TableName});
+            Y_ENSURE(tablePtr);
+            tablePtr->push_back(c);
+        }
+
+        for (const auto& t : StaticColumns) {
+            Y_ENSURE(!t.second.empty());
+        }
+
         TString typeData;
         Y_ENSURE(NResource::FindExact("pg_type.dat", &typeData));
         TString opData;
@@ -1358,6 +1537,8 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_amop.dat", &amOpData));
         TString conversionData;
         Y_ENSURE(NResource::FindExact("pg_conversion.dat", &conversionData));
+        TString amData;
+        Y_ENSURE(NResource::FindExact("pg_am.dat", &amData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -1480,6 +1661,8 @@ struct TCatalog {
         OpClasses = ParseOpClasses(opClassData, TypeByName, opFamilies);
         AmOps = ParseAmOps(amOpData, TypeByName, Types, OperatorsByName, Operators, opFamilies);
         AmProcs = ParseAmProcs(amProcData, TypeByName, ProcByName, Procs, opFamilies);
+        Ams = ParseAms(amData);
+        Namespaces = FillNamespaces();
         for (auto& [k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
                 auto lookupId = (v.TypeId == VarcharOid ? TextOid : v.TypeId);
@@ -1522,6 +1705,8 @@ struct TCatalog {
     TTypes Types;
     TCasts Casts;
     TAggregations Aggregations;
+    TAms Ams;
+    TNamespaces Namespaces;
     TOpClasses OpClasses;
     TAmOps AmOps;
     TAmProcs AmProcs;
@@ -1532,6 +1717,10 @@ struct TCatalog {
     THashMap<TString, TVector<ui32>> OperatorsByName;
     THashMap<TString, TVector<ui32>> AggregationsByName;
     THashSet<TString> ProhibitedProcs;
+
+    TVector<TTableInfo> StaticTables;
+    TVector<TColumnInfo> AllStaticColumns;
+    THashMap<TTableInfo, TVector<TColumnInfo>> StaticColumns;
 };
 
 bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
@@ -1661,6 +1850,55 @@ void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f) {
         f(typeId, desc);
     }
 }
+
+const TAmDesc& LookupAm(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto typePtr = catalog.Ams.FindPtr(oid);
+    if (!typePtr) {
+        throw yexception() << "No such am: " << oid;
+    }
+
+    return *typePtr;
+}
+
+void EnumAm(std::function<void(ui32, const TAmDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.Ams) {
+        f(oid, desc);
+    }
+}
+
+void EnumConversions(std::function<void(const TConversionDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [_, desc] : catalog.Conversions) {
+        f(desc);
+    }
+}
+
+const TNamespaceDesc& LookupNamespace(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto typePtr = catalog.Namespaces.FindPtr(oid);
+    if (!typePtr) {
+        throw yexception() << "No such namespace: " << oid;
+    }
+
+    return *typePtr;
+}
+
+void EnumNamespace(std::function<void(ui32, const TNamespaceDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.Namespaces) {
+        f(oid, desc);
+    }
+}
+
+void EnumOperators(std::function<void(const TOperDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [_, desc] : catalog.Operators) {
+        f(desc);
+    }
+}
+
 
 bool HasCast(ui32 sourceId, ui32 targetId) {
     const auto& catalog = TCatalog::Instance();
@@ -2639,6 +2877,16 @@ const TConversionDesc& LookupConversion(const TString& from, const TString& to) 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
     const auto& catalog = TCatalog::Instance();
     return IsCompatibleTo(actualType, expectedType, catalog.Types);
+}
+
+const TVector<TTableInfo>& GetStaticTables() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticTables;
+}
+
+const THashMap<TTableInfo, TVector<TColumnInfo>>& GetStaticColumns() {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.StaticColumns;
 }
 
 }

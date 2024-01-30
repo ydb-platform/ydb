@@ -255,8 +255,6 @@ ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
         ProgressTxController->GetMemoryUsage() +
         ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-        AltersInFlight.size() * sizeof(TAlterMeta) +
-        CommitsInFlight.size() * sizeof(TCommitMeta) +
         LongTxWrites.size() * (sizeof(TWriteId) + sizeof(TLongTxWriteInfo)) +
         LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
         (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +

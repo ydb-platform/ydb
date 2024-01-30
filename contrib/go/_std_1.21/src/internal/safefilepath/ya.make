@@ -1,30 +1,51 @@
 GO_LIBRARY()
+IF (FALSE)
+    MESSAGE(FATAL this shall never happen)
 
-SRCS(
-    path.go
-)
-
-GO_XTEST_SRCS(path_test.go)
-
-IF (OS_LINUX)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
-        path_other.go
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_LINUX AND ARCH_ARM64)
+    SRCS(
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+    SRCS(
+		path.go
+		path_other.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		path.go
+		path_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_ARM64)
+    SRCS(
+		path.go
+		path_windows.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
+    SRCS(
+		path.go
+		path_windows.go
     )
 ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        path_other.go
-    )
-ENDIF()
-
-IF (OS_WINDOWS)
-    SRCS(
-        path_windows.go
-    )
-ENDIF()
-
 END()
-
-RECURSE(
-)

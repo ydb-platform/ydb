@@ -156,9 +156,10 @@ public:
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2PageId = node.GetShortChild(pos).PageId;
-                        endRowId = Min(endRowId, node.GetShortChild(pos).RowCount + 1); // move endRowId - 1 to the first key > key2
-                        if (node.GetShortChild(pos).RowCount <= beginRowId) {
+                        auto& key2Child = node.GetShortChild(pos);
+                        key2PageId = key2Child.PageId;
+                        endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
+                        if (key2Child.RowCount <= beginRowId) {
                             chargeGroups = false; // key2 is before current slice
                         }
                     }
@@ -318,15 +319,17 @@ public:
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1PageId = node.GetShortChild(pos).PageId;
-                        endRowId = Min(endRowId, node.GetShortChild(pos).RowCount); // move endRowId - 1 to the last key <= key1
+                        auto& key1Child = node.GetShortChild(pos);
+                        key1PageId = key1Child.PageId;
+                        endRowId = Min(endRowId, key1Child.RowCount); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key2PageId = node.GetShortChild(pos).PageId;
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount - 1); // move beginRowId to the last key < key2
-                            if (node.GetShortChild(pos - 1).RowCount >= endRowId) {
+                            auto& prevKey2Child = node.GetShortChild(pos - 1);
+                            beginRowId = Max(beginRowId, prevKey2Child.RowCount - 1); // move beginRowId to the last key < key2
+                            if (prevKey2Child.RowCount >= endRowId) {
                                 chargeGroups = false; // key2 is after current slice
                             }
                         }                        

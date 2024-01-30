@@ -677,6 +677,12 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        if ((::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery))
+            && ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery)) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Write to datashard not supported in the same transaction with columnshard operations.");
+            return false;
+        }
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);

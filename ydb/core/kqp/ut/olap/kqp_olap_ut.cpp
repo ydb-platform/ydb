@@ -5621,16 +5621,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT * FROM `/Root/ColumnShard2`
             )";
             auto insertResult = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
-
-            auto it = client.StreamExecuteQuery(R"(
-                SELECT * FROM `/Root/DataShard2` ORDER BY Col1, Col2, Col3;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
-            TString output = StreamResultToYson(it);
-            CompareYson(
-                output,
-                R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];12];[4u;#;13];[11u;#;110];[12u;#;111];[13u;#;112];[14u;#;113]])");
+            UNIT_ASSERT(!insertResult.IsSuccess());
+            UNIT_ASSERT_C(
+                insertResult.GetIssues().ToString().Contains("Write to datashard not supported in the same transaction with columnshard operations."),
+                insertResult.GetIssues().ToString());
         }
     }
 

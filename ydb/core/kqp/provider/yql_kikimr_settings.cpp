@@ -123,11 +123,11 @@ bool TKikimrSettings::HasOptUseFinalizeByKey() const {
 }
 
 bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
-    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
+    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) != EOptionalFlag::Disabled;
 }
 
 bool TKikimrSettings::HasOptEnableConstantFolding() const {
-    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
+    return GetOptionalFlagValue(OptEnableConstantFolding.Get()) != EOptionalFlag::Disabled;
 }
 
 

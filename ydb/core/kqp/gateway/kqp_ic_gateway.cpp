@@ -850,10 +850,11 @@ public:
         return profilesPromise.GetFuture();
     }
 
-    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk) override {
+    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(metadata);
         Y_UNUSED(createDir);
         Y_UNUSED(existingOk);
+        Y_UNUSED(replaceIfExists);
         return NotImplemented<TGenericResult>();
     }
 
@@ -1182,7 +1183,7 @@ public:
 
     TFuture<TGenericResult> CreateExternalTable(const TString& cluster,
                                                 const NYql::TCreateExternalTableSettings& settings,
-                                                bool createDir, bool existingOk) override {
+                                                bool createDir, bool existingOk, bool replaceIfExists) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1209,7 +1210,7 @@ public:
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {

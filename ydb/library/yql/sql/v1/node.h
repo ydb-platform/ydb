@@ -1231,7 +1231,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-        bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+        bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,

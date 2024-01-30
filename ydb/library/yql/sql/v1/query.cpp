@@ -808,11 +808,12 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, const TCreateTableParameters& params, TScopedStatePtr scoped)
+    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
         , Params(params)
         , ExistingOk(existingOk)
+        , ReplaceIfExists(replaceIfExists)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -898,7 +899,13 @@ public:
             opts = Table.Options;
         }
 
-        opts = L(opts, Q(Y(Q("mode"), Q(ExistingOk ? "create_if_not_exists" : "create"))));
+        if (ExistingOk) {
+          opts = L(opts, Q(Y(Q("mode"), Q("create_if_not_exists"))));
+        } else if (ReplaceIfExists) {
+          opts = L(opts, Q(Y(Q("mode"), Q("create_or_replace"))));
+        } else {
+          opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+        }
 
         THashSet<TString> columnFamilyNames;
 
@@ -1149,12 +1156,13 @@ private:
     const TTableRef Table;
     const TCreateTableParameters Params;
     const bool ExistingOk;
+    const bool ReplaceIfExists;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, const TCreateTableParameters& params, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, params, scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, scoped);
 }
 
 class TAlterTableNode final: public TAstListNode {
@@ -2109,21 +2117,21 @@ private:
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, false, std::move(features), std::set<TString>(), context);
+    return new TUpsertObject(pos, objectId, typeId, false, false, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-    bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, existingOk, std::move(features), std::set<TString>(), context);
+    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, existingOk, replaceIfExists, std::move(features), std::set<TString>(), context);
 }
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context)
 {
-    return new TAlterObject(pos, secretId, typeId, false, std::move(features), std::move(featuresToReset), context);
+    return new TAlterObject(pos, secretId, typeId, false, false, std::move(features), std::move(featuresToReset), context);
 }
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
     bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context)
 {
-    return new TDropObject(pos, secretId, typeId, missingOk, std::move(options), std::set<TString>(), context);
+    return new TDropObject(pos, secretId, typeId, missingOk, false, std::move(options), std::set<TString>(), context);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {

@@ -170,7 +170,7 @@ void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGa
     settings.Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
     settings.ColumnOrder.push_back("Column2");
 
-    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true, false);
+    auto responseFuture = gateway->CreateExternalTable(TestCluster, settings, true, false, false);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);

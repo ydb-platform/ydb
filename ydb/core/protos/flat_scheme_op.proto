@@ -1806,6 +1806,7 @@ message TExternalTableDescription {
     optional string Location = 6;
     repeated TColumnDescription Columns = 7;
     optional bytes Content = 8;
+    optional bool ReplaceIfExists = 9; // Only applicable for `create external table` operation
 }
 
 // Access without authorization
@@ -1866,6 +1867,7 @@ message TExternalDataSourceDescription {
     optional string Installation = 6;
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
+    optional bool ReplaceIfExists = 9;
 }
 
 message TViewDescription {

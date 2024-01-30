@@ -5,9 +5,6 @@
 
 #include <ydb/core/base/subdomain.h>
 
-// #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-// #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace {
 
 using namespace NKikimr;
@@ -39,9 +36,9 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateExternalDataSource);
 
-        const auto pathId  = txState->TargetPathId;
-        const auto path    = TPath::Init(pathId, context.SS);
-        const auto pathPtr = context.SS->PathsById.at(pathId);
+        const auto pathId = txState->TargetPathId;
+        const auto path = TPath::Init(pathId, context.SS);
+        const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_DATA_SOURCE_COUNT].Add(1);
 
@@ -76,23 +73,23 @@ class TCreateExternalDataSource : public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-            case TTxState::Waiting:
-            case TTxState::Propose:
-                return TTxState::Done;
-            default:
-                return TTxState::Invalid;
+        case TTxState::Waiting:
+        case TTxState::Propose:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-            case TTxState::Waiting:
-            case TTxState::Propose:
-                return MakeHolder<TPropose>(OperationId);
-            case TTxState::Done:
-                return MakeHolder<TDone>(OperationId);
-            default:
-                return nullptr;
+        case TTxState::Waiting:
+        case TTxState::Propose:
+            return MakeHolder<TPropose>(OperationId);
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
         }
     }
 

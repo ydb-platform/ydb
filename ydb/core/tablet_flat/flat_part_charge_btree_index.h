@@ -13,7 +13,6 @@ class TChargeBTreeIndex : public ICharge {
     using TGroupId = NPage::TGroupId;
     using TChild = TBtreeIndexNode::TChild;
 
-    // TODO: store PageId only instead of TChild?
     struct TChildState {
         TPageId PageId;
         TRowId BeginRowId;

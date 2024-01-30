@@ -184,6 +184,20 @@ const MemoryContextMethods MkqlMethods = {
 #endif
 };
 
+Datum MakeArrayOfText(const TVector<TString>& arr) {
+    TVector<Datum> elems(arr.size());
+    for (size_t i = 0; i < elems.size(); ++i) {
+        elems[i] = (Datum)MakeVar(arr[i]);
+    }
+
+    auto ret = construct_array(elems.data(), (int)arr.size(), TEXTOID, -1, false, 'i');
+    for (size_t i = 0; i < elems.size(); ++i) {
+        pfree((void*)elems[i]);
+    }
+
+    return (Datum)ret;
+}
+
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;
 public:
@@ -358,6 +372,27 @@ public:
                 };
 
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
+            } else if (Table_ == "pg_roles") {
+                static const std::pair<const char*, TPgRolesFiller> AllPgRolesFillers[] = {
+                    {"rolname", []() { return PointerDatumToPod((Datum)MakeFixedString("postgres", NAMEDATALEN)); }},
+                    {"oid", []() { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"rolbypassrls", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolsuper", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
+                    {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
+                    {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
+                        "search_path=public",
+                        "default_transaction_isolation=serializable",
+                        "standard_conforming_strings=on",
+                    })); }},
+                };
+
+                ApplyFillers(AllPgRolesFillers, Y_ARRAY_SIZE(AllPgRolesFillers), PgRolesFillers_);
             }
         } else {
             if (Table_ == "tables") {
@@ -559,6 +594,14 @@ public:
 
                     rows.emplace_back(row);
                 }
+            } else if (Table_ == "pg_roles") {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
+                for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
+                    items[i] = PgRolesFillers_[i]();
+                }
+
+                rows.emplace_back(row);
             }
         } else {
             if (Table_ == "tables") {
@@ -613,6 +656,8 @@ private:
     TVector<TPgNamespaceFiller> PgNamespaceFillers_;
     using TPgAmFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAmDesc&);
     TVector<TPgAmFiller> PgAmFillers_;
+    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)();
+    TVector<TPgRolesFiller> PgRolesFillers_;
 
     struct TDescriptionDesc {
         ui32 Objoid = 0;

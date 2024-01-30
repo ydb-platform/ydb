@@ -1326,14 +1326,17 @@ NUdf::TUnboxedValuePod ParseDatetime64(NUdf::TStringRef buf) {
     i32 zoneOffset = 0;
     pos = ParseTimezoneOffset(pos, buf, zoneOffset);
 
-    if (Y_LIKELY(pos == buf.Size())) {
-        i64 value = 86400;
-        value *= date;
-        value += time;
-        value += zoneOffset;
-        return NUdf::TUnboxedValuePod(value);
+    if (Y_UNLIKELY(pos != buf.Size())) {
+      return NUdf::TUnboxedValuePod();
     }
-    return NUdf::TUnboxedValuePod();
+    i64 value = 86400;
+    value *= date;
+    value += time;
+    value += zoneOffset;
+    if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+        return NUdf::TUnboxedValuePod();
+    }
+    return NUdf::TUnboxedValuePod(value);
 }
 
 NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
@@ -1551,14 +1554,17 @@ NUdf::TUnboxedValuePod ParseTimestamp64(NUdf::TStringRef buf) {
     i32 zoneOffset = 0;
     pos = ParseTimezoneOffset(pos, buf, zoneOffset);
 
-    if (Y_LIKELY(pos == buf.Size())) {
-        i64 value = 86400000000ull;
-        value *= date;
-        value += (time + zoneOffset)*1000000ull;
-        value += microseconds;
-        return NUdf::TUnboxedValuePod(value);
+    if (Y_UNLIKELY(pos != buf.Size())) {
+        return NUdf::TUnboxedValuePod();
     }
-    return NUdf::TUnboxedValuePod();
+    i64 value = 86400000000ull;
+    value *= date;
+    value += (i32(time) + zoneOffset)*1000000ull;
+    value += microseconds;
+    if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+        return NUdf::TUnboxedValuePod();
+    }
+    return NUdf::TUnboxedValuePod(value);
 }
 
 NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {

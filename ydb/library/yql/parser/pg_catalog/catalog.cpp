@@ -1417,6 +1417,8 @@ struct TCatalog {
             {"pg_catalog", "pg_description"},
             {"pg_catalog", "pg_am"},
             {"pg_catalog", "pg_namespace"},
+            {"pg_catalog", "pg_auth_members"},
+            {"pg_catalog", "pg_roles"},
             {"information_schema", "tables"},
             {"information_schema", "columns"},
             {"information_schema", "table_constraints"},
@@ -1489,6 +1491,24 @@ struct TCatalog {
 
             {"pg_catalog", "pg_namespace", "nspname", "name"},
             {"pg_catalog", "pg_namespace", "oid", "oid"},
+
+            {"pg_catalog", "pg_auth_members", "roleid", "oid"},
+            {"pg_catalog", "pg_auth_members", "member", "oid"},
+            {"pg_catalog", "pg_auth_members", "grantor", "oid"},
+            {"pg_catalog", "pg_auth_members", "admin_option", "bool"},
+
+            {"pg_catalog", "pg_roles", "rolname", "name"},
+            {"pg_catalog", "pg_roles", "oid", "oid"},
+            {"pg_catalog", "pg_roles", "rolbypassrls", "bool"},
+            {"pg_catalog", "pg_roles", "rolcanlogin", "bool"},
+            {"pg_catalog", "pg_roles", "rolconfig", "_text"},
+            {"pg_catalog", "pg_roles", "rolconnlimit", "int4"},
+            {"pg_catalog", "pg_roles", "rolcreatedb", "bool"},
+            {"pg_catalog", "pg_roles", "rolcreaterole", "bool"},
+            {"pg_catalog", "pg_roles", "rolinherit", "bool"},
+            {"pg_catalog", "pg_roles", "rolreplication", "bool"},
+            {"pg_catalog", "pg_roles", "rolsuper", "bool"},
+            {"pg_catalog", "pg_roles", "rolvaliduntil", "timestamptz"},
 
             {"information_schema", "tables", "table_schema", "name"},
             {"information_schema", "tables", "table_name", "name"},

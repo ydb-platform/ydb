@@ -1,7 +1,8 @@
 syntax = "proto3";
 
 package yandex.cloud.priv.ydb.v1;
-
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_private/access/access.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
 

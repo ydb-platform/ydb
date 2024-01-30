@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam;
+
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/iam;iam";
+option java_outer_classname = "PRN";
+
+enum RestrictionKind {
+  RESTRICTION_KIND_UNSPECIFIED = 0;
+  BLOCK_PERMISSIONS = 1;
+}
+
+message Restriction {
+  RestrictionKind restriction_kind = 1;
+  string restriction_type_id = 2;
+  google.protobuf.Timestamp added_at = 3;
+  string added_by = 4;
+}
+
+message ListRestrictionsRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  RestrictionKind restriction_kind = 2;
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=2000"];
+}
+
+message ListRestrictionsResponse {
+  repeated Restriction restrictions = 1;
+  string next_page_token = 2;
+}
+
+message GetRestrictionRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  string restriction_type_id = 2  [(required) = true, (length) = "<=100"];
+}
+
+message AddRestrictionRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  string restriction_type_id = 2  [(required) = true, (length) = "<=100"];
+}
+
+message AddRestrictionMetadata {
+  string resource_id = 1;
+  string restriction_type_id = 2;
+  // Information about operation cancellation
+  string cancelled_by = 3;
+  google.protobuf.Timestamp cancelled_at = 4;
+}
+
+message AddRestrictionResponse {
+  Restriction restriction = 1;
+}
+
+message RemoveRestrictionRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  string restriction_type_id = 2  [(required) = true, (length) = "<=100"];
+}
+
+message RemoveRestrictionMetadata {
+  string resource_id = 1;
+  string restriction_type_id = 2;
+}
+
+message RemoveRestrictionResponse {
+  // optional, empty if there was no restriction
+  Restriction restriction = 1;
+}

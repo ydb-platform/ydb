@@ -6,9 +6,15 @@ import "google/api/annotations.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/tools/options.proto";
+import "ydb/public/api/client/yc_private/access/access.proto";
+import "ydb/public/api/client/yc_private/iam/restriction.proto";
+import "ydb/public/api/client/yc_private/iam/permission_stage.proto";
 import "ydb/public/api/client/yc_private/oauth/claims.proto";
-import "ydb/public/api/client/yc_private/common/sensitive.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/resourcemanager/cloud.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/resourcemanager/v1;resourcemanager";
@@ -93,11 +99,91 @@ service CloudService {
     };
   }
 
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/yrm/v1/clouds/{resource_id}:updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "access.AccessBindingsOperationResult"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.http_verb = true;
+  }
+
   rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
 
   // permission stages
 
   rpc GetPermissionStages (GetPermissionStagesRequest) returns (GetPermissionStagesResponse);
+
+  rpc SetAllPermissionStages (yandex.cloud.priv.iam.v1.SetAllPermissionStagesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "yandex.cloud.priv.iam.v1.SetPermissionStagesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc SetPermissionStages (yandex.cloud.priv.iam.v1.SetPermissionStagesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "yandex.cloud.priv.iam.v1.SetPermissionStagesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc UpdatePermissionStages (yandex.cloud.priv.iam.v1.UpdatePermissionStagesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "yandex.cloud.priv.iam.v1.UpdatePermissionStagesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // restrictions
+
+  rpc ListRestrictions (iam.ListRestrictionsRequest) returns (iam.ListRestrictionsResponse);
+
+  rpc GetRestriction (iam.GetRestrictionRequest) returns (iam.Restriction);
+
+  rpc AddRestriction (iam.AddRestrictionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "iam.AddRestrictionMetadata"
+      response: "iam.AddRestrictionResponse"
+    };
+  }
+
+  rpc RemoveRestriction (iam.RemoveRestrictionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "iam.RemoveRestrictionMetadata"
+      response: "iam.RemoveRestrictionResponse"
+    };
+  }
+}
+
+message ListUsersRequest {
+  repeated string cloud_ids = 1 [(size) = "<=10", (length) = "<=50"];
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListUsers requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2 [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListUsersRequest
+  // request to get the next page of results.
+  string page_token = 3 [(length) = "<=2000"];
+}
+
+message ListUsersResponse {
+  repeated CloudUser cloud_users = 1;
+  // This token allows you to get the next page of results for ListUsers requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListUsers request. Subsequent ListUsers
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+
+  message CloudUser {
+    repeated string cloud_ids = 1;
+    // OpenID standard claims with additional Yandex.Cloud claims
+    yandex.cloud.priv.oauth.SubjectClaims subject_claims = 3;
+  }
+
 }
 
 message GetCloudRequest {

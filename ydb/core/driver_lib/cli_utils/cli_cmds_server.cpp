@@ -1510,32 +1510,6 @@ private:
     }
 };
 
-class TClientCommandServerConfig : public TClientCommandServerBase {
-public:
-    TClientCommandServerConfig()
-        : TClientCommandServerBase("serverconfig", "Generate configs for new-style invocation of server")
-    {
-    }
-
-    virtual void Config(TConfig& config) override {
-        TClientCommandServerBase::Config(config);
-        config.Opts->AddLongOption("dump-config-to", "Dump final application config protobuf to PATH and terminate").RequiredArgument("PATH").Required();
-    }
-
-    virtual int Run(TConfig& config) override {
-        Y_ABORT_UNLESS(config.ParseResult->Has("dump-config-to"));
-
-        TString proto;
-        const bool status = google::protobuf::TextFormat::PrintToString(AppConfig, &proto);
-        Y_ABORT_UNLESS(status);
-        TString path = config.ParseResult->Get("dump-config-to");
-        TFileOutput file(path);
-        file << proto;
-
-        return 0;
-    }
-};
-
 class TClientCommandServer : public TClientCommandServerBase {
 public:
     TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
@@ -1554,7 +1528,6 @@ private:
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
     parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
-    parent.AddCommand(std::make_unique<TClientCommandServerConfig>());
 }
 
 }

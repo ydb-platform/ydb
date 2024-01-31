@@ -701,13 +701,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
             const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
             const TString objType = isStore ? "TABLESTORE" : "TABLE";
+            const TString hash = !isStore ? " PARTITION BY HASH(Key) " : "";
             auto sql = TStringBuilder() << R"(
                 --!syntax_v1
                 CREATE )" << objType << " " << ifNotExistsStatement << " `" << objPath << R"(` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                )
+                ))" << hash << R"(
                 WITH (
                     STORE = COLUMN,
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
@@ -769,6 +770,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             TTestHelper::TColumnTable testTable;
             testTable.SetName(objPath)
                 .SetPrimaryKey({"Key"})
+                .SetSharding({"Key"})
                 .SetSchema(schema);
             {
                 TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

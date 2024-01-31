@@ -396,12 +396,6 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
                                     << "' instead of " << LocalCluster, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
         return RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
     }
-
-    // skip because of LOGBROKER-8792
-    // if (Count(Clusters, config.GetDC()) == 0 && !Clusters.empty()) {
-    //     Request_->RaiseIssue(FillIssue(TStringBuilder() << "Unknown cluster '" << config.GetDC() << "'", Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-    //     return RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
-    // }
 }
 
 

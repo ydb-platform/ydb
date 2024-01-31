@@ -666,25 +666,10 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
         normDir.SkipPrefix("/");
         TString fullPath = NKikimr::JoinPath({TString(normDir), schemeName});
         auto parsed = res->TryParseModernMirroredPath(fullPath);
-        Y_UNUSED(parsed);
         if (!res->IsValid()) {
             return res;
         }
-        // if (parsed) {
-        //     Y_ABORT_UNLESS(!res->Dc.empty());
-        //     if (!localDc.empty() && localDc == res->Dc) {
-        //         res->Valid = false;
-        //         res->Reason = TStringBuilder() << "Topic in modern mirrored-like style: " << schemeName
-        //                                        << " cannot be created in the same cluster " << res->Dc;
-        //         return res;
-        //     }
-        // }
         if (isLocal) {
-            // if(parsed) {
-            //     res->Valid = false;
-            //     res->Reason = TStringBuilder() << "Topic in modern mirrored-like style: " << schemeName << ", created as local";
-            //     return res;
-            // }
             if (localDc.empty()) {
                 res->Valid = false;
                 res->Reason = "Local DC option is mandatory when creating local modern-style topic";
@@ -696,15 +681,15 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
                 return res;
             }
         }
-        // else {
-        //     if (!parsed) {
-        //         res->Valid = false;
-        //         res->Reason = TStringBuilder() << "Topic in modern style with non-mirrored-name: " << schemeName
-        //                                        << ", created as non-local";
+        else {
+            if (!parsed) {
+                res->Valid = false;
+                res->Reason = TStringBuilder() << "Topic in modern style with non-mirrored-name: " << schemeName
+                                               << ", created as non-local";
 
-        //         return res;
-        //     }
-        // }
+                return res;
+            }
+        }
         if (res->FullModernName.empty()) {
             res->Valid = false;
             res->Reason = TStringBuilder() << "Internal error: FullModernName empty in TopicConverter(for schema) for topic: "

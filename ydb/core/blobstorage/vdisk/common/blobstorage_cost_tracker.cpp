@@ -8,6 +8,12 @@ const TDiskOperationCostEstimator TBsCostModelBase::HDDEstimator{
     { 6.089e+06, 8.1 }, // HugeWriteCoefficients
 };
 
+const TDiskOperationCostEstimator TBsCostModelBase::NVMEEstimator{
+    { 10000, 1.3 },   // ReadCoefficients
+    { 3300, 1.5 },     // WriteCoefficients
+    { 50000, 1.83 }, // HugeWriteCoefficients
+};
+
 class TBsCostModelMirror3dc : public TBsCostModelBase {
 public:
     TBsCostModelMirror3dc(NPDisk::EDeviceType deviceType)

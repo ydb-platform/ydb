@@ -21,9 +21,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
     const bool needSnapshots = !exclusiveSource || ReadMetadata->GetSnapshot() < source->GetRecordSnapshotMax();
     auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][exclusiveSource ? 1 : 0];
     if (!result) {
-        std::shared_ptr<IFetchingStep> result = std::make_shared<TBuildFakeSpec>(source->GetRecordsCount(), "fake");
-        result->AttachNext(std::make_shared<TFinalizeSourceStep>());
-        return result;
+        return std::make_shared<TBuildFakeSpec>(source->GetRecordsCount(), "fake");
     }
     return result;
 }
@@ -103,7 +101,6 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
             current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
         }
     }
-    current = current->AttachNext(std::make_shared<TFinalizeSourceStep>());
     return result->GetNextStep();
 }
 

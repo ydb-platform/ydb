@@ -79,6 +79,9 @@ Parameter name | Parameter Description | Default value
 `--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` | `0` parameter
 `--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the --message-rate parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
 `--commit-period` | The period between `COMMIT` calls. In seconds | `10`
+`--commit-messages` | The period between `COMMIT` calls. Number of messages | `1000000`
+`--only-topic-in-tx` | Only topic partitions are forced to participate in transactions | `0`
+`--only-table-in-tx` | Only table shards are forced to participate in transactions | `0`
 
 For example, the command `{{ ydb-cli }} --profile quickstart workload transfer topic-to-table run` will run a test lasting 60 seconds. The data for the first 5 seconds will not be taken into account in the work statistics. Example of console output:
 
@@ -112,6 +115,7 @@ Window  Write speed     Write time      Inflight        Lag             Lag time
 * `Lag` — the specified percentile of maximum number of messages waiting to be read in the statistics collection window. Messages for all batches are taken into account.
 * `Lag time` — the specified percentile of message delay time in ms.
 * `Read speed` — the speed of reading messages by consumers. In messages per second and in megabytes per second.
+* `Select time`, `Upsert time`, `Commit time` — the specified percentile of the execution time of Select, Insert, Commit operations in ms.
 * `Full time` — the specified percentile of the time of complete processing of the message, from writing by the producer to reading by the consumer in ms.
 
 ## Removing the test environment {#clean}

@@ -38,6 +38,7 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
 )
 
+ENV(COMPOSE_PROJECT_NAME=core-kqp-ut-federated_query-generic)
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
@@ -48,6 +49,9 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+    TAG(
+        ya:docker_compose
+    )
 ENDIF()
 
 YQL_LAST_ABI_VERSION()

@@ -5,18 +5,23 @@ PY3TEST()
 STYLE_PYTHON()
 NO_CHECK_IMPORTS()
 
-TAG(
-    ya:external
-    ya:force_sandbox
-    ya:fat
-)
+IF (AUTOCHECK) 
 
-REQUIREMENTS(
-    container:4467981730
-    cpu:all
-    dns:dns64
-)
+    TAG(
+        ya:external
+        ya:force_sandbox
+        ya:fat
+    )
 
+    REQUIREMENTS(
+        container:4467981730
+        cpu:all
+        dns:dns64
+    )
+
+ENDIF()
+
+ENV(COMPOSE_PROJECT_NAME=tests-fq-generic)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/token_accessor_mock/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
@@ -30,6 +35,9 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+    TAG(
+        ya:docker_compose
+    )
 ENDIF()
 
 PEERDIR(

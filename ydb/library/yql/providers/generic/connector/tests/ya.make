@@ -1,3 +1,8 @@
+OWNER(
+    vitalyisaev
+    g:yq
+)
+
 PY3TEST()
 
 STYLE_PYTHON()
@@ -25,6 +30,7 @@ IF (AUTOCHECK)
     )
 ENDIF()
 
+ENV(COMPOSE_PROJECT_NAME=library-yql-providers-generic-connector-tests)
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
@@ -35,6 +41,9 @@ IF (OPENSOURCE)
     SIZE(MEDIUM)
     SET(TEST_TAGS_VALUE)
     SET(TEST_REQUIREMENTS_VALUE)
+    TAG(
+        ya:docker_compose
+    )
 ENDIF()
 
 TEST_SRCS(

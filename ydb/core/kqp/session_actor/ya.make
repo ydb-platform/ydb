@@ -16,7 +16,6 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/federated_query
     ydb/public/lib/operation_id
-    ydb/core/tx/schemeshard
 )
 
 YQL_LAST_ABI_VERSION()

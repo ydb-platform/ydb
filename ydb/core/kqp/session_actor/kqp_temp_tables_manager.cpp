@@ -39,8 +39,7 @@ public:
         return NKikimrServices::TActivity::KQP_SESSION_ACTOR;
     }
 
-    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
-            const TString& database)
+    TKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database)
         : TempTablesState(std::move(tempTablesState))
         , Target(target)
         , Database(database)
@@ -113,8 +112,7 @@ private:
 
 } // namespace
 
-IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target,
-        const TString& database)
+IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database)
 {
     return new TKqpTempTablesManager(tempTablesState, target, database);
 }

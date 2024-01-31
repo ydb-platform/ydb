@@ -17,7 +17,6 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -109,32 +108,6 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     NOperationId::AddOptionalValue(opId, "id", Base64Encode(id));
     return NOperationId::ProtoToString(opId);
 }
-
-class TKqpTempTablesAgentActor: public TActorBootstrapped<TKqpTempTablesAgentActor> {
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_PROXY_ACTOR;
-    }
-
-    explicit TKqpTempTablesAgentActor()
-    {}
-
-    void Bootstrap() {
-        Become(&TKqpTempTablesAgentActor::StateWork);
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvOwnerActorAck, HandleNoop)
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
-private:
-    template<typename T>
-    void HandleNoop(T&) {
-    }
-};
 
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
@@ -289,8 +262,6 @@ public:
         }
 
         KqpRmServiceActor = MakeKqpRmServiceID(SelfId().NodeId());
-
-        KqpTempTablesAgentActor = Register(new TKqpTempTablesAgentActor());
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -462,8 +433,6 @@ public:
 
     void PassAway() override {
         Send(CompileService, new TEvents::TEvPoisonPill());
-
-        Send(KqpTempTablesAgentActor, new TEvents::TEvPoisonPill());
 
         if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
             Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
@@ -688,8 +657,8 @@ public:
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
-        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration
-            << " timeout: " << timeout << " cancelAfter: " << cancelAfter
+        KQP_PROXY_LOG_D("Ctx: " << *ev->Get()->GetUserRequestContext() << ". TEvQueryRequest, set timer for: " << timerDuration 
+            << " timeout: " << timeout << " cancelAfter: " << cancelAfter 
             << ". " << "Send request to target, requestId: " << requestId << ", targetId: " << targetId);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
@@ -1450,9 +1419,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings,
-            FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
-            QueryServiceConfig, MetadataProviderConfig, KqpTempTablesAgentActor);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters, QueryServiceConfig, MetadataProviderConfig);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);
@@ -1684,7 +1651,6 @@ private:
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<THolder<IEventHandle>> DelayedEventsQueue;
     bool IsLookupByRmScheduled = false;
-    TActorId KqpTempTablesAgentActor;
 };
 
 } // namespace

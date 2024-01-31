@@ -57,7 +57,6 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem,
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
-    (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -162,7 +161,7 @@ public:
     TCheckKindsResult CheckKinds(const TVector<ui32>& kinds, const char* errorContext) const;
 
     NKikimrConfig::TAppConfig ParseYamlProtoConfig();
-
+        
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
@@ -784,7 +783,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             subscription->YamlVersion = std::nullopt;
         }
     }
-
+    
     if (CurrentStateFunc() == &TThis::StateInit) {
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
@@ -996,7 +995,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
 
     Send(ev->Sender, Response.Release());
 }
-
+    
 IActor *CreateConfigsDispatcher(
     const NKikimrConfig::TAppConfig &config,
     const TMap<TString, TString> &labels,

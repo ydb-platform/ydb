@@ -117,8 +117,7 @@ namespace NSchemeShardUT_Private {
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num = 1);
 
     TEvTx* CombineSchemeTransactions(const TVector<TEvTx*>& transactions);
-    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId,
-        IEventBase *ev, ui32 nodeIndex = 0, TActorId sender = TActorId());
+    void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev);
 
     ////////// generic
 

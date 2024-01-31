@@ -38,8 +38,8 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
-    const TActorId& kqpTempTablesAgentActor);
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
+    );
 
 IActor* CreateKqpTempTablesManager(
     TKqpTempTablesState tempTablesState, const TActorId& target, const TString& database);

@@ -138,28 +138,4 @@ enum class EAttachChildResult : ui32 {
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
-struct TTempTablesState {
-
-    struct TRetryState {
-        bool IsScheduled = false;
-        NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
-        TDuration CurrentDelay = TDuration::Zero();
-        ui32 RetryNumber = 0;
-    };
-
-    struct TNodeState {
-        THashSet<TActorId> Owners;
-        TRetryState RetryState;
-    };
-
-    THashMap<TActorId, THashSet<TPathId>> TempTablesByOwner; // OwnerActorId -> [ TPathId ]
-    THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
-};
-
-struct TTempTableInfo {
-    TString WorkingDir;
-    TString Name;
-    TActorId OwnerActorId;
-};
-
 }

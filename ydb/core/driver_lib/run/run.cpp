@@ -228,7 +228,6 @@ public:
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
         appData->CompactionConfig = Config.GetCompactionConfig();
-        appData->BackgroundCleaningConfig = Config.GetBackgroundCleaningConfig();
     }
 };
 

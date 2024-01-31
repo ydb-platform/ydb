@@ -6,7 +6,6 @@ SRCS(
     claims.proto
     cloud_user.proto
     login_history_service.proto
-    oauth_request.proto
     session_service.proto
 )
 

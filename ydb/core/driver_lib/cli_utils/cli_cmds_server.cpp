@@ -108,7 +108,7 @@ protected:
     TString PathToInterconnectPrivateKeyFile;
     TString PathToGrpcCaFile;
     TString PathToInterconnectCaFile;
-    TVector<TString> YamlConfigFiles;
+    TString YamlConfigFile;
 
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
@@ -258,7 +258,7 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&Rack);
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
-        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
+        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         config.Opts->AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 
@@ -823,30 +823,28 @@ protected:
     }
 
     inline void LoadYamlConfig(TCallContext callCtx) {
-        for(const TString& yamlConfigFile: YamlConfigFiles) {
-            auto yamlConfig = TFileInput(yamlConfigFile);
-            NKikimrConfig::TAppConfig parsedConfig;
-            NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
-            const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
-            const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
-            for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
-                const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-                if (!fieldDescriptor)
-                    continue;
+        auto yamlConfig = TFileInput(YamlConfigFile);
+        NKikimrConfig::TAppConfig parsedConfig;
+        NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
+        const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
+        const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
+        for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
+            const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
+            if (!fieldDescriptor)
+                continue;
 
-                if (fieldDescriptor->is_repeated()) {
-                    continue;
-                }
+            if (fieldDescriptor->is_repeated()) {
+                continue;
+            }
 
-                if (reflection->HasField(AppConfig, fieldDescriptor)) {
-                    // field is already set in app config
-                    continue;
-                }
+            if (reflection->HasField(AppConfig, fieldDescriptor)) {
+                // field is already set in app config
+                continue;
+            }
 
-                if (reflection->HasField(parsedConfig, fieldDescriptor)) {
-                    reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
-                    TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
-                }
+            if (reflection->HasField(parsedConfig, fieldDescriptor)) {
+                reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
+                TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
             }
         }
     }

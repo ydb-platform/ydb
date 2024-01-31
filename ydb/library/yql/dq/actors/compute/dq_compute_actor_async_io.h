@@ -232,6 +232,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         IRandomProvider *const RandomProvider;
+        NWilson::TTraceId TraceId;
     };
 
     struct TInputTransformArguments {

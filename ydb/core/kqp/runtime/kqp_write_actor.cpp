@@ -16,6 +16,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 
 namespace {
@@ -86,6 +87,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
+        , WriteActorSpan(TWilsonKqp::WriteActor,  NWilson::TTraceId(args.TraceId), "WriteActor")
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
@@ -174,14 +176,21 @@ private:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = true;
         request->ResultSet.emplace_back(entry);
+
+        WriteActorStateSpan =  NWilson::TSpan(TWilsonKqp::WriteActorTableNavigate, WriteActorSpan.GetTraceId(),
+            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (ev->Get()->Request->ErrorCount > 0) {
-            RuntimeError(TStringBuilder() << "Failed to get table: "
-                << TableId << "'", NYql::NDqProto::StatusIds::SCHEME_ERROR);
+            const auto error = TStringBuilder() << "Failed to get table: " << TableId << "'";
+            WriteActorStateSpan.EndError(error);
+            RuntimeError(error, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
+        WriteActorStateSpan.EndOk();
+
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
         SchemeEntry = resultSet[0];
@@ -231,7 +240,7 @@ private:
             Send(
                 PipeCacheId,
                 new TEvPipeCache::TEvForward(evTnx.Release(), coordinator, /* subscribe */ true),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery, 0, WriteActorSpan.GetTraceId());
         } else if (ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId() << ", TabletId=" << ev->Get()->Record.GetOrigin());
             auto& batchesQueue = InFlightBatches.at(ev->Get()->Record.GetOrigin());
@@ -353,7 +362,7 @@ private:
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-            IEventHandle::FlagTrackDelivery);
+            IEventHandle::FlagTrackDelivery, 0, WriteActorSpan.GetTraceId());
         TlsActivationContext->Schedule(
             CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.TxId)));
@@ -362,7 +371,7 @@ private:
         if (inFlightBatch.SendAttempts == 0) {
             Counters->WriteActorWrites->Inc();
         } else {
-            Counters->WriteActorRetries->Inc();
+            Counters->WriteActorWritesRetries->Inc();
         }
         Counters->WriteActorWritesSizes->Collect(inFlightBatch.Data.size());
 
@@ -431,6 +440,10 @@ private:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        if (WriteActorSpan) {
+            WriteActorSpan.EndError(issues.ToOneLineString());
+        }
+
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
 
@@ -439,6 +452,8 @@ private:
 
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpWriteActor>::PassAway();
+
+        WriteActorSpan.End();
     }
 
     void Prepare() {
@@ -558,6 +573,9 @@ private:
     i64 MemoryInFlight = 0;
 
     std::deque<ui64> FreeTxIds;
+
+    NWilson::TSpan WriteActorSpan;
+    NWilson::TSpan WriteActorStateSpan;
 };
 
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {

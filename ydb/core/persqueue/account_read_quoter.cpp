@@ -227,7 +227,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
 )
     : TBasicAccountQuoter(tabletActor, recepient, tabletId, topicConverter, partition,
                           CreateQuoterParams(AppData()->PQConfig, topicConverter, tabletId, ctx),
-                          0 /** ToDo: discuss. Do we need write credit? */, counters,
+                          0, counters,
                           TDuration::Zero())
 {
 }

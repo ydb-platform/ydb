@@ -53,6 +53,30 @@ void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext& ctx) {
     }
 }
 
+THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker(const TString&, const TActorContext& ctx) const {
+    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
+    TActorId actorId;
+    if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
+        actorId = TActivationContext::Register(
+            new TAccountWriteQuoter(
+                GetTabletActor(),
+                ctx.SelfID,
+                GetTabletId(),
+                TopicConverter,
+                GetPartition(),
+                Counters,
+                ctx
+            ),
+            GetParent()
+        );
+    }
+    if (actorId) {
+        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
+    } else {
+        return nullptr;
+    }
+}
+
 void TWriteQuoter::UpdateCounters(const TActorContext&) {
 }
 
@@ -83,3 +107,4 @@ THolder<TAccountQuoterHolder>& TWriteQuoter::GetAccountQuotaTracker(TEvPQ::TEvRe
 }
 
 } //namespace
+

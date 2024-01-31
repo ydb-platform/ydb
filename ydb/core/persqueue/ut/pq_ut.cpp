@@ -206,8 +206,8 @@ Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
 
         //check not throttling on total partition quota
         auto startTimeReadWithDifferentConsumers = tc.Runtime->GetTimeProvider()->Now();
-        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
-        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user2");
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user3");
 
         auto diffReadWithDifferentConsumers = (tc.Runtime->GetTimeProvider()->Now() - startTimeReadWithDifferentConsumers).Seconds();
         UNIT_ASSERT(diffReadWithDifferentConsumers <= 1); //different consumers. No throttling
@@ -239,7 +239,7 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
 
         //check throttling on total partition quota
         auto diff = (tc.Runtime->GetTimeProvider()->Now() - startTime).Seconds();
-        UNIT_ASSERT_C(diff >= 3, TStringBuilder() << "Actual: " << diff); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
+        UNIT_ASSERT_C(diff >= 3, TStringBuilder() << "Actual: " << diff); 
     });
 }
 

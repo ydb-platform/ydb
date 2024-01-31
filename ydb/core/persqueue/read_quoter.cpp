@@ -119,48 +119,6 @@ TQuotaTracker TPartitionQuoterBase::CreatePartitionTotalQuotaTracker(const NKiki
     return {GetTotalPartitionSpeedBurst(pqTabletConfig, ctx), GetTotalPartitionSpeed(pqTabletConfig, ctx), ctx.Now()};
 }
 
-//ToDo: (?) Remove from a basic class maybe?
-THolder<TAccountQuoterHolder> TPartitionQuoterBase::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    TActorId actorId;
-    if (TabletActor && quotingConfig.GetEnableQuoting()) {
-        if (!user.empty()) {
-            if(quotingConfig.GetEnableReadQuoting()) {
-                actorId = TActivationContext::Register(
-                    new TAccountReadQuoter(
-                        TabletActor,
-                        ctx.SelfID,
-                        TabletId,
-                        TopicConverter,
-                        Partition,
-                        user,
-                        Counters
-                    ),
-                    Parent
-                );
-            }
-        } else {
-            actorId = TActivationContext::Register(
-                new TAccountWriteQuoter(
-                    TabletActor,
-                    ctx.SelfID,
-                    TabletId,
-                    TopicConverter,
-                    Partition,
-                    Counters,
-                    ctx
-                ),
-                Parent
-            );
-        }
-    }
-    if (actorId) {
-        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
-    } else {
-        return nullptr;
-    }
-}
-
 void TPartitionQuoterBase::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     HandleWakeUpImpl();
     ProcessPartitionTotalQuotaQueue();
@@ -312,6 +270,32 @@ ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& 
     return GetConsumerReadBurst(pqTabletConfig, ctx) * consumersPerPartition;
 }
 
+THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
+    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
+    TActorId actorId;
+    if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
+        if(quotingConfig.GetEnableReadQuoting()) {
+            actorId = TActivationContext::Register(
+                new TAccountReadQuoter(
+                    GetTabletActor(),
+                    ctx.SelfID,
+                    GetTabletId(),
+                    TopicConverter,
+                    GetPartition(),
+                    user,
+                    Counters
+                ),
+                GetParent()
+            );
+        }
+    }
+    if (actorId) {
+        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
+    } else {
+        return nullptr;
+    }
+}
+
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
     Y_ABORT_UNLESS(!consumerStr.empty());
     auto it = ConsumerQuotas.find(consumerStr);
@@ -327,7 +311,6 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
         ));
 
         auto result = ConsumerQuotas.emplace(consumerStr, std::move(consumer));
-        Y_ABORT_UNLESS(result.second);
         return &result.first->second;
     }
     return &it->second;

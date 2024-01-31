@@ -122,9 +122,9 @@ public:
         , RequestsInflight(0)
         , PQTabletConfig(config)
         , PartitionTotalQuotaTracker(std::move(partitionTotalQuotaTracker))
+        , TopicConverter(topicConverter)
         , TabletActor(tabletActor)
         , Parent(parent)
-        , TopicConverter(topicConverter)
         , Partition(partition)
         , TabletId(tabletId)
         , MaxInflightRequests(maxRequestsInflight)
@@ -158,14 +158,18 @@ protected:
     virtual void UpdateCounters(const TActorContext& ctx) = 0;
     virtual ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
     virtual ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
+    virtual THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const = 0;
     
 protected:
     void CheckTotalPartitionQuota(TRequestContext& context);
     void ApproveQuota(TRequestContext& context);
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
+//    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const;
     TQuotaTracker CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
     inline const TActorId& GetParent() const {return Parent;}
+    inline const TActorId& GetTabletActor() const {return TabletActor;}
+    inline ui64 GetTabletId() const {return TabletId;}
+    inline ui32 GetPartition() const {return Partition;}
 
 private:
     void StartQuoting(TRequestContext& context);
@@ -199,16 +203,16 @@ protected:
     THashMap<ui64, TInstant> QuotaRequestedTimes;
     NKikimrPQ::TPQTabletConfig PQTabletConfig;
     TMaybe<TQuotaTracker> PartitionTotalQuotaTracker;
+    NPersQueue::TTopicConverterPtr TopicConverter;
+    TTabletCountersBase Counters;
 
 private:
     TActorId TabletActor;
     TActorId Parent;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
-    NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     ui64 TabletId;
-    TTabletCountersBase Counters;
     ui64 MaxInflightRequests;
 
     
@@ -259,6 +263,7 @@ protected:
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
+    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const override;
 
     STFUNC(ProcessEventImpl) override
     {
@@ -316,6 +321,7 @@ protected:
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     void UpdateCounters(const TActorContext& ctx) override;
     void HandleWakeUpImpl() override;
+    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const override;
 
     STFUNC(ProcessEventImpl) override
     {

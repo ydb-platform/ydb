@@ -39,8 +39,6 @@ protected:
     TSet<ui32> QueriesToRun;
     TSet<ui32> QueriesToSkip;
     TVector<TString> QuerySettings;
-    TString ExternalQueries;
-    TString ExternalQueriesFile;
     TString ExternalQueriesDir;
     TString ExternalVariablesString;
     TString QueryExecutorType;

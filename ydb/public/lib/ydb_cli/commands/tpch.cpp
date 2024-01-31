@@ -31,21 +31,27 @@ namespace {
 
 TVector<TString> TTpchCommandRun::GetQueries() const {
     TVector<TString> queries;
-    TFsPath queriesDir(ExternalQueriesDir);
-    TVector<TString> queriesList;
-    queriesDir.ListNames(queriesList);
-    std::sort(queriesList.begin(), queriesList.end(), [](const TString& l, const TString& r) {
-        auto leftNum = l.substr(1);
-        auto rightNum = r.substr(1);
-        return std::stoi(leftNum) < std::stoi(rightNum);
-        });
-    for (auto&& queryFileName : queriesList) {
-        const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
-        Y_ABORT_UNLESS(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
-        TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
-        auto query = fInput.ReadAll();
+    if (!ExternalQueriesDir.Empty()) {
+        TFsPath queriesDir(ExternalQueriesDir);
+        TVector<TString> queriesList;
+        queriesDir.ListNames(queriesList);
+        std::sort(queriesList.begin(), queriesList.end(), [](const TString& l, const TString& r) {
+            auto leftNum = l.substr(1);
+            auto rightNum = r.substr(1);
+            return std::stoi(leftNum) < std::stoi(rightNum);
+            });
+        for (auto&& queryFileName : queriesList) {
+            const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
+            Y_ABORT_UNLESS(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
+            TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
+            queries.emplace_back(fInput.ReadAll());
+        }
+    } else {
+        queries = StringSplitter(NResource::Find("tpch_queries.sql")).SplitByString("-- end query").ToList<TString>();
+    }
+
+    for (auto& query : queries) {
         SubstGlobal(query, "{path}", TablesPath);
-        queries.emplace_back(query);
     }
     return queries;
 }

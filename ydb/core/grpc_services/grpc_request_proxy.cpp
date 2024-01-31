@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/control/common_controls/tracing_control.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -61,9 +62,9 @@ class TGRpcRequestProxyImpl
 {
     using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>;
 public:
-    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<TControlBoard> icb)
+    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl)
         : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
-        , Icb(std::move(icb))
+        , TracingControl(std::move(tracingControl))
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -82,8 +83,6 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    static TString InternalRequestTypeToControlDomain(const TString& type);
-    TTracingControl& GetTracingControl(const TString& type);
     void MaybeStartTracing(IRequestProxyCtx& ctx);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
@@ -315,8 +314,7 @@ private:
     bool DynamicNode = false;
     TString RootDatabase;
     IGRpcProxyCounters::TPtr Counters;
-    THashMap<TString, TTracingControl> TracingControls;
-    TIntrusivePtr<TControlBoard> Icb;
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> TracingControl;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
@@ -415,31 +413,6 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 
-TString TGRpcRequestProxyImpl::InternalRequestTypeToControlDomain(const TString& type) {
-    static constexpr TStringBuf ydbNamespacePrefix = "Ydb.";
-    static constexpr TStringBuf requestSuffix = "Request";
-
-    TString controlDomain = type;
-    if (controlDomain.StartsWith(ydbNamespacePrefix)) {
-        controlDomain.erase(0, ydbNamespacePrefix.size());
-    }
-    if (controlDomain.EndsWith(requestSuffix)) {
-        controlDomain.erase(controlDomain.size() - requestSuffix.size());
-    }
-
-    return controlDomain;
-}
-
-TTracingControl& TGRpcRequestProxyImpl::GetTracingControl(const TString& type) {
-    if (auto it = TracingControls.find(type); it != TracingControls.end()) {
-        return it->second;
-    }
-    auto tracingControlsDomain = InternalRequestTypeToControlDomain(type);
-    auto domain = TString::Join("TracingControls.", tracingControlsDomain);
-    TTracingControl control(Icb, TAppData::TimeProvider, TAppData::RandomProvider, std::move(domain));
-    return TracingControls.emplace(type, std::move(control)).first->second;
-}
-
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
     auto requestType = ctx.GetInternalRequestType();
     if (requestType.empty()) {
@@ -449,15 +422,7 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
         traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
     }
-    auto& control = GetTracingControl(requestType);
-    if (traceId && control.ThrottleExternal()) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Dropping external traceId " << traceId.GetHexTraceId() << " for request type " << requestType);
-        traceId = {};
-    }
-    if (!traceId && control.SampleThrottle()) {
-        traceId = NWilson::TTraceId::NewTraceId(control.SampledVerbosity(), 4095);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Created new traceId " << traceId.GetHexTraceId() << " for request type " << requestType);
-    }
+    TracingControl->HandleTracing(traceId, NJaegerTracing::TRequestDiscriminator{});
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         ctx.StartTracing(std::move(grpcRequestProxySpan));
@@ -617,8 +582,8 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     }
 }
 
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<TControlBoard> icb) {
-    return new TGRpcRequestProxyImpl(appConfig, std::move(icb));
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl) {
+    return new TGRpcRequestProxyImpl(appConfig, std::move(tracingControl));
 }
 
 } // namespace NGRpcService

@@ -460,8 +460,11 @@ private:
             if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
                 TExprNode::TPtr output;
 
-                Y_ENSURE(outTableInfo.RowSpec);
-                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, outTableInfo.RowSpec->GetColumnOrder(), ctx, *State_->Types);
+                const auto& columnOrder = (outTableInfo.RowSpec)
+                    ? outTableInfo.RowSpec->GetColumnOrder()
+                    : contentColumnOrder;
+
+                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, columnOrder, ctx, *State_->Types);
                 if (!result) {
                     return TStatus::Error;
                 }

@@ -448,6 +448,12 @@ private:
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
+    void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
+        const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+        Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        this->PassAway();
+    }
+
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         NYql::IssueToMessage(issue, issuesMessage.Add());

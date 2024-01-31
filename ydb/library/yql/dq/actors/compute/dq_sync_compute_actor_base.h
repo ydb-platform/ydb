@@ -51,11 +51,11 @@ protected:
     void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
         YQL_ENSURE(this->TaskRunner);
 
-        auto guard = TaskRunner->BindAllocator();
+        auto guard = TBase::BindAllocator();
         auto* alloc = guard.GetMutex();
-        alloc->SetLimit(MemoryQuota->GetMkqlMemoryLimit());
+        alloc->SetLimit(this->MemoryQuota->GetMkqlMemoryLimit());
 
-        MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
 
         this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
 

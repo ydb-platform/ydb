@@ -261,6 +261,7 @@ public:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
+        ui64 prevKey1Items = 0, prevKey1Bytes = 0, key1Items = 0, key1Bytes = 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
@@ -301,6 +302,13 @@ public:
                                     return;
                                 }
                             }
+                            if (bytesLimit) {
+                                ui64 bytes = prevLastChild->DataSize - child->DataSize;
+                                if (LimitExceeded(bytes, bytesLimit)) {
+                                    overshot = false;
+                                    return;
+                                }
+                            }
                         }
                     }
                     ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
@@ -311,8 +319,7 @@ public:
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
                 if (chargeGroups && chargeGroupsItemsLimit) {
-                    // TODO: use erased count
-                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    ui64 unloadedItems = key1Items - prevKey1Items;
                     if (unloadedItems < chargeGroupsItemsLimit) {
                         chargeGroupsItemsLimit -= unloadedItems;
                     } else {
@@ -334,6 +341,13 @@ public:
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         auto& key1Child = node.GetChild(pos);
                         key1PageId = key1Child.PageId;
+                        key1Items = key1Child.GetNonErasedRowCount();
+                        key1Bytes = key1Child.DataSize;
+                        if (pos) {
+                            auto& prevKey1Child = node.GetChild(pos - 1);
+                            prevKey1Items = prevKey1Child.GetNonErasedRowCount();
+                            prevKey1Bytes = prevKey1Child.DataSize;
+                        }
                         endRowId = Min(endRowId, key1Child.RowCount); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.PageId == key2PageId) {

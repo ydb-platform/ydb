@@ -1814,7 +1814,7 @@ bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& 
     return true;
 }
 
-template <i64 UpperBound>
+template <i64 UpperBound, ui32 MaxDays>
 NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     if (buf.empty()) {
         return NUdf::TUnboxedValuePod();
@@ -1843,6 +1843,10 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
             case 'W': days = 7U * num; break;
             default: return NUdf::TUnboxedValuePod();
         }
+    }
+
+    if (days > MaxDays) {
+        return NUdf::TUnboxedValuePod();
     }
 
     if (buf.cend() != pos) {
@@ -2050,7 +2054,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         return ParseTimestamp(buf);
 
     case NUdf::EDataSlot::Interval:
-        return ParseInterval<NUdf::MAX_TIMESTAMP - 1>(buf);
+        return ParseInterval<NUdf::MAX_TIMESTAMP - 1, 2*NUdf::MAX_DATE>(buf);
 
     case NUdf::EDataSlot::TzDate:
         return ParseTzDate(buf);
@@ -2089,7 +2093,7 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
         return ParseTimestamp64(buf);
 
     case NUdf::EDataSlot::Interval64:
-        return ParseInterval<NUdf::MAX_INTERVAL64>(buf);
+        return ParseInterval<NUdf::MAX_INTERVAL64, NUdf::MAX_DATE32 - NUdf::MIN_DATE32>(buf);
 
     case NUdf::EDataSlot::Decimal:
     default:

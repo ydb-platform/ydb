@@ -16,7 +16,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TAlterExternalDataSource TPropose"
+            << "TReplaceExternalDataSource TPropose"
             << ", operationId: " << OperationId;
     }
 
@@ -34,7 +34,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalDataSource);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReplaceExternalDataSource);
 
         const auto pathId = txState->TargetPathId;
         const auto path = TPath::Init(pathId, context.SS);
@@ -56,14 +56,14 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalDataSource);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReplaceExternalDataSource);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
 };
 
-class TAlterExternalDataSource : public TSubOperation {
+class TReplaceExternalDataSource : public TSubOperation {
     static TTxState::ETxState NextState() { return TTxState::Propose; }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -152,7 +152,7 @@ class TAlterExternalDataSource : public TSubOperation {
     void CreateTransaction(const TOperationContext& context,
                            const TPathId& externalDataSourcePathId) const {
         TTxState& txState = context.SS->CreateTx(OperationId,
-                                                 TTxState::TxAlterExternalDataSource,
+                                                 TTxState::TxReplaceExternalDataSource,
                                                  externalDataSourcePathId);
         txState.Shards.clear();
     }
@@ -207,7 +207,7 @@ public:
             Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
-        LOG_N("TAlterExternalDataSource Propose"
+        LOG_N("TReplaceExternalDataSource Propose"
               << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
@@ -258,13 +258,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterExternalDataSource AbortPropose"
+        LOG_N("TReplaceExternalDataSource AbortPropose"
               << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterExternalDataSource");
+        Y_ABORT("no AbortPropose for TReplaceExternalDataSource");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterExternalDataSource AbortUnsafe"
+        LOG_N("TReplaceExternalDataSource AbortUnsafe"
               << ": opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -274,13 +274,13 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterExternalDataSource>(id, tx);
+ISubOperation::TPtr CreateReplaceExternalDataSource(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TReplaceExternalDataSource>(id, tx);
 }
 
-ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateReplaceExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TAlterExternalDataSource>(id, state);
+    return MakeSubOperation<TReplaceExternalDataSource>(id, state);
 }
 
 }

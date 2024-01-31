@@ -304,7 +304,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
 
     LOG_I("CreateNewExternalDataSource, opId " << id << ", feature flag EnableOrReplace "
-                                               << context.SS->EnableReplaceIfExists << ", tx "
+                                               << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
                                                << tx.ShortDebugString());
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
@@ -315,8 +315,8 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
     const auto replaceIfExists = operation.GetReplaceIfExists();
     const TString& name           = operation.GetName();
 
-    if (replaceIfExists && !context.SS->EnableReplaceIfExists) {
-        return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExists is off");
+    if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
+        return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
     }
 
     const TString& parentPathStr = tx.GetWorkingDir();
@@ -342,7 +342,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
             .IsResolved()
             .NotUnderDeleting();
         if (isAlreadyExists) {
-            return {CreateAlterExternalDataSource(id, tx)};
+            return {CreateReplaceExternalDataSource(id, tx)};
         }
     }
 

@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(CreateExternalTableWithOrReplace) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExists(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(CreateExternalTableWithOrReplaceShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExists(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
                 ReplaceIfExists: true
-            )", {{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExists is off"}});
+            )", {{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
 
         env.TestWaitNotification(runtime, txId);
 

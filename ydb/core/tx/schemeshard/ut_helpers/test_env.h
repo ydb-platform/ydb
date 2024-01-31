@@ -59,7 +59,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
         OPTION(std::optional<bool>, EnableServerlessExclusiveDynamicNodes, std::nullopt);
         OPTION(std::optional<bool>, EnableAddColumsWithDefaults, std::nullopt);
-        OPTION(std::optional<bool>, EnableReplaceIfExists, std::nullopt);
+        OPTION(std::optional<bool>, EnableReplaceIfExistsForExternalEntities, std::nullopt);
 
         #undef OPTION
     };

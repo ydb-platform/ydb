@@ -445,8 +445,9 @@ private:
             }
         }
 
-        const TMaybe<TColumnOrder> contentColumnOrder = outTableInfo.RowSpec->GetColumnOrder();
+        TMaybe<TColumnOrder> contentColumnOrder;
         if (content) {
+            contentColumnOrder = State_->Types->LookupColumnOrder(*content);
             if (content->IsCallable("AssumeColumnOrder")) {
                 YQL_ENSURE(contentColumnOrder);
                 YQL_CLOG(INFO, ProviderYt) << "Dropping top level " << content->Content() << " from WriteTable input";
@@ -458,7 +459,9 @@ private:
             auto pgSelect = TCoPgSelect(content);
             if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
                 TExprNode::TPtr output;
-                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, contentColumnOrder, ctx, *State_->Types);
+
+                Y_ENSURE(outTableInfo.RowSpec);
+                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, outTableInfo.RowSpec->GetColumnOrder(), ctx, *State_->Types);
                 if (!result) {
                     return TStatus::Error;
                 }

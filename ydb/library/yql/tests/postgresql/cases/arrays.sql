@@ -133,3 +133,22 @@ select cardinality('[2:4]={5,6,7}'::int[]);
 select cardinality('{{1,2}}'::int[]);
 select cardinality('{{1,2},{3,4},{5,6}}'::int[]);
 select cardinality('{{{1,9},{5,6}},{{2,3},{3,4}}}'::int[]);
+-- Insert/update on a column that is array of composite
+create temp table t1 (f1 int8_tbl[]);
+-- Check that arrays of composites are safely detoasted when needed
+create temp table src (f1 text);
+insert into src
+  select string_agg(random()::text,'') from generate_series(1,10000);
+create temp table dest (f1 textandtext[]);
+drop table src;
+drop table dest;
+-- trim_array
+SELECT arr, trim_array(arr, 2)
+FROM
+(VALUES ('{1,2,3,4,5,6}'::bigint[]),
+        ('{1,2}'),
+        ('[10:16]={1,2,3,4,5,6,7}'),
+        ('[-15:-10]={1,2,3,4,5,6}'),
+        ('{{1,10},{2,20},{3,30},{4,40}}')) v(arr);
+SELECT trim_array(ARRAY[1, 2, 3], -1); -- fail
+SELECT trim_array(ARRAY[1, 2, 3], 10); -- fail

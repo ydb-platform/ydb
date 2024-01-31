@@ -6,8 +6,8 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/duration.proto";
 
-import "ydb/public/api/client/yc_public/api/operation.proto";
-import "ydb/public/api/client/yc_public/api/tools/options.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/access/access.proto";
 import "ydb/public/api/client/yc_private/microcosm/instancegroup/v1/instance_group.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";

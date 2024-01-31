@@ -5,7 +5,7 @@ package yandex.cloud.priv.microcosm.v1;
 import "google/protobuf/empty.proto";
 import "google/protobuf/field_mask.proto";
 
-import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_private/microcosm/v1/value.proto";
 import "ydb/public/api/client/yc_private/microcosm/v1/stack.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";

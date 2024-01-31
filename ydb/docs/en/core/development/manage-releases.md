@@ -13,13 +13,13 @@ YDB server major version comprise of two numbers separated by a dot character. F
 
 As part of the YDB server development lifecycle, multiple minor versions can be released, concatenating its ordinal number to the major version after a dot. So, a full version number for YDB server looks like `23.3.5`, where `23.3` is the major version, and `5` is the minor.
 
-YDB server release schedule includes 4 major releases for each year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. Number of minor releases is not fixed, and may vary from one major to another.
+YDB server release schedule typically includes 4 major releases for each year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. Number of minor releases is not fixed, and may vary from one major release to another.
 
 ### Compatibility {#server-compatibility}
 
 YDB maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating YDB](../administration/upgrade.md) article for cluster upgrade procedure.
 
-Given the above compatibility target, major releases go in pairs, with odd numbers adding new functionality switched off by feature flags, and even numbers enabling that functionality.
+Given the above compatibility target, major releases go in pairs, with odd numbers mostly adding new functionality switched off by feature flags, and even numbers enabling that functionality.
 
 For instance, release `23.1` comes with new functionality switched off, and can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, it can be further upgraded to `23.2` to leverage new functionality.
 

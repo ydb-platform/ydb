@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1.autoscaling;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup/inner;autoscaling";
+option java_outer_classname = "PAS";
+
+service AutoscalingService {
+  rpc GetTrackedMetricsKeys (GetTrackedMetricsKeysRequest) returns (GetTrackedMetricsKeysResponse);
+
+  rpc SendTrackedMetrics (SendTrackedMetricsRequest) returns (google.protobuf.Empty);
+
+  rpc ReplicateTrackedMetrics (SendTrackedMetricsRequest) returns (google.protobuf.Empty);
+}
+
+message GetTrackedMetricsKeysRequest {
+  repeated MetricKey available_keys = 1;
+}
+
+message GetTrackedMetricsKeysResponse {
+  repeated MetricKey tracked_keys = 1;
+}
+
+message SendTrackedMetricsRequest {
+  repeated MetricValue values = 2;
+}
+
+
+message MetricKey {
+  map<string, string> labels = 1;
+}
+
+message MetricValue {
+  MetricKey key = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  double value = 3;
+}

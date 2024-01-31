@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.v1;
+
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm;microcosm";
+option java_outer_classname = "PMICV";
+
+message Struct {
+  map<string, Value> fields = 1;
+}
+
+message Value {
+  oneof kind {
+    // Allowed values: decimal integers and decimal floating point numbers.
+    // Integers format - https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Long.html#parseLong(java.lang.String)
+    // Floating point format - https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Double.html#valueOf(java.lang.String)
+    // Values 'Nan' and '+-Infinity' are not allowed.
+    string number_value = 2 [(sensitive) = true];
+    string string_value = 3 [(sensitive) = true];
+    bool bool_value = 4;
+    Struct struct_value = 5;
+    ListValue list_value = 6;
+    SetValue set_value = 7;
+    UnknownValue unknown_value = 8;
+  }
+}
+
+message UnknownValue {}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+message SetValue {
+  repeated Value values = 1;
+}

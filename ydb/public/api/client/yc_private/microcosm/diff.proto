@@ -1,0 +1,69 @@
+syntax = "proto3";
+import "ydb/public/api/client/yc_private/microcosm/v1/value.proto";
+
+package yandex.cloud.priv.microcosm.v1;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm;microcosm";
+option java_outer_classname = "PMICD";
+
+message BlockDiff {
+  message BlockListDiff {
+    repeated BlockDiff block = 1;
+  }
+  map<string, ValueDiff> attributes = 1;
+  map<string, BlockListDiff> blocks = 2;
+}
+
+message ValueUnchanged {
+  Value value = 1;
+  bool computed = 2;
+  bool sensitive = 3;
+}
+
+message ValueAdded {
+  Value planned_value = 1;
+  bool computed = 2;
+  bool sensitive = 3;
+}
+
+message ValueDeleted {
+  Value prior_value = 1;
+  bool computed = 2;
+  bool sensitive = 3;
+}
+
+message ValueChanged {
+  Value prior_value = 1;
+  Value planned_value = 2;
+  bool computed = 3;
+  bool sensitive = 4;
+}
+
+message MapChanged {
+  map<string, ValueDiff> diff = 1;
+}
+
+message ListChanged {
+  repeated ValueDiff diff = 1;
+}
+
+message SetChanged {
+  repeated ValueDiff diff = 1;
+}
+
+message ObjectChanged {
+  map<string, ValueDiff> diff = 1;
+}
+
+message ValueDiff {
+  oneof diff {
+    ValueAdded added = 1;
+    ValueUnchanged unchanged = 2;
+    ValueDeleted deleted = 3;
+    ValueChanged changed = 4;
+    MapChanged map_changed = 5;
+    ListChanged list_changed = 6;
+    SetChanged set_changed = 7;
+    ObjectChanged object_changed = 8;
+  }
+}

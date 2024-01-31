@@ -4,9 +4,11 @@ RECURSE(
     compute
     iam
     kms
+    microcosm
     operation
     team
     quota
+    reference
     resourcemanager
     servicecontrol
     ydb

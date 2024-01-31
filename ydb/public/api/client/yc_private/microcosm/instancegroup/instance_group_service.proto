@@ -1,0 +1,383 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/duration.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/api/tools/options.proto";
+import "ydb/public/api/client/yc_private/access/access.proto";
+import "ydb/public/api/client/yc_private/microcosm/instancegroup/v1/instance_group.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/reference/reference.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup;instancegroup";
+option java_outer_classname = "PIGS";
+
+service InstanceGroupService {
+  rpc Get (GetInstanceGroupRequest) returns (InstanceGroup);
+
+  rpc List (ListInstanceGroupsRequest) returns (ListInstanceGroupsResponse);
+
+  rpc Create (CreateInstanceGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc CreateFromYaml (CreateInstanceGroupFromYamlRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc Update (UpdateInstanceGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc UpdateFromYaml (UpdateInstanceGroupFromYamlRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc Delete (DeleteInstanceGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteInstanceGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Start (StartInstanceGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc Stop (StopInstanceGroupRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopInstanceGroupMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc RollingRestart (RollingRestartRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RollingRestartMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc RollingRecreate (RollingRecreateRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RollingRecreateMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc ConfirmInstancesStop (ConfirmInstancesStopRequest) returns (google.protobuf.Empty);
+
+  rpc ListInstances (ListInstanceGroupInstancesRequest) returns (ListInstanceGroupInstancesResponse);
+
+  rpc DeleteInstances (DeleteInstancesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteInstancesMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc StopInstances (StopInstancesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopInstancesMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc ResumeProcesses (ResumeInstanceGroupProcessesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResumeInstanceGroupProcessMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc PauseProcesses (PauseInstanceGroupProcessesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "PauseInstanceGroupProcessMetadata"
+      response: "InstanceGroup"
+    };
+  }
+
+  rpc ListOperations (ListInstanceGroupOperationsRequest) returns (ListInstanceGroupOperationsResponse);
+
+  rpc ListLogRecords (ListInstanceGroupLogRecordsRequest) returns (ListInstanceGroupLogRecordsResponse);
+
+  // Lists references to the specified instance group.
+  rpc ListReferences (ListInstanceGroupReferencesRequest) returns (ListInstanceGroupReferencesResponse);
+
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
+
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "access.UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+enum InstanceGroupView {
+  option (cloud.api.tools.enumeration).lint_skip.unspecified_value = true;
+  BASIC = 0;
+  FULL = 1;
+}
+
+message ResumeInstanceGroupProcessesRequest {
+  string instance_group_id = 1 [(length) = "<=255"];
+}
+
+message ResumeInstanceGroupProcessMetadata {
+  string instance_group_id = 1;
+}
+
+message PauseInstanceGroupProcessesRequest {
+  string instance_group_id = 1 [(length) = "<=255"];
+}
+
+message PauseInstanceGroupProcessMetadata {
+  string instance_group_id = 1;
+}
+
+message GetInstanceGroupRequest {
+  string instance_group_id = 1 [(required) = true];
+  InstanceGroupView view = 2;
+}
+
+message CreateInstanceGroupRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  InstanceTemplate instance_template = 6 [(required) = true];
+  ScalePolicy scale_policy = 7 [(required) = true];
+  DeployPolicy deploy_policy = 8 [(required) = true];
+  AllocationPolicy allocation_policy = 9 [(required) = true];
+  LoadBalancerSpec load_balancer_spec = 10;
+  HealthChecksSpec health_checks_spec = 11;
+  string service_account_id = 12 [(required) = true, (length) = "<=50"];
+  repeated Variable variables = 15;
+  bool deletion_protection = 16;
+  ApplicationLoadBalancerSpec application_load_balancer_spec = 18;
+
+  // private fields, potentially public
+  ConfirmationSpec confirmation_spec = 13;
+  AutoHealingPolicy auto_healing_policy = 20;
+  // Deprecated. Use application_load_balancer_spec instead
+  PlatformL7LoadBalancerSpec platform_l7_load_balancer_spec = 14;
+  bool dry_run = 17;
+
+  // private only
+  string id = 19 [(length) = "<=255"];
+
+  // private field
+  repeated reference.Reference references = 100;
+}
+
+message CreateInstanceGroupFromYamlRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string instance_group_yaml = 2 [(required) = true, (length) = "<=1048576"];
+
+  // private fields, potentially public
+  bool dry_run = 3;
+}
+
+message CreateInstanceGroupMetadata {
+  string instance_group_id = 1 [(length) = "<=255"];
+}
+
+message UpdateInstanceGroupRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+  InstanceTemplate instance_template = 6 [(required) = true];
+  ScalePolicy scale_policy = 7 [(required) = true];
+  DeployPolicy deploy_policy = 8 [(required) = true];
+  AllocationPolicy allocation_policy = 9 [(required) = true];
+  HealthChecksSpec health_checks_spec = 11;
+  string service_account_id = 12 [(required) = true];
+  LoadBalancerSpec load_balancer_spec = 14;
+  ApplicationLoadBalancerSpec application_load_balancer_spec = 19;
+  repeated Variable variables = 16;
+  bool deletion_protection = 17;
+
+  // private fields, potentially public
+  ConfirmationSpec confirmation_spec = 13;
+  AutoHealingPolicy auto_healing_policy = 20;
+  // Deprecated. Use application_load_balancer_spec instead
+  PlatformL7LoadBalancerSpec platform_l7_load_balancer_spec = 15;
+  bool dry_run = 18;
+}
+
+message UpdateInstanceGroupFromYamlRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  string instance_group_yaml = 2 [(required) = true, (length) = "<=1048576"];
+
+  // private fields, potentially public
+  bool dry_run = 3;
+}
+
+message UpdateInstanceGroupMetadata {
+  string instance_group_id = 1;
+}
+
+message StartInstanceGroupRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+}
+
+message StartInstanceGroupMetadata {
+  string instance_group_id = 1;
+}
+
+message StopInstanceGroupRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  string service_account_id = 2;
+  //private fields
+  google.protobuf.Duration instances_termination_grace_period = 3 [(value) = "<=30m"];
+}
+
+message StopInstanceGroupMetadata {
+  string instance_group_id = 1;
+}
+
+message RollingRestartRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  repeated string managed_instance_ids = 2 [(size) = ">=1"];
+  bool ignore_references = 3;
+}
+
+message RollingRestartMetadata {
+  string instance_group_id = 1;
+}
+
+message RollingRecreateRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  repeated string managed_instance_ids = 2 [(size) = ">=1"];
+}
+
+message RollingRecreateMetadata {
+  string instance_group_id = 1;
+}
+
+message DeleteInstanceGroupRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  string service_account_id = 2 [(length) = "<=50"];
+}
+
+message DeleteInstanceGroupMetadata {
+  string instance_group_id = 1;
+}
+
+message ListInstanceGroupsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4 [(length) = "<=1000"];
+
+  InstanceGroupView view = 5;
+}
+
+message ListInstanceGroupsResponse {
+  repeated InstanceGroup instance_groups = 1;
+  string next_page_token = 2;
+}
+
+message ConfirmInstancesStopRequest {
+  string instance_group_id = 1 [(length) = "<=255"];
+  repeated string managed_instance_ids = 2;
+}
+
+message ListInstanceGroupInstancesRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupInstancesResponse {
+  repeated ManagedInstance instances = 1;
+  string next_page_token = 2;
+}
+
+message DeleteInstancesRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  repeated string managed_instance_ids = 2 [(size) = ">=1"];
+  bool create_another = 3;
+}
+
+message StopInstancesRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+  repeated string managed_instance_ids = 2 [(size) = ">=1"];
+  bool ignore_references = 3;
+}
+
+message DeleteInstancesMetadata {
+  string instance_group_id = 1;
+}
+
+message StopInstancesMetadata {
+  string instance_group_id = 1;
+}
+
+message ListInstanceGroupOperationsRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message ListInstanceGroupLogRecordsRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListInstanceGroupLogRecordsResponse {
+  repeated LogRecord log_records = 1;
+
+  string next_page_token = 2;
+}
+
+message ListInstanceGroupReferencesRequest {
+  string instance_group_id = 1 [(required) = true, (length) = "<=255"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}

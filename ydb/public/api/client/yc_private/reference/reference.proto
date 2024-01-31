@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.reference;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/reference;reference";
+option java_outer_classname = "PREF";
+
+message Reference {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    MANAGED_BY = 1;
+    USED_BY = 2;
+  }
+  Referrer referrer = 1;
+  Type type = 2;
+}
+
+message Referrer {
+  // * `type = compute.instance, id = <instance id>`
+  // * `type = compute.instanceGroup, id = <instanceGroup id>`
+  // * `type = loadbalancer.networkLoadBalancer, id = <networkLoadBalancer id>`
+  // * `type = managed-kubernetes.cluster, id = <cluster id>`
+  // * `type = managed-mysql.cluster, id = <cluster id>`
+  string type = 1;
+  string id = 2;
+}

@@ -1,0 +1,496 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.instancegroup.v1.console;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup/console;console";
+option java_outer_classname = "PCIG";
+
+message Variable {
+  string key = 1;
+  string value = 2;
+}
+
+message ScalePolicy {
+  oneof scale_type {
+    option (exactly_one) = true;
+    FixedScale fixed_scale = 1;
+    AutoScale auto_scale = 2;
+  }
+
+  AutoScale test_auto_scale = 3;
+
+  message FixedScale {
+    int64 size = 1 [(value) = "0-100"];
+    repeated ZoneSize zone_sizes = 2;
+
+    message ZoneSize {
+      string zone_id = 1;
+      int64 size = 2;
+    }
+  }
+
+  message AutoScale {
+    // Lower limit for instance count in each zone.
+    int64 min_zone_size = 1 [(value) = "0-100"];
+    // Upper limit for total instance count (across all zones).
+    // 0 means maximum limit = 100.
+    int64 max_size = 2 [(value) = "0-100"];
+
+    google.protobuf.Duration measurement_duration = 3;
+    google.protobuf.Duration warmup_duration = 4;
+    // deprecated, use stabilization_duration instead
+    google.protobuf.Duration cooldown_duration = 5;
+    google.protobuf.Duration stabilization_duration = 10;
+
+    int64 initial_size = 6;
+    CpuUtilizationRule cpu_utilization_rule = 7;
+    repeated CustomRule custom_rules = 8;
+
+    enum AutoScaleType {
+      AUTO_SCALE_TYPE_UNSPECIFIED = 0;
+      ZONAL = 1;
+      REGIONAL = 2;
+    }
+
+    AutoScaleType auto_scale_type = 9;
+  }
+
+  message CpuUtilizationRule {
+    double utilization_target = 1;
+  }
+
+  message CustomRule {
+    enum RuleType {
+      RULE_TYPE_UNSPECIFIED = 0;
+      UTILIZATION = 1;
+      WORKLOAD = 2;
+    }
+
+    enum MetricType {
+      METRIC_TYPE_UNSPECIFIED = 0;
+      GAUGE = 1;
+      COUNTER = 2;
+    }
+
+    RuleType rule_type = 1;
+    MetricType metric_type = 2;
+    string metric_name = 3;
+    map<string, string> labels = 5;
+    double target = 4;
+    string folder_id = 6;
+    string service = 7;
+  }
+
+}
+
+message DeployPolicy {
+  int64 max_unavailable = 1;
+  int64 min_available_percent = 4;
+  int64 max_deleting = 2;
+  int64 max_creating = 3;
+  int64 max_expansion = 6;
+  google.protobuf.Duration startup_duration = 7;
+  Strategy strategy = 8;
+  bool stable_deploy = 9;
+
+  oneof zonal_unavailable {
+    int64 zonal_max_unavailable = 10;
+    int64 zonal_min_available_percent = 11;
+  }
+  int64 zonal_max_deleting = 12;
+  int64 zonal_max_creating = 13;
+  MinimalAction minimal_action = 14;
+
+  enum Strategy {
+    STRATEGY_UNSPECIFIED = 0;
+    PROACTIVE = 1;
+    OPPORTUNISTIC = 2;
+  }
+
+  enum MinimalAction {
+    MINIMAL_ACTION_UNSPECIFIED = 0;
+    LIVE_UPDATE = 1;
+    RESTART = 2;
+    RECREATE = 3;
+  }
+}
+
+message AllocationPolicy {
+  repeated Zone zones = 1;
+
+  message Zone {
+    string zone_id = 1;
+    repeated string instance_tags_pool = 2;
+  }
+}
+
+message ConfirmationSpec {
+  bool confirmation_on_instance_stop = 1;
+}
+
+message InstanceTemplate {
+  string description = 1;
+  map<string, string> labels = 2;
+  string platform_id = 3;
+  ResourcesSpec resources_spec = 4;
+
+  // Metadata values may contain one of the supported placeholders:
+  //   {instance_group.id}
+  //   {instance.short_id}
+  //   {instance.index}
+  //   {instance.index_in_zone}
+  //   {instance.zone_id}
+  //   {instance.internal_dc}
+  // InstanceGroup and Instance labels may be copied to metadata following way:
+  //   {instance_group.labels.some_label_key}
+  //   {instance.labels.another_label_key}
+  // These placeholders will be substituted for each created instance anywhere in the value text.
+  // In the rare case the value requires to contain this placeholder explicitly,
+  // it must be escaped with double brackets, in example {{instance.index}}
+  map<string, string> metadata = 5 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+
+  AttachedDiskSpec boot_disk_spec = 6;
+  repeated AttachedDiskSpec secondary_disk_specs = 7;
+
+  repeated NetworkInterfaceSpec network_interface_specs = 8;
+
+  // Deprecated. Use name instead.
+  string name_template = 9;
+  // Deprecated. Use hostname instead.
+  string hostname_template = 10;
+
+  SchedulingPolicy scheduling_policy = 11;
+
+  string service_account_id = 12;
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}
+  // If not set, default is used: {instance_group.id}-{instance.short_id}
+  // It may also contain another placeholders, see metadata doc for full list.
+  string name = 13;
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}
+  // If not set, `name` value will be used
+  // It may also contain another placeholders, see metadata doc for full list.
+  string hostname = 14;
+
+  NetworkSettings network_settings = 15;
+
+  PlacementPolicy placement_policy = 16;
+
+  repeated AttachedFilesystemSpec filesystem_specs = 17;
+
+  // private fields
+  bool cauth = 100;
+  repeated UnderlayNetwork underlay_networks = 101;
+  // Deprecated. Use fqdn instead.
+  string fqdn_template = 102;
+  string internal_data_disk_id = 103;
+
+  // In order to be unique it must contain at least on of instance unique placeholders:
+  //   {instance.short_id}
+  //   {instance.index}
+  //   combination of {instance.zone_id} and {instance.index_in_zone}
+  //   combination of {instance.internal_dc} and {instance.index_in_zone}
+  // Example: my-instance-{instance.index}.internal
+  // If not set, default is used: `hostname`.ru-central1.internal
+  // It also may contain another placeholders, see metadata doc for full list
+  string fqdn = 104;
+  PciTopologyId pci_topology_id = 105;
+  MetadataOptions metadata_options = 106;
+}
+
+message PlacementPolicy {
+  message HostAffinityRule {
+    enum Operator {
+      OPERATOR_UNSPECIFIED = 0;
+      IN = 1;
+      NOT_IN = 2;
+    }
+    string key = 1;
+    Operator op = 2;
+    repeated string values = 3;
+  }
+
+  string placement_group_id = 1;
+  string host_group = 2;
+  repeated HostAffinityRule host_affinity_rules = 3;
+  string placement_group_partition = 4;
+}
+
+enum PciTopologyId {
+  PCI_TOPOLOGY_ID_UNSPECIFIED = 0;
+  V1 = 1;
+  V2 = 2;
+  // This topology will be available only for internal usage
+  K8S = 3;
+  // AKA "new topology" AKA "V2" for external users.
+  V3 = 4;
+}
+
+message ResourcesSpec {
+  int64 memory = 1;
+  int64 cores = 2;
+  int64 core_fraction = 3;
+  int64 gpus = 4;
+}
+
+message AttachedDiskSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  Mode mode = 1 [(required) = true];
+  string device_name = 2;
+  //oneof disk_spec or disk_id
+  DiskSpec disk_spec = 3;
+  // set to use an existing disk. To set use variables.
+  string disk_id = 4;
+
+  message DiskSpec {
+    string description = 1;
+    string type_id = 2;
+    int64 size = 3;
+    oneof source_oneof {
+      string image_id = 4;
+      string snapshot_id = 5;
+    }
+    // When set to true, disk will not be deleted even after managed instance is deleted.
+    // It will be a user's responsibility to delete such disks.
+    bool preserve_after_instance_delete = 6;
+  }
+
+  // when set can be later used to change DiskSpec of actual disk
+  string name = 5;
+}
+
+message AttachedFilesystemSpec {
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    READ_ONLY = 1;
+    READ_WRITE = 2;
+  }
+
+  Mode mode = 1;
+  string device_name = 2;
+
+  string filesystem_id = 3;
+}
+
+message NetworkInterfaceSpec {
+  string network_id = 1;
+  repeated string subnet_ids = 2;
+
+  PrimaryAddressSpec primary_v4_address_spec = 3;
+  PrimaryAddressSpec primary_v6_address_spec = 4;
+
+  repeated string security_group_ids = 5;
+}
+
+message PrimaryAddressSpec {
+  OneToOneNatSpec one_to_one_nat_spec = 1;
+
+  // private fields
+  repeated string additional_fqdns = 2 [(unique) = true];
+  string name = 3;
+
+  // optional, manual set static internal IP. To set use variables.
+  string address = 4;
+  repeated DnsRecordSpec dns_record_specs = 5;
+}
+
+message OneToOneNatSpec {
+  IpVersion ip_version = 1;
+
+  // optional, manual set static public IP. To set use variables.
+  string address = 2;
+  repeated DnsRecordSpec dns_record_specs = 3;
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+  IPV4 = 1;
+  IPV6 = 2;
+}
+
+message UnderlayNetwork {
+  string network_name = 1;
+}
+
+message SchedulingPolicy {
+  bool preemptible = 1;
+
+  // internal fields
+  bool deny_deallocation = 2;
+  bool start_without_compute = 3;
+
+  //private fields
+  google.protobuf.Duration termination_grace_period = 4;
+}
+
+message NetworkSettings {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    STANDARD = 1;
+    SOFTWARE_ACCELERATED = 2;
+    HARDWARE_ACCELERATED = 3;
+  }
+
+  Type type = 1;
+}
+
+message LoadBalancerSpec {
+  TargetGroupSpec target_group_spec = 1;
+  google.protobuf.Duration max_opening_traffic_duration = 2;
+  google.protobuf.Duration target_draining_duration = 3;
+}
+
+message TargetGroupSpec {
+  string name = 1;
+  string description = 2;
+  map<string, string> labels = 3;
+  repeated string address_names = 4;
+}
+
+message ApplicationLoadBalancerSpec {
+  ApplicationTargetGroupSpec target_group_spec = 1;
+  google.protobuf.Duration max_opening_traffic_duration = 2;
+}
+
+message ApplicationTargetGroupSpec {
+  string name = 1;
+  string description = 2;
+  map<string, string> labels = 3;
+  repeated string address_names = 4;
+}
+
+// Deprecated. Use ApplicationLoadBalancerSpec instead
+message PlatformL7LoadBalancerSpec {
+  PlatformL7TargetGroupSpec target_group_spec = 1;
+  // Deprecated. Will be removed, use target_group_spec::address_names instead
+  IpVersion preferred_ip_version = 2;
+  google.protobuf.Duration max_opening_traffic_duration = 3;
+}
+
+// Deprecated. Use ApplicationTargetGroupSpec instead
+message PlatformL7TargetGroupSpec {
+  string name = 1;
+  string description = 2;
+  map<string, string> labels = 3;
+  repeated string address_names = 4;
+}
+
+message HealthChecksSpec {
+  repeated HealthCheckSpec health_check_specs = 1;
+  google.protobuf.Duration max_checking_health_duration = 2;
+}
+
+message HealthCheckSpec {
+  message TcpOptions {
+    int64 port = 1;
+  }
+
+  message HttpOptions {
+    int64 port = 1;
+    string path = 2;
+    repeated int64 success_codes = 3;
+    map<string, string> headers = 4;
+  }
+
+  message HttpsOptions {
+    int64 port = 1;
+    string host = 2;
+    string path = 3;
+    repeated int64 success_codes = 4;
+    map<string, string> headers = 5;
+  }
+
+  message Http2Options {
+    int64 port = 1;
+    string host = 2;
+    string path = 3;
+    repeated int64 success_codes = 4;
+    map<string, string> headers = 5;
+  }
+
+  message GrpcOptions {
+    int64 port = 1;
+    string service_name = 2;
+    string authority = 3;
+  }
+
+  google.protobuf.Duration interval = 1; // default = 2s
+  google.protobuf.Duration timeout = 2; // default = 1s
+  int64 unhealthy_threshold = 3; // default (0) = 2
+  int64 healthy_threshold = 4; // default (0) = 2
+
+  oneof health_check_options {
+    option (exactly_one) = true;
+
+    TcpOptions tcp_options = 5;
+    HttpOptions http_options = 6;
+    HttpsOptions https_options = 8;
+    Http2Options http2_options = 9;
+    GrpcOptions grpc_options = 10;
+  }
+
+  // internal fields
+  repeated string address_names = 7;
+}
+
+message DnsRecordSpec {
+  string fqdn = 1; // required
+  string dns_zone_id = 2; // optional, if not set, private zone used
+  int64 ttl = 3; // optional, 0-86400
+  bool ptr = 4; // optional, set if PTR record required
+}
+
+message AutoHealingPolicy {
+  enum AutoHealingAction {
+    AUTO_HEALING_ACTION_UNSPECIFIED = 0;
+    //deprecated
+    STOP = 1;
+    //deprecated
+    DELETE = 2;
+    NONE = 3;
+
+    RESTART = 4;
+    RECREATE = 5;
+  }
+
+  AutoHealingAction auto_healing_action = 1;
+}
+
+message MetadataOptions {
+  // Enabled access to GCE flavored metadata
+  MetadataOption gce_http_endpoint = 1;
+  // Enabled access to AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_endpoint = 2;
+  // Enabled access to IAM credentials with GCE flavored metadata
+  MetadataOption gce_http_token = 3;
+  // Enabled access to IAM credentials with AWS flavored metadata (IMDSv1)
+  MetadataOption aws_v1_http_token = 4;
+}
+
+enum MetadataOption {
+  METADATA_OPTION_UNSPECIFIED = 0;
+  // Option is enabled
+  ENABLED = 1;
+  // Option is disabled
+  DISABLED = 2;
+}

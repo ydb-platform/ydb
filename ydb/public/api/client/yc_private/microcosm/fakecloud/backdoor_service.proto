@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.fakecloud.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/rpc/status.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/common/sensitive.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/fakecloud;fakecloud";
+option java_outer_classname = "FCS";
+
+service BackdoorService {
+  // Replaces response body and/or status for all requests matching given criteria
+  rpc Replace (ReplaceRequest) returns (google.protobuf.Empty);
+
+  // Starts waiting for a matching request to happen.
+  // Returns a call token which can be used with GetCallMetadata() to get request and
+  // response metadata.
+  rpc RecordCallMetadata (RecordCallMetadataRequest) returns (RecordCallMetadataResponse);
+
+  // Returns metadata for the call recorded by RecordCallMetadata().
+  // Can block for the duration of the timeout specified by RecordCallMetadata().
+  // Will fail with DEADLINE_EXCEEDED if the call doesn't happen within the timeout specified.
+  rpc GetCallMetadata (GetCallMetadataRequest) returns (CallMetadata);
+
+  // Resets the state of all fake services and BackdoorService.
+  // All user-generated data will be removed.
+  rpc Reset (ResetRequest) returns (google.protobuf.Empty);
+}
+
+message RequestMatcher {
+  oneof match_type {
+    option (exactly_one) = true;
+    google.protobuf.Any exact = 1;
+  }
+}
+
+message ReplaceRequest {
+  RequestMatcher replace_requests = 1 [(required) = true];
+
+  // Replacement response body. If absent, the response body will be left unchanged
+  google.protobuf.Any replacement_response = 2;
+  // Replacement response status. If absent, the response status will be left unchanged
+  google.rpc.Status replacement_status = 3;
+  // Replacement response trailers. If absent, the response trailers will be left unchanged
+  map<string, Values> replacement_trailers = 4;
+}
+
+message RecordCallMetadataRequest {
+  // Request to wait for
+  RequestMatcher wait_for = 1 [(required) = true];
+  // Maximum time to wait for a matching request to occur
+  google.protobuf.Duration timeout = 2 [(required) = true];
+}
+
+message RecordCallMetadataResponse {
+  string call_token = 1 [(sensitive) = true];
+}
+
+message GetCallMetadataRequest {
+  string call_token = 1 [(sensitive) = true];;
+}
+
+message ResetRequest {
+  // Reset options. Currently empty
+}
+
+message CallMetadata {
+  // Request headers
+  map<string, Values> request_headers = 1;
+
+  // Response headers
+  map<string, Values> response_headers = 2;
+  // Response trailers
+  map<string, Values> response_trailers = 3;
+  // Response status
+  google.rpc.Status call_status = 4;
+}
+
+message Values {
+  // Header values.
+  // For ASCII headers, we return header values as-is.
+  // For binary headers (with `-bin' suffix), we return base64-encoded binary data as string.
+  repeated string values = 1;
+}

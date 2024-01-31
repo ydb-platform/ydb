@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.v1;
+
+import "ydb/public/api/client/yc_private/common/validation.proto";
+import "ydb/public/api/client/yc_private/microcosm/v1/value.proto";
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/microcosm/v1/diff.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm;microcosm";
+option java_outer_classname = "PMIC";
+
+
+message Stack {
+  // ID of the stack.
+  string id = 1;
+
+  // ID of the folder that the stack belongs to.
+  string folder_id = 2;
+
+  // Creation timestamp in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Name of the stack.
+  // The name is unique within the folder.
+  string name = 4;
+
+  // Description of the stack.
+  string description = 5;
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 6;
+
+  string service_account_id = 7;
+
+  reserved 8;
+
+  // Input values as `name:value` pairs.
+  map<string, Value> input_values = 10;
+
+  Status status = 9;
+
+  // Output values as `name:value` pairs.
+  // Field updated when Create/Deploy operation completes successfully.
+  map<string, Value> output_values = 11;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // The stack is being created/deployed.
+    DEPLOYING = 1;
+    // Deployment not going.
+    DEPLOYED = 2;
+    // Deployment failed.
+    FAILED = 3;
+    // The stack is being deleted.
+    DELETING = 4;
+  }
+}
+
+message Specification {
+  reserved 10, 11, 12;
+  reserved "specification_yaml", "specification_json", "specification_hcl";
+  oneof source {
+    option (exactly_one) = true;
+    // Base64 encoded bytes of zip archive with specification files.
+    string specification_archive = 13;
+  }
+}
+
+message ChangeSet {
+  string id = 1 [(required) = true, (length) = "<=50"];
+  repeated Change changes = 2;
+
+  reserved 3, 4;
+
+  map<string, Value> prior_input_values = 5;
+  map<string, Value> input_values = 6;
+}
+
+message Change {
+  // note: ACTION_UNSPECIFIED should not be returned from server
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    CREATE = 2;
+    UPDATE = 3;
+    DELETE = 4;
+    // DELETE + CREATE
+    REPLACE = 5;
+  }
+
+  string resource_id = 1 [(length) = "<=50"];
+  string resource_name = 2 [(required) = true];
+  string resource_type = 3 [(required) = true];
+  Action action = 4 [(required) = true];
+  string resource_folder_id = 5 [(required) = true, (length) = "<=50"];
+  BlockDiff diff = 6;
+}
+
+message Resource {
+  string id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2 [(required) = true];
+  string type = 3 [(required) = true];
+  Status status = 4 [(required) = true];
+  string folder_id = 5 [(required) = true, (length) = "<=50"];
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // The resource deployment is planned.
+    DEPLOYMENT_PLANNED = 1;
+    // The resource is being creating/deleting/etc.
+    DEPLOYING = 2;
+    // Stable state.
+    DEPLOYED = 3;
+  }
+}

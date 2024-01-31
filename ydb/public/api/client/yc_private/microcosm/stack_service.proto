@@ -1,0 +1,334 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.microcosm.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "ydb/public/api/client/yc_private/microcosm/v1/value.proto";
+import "ydb/public/api/client/yc_private/microcosm/v1/stack.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm;microcosm";
+option java_outer_classname = "PMICS";
+
+// Main microcosm service used to manage Stacks.
+service StackService {
+
+  // Create new stack
+  rpc Create (CreateStackRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateStackMetadata"
+      response: "Stack"
+    };
+  }
+
+  rpc Delete (DeleteStackRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteStackMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ForceDelete (ForceDeleteStackRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ForceDeleteStackMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Update existing stack without changing it's resources
+  rpc Update (UpdateStackRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateStackMetadata"
+      response: "Stack"
+    };
+  }
+
+  rpc Deploy (DeployStackRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeployStackMetadata"
+      response: "Stack"
+    };
+  }
+
+  // Works only if deployment was planned with confirmation requirement, return FAILED_PRECONDITION otherwise
+  rpc ConfirmDeployment (ConfirmStackDeploymentRequest) returns (google.protobuf.Empty);
+
+  // Works only if planned deployment was not confirmed, return FAILED_PRECONDITION otherwise
+  rpc CancelDeployment (CancelStackDeploymentRequest) returns (google.protobuf.Empty);
+
+  rpc ListResources (ListResourcesRequest) returns (ListResourcesResponse);
+
+  rpc Get (GetStackRequest) returns (Stack);
+
+  // Returns last applied Specification. Fails if new stack is not deployed yet.
+  rpc GetSpecification (GetStackSpecificationRequest) returns (Specification);
+
+  rpc List (ListStacksRequest) returns (ListStacksResponse);
+
+  rpc GetChangeSet (GetChangeSetRequest) returns (ChangeSet);
+
+  rpc ListOperations (ListStackOperationsRequest) returns (ListStackOperationsResponse);
+}
+
+message CreateStackRequest {
+  // ID of the folder to create a stack in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // Name of the stack.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the stack.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  Specification specification = 6 [(required) = true];
+
+  string service_account_id = 7 [(required) = true];
+
+  reserved 8;
+
+  // Input values as `name:value` pairs.
+  // Must not contain unknown value.
+  map<string, Value> input_values = 9;
+
+  bool need_confirmation = 10;
+}
+
+message CreateStackMetadata {
+  // ID of the stack that is being created.
+  string stack_id = 1 [(length) = "<=50"];
+
+  // true if client must confirm stack deployment when it requested
+  //
+  // client workflow pseudocode:
+  // metadata = poll (operation)
+  // if not metadata.need_confirmation
+  //     return if operation.done else continue polling
+  // if metadata.confirmation_status == REQUIRED
+  //     call ConfirmDeployment or CancelDeployment with change_set_id
+  // continue polling // deploy in progress
+  bool need_confirmation = 2;
+
+  ConfirmationStatus confirmation_status = 3;
+
+  // value is set when confirmation_status == REQUIRED
+  string change_set_id = 4 [(length) = "<=50"];
+}
+
+message DeleteStackRequest {
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+  string service_account_id = 2 [(length) = "<=50"];
+  repeated string allow_deletion = 3;
+  repeated string skip_deletion = 4;
+  bool need_confirmation = 5;
+}
+
+message DeleteStackMetadata {
+  string stack_id = 1 [(length) = "<=50"];
+
+  // true if client must confirm stack deployment when it requested
+  //
+  // client workflow pseudocode:
+  // metadata = poll (operation)
+  // if not metadata.need_confirmation
+  //     return if operation.done else continue polling
+  // if metadata.confirmation_status == REQUIRED
+  //     call ConfirmDeployment or CancelDeployment with change_set_id
+  // continue polling // deploy in progress
+  bool need_confirmation = 2;
+
+  ConfirmationStatus confirmation_status = 3;
+
+  // value is set when confirmation_status == REQUIRED
+  string change_set_id = 4 [(length) = "<=50"];
+}
+
+message ForceDeleteStackRequest {
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ForceDeleteStackMetadata {
+  string stack_id = 1 [(length) = "<=50"];
+}
+
+message UpdateStackRequest {
+  // ID of the stack to update.
+  // To get the stack ID, use a [StackService.List] request.
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+
+  // Field mask that specifies which fields of the Stack resource are going to be updated.
+  google.protobuf.FieldMask update_mask = 2;
+
+  // Name of the stack.
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+
+  // Description of the stack.
+  string description = 4 [(length) = "<=256"];
+
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  string service_account_id = 7;
+}
+
+message UpdateStackMetadata {
+  // ID of the stack that is being updated.
+  string stack_id = 1 [(length) = "<=50"];
+}
+
+message DeployStackRequest {
+  // ID of the stack to update.
+  // To get the stack ID, use a [StackService.List] request.
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+
+  // New specification
+  Specification specification = 2 [(required) = true];
+
+  bool need_confirmation = 3;
+
+  reserved 4;
+
+  // Input values as `name:value` pairs.
+  // Must not contain unknown value.
+  map<string, Value> input_values = 6;
+
+  // IDs of prevented from deletion, that are allowed to delete on deploy.
+  // If need_confirmation is true, list should be empty and it can be passed on confirmation.
+  repeated string allow_deletion = 7;
+}
+
+enum ConfirmationStatus {
+  CONFIRMATION_STATUS_UNSPECIFIED = 0;
+  REQUIRED = 1;
+  RECEIVED = 2;
+  CANCELLED = 3;
+}
+
+message DeployStackMetadata {
+  // ID of the stack that is being deployed.
+  string stack_id = 1 [(length) = "<=50"];
+
+  // true if client must confirm stack deployment when it requested
+  //
+  // client workflow pseudocode:
+  // metadata = poll (operation)
+  // if not metadata.need_confirmation
+  //     return if operation.done else continue polling
+  // if metadata.confirmation_status == REQUIRED
+  //     call ConfirmDeployment or CancelDeployment with change_set_id
+  // continue polling // deploy in progress
+  bool need_confirmation = 2;
+
+  ConfirmationStatus confirmation_status = 3;
+
+  // value is set when confirmation_status == REQUIRED
+  string change_set_id = 4 [(length) = "<=50"];
+}
+
+message ConfirmStackDeploymentRequest {
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+  string change_set_id = 2 [(required) = true, (length) = "<=50"];
+  repeated string allow_deletion = 3;
+  repeated string skip_deletion = 4;
+}
+
+message CancelStackDeploymentRequest {
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+  string change_set_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message ListResourcesRequest {
+  // ID of the Stack resource to list resources for.
+  string stack_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListStacksResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListStacksResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListResourcesResponse {
+  // Resources list for the specified stack.
+  repeated Resource resources = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListStackResourcesRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListStackResourcesRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message GetStackRequest {
+  // ID of the stack resource to return.
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetStackSpecificationRequest {
+  // ID of the stack
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListStacksRequest {
+  // ID of the folder to list stacks in.
+  // To get the folder ID, use a [yandex.cloud.resourcemanager.v1.FolderService.List] request.
+  string folder_id = 1 [(required) = true];
+
+  // The maximum number of results per page to return. If the number of available
+  // results is larger than [page_size],
+  // the service returns a [ListStacksResponse.next_page_token]
+  // that can be used to get the next page of results in subsequent list requests.
+  int64 page_size = 2 [(value) = "<=1000"];
+
+  // Page token. To get the next page of results,
+  // set [page_token] to the [ListStacksResponse.next_page_token]
+  // returned by a previous list request.
+  string page_token = 3 [(length) = "<=100"];
+
+  // A filter expression that filters resources listed in the response.
+  // Currently you can use filtering only on the [Stack.name] field.
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListStacksResponse {
+  // Stacks for the specified folder.
+  repeated Stack stacks = 1;
+
+  // This token allows you to get the next page of results for list requests. If the number of results
+  // is larger than [ListStacksRequest.page_size], use
+  // [next_page_token] as the value
+  // for the [ListStacksRequest.page_token] query parameter
+  // in the next list request. Each subsequent list request will have its own
+  // [next_page_token] to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message GetChangeSetRequest {
+  string change_set_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListStackOperationsRequest {
+  string stack_id = 1 [(required) = true, (length) = "<=50"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListStackOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

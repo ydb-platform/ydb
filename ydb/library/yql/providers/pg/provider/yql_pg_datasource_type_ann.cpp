@@ -107,7 +107,7 @@ public:
 
         auto tableName = input->Child(TNode::idx_Table)->Content();
         TVector<const TItemExprType*> items;
-        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfo{ cluster, TString(tableName) });
+        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{ cluster, TString(tableName) });
         if (!columnsPtr) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;

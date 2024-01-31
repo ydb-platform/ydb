@@ -108,12 +108,9 @@ public:
         if (useRuntimeListing) {
             size_t partitionCount = hasDirectories ? maxPartitions : Min(parts.size(), maxPartitions);
             partitions.reserve(partitionCount);
-            ui64 startIdx = 0;
             for (size_t i = 0; i < partitionCount; ++i) {
                 NS3::TRange range;
-                range.SetStartPathIndex(startIdx);
                 TFileTreeBuilder builder;
-                builder.AddPath("", 1, false);
                 builder.Save(&range);
 
                 partitions.emplace_back();
@@ -426,8 +423,25 @@ public:
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(), pathsChunk.begin(), pathsChunk.end());
+                    paths.insert(paths.end(), 
+                        std::make_move_iterator(pathsChunk.begin()), 
+                        std::make_move_iterator(pathsChunk.end()));
                 }
+
+                NS3::TRange range;
+                range.SetStartPathIndex(0);
+                TFileTreeBuilder builder;
+                std::for_each(paths.cbegin(), paths.cend(), [&builder](const TPath& f) {
+                    builder.AddPath(f.Path, f.Size, f.IsDirectory);
+                });
+                builder.Save(&range);
+                
+                TVector<TString> serialized(1);
+                TStringOutput out(serialized.front());
+                range.Save(&out);
+                
+                paths.clear();
+                ReadPathsList(srcDesc, {}, serialized, paths);
 
                 NDq::TS3ReadActorFactoryConfig readActorConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;

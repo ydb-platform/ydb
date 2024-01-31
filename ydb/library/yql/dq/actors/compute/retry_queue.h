@@ -120,6 +120,11 @@ public:
         }
         return false;
     }
+    
+    bool HasPendingEvents() {
+        RemoveConfirmedEvents(MyConfirmedSeqNo);
+        return !Events.empty();
+    }
 
     void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
     void HandleNodeConnected(ui32 nodeId);

@@ -142,7 +142,8 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
-using TObjectPath = NS3::FileQueue::TObjectPath;
+using NS3::FileQueue::TObjectPath;
+using NDqProto::TMessageTransportMeta;
 
 struct TEvS3FileQueue {
     enum EEv : ui32 {
@@ -168,11 +169,12 @@ struct TEvS3FileQueue {
             Record.SetNoMoreFiles(false);
         }
 
-        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles) {
+        TEvObjectPathBatch(std::vector<TObjectPath> objectPaths, bool noMoreFiles, const TMessageTransportMeta& transportMeta) {
             Record.MutableObjectPaths()->Assign(
                 std::make_move_iterator(objectPaths.begin()),
                 std::make_move_iterator(objectPaths.end()));
             Record.SetNoMoreFiles(noMoreFiles);
+            Record.MutableTransportMeta()->CopyFrom(transportMeta);
         }
     };
 
@@ -181,8 +183,9 @@ struct TEvS3FileQueue {
 
         TEvObjectPathReadError() {}
 
-        TEvObjectPathReadError(TIssues issues) {
+        TEvObjectPathReadError(TIssues issues, const TMessageTransportMeta& transportMeta) {
             IssuesToMessage(issues, Record.MutableIssues());
+            Record.MutableTransportMeta()->CopyFrom(transportMeta);
         }
     };
 };
@@ -396,8 +399,6 @@ public:
     void Bootstrap() {
         if (UseRuntimeListing) {
             Schedule(PoisonTimeout, new TEvents::TEvPoison());
-            LOG_I("TS3FileQueueActor", "Sleeping");
-            Sleep(TDuration::Seconds(1));
         }
         if (Directories.empty()) {
             LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list");
@@ -415,10 +416,7 @@ public:
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
-                hFunc(TEvents::TEvPoison, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -431,14 +429,13 @@ public:
     }
 
     void HandleGetNextBatch(TEvS3FileQueue::TEvGetNextBatch::TPtr& ev) {
-        UpdateEventsQueue(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
-            TrySendObjects(ev->Sender);
+            TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
             TryPreFetch();
         } else {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch have not enough objects cached. Start fetching");
-            ScheduleRequest(ev->Sender);
+            ScheduleRequest(ev->Sender, ev->Get()->Record.GetTransportMeta());
             TryFetch();
         }
     }
@@ -518,10 +515,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
-                hFunc(TEvents::TEvPoison, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     TransitToErrorState();
@@ -537,8 +531,7 @@ public:
         LOG_T(
             "TS3FileQueueActor",
             "HandleGetNextBatchForEmptyState Giving away rest of Objects");
-        UpdateEventsQueue(ev->Sender);
-        TrySendObjects(ev->Sender);
+        TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
     STATEFN(AnErrorOccurredState) {
@@ -546,10 +539,7 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
-                hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
-                hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
-                hFunc(TEvents::TEvPoison, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
                 default:
                     MaybeIssues = TIssues{TIssue{TStringBuilder() << "An event with unknown type has been received: '" << etype << "'"}};
                     break;
@@ -563,8 +553,8 @@ public:
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
-        UpdateEventsQueue(ev->Sender);
-        ReadActorToEvents[ev->Sender].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
+        Send(ev->Sender, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
+        TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
     void HandleRoundRobinStageTimeout() {
@@ -575,63 +565,24 @@ public:
         }
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
-        Y_UNUSED(ev);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.Retry();
-        }
-    }
-
-    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_T("TS3FileQueueActor", "Handle disconnected consumer at node " << ev->Get()->NodeId);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.HandleNodeDisconnected(ev->Get()->NodeId);
-        }
-    }
-
-    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3FileQueueActor","Handle connected consumer at node " << ev->Get()->NodeId);
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.HandleNodeConnected(ev->Get()->NodeId);
-        }
-    }
-    
-    void Handle(TEvents::TEvPoison::TPtr& ev) {
-        LOG_D("TS3FileQueueActor", "Handling poison from " << ev->Sender << ", already recieved from " << FinishedConsumers.size() << " ReadActors");
-        if (ev->Sender == TActorId()) {
-            LOG_D("TS3FileQueueActor", "PoisonTimeout reached");
-            PassAway();
-        } else if (UseRuntimeListing) {
-            FinishedConsumers.insert(ev->Sender);
-            if (FinishedConsumers.size() >= ConsumersCount) {
-                PassAway();
-            }
-        } else {
-            PassAway();
-        }
-    }
-
     void PassAway() override {
         LOG_D("TS3FileQueueActor", "PassAway");
         
         AnswerPendingRequests();
-        for (auto& [_, events] : ReadActorToEvents) {
-            events.Unsubscribe();
-        }
         Objects.clear();
         Directories.clear();
         TBase::PassAway();
     }
 
 private:
-    void TrySendObjects(const TActorId& consumer) {
+    void TrySendObjects(const TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         if (CanSendToConsumer(consumer)) {
-            SendObjects(consumer);
+            SendObjects(consumer, transportMeta);
         } else {
-            ScheduleRequest(consumer);
+            ScheduleRequest(consumer, transportMeta);
         }
     }
-    void SendObjects(const TActorId& consumer) {
+    void SendObjects(const TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         Y_ENSURE(!MaybeIssues.Defined());
         std::vector<TObjectPath> result;
         if (Objects.size() > 0) {
@@ -645,8 +596,11 @@ private:
         }
 
         LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
-        ReadActorToEvents[consumer].Send(
-            new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems()));
+        Send(consumer, new TEvS3FileQueue::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
+        
+        if (HasNoMoreItems()) {
+            TryFinish(consumer, transportMeta.GetSeqNo());
+        }
 
         if (!RoundRobinStageFinished) {
             if (StartedConsumers.empty()) {
@@ -735,19 +689,8 @@ private:
                 });
     }
     
-    void UpdateEventsQueue(const TActorId& actor) {
-        if (!ReadActorToEvents.contains(actor)) {
-            ReadActorToEvents[actor].Init(TxId, SelfId(), SelfId());
-            ReadActorToEvents[actor].OnNewRecipientId(actor);
-        }
-    }
-    
-    void ScheduleRequest(const TActorId& consumer) {
-        if (PendingRequests.contains(consumer)) {
-            ++PendingRequests[consumer];
-        } else {
-            PendingRequests[consumer] = 1;
-        }
+    void ScheduleRequest(const TActorId& consumer, const TMessageTransportMeta& transportMeta) {
+        PendingRequests[consumer].push_back(transportMeta);
         HasPendingRequests = true;
     }
 
@@ -756,30 +699,45 @@ private:
         while (HasPendingRequests && (!earlyStop || handledRequest)) {
             bool isEmpty = true;
             handledRequest = false;
-            for (auto& [consumer, requestCount] : PendingRequests) {
+            for (auto& [consumer, requests] : PendingRequests) {
                 if (!CanSendToConsumer(consumer) || (earlyStop && !HasEnoughToSend())) {
-                    if (requestCount > 0) {
+                    if (!requests.empty()) {
                         isEmpty = false;
                     }
                     continue;
                 }
-                if (requestCount > 0) {
-                    --requestCount;
+                if (!requests.empty()) {
                     if (!MaybeIssues.Defined()) {
-                        SendObjects(consumer);
+                        SendObjects(consumer, requests.front());
                     } else {
-                        ReadActorToEvents[consumer].Send(new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues));
+                        Send(consumer, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, requests.front()));
+                        TryFinish(consumer, requests.front().GetSeqNo());
                     }
+                    requests.pop_front();
                     handledRequest = true;
                 }
-                if (requestCount > 0) {
+                if (!requests.empty()) {
                     isEmpty = false;
                 }
             }
-            std::erase_if(PendingRequests, [](const auto& val) { return val.second == 0; });
             if (isEmpty) {
                 HasPendingRequests = false;
             }
+        }
+    }
+    
+    void TryFinish(const TActorId& consumer, ui64 seqNo) {
+        LOG_T("TS3FileQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
+        if (FinishingConsumerToLastSeqNo.contains(consumer)) {
+            LOG_T("TS3FileQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
+            if (FinishingConsumerToLastSeqNo[consumer] < seqNo || SelfId().NodeId() == consumer.NodeId()) {
+                FinishedConsumers.insert(consumer);
+                if (FinishedConsumers.size() == ConsumersCount) {
+                    PassAway();
+                }
+            }
+        } else {
+            FinishingConsumerToLastSeqNo[consumer] = seqNo;
         }
     }
 
@@ -794,14 +752,14 @@ private:
     TMaybe<NS3Lister::IS3Lister::TPtr> MaybeLister = Nothing();
     TMaybe<NThreading::TFuture<NS3Lister::TListResult>> ListingFuture;
     size_t CurrentDirectoryPathIndex = 0;
-    std::unordered_map<TActorId, ui64> PendingRequests;
+    THashMap<TActorId, TDeque<TMessageTransportMeta>> PendingRequests;
     TMaybe<TIssues> MaybeIssues;
     bool UseRuntimeListing;
     ui64 ConsumersCount;
     ui64 BatchSizeLimit;
     ui64 BatchObjectCountLimit;
     ui64 ObjectsTotalSize = 0;
-    THashMap<TActorId, TRetryEventsQueue> ReadActorToEvents;
+    THashMap<TActorId, ui64> FinishingConsumerToLastSeqNo;
     THashSet<TActorId> FinishedConsumers;
     bool RoundRobinStageFinished = false;
     bool IsRoundRobinFinishScheduled = false;
@@ -973,7 +931,6 @@ public:
         }
     }
     void SendPathBatchRequest() {
-        Y_ENSURE(!IsWaitingFileQueueResponse);
         FileQueueEvents.Send(new TEvS3FileQueue::TEvGetNextBatch());
         IsWaitingFileQueueResponse = true;
     }
@@ -1013,10 +970,15 @@ private:
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingFileQueueResponse);
+        FileQueueEvents.OnEventReceived(objectPathBatch);
         IsWaitingFileQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
+        if (IsFileQueueEmpty && !IsConfirmedFileQueueFinish) {
+            SendPathBatchRequest();
+            IsConfirmedFileQueueFinish = true;
+        }
         if (!objectBatch.GetObjectPaths().empty()) {
             PathBatchQueue.emplace_back(
                 std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
@@ -1029,7 +991,12 @@ private:
         }
     }
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
+        FileQueueEvents.OnEventReceived(result);
         IsFileQueueEmpty = true;
+        if (!IsConfirmedFileQueueFinish) {
+            SendPathBatchRequest();
+            IsConfirmedFileQueueFinish = true;
+        }
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
@@ -1077,7 +1044,7 @@ private:
             } while (!Blocks.empty() && freeSpace > 0LL);
         }
 
-        if (LastFileWasProcessed() || ConsumedEnoughFiles()) {
+        if ((LastFileWasProcessed() || ConsumedEnoughFiles()) && !FileQueueEvents.HasPendingEvents()) {
             finished = true;
             ContainerCache.Clear();
         }
@@ -1180,7 +1147,6 @@ private:
 
         ContainerCache.Clear();
         FileQueueEvents.Unsubscribe();
-        Send(FileQueueActor, new NActors::TEvents::TEvPoison());
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
@@ -1233,6 +1199,7 @@ private:
     bool IsFileQueueEmpty = false;
     bool IsCurrentBatchEmpty = false;
     bool IsWaitingFileQueueResponse = false;
+    bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
     TDeque<TVector<TObjectPath>> PathBatchQueue;
 };
@@ -2762,7 +2729,7 @@ private:
             TryRegisterCoro();
         } while (!Blocks.empty() && free > 0LL && GetBlockSize(Blocks.front()) <= size_t(free));
 
-        finished = ConsumedEnoughRows() || LastFileWasProcessed();
+        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.HasPendingEvents();
         if (finished) {
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -2794,8 +2761,8 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new NActors::TEvents::TEvPoison());
             }
+            LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
-            Send(FileQueueActor, new NActors::TEvents::TEvPoison());
 
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -2824,10 +2791,16 @@ private:
 
     void HandleObjectPathBatch(TEvS3FileQueue::TEvObjectPathBatch::TPtr& objectPathBatch) {
         Y_ENSURE(IsWaitingFileQueueResponse);
+        FileQueueEvents.OnEventReceived(objectPathBatch);
         IsWaitingFileQueueResponse = false;
         auto& objectBatch = objectPathBatch->Get()->Record;
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
+        if (IsFileQueueEmpty && !IsConfirmedFileQueueFinish) {
+            LOG_T("TS3StreamReadActor", "Sending finish confirmation to FileQueue");
+            SendPathBatchRequest();
+            IsConfirmedFileQueueFinish = true;
+        }
         if (!objectBatch.GetObjectPaths().empty()) {
             PathBatchQueue.emplace_back(
                 std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
@@ -2844,7 +2817,13 @@ private:
     }
 
     void HandleObjectPathReadError(TEvS3FileQueue::TEvObjectPathReadError::TPtr& result) {
+        FileQueueEvents.OnEventReceived(result);
         IsFileQueueEmpty = true;
+        if (!IsConfirmedFileQueueFinish) {
+            LOG_T("TS3StreamReadActor", "Sending finish confirmation to FileQueue");
+            SendPathBatchRequest();
+            IsConfirmedFileQueueFinish = true;
+        }
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
@@ -3033,6 +3012,7 @@ private:
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
+    bool IsConfirmedFileQueueFinish = false;
     TRetryEventsQueue FileQueueEvents;
     TDeque<TVector<TObjectPath>> PathBatchQueue;
 };
@@ -3243,7 +3223,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     auto hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
                               return a.IsDirectory;
                           }) != paths.end();
-    if (hasDirectories && !params.GetUseRuntimeListing()) {
+    if (hasDirectories) {
         auto pathPatternValue = settings.find("pathpattern");
         if (pathPatternValue == settings.cend()) {
             ythrow yexception() << "'pathpattern' must be configured for directory listing";

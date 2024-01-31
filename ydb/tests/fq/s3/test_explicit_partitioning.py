@@ -17,7 +17,10 @@ class TestS3(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_partitioned_by(self, kikimr, s3, client, runtime_listing):
+    def test_partitioned_by(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == 'v1' and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -110,7 +113,11 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_projection(self, kikimr, s3, client, runtime_listing):
+    def test_projection(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -196,7 +203,10 @@ Banana,3,100'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_pruning(self, kikimr, s3, client, runtime_listing):
+    def test_pruning(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -344,7 +354,10 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_no_schema_columns_except_partitioning_ones(self, kikimr, s3, client, runtime_listing):
+    def test_no_schema_columns_except_partitioning_ones(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -419,7 +432,10 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_projection_date(self, kikimr, s3, client, runtime_listing):
+    def test_projection_date(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -536,7 +552,10 @@ Banana,3,100'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_no_paritioning_columns(self, kikimr, s3, client, runtime_listing):
+    def test_no_paritioning_columns(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -658,7 +677,10 @@ Banana,3,100'''
         ({"folder_id": "my_folder14"}, "year Date", False)
     ], indirect=["client"])
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing):
+    def test_projection_integer_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -748,7 +770,10 @@ Banana,3,100'''
         ({"folder_id": "my_folder9"}, "year Date", False),
     ], indirect=["client"])
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_projection_enum_type_invalid_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing):
+    def test_projection_enum_type_invalid_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -838,7 +863,10 @@ Banana,3,100'''
         ({"folder_id": "my_folder16"}, "year Datetime NOT NULL", True),
     ], indirect=["client"])
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing):
+    def test_projection_date_type_validation(self, kikimr, s3, client, column_type, is_correct, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -1096,7 +1124,10 @@ Banana,3,100'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_raw_format(self, kikimr, s3, client, runtime_listing):
+    def test_raw_format(self, kikimr, s3, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,
@@ -1177,7 +1208,10 @@ Banana,3,100'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("blocks", [False, True])
     @pytest.mark.parametrize("runtime_listing", [False, True])
-    def test_parquet(self, kikimr, s3, blocks, client, runtime_listing):
+    def test_parquet(self, kikimr, s3, blocks, client, runtime_listing, yq_version):
+        if yq_version == "v1" and runtime_listing:
+            pytest.skip("Runtime listing is v2 only")
+
         resource = boto3.resource(
             "s3",
             endpoint_url=s3.s3_url,

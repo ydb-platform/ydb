@@ -106,6 +106,7 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     env.reset(new TEnvironmentSetup({
         .NodeCount = groupSize,
         .Erasure = groupType,
+        .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
     }));
 
     env->CreateBoxAndPool(1, 1);
@@ -140,7 +141,6 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
 
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
-
 
     auto updateCounters = [&]() {
         dsproxyCost = 0;

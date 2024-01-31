@@ -504,20 +504,23 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
                         message << ") bytes " << bytesLimit;
 
-                        Cerr << message << Endl;
                         DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
                         
                         for (const auto& [groupId, unlimitedLoaded] : unlimitedEnv.Loaded) {
                             ui64 size = 0;
-                            TVector<TPageId> expected, loaded;
-                            for (auto pageId : unlimitedLoaded) {
+                            TSet<TPageId> expected, loaded;
+                            TVector<TPageId> unlimitedLoadedList(unlimitedLoaded.begin(), unlimitedLoaded.end());
+                            if (reverse) {
+                                std::reverse(unlimitedLoadedList.begin(), unlimitedLoadedList.end());
+                            }
+                            for (auto pageId : unlimitedLoadedList) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    if (expected) {
-                                        // do not count first page
+                                    if (expected || !groupId.IsMain()) {
+                                        // do not count first main page
                                         size += part.GetPageSize(pageId, groupId);
                                     }
-                                    expected.push_back(pageId);
+                                    expected.insert(pageId);
                                     if (size > bytesLimit) {
                                         break;
                                     }
@@ -525,7 +528,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             }
                             for (auto pageId : limitedEnv.Loaded[groupId]) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    loaded.push_back(pageId);
+                                    loaded.insert(pageId);
                                 }
                             }
 

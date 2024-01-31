@@ -86,4 +86,9 @@ bool TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& sourc
     return true;
 }
 
+bool TFinalizeSourceStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
+    source->Finalize();
+    return true;
+}
+
 }

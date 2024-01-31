@@ -5,6 +5,7 @@ RECURSE(
     iam
     kms
     microcosm
+    oauth
     operation
     team
     quota

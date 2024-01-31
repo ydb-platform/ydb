@@ -140,7 +140,7 @@ class TAlterExternalDataSource : public TSubOperation {
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
-    TPathElement::TPtr CreateExternalDataSourcePathElement(const TPath& dstPath) const {
+    TPathElement::TPtr ReplaceExternalDataSourcePathElement(const TPath& dstPath) const {
         TPathElement::TPtr externalDataSource = dstPath.Base();
 
         externalDataSource->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -236,7 +236,7 @@ public:
 
         AddPathInSchemeShard(result, dstPath);
         const TPathElement::TPtr externalDataSource =
-            CreateExternalDataSourcePathElement(dstPath);
+            ReplaceExternalDataSourcePathElement(dstPath);
         CreateTransaction(context, externalDataSource->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());

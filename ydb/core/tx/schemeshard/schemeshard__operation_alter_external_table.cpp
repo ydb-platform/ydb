@@ -208,7 +208,7 @@ private:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
-    TPathElement::TPtr CreateExternalTablePathElement(const TPath& dstPath) const {
+    TPathElement::TPtr ReplaceExternalTablePathElement(const TPath& dstPath) const {
         TPathElement::TPtr externalTable = dstPath.Base();
         externalTable->PathState = TPathElement::EPathState::EPathStateAlter;
         externalTable->LastTxId  = OperationId.GetTxId();
@@ -247,9 +247,9 @@ private:
         const TPathElement::TPtr& externalTable,
         const TPath& dstPath,
         const TExternalDataSourceInfo::TPtr& oldDataSource,
-        bool IsSameDataSource) {
+        bool isSameDataSource) {
 
-        if (!IsSameDataSource) {
+        if (!isSameDataSource) {
             auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
             reference.SetPath(dstPath.PathString());
             PathIdFromPathId(externalTable->PathId, reference.MutablePathId());
@@ -363,7 +363,7 @@ public:
 
         AddPathInSchemeShard(result, dstPath);
 
-        const auto externalTable = CreateExternalTablePathElement(dstPath);
+        const auto externalTable = ReplaceExternalTablePathElement(dstPath);
         CreateTransaction(context, externalTable->PathId, dataSourcePath->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());

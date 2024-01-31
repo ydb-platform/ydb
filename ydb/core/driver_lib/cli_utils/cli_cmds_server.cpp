@@ -39,6 +39,71 @@ struct TCallContext {
 
 #define CALL_CTX() TCallContext{__FILE__, __LINE__}
 
+class IProtoConfigFileProvider {
+public:
+    virtual ~IProtoConfigFileProvider() {}
+    virtual void AddConfigFile(TString optName, TString description) = 0;
+    virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) const = 0;
+};
+
+class TDefaultProtoConfigFileProvider
+    : public IProtoConfigFileProvider
+{
+private:
+    TMap<TString, TString> Opts;
+public:
+    void AddConfigFile(TString optName, TString description) override {
+        Opts.emplace(optName, description);
+    }
+
+    void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
+        for (const auto& [opt, desc] : Opts) {
+            opts.AddLongOption(opt, desc).OptionalArgument("PATH");
+        }
+    }
+};
+
+void AddProtoConfigOptions(IProtoConfigFileProvider& out) {
+    const TMap<TString, TString> opts = {
+        {"alloc-file", "Allocator config file"},
+        {"audit-file", "File with audit config"},
+        {"auth-file", "authorization configuration"},
+        {"auth-token-file", "authorization token configuration"},
+        {"bootstrap-file", "Bootstrap config file"},
+        {"bs-file", "blobstorage config file"},
+        {"channels-file", "tablet channel profile config file"},
+        {"cms-file", "CMS config file"},
+        {"domains-file", "domain config file"},
+        {"drivemodel-file", "drive model config file"},
+        {"dyn-nodes-file", "Dynamic nodes config file"},
+        {"feature-flags-file", "File with feature flags to turn new features on/off"},
+        {"fq-file", "Federated Query config file"},
+        {"grpc-file", "gRPC config file"},
+        {"http-proxy-file", "Http proxy config file"},
+        {"ic-file", "interconnect config file"},
+        {"incrhuge-file", "incremental huge blob keeper config file"},
+        {"key-file", "tanant encryption key configuration"},
+        {"kqp-file", "Kikimr Query Processor config file"},
+        {"log-file", "log config file"},
+        {"memorylog-file", "set buffer size for memory log"},
+        {"metering-file", "File with metering config"},
+        {"naming-file", "static nameservice config file"},
+        {"netclassifier-file", "NetClassifier config file"},
+        {"pdisk-key-file", "pdisk encryption key configuration"},
+        {"pq-file", "PersQueue config file"},
+        {"pqcd-file", "PersQueue cluster discovery config file"},
+        {"public-http-file", "Public HTTP config file"},
+        {"rb-file", "File with resource broker customizations"},
+        {"sqs-file", "SQS config file"},
+        {"sys-file", "actor system config file (use dummy config by default)"},
+        {"vdisk-file", "vdisk kind config file"},
+    };
+
+    for (const auto& [opt, desc] : opts) {
+        out.AddConfigFile(opt, desc);
+    }
+}
+
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
@@ -53,11 +118,11 @@ private:
     THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
 
 public:
-    void Add(ui32 kind, TConfigItemInfo::TUpdate update) {
+    void Add(ui32 kind, TConfigItemInfo::TUpdate update) override {
         ConfigInitInfo[kind].Updates.emplace_back(update);
     }
 
-    THashMap<ui32, TConfigItemInfo> Dump() const {
+    THashMap<ui32, TConfigItemInfo> Dump() const override {
         return ConfigInitInfo;
     }
 };
@@ -124,62 +189,73 @@ TProto *MutableConfigPartMerge(
 constexpr auto NODE_KIND_YDB = "ydb";
 constexpr auto NODE_KIND_YQ = "yq";
 
-class TClientCommandServerBase : public TClientCommand {
+class TClientCommandServer
+    : public TClientCommand {
+public:
+    TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
+        : TClientCommand("server", {}, "Execute YDB server")
+        , RunConfig(AppConfig)
+        , Factories(std::move(factories))
+    {
+        ProtoConfigFileProvider = std::make_unique<TDefaultProtoConfigFileProvider>();
+        AddProtoConfigOptions(*ProtoConfigFileProvider);
+        ConfigUpdateTracer = std::make_unique<TDefaultConfigUpdateTracer>();
+    }
 protected:
     NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig AppConfig;
     TKikimrRunConfig RunConfig;
 
-    ui32 LogLevel; // log settings
-    ui32 LogSamplingLevel; // log settings
-    ui32 LogSamplingRate; // log settings
+    ui32 LogLevel = NActors::NLog::PRI_WARN; // log settings
+    ui32 LogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
+    ui32 LogSamplingRate = 0; // log settings
     TString LogFormat;// log settings
     TString SysLogServiceTag; //unique tags for sys logs
     TString LogFileName; // log file name to initialize file log backend
     TString ClusterName; // log settings
 
-    ui32 NodeId;
-    TString NodeIdValue;
+    ui32 NodeId = 0;
+    TString NodeIdValue = "";
     ui32 DefaultInterconnectPort = 19001;
-    ui32 BusProxyPort;
+    ui32 BusProxyPort = BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort;
     NBus::TBusQueueConfig ProxyBusQueueConfig;
     NBus::TBusServerSessionConfig ProxyBusSessionConfig;
     TVector<ui64> ProxyBindToProxy;
-    ui32 MonitoringPort;
+    ui32 MonitoringPort = 0;
     TString MonitoringAddress;
-    ui32 MonitoringThreads;
+    ui32 MonitoringThreads = 10;
     TString MonitoringCertificateFile;
-    TString RestartsCountFile;
+    TString RestartsCountFile = "";
     TString TracePath;
-    size_t CompileInflightLimit; // MiniKQLCompileService
+    size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
     TVector<TString> UDFsPaths;
-    TString TenantName;
+    TString TenantName = "";
     TVector<TString> NodeBrokerAddresses;
-    ui32 NodeBrokerPort;
-    bool NodeBrokerUseTls;
-    bool FixedNodeID;
-    bool IgnoreCmsConfigs;
-    bool TinyMode;
+    ui32 NodeBrokerPort = 0;
+    bool NodeBrokerUseTls = false;
+    bool FixedNodeID = false;
+    bool IgnoreCmsConfigs = false;
+    bool TinyMode = false;
     TString NodeAddress;
     TString NodeHost;
     TString NodeResolveHost;
     TString NodeDomain;
-    ui32 InterconnectPort;
-    ui32 SqsHttpPort;
+    ui32 InterconnectPort = 0;
+    ui32 SqsHttpPort = 0;
     TString NodeKind = NODE_KIND_YDB;
     TString NodeType;
-    TString DataCenter;
-    TString Rack;
-    ui32 Body;
-    ui32 GRpcPort;
-    ui32 GRpcsPort;
-    TString GRpcPublicHost;
-    ui32 GRpcPublicPort;
-    ui32 GRpcsPublicPort;
+    TString DataCenter = "";
+    TString Rack = "";
+    ui32 Body = 0;
+    ui32 GRpcPort = 0;
+    ui32 GRpcsPort = 0;
+    TString GRpcPublicHost = "";
+    ui32 GRpcPublicPort = 0;
+    ui32 GRpcsPublicPort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
-    TString GRpcPublicTargetNameOverride;
+    TString GRpcPublicTargetNameOverride = "";
     TString PathToGrpcCertFile;
     TString PathToInterconnectCertFile;
     TString PathToGrpcPrivateKeyFile;
@@ -188,47 +264,11 @@ protected:
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
 
+    std::unique_ptr<IProtoConfigFileProvider> ProtoConfigFileProvider;
     std::unique_ptr<IConfigUpdateTracer> ConfigUpdateTracer;
 
-    TClientCommandServerBase(const char *cmd, const char *description)
-        : TClientCommand(cmd, {}, description)
-        , RunConfig(AppConfig)
-    {
-        ConfigUpdateTracer = std::make_unique<TDefaultConfigUpdateTracer>();
-    }
-
-    virtual void Config(TConfig& config) override {
+    void Config(TConfig& config) override {
         TClientCommand::Config(config);
-
-        LogLevel = NActors::NLog::PRI_WARN;
-        LogSamplingLevel = NActors::NLog::PRI_DEBUG;
-        LogSamplingRate = 0;
-
-        NodeId = 0;
-        NodeIdValue = "";
-        BusProxyPort = NMsgBusProxy::TProtocol::DefaultPort;
-        MonitoringPort = 0;
-        MonitoringThreads = 10;
-        RestartsCountFile = "";
-        CompileInflightLimit = 100000;
-        TenantName = "";
-        NodeBrokerPort = 0;
-        NodeBrokerUseTls = false;
-        FixedNodeID = false;
-        InterconnectPort = 0;
-        SqsHttpPort = 0;
-        IgnoreCmsConfigs = false;
-        DataCenter = "";
-        Rack = "";
-        Body = 0;
-        GRpcPort = 0;
-        GRpcsPort = 0;
-        GRpcPublicHost = "";
-        GRpcPublicPort = 0;
-        GRpcsPublicPort = 0;
-        GRpcPublicAddressesV4.clear();
-        GRpcPublicAddressesV6.clear();
-        GRpcPublicTargetNameOverride = "";
 
         config.Opts->AddLongOption("cluster-name", "which cluster this node belongs to")
             .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&ClusterName);
@@ -275,16 +315,6 @@ protected:
         config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument();
 
-        config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH");
-        config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("bs-file", "blobstorage config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("log-file", "log config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         config.Opts->AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
         config.Opts->AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
@@ -293,27 +323,6 @@ protected:
         config.Opts->AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         config.Opts->AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         config.Opts->AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
-        config.Opts->AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
-        config.Opts->AddLongOption("pq-file", "PersQueue config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("pqcd-file", "PersQueue cluster discovery config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("auth-file", "authorization configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("cms-file", "CMS config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("fq-file", "Federated Query config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
-        config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
-        config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
-        config.Opts->AddLongOption("audit-file", "File with audit config").OptionalArgument("PATH");
         config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
                 .OptionalArgument("PATH").DefaultValue(RestartsCountFile).StoreResult(&RestartsCountFile);
         config.Opts->AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
@@ -341,11 +350,11 @@ protected:
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
-        config.Opts->AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 
         config.Opts->AddLongOption("tiny-mode", "Start in a tiny mode")
-        .NoArgument().SetFlag(&TinyMode);
+                .NoArgument().SetFlag(&TinyMode);
+
+        ProtoConfigFileProvider->RegisterCliOptions(*config.Opts);
 
         config.Opts->AddHelpOption('h');
 
@@ -396,7 +405,7 @@ protected:
         label->SetValue(value);
     }
 
-    virtual void Parse(TConfig& config) override {
+    void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
         TConfigRefs refs{BaseConfig, AppConfig, *ConfigUpdateTracer};
@@ -435,9 +444,10 @@ protected:
                 } catch(TSystemError& e) {
                     ythrow yexception() << "cannot detect host name: " << e.what();
                 }
-                if (!NodeId)
+                if (!NodeId) {
                     ythrow yexception() << "cannot detect node ID for " << HostName() << ":" << InterconnectPort
                         << " and for " << FQDNHostName() << ":" << InterconnectPort << Endl;
+                }
                 Cout << "Determined node ID: " << NodeId << Endl;
             } else {
                 if (!TryFromString(NodeIdValue, NodeId))
@@ -510,22 +520,29 @@ protected:
         OPTION("bs-file", BlobStorageConfig);
 
         if (auto logConfig = OPTION("log-file", LogConfig)) {
-            if (config.ParseResult->Has("syslog"))
+            if (config.ParseResult->Has("syslog")) {
                 logConfig->SetSysLog(true);
-            if (config.ParseResult->Has("log-level"))
+            }
+            if (config.ParseResult->Has("log-level")) {
                 logConfig->SetDefaultLevel(LogLevel);
-            if (config.ParseResult->Has("log-sampling-level"))
+            }
+            if (config.ParseResult->Has("log-sampling-level")) {
                 logConfig->SetDefaultSamplingLevel(LogSamplingLevel);
-            if (config.ParseResult->Has("log-sampling-rate"))
+            }
+            if (config.ParseResult->Has("log-sampling-rate")) {
                 logConfig->SetDefaultSamplingRate(LogSamplingRate);
-            if (config.ParseResult->Has("log-format"))
+            }
+            if (config.ParseResult->Has("log-format")) {
                 logConfig->SetFormat(LogFormat);
-            if (config.ParseResult->Has("cluster-name"))
+            }
+            if (config.ParseResult->Has("cluster-name")) {
                 logConfig->SetClusterName(ClusterName);
+            }
         }
         // This flag is set per node and we prefer flag over CMS.
         if (config.ParseResult->Has("syslog-service-tag")
-            && !AppConfig.GetLogConfig().GetSysLogService()) {
+            && !AppConfig.GetLogConfig().GetSysLogService())
+        {
             AppConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag);
             TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
         }
@@ -626,10 +643,13 @@ protected:
             TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
         }
 
-        if (!AppConfig.HasDomainsConfig())
+        if (!AppConfig.HasDomainsConfig()) {
             ythrow yexception() << "DomainsConfig is not provided";
-        if (!AppConfig.HasChannelProfileConfig())
+        }
+
+        if (!AppConfig.HasChannelProfileConfig()) {
             ythrow yexception() << "ChannelProfileConfig is not provided";
+        }
 
         if (!config.ParseResult->Has("tenant") && RunConfig.ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain();
@@ -640,8 +660,10 @@ protected:
                 }
             }
         }
-        if (NodeId)
+
+        if (NodeId) {
             RunConfig.NodeId = NodeId;
+        }
 
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
             auto& fqConfig = *AppConfig.MutableFederatedQueryConfig();
@@ -660,8 +682,10 @@ protected:
         }
 
         // apply options affecting UDF paths
-        if (!AppConfig.HasUDFsDir())
+        if (!AppConfig.HasUDFsDir()) {
             AppConfig.SetUDFsDir(UDFsDir);
+        }
+
         if (!AppConfig.UDFsPathsSize()) {
             for (const auto& path : UDFsPaths) {
                 AppConfig.AddUDFsPaths(path);
@@ -872,8 +896,9 @@ protected:
         const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
         for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
             const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-            if (!fieldDescriptor)
+            if (!fieldDescriptor) {
                 continue;
+            }
 
             if (fieldDescriptor->is_repeated()) {
                 continue;
@@ -905,10 +930,12 @@ protected:
     }
 
     TString DeduceNodeDomain() {
-        if (NodeDomain)
+        if (NodeDomain) {
             return NodeDomain;
-        if (AppConfig.GetDomainsConfig().DomainSize() == 1)
+        }
+        if (AppConfig.GetDomainsConfig().DomainSize() == 1) {
             return AppConfig.GetDomainsConfig().GetDomain(0).GetName();
+        }
         if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
             auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
             if (slot.GetDomainName())
@@ -940,7 +967,8 @@ protected:
             const TString &nodeHost,
             const TString &nodeAddress,
             const TString &nodeResolveHost,
-            const TMaybe<TString>& path) {
+            const TMaybe<TString>& path)
+    {
         NYdb::NDiscovery::TNodeRegistrationSettings settings;
         settings.Host(nodeHost);
         settings.Port(InterconnectPort);
@@ -968,7 +996,8 @@ protected:
             const TString &nodeHost,
             const TString &nodeAddress,
             const TString &nodeResolveHost,
-            const TMaybe<TString>& path) {
+            const TMaybe<TString>& path)
+    {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdb::TDriverConfig config;
         if (endpoint.EnableSsl.Defined()) {
@@ -997,7 +1026,8 @@ protected:
             const TString &nodeHost,
             const TString &nodeAddress,
             const TString &nodeResolveHost,
-        const TMaybe<TString>& path) {
+            const TMaybe<TString>& path)
+    {
         NClient::TKikimr kikimr(GetKikimr(addr));
         auto registrant = kikimr.GetNodeRegistrant();
 
@@ -1047,9 +1077,9 @@ protected:
 
     NYdb::NDiscovery::TNodeRegistrationResult RegisterDynamicNodeViaDiscoveryService(const TVector<TString>& addrs, const TString& domainName) {
         NYdb::NDiscovery::TNodeRegistrationResult result;
-        const size_t maxNumberRecivedCallUnimplemented = 5;
-        size_t currentNumberRecivedCallUnimplemented = 0;
-        while (!result.IsSuccess() && currentNumberRecivedCallUnimplemented < maxNumberRecivedCallUnimplemented) {
+        const size_t maxNumberReceivedCallUnimplemented = 5;
+        size_t currentNumberReceivedCallUnimplemented = 0;
+        while (!result.IsSuccess() && currentNumberReceivedCallUnimplemented < maxNumberRecivedCallUnimplemented) {
             for (const auto& addr : addrs) {
                 result = TryToRegisterDynamicNodeViaDiscoveryService(addr, domainName, NodeHost, NodeAddress, NodeResolveHost, GetSchemePath());
                 if (result.IsSuccess()) {
@@ -1061,7 +1091,7 @@ protected:
             if (!result.IsSuccess()) {
                 Sleep(TDuration::Seconds(1));
                 if (result.GetStatus() == NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED) {
-                    currentNumberRecivedCallUnimplemented++;
+                    currentNumberReceivedCallUnimplemented++;
                 }
             }
         }
@@ -1179,8 +1209,9 @@ protected:
         }
         Y_ABORT_UNLESS(result);
 
-        if (!result->IsSuccess())
+        if (!result->IsSuccess()) {
             ythrow yexception() << "Cannot register dynamic node: " << result->GetErrorMessage();
+        }
 
         return result;
     }
@@ -1213,8 +1244,9 @@ protected:
 
         FillClusterEndpoints(addrs);
 
-        if (!InterconnectPort)
+        if (!InterconnectPort) {
             ythrow yexception() << "Either --node or --ic-port should be specified";
+        }
 
         if (addrs.empty()) {
             ythrow yexception() << "List of Node Broker end-points is empty";
@@ -1299,7 +1331,8 @@ protected:
                 }
                 if ((kind == NKikimrConsole::TConfigItem::NameserviceConfigItem && appConfig.HasNameserviceConfig())
                  || (kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem && appConfig.HasNetClassifierDistributableConfig())
-                 || (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize())) {
+                 || (kind == NKikimrConsole::TConfigItem::NamedConfigsItem && appConfig.NamedConfigsSize()))
+                {
                     TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleProto);
                 } else {
                     TRACE_CONFIG_CHANGE_INPLACE(kind, ReplaceConfigWithConsoleYaml);
@@ -1338,8 +1371,9 @@ protected:
                     break;
             }
             // Randomized backoff
-            if (!res)
+            if (!res) {
                 Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
+            }
         }
 
         if (!res) {
@@ -1347,7 +1381,14 @@ protected:
         }
     }
 
+    int Run(TConfig &/*config*/) override {
+        Y_ABORT_UNLESS(RunConfig.NodeId);
+        return MainRun(RunConfig, Factories);
+    }
+
 private:
+    std::shared_ptr<TModuleFactories> Factories;
+
     NClient::TKikimr GetKikimr(const TString& addr) {
         TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NYdbGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
@@ -1365,22 +1406,6 @@ private:
         }
         return NClient::TKikimr(grpcConfig);
     }
-};
-
-class TClientCommandServer : public TClientCommandServerBase {
-public:
-    TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
-        : TClientCommandServerBase("server", "Execute YDB server")
-        , Factories(std::move(factories))
-    {}
-
-    virtual int Run(TConfig &/*config*/) override {
-        Y_ABORT_UNLESS(RunConfig.NodeId);
-        return MainRun(RunConfig, Factories);
-    }
-
-private:
-    std::shared_ptr<TModuleFactories> Factories;
 };
 
 void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {

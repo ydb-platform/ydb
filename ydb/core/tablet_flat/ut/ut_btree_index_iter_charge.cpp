@@ -510,11 +510,14 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         
                         for (const auto& [groupId, unlimitedLoaded] : unlimitedEnv.Loaded) {
                             ui64 size = 0;
-                            TSet<TPageId> limitedExpected, limitedLoaded;
+                            TVector<TPageId> expected, loaded;
                             for (auto pageId : unlimitedLoaded) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    size += part.GetPageSize(pageId, groupId);
-                                    limitedExpected.insert(pageId);
+                                    if (expected) {
+                                        // do not count first page
+                                        size += part.GetPageSize(pageId, groupId);
+                                    }
+                                    expected.push_back(pageId);
                                     if (size > bytesLimit) {
                                         break;
                                     }
@@ -522,13 +525,12 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             }
                             for (auto pageId : limitedEnv.Loaded[groupId]) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    limitedLoaded.insert(pageId);
+                                    loaded.push_back(pageId);
                                 }
                             }
 
-                            UNIT_ASSERT_VALUES_EQUAL_C(limitedExpected, limitedLoaded,
+                            UNIT_ASSERT_VALUES_EQUAL_C(expected, loaded,
                                 TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
-                            }
                         }
                     }
                 }
@@ -547,6 +549,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
         CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeBytesLimit(part, tags, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {

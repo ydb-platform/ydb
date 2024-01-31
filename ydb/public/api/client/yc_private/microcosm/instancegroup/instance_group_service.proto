@@ -121,9 +121,6 @@ service InstanceGroupService {
 
   rpc ListLogRecords (ListInstanceGroupLogRecordsRequest) returns (ListInstanceGroupLogRecordsResponse);
 
-  // Lists references to the specified instance group.
-  rpc ListReferences (ListInstanceGroupReferencesRequest) returns (ListInstanceGroupReferencesResponse);
-
   rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
 
   rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (operation.Operation) {

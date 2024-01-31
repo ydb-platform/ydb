@@ -25,7 +25,7 @@ public:
     TDqComputeStorage(TTxId txId, const TString& spillerName, std::function<void()>&& wakeUpCallback) {
 
         SelfActor_ = CreateDqComputeStorageActor(txId, spillerName, std::move(wakeUpCallback));
-        SelfActorId_ = TlsActivationContext->AsActorContext().RegisterWithSameMailbox(SelfActor_->GetActor());
+        SelfActorId_ = TlsActivationContext->AsActorContext().Register(SelfActor_->GetActor());
         SelfId_ = TlsActivationContext->AsActorContext().SelfID;
     }
 

@@ -388,8 +388,8 @@ public:
 private:
     EFetchResult AsyncWrite() {
         MKQL_ENSURE(!AsyncReadOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
-        MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
+        // MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
+        // MKQL_ENSURE(AsyncWriteOperation.has_value(), "Internal logic error");
         // AsyncWriteOperation->Subscribe(this->DoCalculate) //TODO YQL-16988
         /*AsyncWriteOperation->Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
@@ -543,7 +543,7 @@ private:
             } else {
                 SpilledBuckets[0].Data->AsyncReadCompleted(AsyncReadOperation->ExtractValue(), ctx.HolderFactory);
             }
-            AsyncWriteOperation = std::nullopt;
+            AsyncReadOperation = std::nullopt;
         }
         while(!SpilledBuckets.empty()){
             auto& bucket = SpilledBuckets.front();
@@ -623,7 +623,10 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                Spiller = NYql::NDq::MakeSpiller("My spiller", std::move(ctx.WakeUpCallback));
+                TStringStream spillerName;
+                spillerName << "Spiller" << this->DebugString() << "_" << static_cast<const void*>(this);
+
+                Spiller = NYql::NDq::MakeSpiller(spillerName.Str(), std::move(ctx.WakeUpCallback));
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

@@ -265,7 +265,7 @@ private:
         if (IsInitialized_) return;
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
             SelfId(), false);
-        SpillingActorId_ = RegisterWithSameMailbox(spillingActor);
+        SpillingActorId_ = Register(spillingActor);
 
         IsInitialized_ = true;
     }

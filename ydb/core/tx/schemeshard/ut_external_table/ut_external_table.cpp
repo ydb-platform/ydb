@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             )", {{NKikimrScheme::StatusPathDoesNotExist, "Check failed: path: '/MyRoot/ExternalDataSource1'"}});
     }
 
-    Y_UNIT_TEST(CreateExternalTableWithOrReplace) {
+    Y_UNIT_TEST(ReplaceExternalTableIfNotExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
         ui64 txId = 100;

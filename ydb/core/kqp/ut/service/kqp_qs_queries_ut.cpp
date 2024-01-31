@@ -769,7 +769,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             TTestHelper::TColumnTable testTable;
             testTable.SetName(objPath)
                 .SetPrimaryKey({"Key"})
-                .SetSharding({"Key"})
                 .SetSchema(schema);
             {
                 TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));

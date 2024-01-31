@@ -63,6 +63,7 @@ protected:
     ui64 PDiskWriteBlockSize = 4ull * 1'000'000; // 4MB
 
     static const TDiskOperationCostEstimator HDDEstimator;
+    static const TDiskOperationCostEstimator NVMEEstimator;
 
 private:
     enum class EMemoryOperationType {
@@ -99,6 +100,9 @@ protected:
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Write(chunkSize);
             }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Write(chunkSize);
+            }
             default: {
                 ui64 seekTime = DeviceSeekTimeNs / 100u;  // assume we do one seek per 100 log records
                 ui64 writeTime = chunkSize * 1'000'000'000ull / DeviceWriteSpeedBps;
@@ -111,6 +115,9 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.HugeWrite(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.HugeWrite(chunkSize);
             }
             default: {
                 ui64 blocksNumber = (chunkSize + DeviceWriteBlockSize - 1) / DeviceWriteBlockSize;
@@ -125,6 +132,9 @@ protected:
         switch (DeviceType) {
             case NPDisk::DEVICE_TYPE_ROT: {
                 return HDDEstimator.Read(chunkSize);
+            }
+            case NPDisk::DEVICE_TYPE_NVME: {
+                return NVMEEstimator.Read(chunkSize);
             }
             default: {
                 ui64 blocksNumber = (chunkSize + DeviceReadBlockSize - 1) / DeviceReadBlockSize;

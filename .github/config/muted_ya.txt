@@ -16,6 +16,7 @@ ydb/core/cms/ut_sentinel TSentinelTests.BSControllerCantChangeStatus
 ydb/core/persqueue/ut [31/40]*
 ydb/core/persqueue/ut TopicSplitMerge.PartitionSplit
 ydb/core/persqueue/ut TPersQueueMirrorer.TestBasicRemote
+ydb/core/persqueue/ut TPQTest.TestDirectReadHappyWay
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/kafka_proxy/ut KafkaProtocol.CreatePartitionsScenario
 ydb/core/kafka_proxy/ut KafkaProtocol.ProduceScenario
@@ -53,6 +54,7 @@ ydb/library/yql/providers/generic/connector/tests sole*
 ydb/library/yql/providers/generic/connector/tests test.py.*
 ydb/library/yql/sql/pg/ut PgSqlParsingAutoparam.AutoParamValues_DifferentTypes
 ydb/library/yql/tests/sql/dq_file/part* *
+ydb/public/sdk/cpp/client/ydb_federated_topic/ut BasicUsage.SimpleHandlers
 ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.WriteRead
 ydb/services/datastreams/ut DataStreams.TestPutRecordsWithRead
@@ -60,6 +62,7 @@ ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/fq/ut_integration Yq_1.*
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
+ydb/services/persqueue_v1/ut TPersQueueTest.CheckACLForGrpcWrite
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*
 ydb/services/persqueue_v1/ut TPersQueueTest.SetupLockSession
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets

@@ -1632,7 +1632,6 @@ namespace NKikimr {
             extQueue.Completed(ctx, msgCtx, event);
             TIntQueueClass &intQueue = GetIntQueue(msgCtx.IntQueueId);
             intQueue.Completed(ctx, msgCtx, *this, id);
-            VCtx->CostTracker->CountPDiskResponse();
             TActivationContext::Send(event.release());
         }
 

@@ -14,17 +14,9 @@ TString MakeData(ui32 dataSize) {
 template <typename TDerived>
 class TInflightActor : public TActorBootstrapped<TDerived> {
 public:
-    struct TSettings {
-        ui32 Requests;
-        ui32 MaxInFlight;
-        TDuration Delay = TDuration::Zero();
-    };
-
-public:
-    TInflightActor(TSettings settings)
-        : RequestsToSend(settings.Requests)
-        , RequestInFlight(settings.MaxInFlight)
-        , Settings(settings)
+    TInflightActor(ui32 requests, ui32 inflight)
+        : RequestCount(requests)
+        , RequestInflight(inflight)
     {}
 
     virtual ~TInflightActor() = default;
@@ -37,18 +29,11 @@ public:
     }
 
 protected:
-    void ScheduleRequests() {
-        while (RequestInFlight > 0 && RequestsToSend > 0) {
-            TMonotonic now = TMonotonic::Now();
-            TDuration timePassed = now - LastTs;
-            if (timePassed >= Settings.Delay) {
-                LastTs = now;
-                RequestInFlight--;
-                RequestsToSend--;
-                SendRequest();
-            } else {
-                TActorBootstrapped<TDerived>::Schedule(Settings.Delay - timePassed, new TEvents::TEvWakeup);
-            }
+    void SendRequests() {
+        while (RequestInflight > 0 && RequestCount > 0) {
+            RequestInflight--;
+            RequestCount--;
+            SendRequest();
         }
     }
 
@@ -58,110 +43,89 @@ protected:
         } else {
             Fails++;
         }
-        ++RequestInFlight;
-        ScheduleRequests();
+        ++RequestInflight;
+        SendRequests();
     }
 
     virtual void BootstrapImpl(const TActorContext &ctx) = 0;
     virtual void SendRequest() = 0;
 
 protected:
-    ui32 RequestsToSend;
-    ui32 RequestInFlight;
+    ui32 RequestCount;
+    ui32 RequestInflight;
     ui32 GroupId;
-    TMonotonic LastTs;
-    TSettings Settings;
 
 public:
     ui32 OKs = 0;
     ui32 Fails = 0;
 };
 
-ui64 AggregateVDiskCounters(std::unique_ptr<TEnvironmentSetup>& env, const NKikimrBlobStorage::TBaseConfig& baseConfig,
-        TString storagePool, ui32 groupSize, ui32 groupId, const std::vector<ui32>& pdiskLayout, TString subsystem,
-        TString counter, bool derivative = false) {
-    ui64 ctr = 0;
-
-    for (const auto& vslot : baseConfig.GetVSlot()) {
-        auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
-        for (ui32 i = 0; i < groupSize; ++i) {
-            ctr += GetServiceCounters(appData->Counters, "vdisks")->
-                    GetSubgroup("storagePool", storagePool)->
-                    GetSubgroup("group", std::to_string(groupId))->
-                    GetSubgroup("orderNumber", "0" + std::to_string(i))->
-                    GetSubgroup("pdisk", "00000" + std::to_string(pdiskLayout[i]))->
-                    GetSubgroup("media", "rot")->
-                    GetSubgroup("subsystem", subsystem)->
-                    GetCounter(counter, derivative)->Val();
-        }
-    }
-    return ctr;
-};
-
-void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
-        NKikimrBlobStorage::TBaseConfig& baseConfig, ui32& groupSize, TBlobStorageGroupType& groupType,
-        ui32& groupId, std::vector<ui32>& pdiskLayout) {
-    groupSize = topology.TotalVDisks;
-    groupType = topology.GType;
-    env.reset(new TEnvironmentSetup({
+template <typename TInflightActor>
+void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
+    const ui32 groupSize = topology.TotalVDisks;
+    const auto& groupErasure = topology.GType;
+    TEnvironmentSetup env{{
         .NodeCount = groupSize,
-        .Erasure = groupType,
-    }));
+        .Erasure = groupErasure,
+    }};
 
-    env->CreateBoxAndPool(1, 1);
-    env->Sim(TDuration::Seconds(30));
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Seconds(30));
 
     NKikimrBlobStorage::TConfigRequest request;
     request.AddCommand()->MutableQueryBaseConfig();
-    auto response = env->Invoke(request);
+    auto response = env.Invoke(request);
 
-    baseConfig = response.GetStatus(0).GetBaseConfig();
+    const auto& baseConfig = response.GetStatus(0).GetBaseConfig();
     UNIT_ASSERT_VALUES_EQUAL(baseConfig.GroupSize(), 1);
-    groupId = baseConfig.GetGroup(0).GetGroupId();
-    pdiskLayout.resize(groupSize);
+    ui32 groupId = baseConfig.GetGroup(0).GetGroupId();
+    std::vector<ui32> pdiskIds(groupSize);
     for (const auto& vslot : baseConfig.GetVSlot()) {
         const auto& vslotId = vslot.GetVSlotId();
         ui32 orderNumber = topology.GetOrderNumber(TVDiskIdShort(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
         if (vslot.GetGroupId() == groupId) {
-            pdiskLayout[orderNumber] = vslotId.GetPDiskId();
+            pdiskIds[orderNumber] = vslotId.GetPDiskId();
         }
     }
-}
-
-template <typename TInflightActor>
-void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
-    std::unique_ptr<TEnvironmentSetup> env;
-    NKikimrBlobStorage::TBaseConfig baseConfig;
-    ui32 groupSize;
-    TBlobStorageGroupType groupType;
-    ui32 groupId;
-    std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
 
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
 
+    auto vdisksTotal = [&](TString subsystem, TString counter, bool derivative = false) {
+        ui64 ctr = 0;
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            auto* appData = env.Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+            for (ui32 i = 0; i < groupSize; ++i) {
+                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                        GetSubgroup("storagePool", env.StoragePoolName)->
+                        GetSubgroup("group", std::to_string(groupId))->
+                        GetSubgroup("orderNumber", "0" + std::to_string(i))->
+                        GetSubgroup("pdisk", "00000" + std::to_string(pdiskIds[i]))->
+                        GetSubgroup("media", "rot")->
+                        GetSubgroup("subsystem", subsystem)->
+                        GetCounter(counter, derivative)->Val();
+            }
+        }
+        return ctr;
+    };
 
     auto updateCounters = [&]() {
-        dsproxyCost = 0;
-
         for (const auto& vslot : baseConfig.GetVSlot()) {
-            auto* appData = env->Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+            auto* appData = env.Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
             dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
                     GetSubgroup("subsystem", "request")->
-                    GetSubgroup("storagePool", env->StoragePoolName)->
+                    GetSubgroup("storagePool", env.StoragePoolName)->
                     GetCounter("DSProxyDiskCostNs")->Val();
         }
-        vdiskCost = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
-                pdiskLayout, "cost", "SkeletonFrontUserCostNs");
+        vdiskCost = vdisksTotal("cost", "SkeletonFrontUserCostNs");
     };
 
     updateCounters();
     UNIT_ASSERT_VALUES_EQUAL(dsproxyCost, vdiskCost);
 
     actor->SetGroupId(groupId);
-    env->Runtime->Register(actor, 1);
-    env->Sim(TDuration::Minutes(15));
+    env.Runtime->Register(actor, 1);
+    env.Sim(TDuration::Minutes(15));
 
     updateCounters();
 
@@ -174,21 +138,19 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
 
     if constexpr(VERBOSE) {
         Cerr << str.Str() << Endl;
-        // env->Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
     }
     UNIT_ASSERT_VALUES_EQUAL_C(dsproxyCost, vdiskCost, str.Str());
 }
 
 class TInflightActorPut : public TInflightActor<TInflightActorPut> {
 public:
-    TInflightActorPut(TSettings settings, ui32 dataSize = 1024)
-        : TInflightActor(settings)
+    TInflightActorPut(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
+        : TInflightActor(requests, inflight)
         , DataSize(dataSize)
     {}
 
     STRICT_STFUNC(StateWork,
-        cFunc(TEvBlobStorage::TEvStatusResult::EventType, ScheduleRequests);
-        cFunc(TEvents::TEvWakeup::EventType, ScheduleRequests);
+        cFunc(TEvBlobStorage::TEvStatusResult::EventType, SendRequests);
         hFunc(TEvBlobStorage::TEvPutResult, Handle);
     )
 
@@ -202,7 +164,7 @@ public:
 protected:
     virtual void SendRequest() override {
         TString data = MakeData(DataSize);
-        auto ev = new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 10, DataSize, RequestsToSend + 1),
+        auto ev = new TEvBlobStorage::TEvPut(TLogoBlobID(1, 1, 1, 10, DataSize, RequestCount + 1),
                 data, TInstant::Max(), NKikimrBlobStorage::UserData);
         SendToBSProxy(SelfId(), GroupId, ev, 0);
     }
@@ -222,8 +184,8 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) 
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;   \
     ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;  \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true); \
-    auto actor = new TInflightActor##requestType({requests, inflight});             \
-    TestDSProxyAndVDiskEqualCost(topology, actor);                                  \
+    auto actor = new TInflightActor##requestType(requests, inflight);               \
+    Test(topology, actor);                                                          \
 }
 
 #define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)                        \
@@ -232,20 +194,19 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight##
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                       \
     ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                      \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                     \
-    auto actor = new TInflightActor##requestType({requests, inflight}, dataSize);                       \
-    TestDSProxyAndVDiskEqualCost(topology, actor);                                                      \
+    auto actor = new TInflightActor##requestType(requests, inflight, dataSize);                         \
+    Test(topology, actor);                                                                              \
 }
 
 class TInflightActorGet : public TInflightActor<TInflightActorGet> {
 public:
-    TInflightActorGet(TSettings settings, ui32 dataSize = 1024)
-        : TInflightActor(settings)
+    TInflightActorGet(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
+        : TInflightActor(requests, inflight)
         , DataSize(dataSize)
     {}
 
     STRICT_STFUNC(StateWork,
-        cFunc(TEvBlobStorage::TEvPutResult::EventType, ScheduleRequests);
-        cFunc(TEvents::TEvWakeup::EventType, ScheduleRequests);
+        cFunc(TEvBlobStorage::TEvPutResult::EventType, SendRequests);
         hFunc(TEvBlobStorage::TEvGetResult, Handle);
     )
 
@@ -275,8 +236,8 @@ private:
 
 class TInflightActorPatch : public TInflightActor<TInflightActorPatch> {
 public:
-    TInflightActorPatch(TSettings settings, ui32 dataSize = 1024)
-        : TInflightActor(settings)
+    TInflightActorPatch(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
+        : TInflightActor(requests, inflight)
         , DataSize(dataSize)
     {}
 
@@ -287,7 +248,7 @@ public:
 
     virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
         TString data = MakeData(DataSize);
-        for (ui32 i = 0; i < RequestInFlight; ++i) {
+        for (ui32 i = 0; i < RequestInflight; ++i) {
             TLogoBlobID blobId(1, 1, 1, 10, DataSize, 1 + i);
             auto ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
             SendToBSProxy(SelfId(), GroupId, ev, 0);
@@ -302,7 +263,7 @@ protected:
         TLogoBlobID newId(1, 1, oldId.Step() + 1, 10, DataSize, oldId.Cookie());
         Y_ABORT_UNLESS(TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(oldId, &newId, BlobIdMask, GroupId, GroupId));
         TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffs(new TEvBlobStorage::TEvPatch::TDiff[1]);
-        char c = 'a' + RequestsToSend % 26;
+        char c = 'a' + RequestCount % 26;
         diffs[0].Set(TString(DataSize, c), 0);
         auto ev = new TEvBlobStorage::TEvPatch(GroupId, oldId, newId, BlobIdMask, std::move(diffs), 1, TInstant::Max());
         SendToBSProxy(SelfId(), GroupId, ev, 0);
@@ -316,8 +277,8 @@ protected:
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr res) {
         Blobs.push_back(res->Get()->Id);
-        if (++BlobsWritten == RequestInFlight) {
-            ScheduleRequests();
+        if (++BlobsWritten == RequestInflight) {
+            SendRequests();
         }
     }
 
@@ -406,43 +367,4 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
-}
-
-template <typename TInflightActor>
-void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, bool burstExpected) {
-    std::unique_ptr<TEnvironmentSetup> env;
-    NKikimrBlobStorage::TBaseConfig baseConfig;
-    ui32 groupSize;
-    TBlobStorageGroupType groupType;
-    ui32 groupId;
-    std::vector<ui32> pdiskLayout;
-    SetupEnv(topology, env, baseConfig, groupSize, groupType, groupId, pdiskLayout);
-
-    actor->SetGroupId(groupId);
-    env->Runtime->Register(actor, 1);
-    env->Sim(TDuration::Seconds(15));
-
-    ui64 redMs = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
-            pdiskLayout, "advancedCost", "BurstDetector_redMs");
-    
-    if (burstExpected) {
-        UNIT_ASSERT_GT(redMs, 0);
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(redMs, burstExpected);
-    }
-}
-
-#define MAKE_BURST_TEST(testType, erasure, requestType, requests, inflight, delay, burstExpected)   \
-Y_UNIT_TEST(Test##requestType##testType##erasure) {                                                 \
-    auto groupType = TBlobStorageGroupType::Erasure##erasure;                                       \
-    ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                   \
-    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                  \
-    TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                 \
-    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 1_KB);               \
-    TestBurst(topology, actor, burstExpected);                                                      \
-}
-
-Y_UNIT_TEST_SUITE(BurstDetection) {
-    MAKE_BURST_TEST(Evenly, 4Plus2Block, Put, 100000, 1, TDuration::MicroSeconds(1), false);
-    MAKE_BURST_TEST(Burst, 4Plus2Block, Put, 100000, 1000000, TDuration::Zero(), true);
 }

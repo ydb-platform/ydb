@@ -43,6 +43,32 @@ public:
     {
         return inputTransformInfo.Buffer.Get();
     }
+protected:
+    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
+        this->TaskRunner = taskRunner;
+    }
+
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
+        YQL_ENSURE(this->TaskRunner);
+
+        auto guard = this->TaskRunner->BindAllocator(this->MemoryQuota->GetMkqlMemoryLimit());
+        auto* alloc = guard.GetMutex();
+
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+
+        TDqTaskRunnerMemoryLimits limits;
+        limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
+        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+
+        this->TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        TBase::FillIoMaps(
+                this->TaskRunner->GetHolderFactory(),
+                this->TaskRunner->GetTypeEnv(),
+                this->TaskRunner->GetSecureParams(),
+                this->TaskRunner->GetTaskParams(),
+                this->TaskRunner->GetReadRanges());
+    }
 };
 
 } //namespace NYql::NDq

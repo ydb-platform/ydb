@@ -5,10 +5,8 @@
 #include "vdisk_events.h"
 #include "vdisk_handle_class.h"
 
-#include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <util/system/compiler.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/util/light.h>
 
 namespace NKikimr {
 
@@ -264,18 +262,14 @@ class TBsCostTracker {
 private:
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
+
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr UserDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompactionDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr ScrubDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr DefragDiskCost;
     ::NMonitoring::TDynamicCounters::TCounterPtr InternalDiskCost;
-
-    TBucketQuoter<i64, TSpinLock, THPTimerUs> Bucket;
-    static constexpr ui64 BucketCapacity = 1'000'000'000;
-    TLight BurstDetector;
-    std::atomic<ui64> SeqnoBurstDetector = 0;
 
 public:
     TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::EDeviceType diskType,
@@ -302,59 +296,38 @@ public:
         }
     }
 
-    void CountRequest(ui64 cost) {
-        Bucket.Use(cost);
-        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
-    }
-
 public:
     template<class TEvent>
     void CountUserRequest(const TEvent& ev) {
-        ui64 cost = GetCost(ev);
-        *UserDiskCost += cost;
-        CountRequest(cost);
+        *UserDiskCost += GetCost(ev);
     }
 
     void CountUserCost(ui64 cost) {
         *UserDiskCost += cost;
-        CountRequest(cost);
     }
 
     template<class TEvent>
     void CountCompactionRequest(const TEvent& ev) {
-        ui64 cost = GetCost(ev);
-        *CompactionDiskCost += cost;
-        CountRequest(cost);
+        *CompactionDiskCost += GetCost(ev);
     }
 
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
-        ui64 cost = GetCost(ev);
-        *UserDiskCost += cost;
-        CountRequest(cost);
+        *UserDiskCost += GetCost(ev);
     }
 
     template<class TEvent>
     void CountDefragRequest(const TEvent& ev) {
-        ui64 cost = GetCost(ev);
-        *DefragDiskCost += cost;
-        CountRequest(cost);
+        *DefragDiskCost += GetCost(ev);
     }
 
     template<class TEvent>
     void CountInternalRequest(const TEvent& ev) {
-        ui64 cost = GetCost(ev);
-        *InternalDiskCost += cost;
-        CountRequest(cost);
+        *InternalDiskCost += GetCost(ev);
     }
 
     void CountInternalCost(ui64 cost) {
         *InternalDiskCost += cost;
-        CountRequest(cost);
-    }
-
-    void CountPDiskResponse() {
-        BurstDetector.Set(!Bucket.IsAvail(), SeqnoBurstDetector.fetch_add(1));
     }
 };
 

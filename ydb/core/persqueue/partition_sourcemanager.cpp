@@ -1,7 +1,6 @@
 #include "partition.h"
 
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -15,10 +14,7 @@ TPartitionSourceManager::TPartitionSourceManager(TPartition& partition)
 
 
 const TPartitionSourceManager::TSourceInfo TPartitionSourceManager::Get(const TString& sourceId) const {
-    DBGTRACE("TPartitionSourceManager::Get");
-    DBGTRACE_LOG("sourceId=" << sourceId);
     auto& knownSourceIds = GetSourceIdStorage().GetInMemorySourceIds();
-    DBGTRACE_LOG("knownSourceId: " << knownSourceIds.contains(sourceId));
     auto itk = knownSourceIds.find(sourceId);
     if (itk != knownSourceIds.end()) {
         auto& value = itk->second;

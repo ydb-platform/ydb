@@ -7,8 +7,6 @@
 
 #include <algorithm>
 
-#include <ydb/library/dbgtrace/debug_trace.h>
-
 namespace NKikimr::NPQ {
 
 static constexpr ui64 MAX_DELETE_COMMAND_SIZE = 10_MB;
@@ -59,14 +57,12 @@ NKikimrPQ::TMessageGroupInfo::EState TSourceIdInfo::ConvertState(TSourceIdInfo::
 }
 
 void FillWrite(const TKeyPrefix& key, const TBuffer& data, NKikimrClient::TKeyValueRequest::TCmdWrite& cmd) {
-    DBGTRACE("FillWrite");
     cmd.SetKey(key.Data(), key.Size());
     cmd.SetValue(data.Data(), data.Size());
     cmd.SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 void FillDelete(const TKeyPrefix& key, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
-    DBGTRACE("FillDelete");
     auto& range = *cmd.MutableRange();
     range.SetFrom(key.Data(), key.Size());
     range.SetIncludeFrom(true);
@@ -341,8 +337,6 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 }
 
 void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    DBGTRACE("TSourceIdStorage::LoadSourceIdInfo");
-    DBGTRACE_LOG("key=" << key << ", data=" << data);
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
 
     const auto mark = TKeyPrefix::EMark(key[TKeyPrefix::MarkPosition()]);
@@ -357,7 +351,6 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
 }
 
 void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    DBGTRACE("TSourceIdStorage::LoadRawSourceIdInfo");
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
     Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
 
@@ -365,7 +358,6 @@ void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& da
 }
 
 void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& data) {
-    DBGTRACE("TSourceIdStorage::LoadProtoSourceIdInfo");
     Y_ABORT_UNLESS(key.size() >= TKeyPrefix::MarkedSize());
     Y_ABORT_UNLESS(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId);
 
@@ -377,8 +369,6 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
 }
 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
-    DBGTRACE("TSourceIdStorage::RegisterSourceIdInfo");
-    DBGTRACE_LOG("sourceId=" << sourceId);
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
@@ -442,10 +432,7 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
 
 void TSourceIdStorage::UpdateConfig(const NKikimrPQ::TBootstrapConfig& config, TInstant now)
 {
-    DBGTRACE("TSourceIdStorage::UpdateConfig");
-
     for (const auto& mg : config.GetExplicitMessageGroups()) {
-        DBGTRACE_LOG("msg.Id=" << mg.GetId());
 
         TMaybe<TPartitionKeyRange> keyRange;
         if (mg.HasKeyRange()) {

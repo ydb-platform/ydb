@@ -20,8 +20,6 @@
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
-#include <ydb/library/dbgtrace/debug_trace.h>
-
 namespace NKikimr::NPQ {
 
 #if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
@@ -272,12 +270,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetOwnership
 
     void GetOwnership() {
-        DBGTRACE("TPartitionWriter::GetOwnership");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
-        DBGTRACE_LOG("Opts.UseDeduplication=" << Opts.UseDeduplication);
-        DBGTRACE_LOG("SourceId=" << SourceId);
         if (Opts.UseDeduplication) {
             cmd.SetOwner(SourceId);
         } else {
@@ -299,7 +294,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
-        DBGTRACE("TPartitionWriter::HandleOwnership");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -317,18 +311,15 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
-        DBGTRACE_LOG("OwnerCookie=" << OwnerCookie);
         GetMaxSeqNo();
     }
 
     /// GetMaxSeqNo
 
     void GetMaxSeqNo() {
-        DBGTRACE("TPartitionWriter::GetMaxSeqNo");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
-        DBGTRACE_LOG("SourceId=" << SourceId);
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -345,7 +336,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        DBGTRACE("TPartitionWriter::HandleMaxSeqNo");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -365,7 +355,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& sourceIdInfo = *result.MutableSourceIdInfo(0);
         if (Opts.CheckState) {
-            DBGTRACE_LOG("sourceIdInfo.State=" << (int)sourceIdInfo.GetState());
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
                 Registered = true;
@@ -380,8 +369,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return InitResult("Unknown source state", std::move(record));
             }
         }
-
-        DBGTRACE_LOG("sourceIdInfo.SeqNo=" << sourceIdInfo.GetSeqNo());
 
         Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
         if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {

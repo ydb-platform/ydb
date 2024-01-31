@@ -25,8 +25,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
-#include <ydb/library/dbgtrace/debug_trace.h>
-
 namespace NKikimr::NPQ {
 
 static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -656,7 +654,6 @@ void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie,
 
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ApplyNewConfigAndReply");
     THashSet<ui32> was;
     if (NewConfig.PartitionsSize()) {
         for (const auto& partition : NewConfig.GetPartitions()) {
@@ -699,7 +696,6 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                                 const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ApplyNewConfig");
     Config = newConfig;
 
     if (!Config.PartitionsSize()) {
@@ -744,7 +740,6 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
 
 void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::EndWriteConfig");
     if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK ||
         resp.WriteResultSize() < 1) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
@@ -770,9 +765,6 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
 
     Y_ABORT_UNLESS(resp.WriteResultSize() >= 1);
     Y_ABORT_UNLESS(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
-    DBGTRACE_LOG("ConfigInited=" << ConfigInited);
-    DBGTRACE_LOG("PartitionsInited=" << PartitionsInited);
-    DBGTRACE_LOG("Partitions.size=" << Partitions.size());
     if (ConfigInited && PartitionsInited == Partitions.size()) //all partitions are working well - can apply new config
         ApplyNewConfigAndReply(ctx);
     else
@@ -840,7 +832,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
                             const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
                             const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ReadConfig");
     Y_ABORT_UNLESS(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
@@ -1079,7 +1070,6 @@ void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const
 
 void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvKeyValue::TEvResponse)");
     auto& resp = ev->Get()->Record;
 
     switch (resp.GetCookie()) {
@@ -1221,7 +1211,6 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvPQ::TEvInitComplete)");
     const auto partitionId = ev->Get()->Partition;
     auto it = Partitions.find(partitionId);
     Y_ABORT_UNLESS(it != Partitions.end());
@@ -1279,7 +1268,6 @@ void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iter
 
 void TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx)
 {   
-    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvUpdateConfig)");
     if (!ConfigInited) {
         UpdateConfigRequests.emplace_back(ev->Release(), ev->Sender);
         return;
@@ -1334,7 +1322,6 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::ProcessUpdateConfigRequest");
     auto& record = ev->Record;
 
     int oldConfigVersion = Config.HasVersion() ? Config.GetVersion() : -1;
@@ -1479,7 +1466,6 @@ void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
                                   const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                                   const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::BeginWriteConfig");
     TAutoPtr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     request->Record.SetCookie(WRITE_CONFIG_COOKIE);
 
@@ -1487,7 +1473,6 @@ void TPersQueue::BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
                       cfg,
                       bootstrapCfg,
                       ctx);
-    DBGTRACE_LOG("request->Record.GetCmdWrite().size=" << request->Record.GetCmdWrite().size());
     Y_ABORT_UNLESS((ui64)request->Record.GetCmdWrite().size() == (ui64)bootstrapCfg.GetExplicitMessageGroups().size() * cfg.PartitionsSize() + 1);
 
     ctx.Send(ctx.SelfID, request.Release());
@@ -1498,7 +1483,6 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                                    const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                                    const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::AddCmdWriteConfig");
     Y_ABORT_UNLESS(request);
 
     TString str;
@@ -1655,7 +1639,6 @@ void TPersQueue::InitResponseBuilder(const ui64 responseCookie, const ui32 count
 void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActorId& partActor,
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::HandleGetMaxSeqNoRequest");
     Y_ABORT_UNLESS(req.HasCmdGetMaxSeqNo());
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_MAX_SEQ_NO);
     const auto& cmd = req.GetCmdGetMaxSeqNo();
@@ -2046,11 +2029,9 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, const TAct
                                           const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
                                           const TActorId& pipeClient, const TActorId& sender)
 {
-    DBGTRACE("TPersQueue::HandleGetOwnershipRequest");
     Y_ABORT_UNLESS(req.HasCmdGetOwnership());
 
     const TString& owner = req.GetCmdGetOwnership().GetOwner();
-    DBGTRACE_LOG("owner=" << owner);
     if (owner.empty()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "empty owner in CmdGetOwnership request");
@@ -2367,7 +2348,6 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
 
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::Handle(TEvPersQueue::TEvRequest)");
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
@@ -3445,7 +3425,6 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
 void TPersQueue::CheckTxState(const TActorContext& ctx,
                               TDistributedTransaction& tx)
 {
-    DBGTRACE("TPersQueue::CheckTxState");
     switch (tx.State) {
     case NKikimrPQ::TTransaction::UNKNOWN:
         Y_ABORT_UNLESS(tx.TxId != Max<ui64>());
@@ -3749,8 +3728,6 @@ TPartition* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                                              bool newPartition,
                                              const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::CreatePartitionActor");
-    DBGTRACE_LOG("newPartition=" << newPartition);
     int channels = Info()->Channels.size() - NKeyValue::BLOB_CHANNEL; // channels 0,1 are reserved in tablet
     Y_ABORT_UNLESS(channels > 0);   
 
@@ -3773,7 +3750,6 @@ void TPersQueue::CreateNewPartitions(NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TTopicConverterPtr topicConverter,
                                      const TActorContext& ctx)
 {
-    DBGTRACE("TPersQueue::CreateNewPartitions");
     EnsurePartitionsAreNotDeleted(config);
 
     Y_ABORT_UNLESS(ConfigInited && PartitionsInited == Partitions.size());

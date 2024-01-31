@@ -4364,12 +4364,6 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
 
     default:
         StateInitImpl(ev, SelfId());
-        // if (!HandleDefaultEvents(ev, SelfId())) {
-        //     ALOG_WARN(NKikimrServices::FLAT_TX_SCHEMESHARD,
-        //                "StateInit:"
-        //                    << " unhandled event type: " << ev->GetTypeRewrite()
-        //                    << " event: " << ev->ToString());
-        // }
     }
 }
 

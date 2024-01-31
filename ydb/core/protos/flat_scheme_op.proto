@@ -1431,9 +1431,6 @@ enum EOperationType {
     ESchemeOpCreateView = 93;
     ESchemeOpAlterView = 94;
     ESchemeOpDropView = 95;
-
-    ESchemeOpReplaceExternalDataSource = 96;
-    ESchemeOpReplaceExternalTable = 97;
 }
 
 message TApplyIf {

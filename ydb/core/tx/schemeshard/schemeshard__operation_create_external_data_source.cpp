@@ -329,8 +329,6 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         }
     }
 
-
-
     if (replaceIfExists) {
         const TPath dstPath = parentPath.Child(name);
         const auto isAlreadyExists =
@@ -338,7 +336,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                 .IsResolved()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
-            return {CreateReplaceExternalDataSource(id, tx)};
+            return {CreateAlterExternalDataSource(id, tx)};
         }
     }
 

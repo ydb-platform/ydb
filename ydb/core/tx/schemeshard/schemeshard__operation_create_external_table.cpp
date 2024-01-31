@@ -429,7 +429,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
                 .IsResolved()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
-            return {CreateReplaceExternalTable(id, tx)};
+            return {CreateAlterExternalTable(id, tx)};
         }
     }
 

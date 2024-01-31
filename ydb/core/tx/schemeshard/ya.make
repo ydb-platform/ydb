@@ -80,6 +80,8 @@ SRCS(
     schemeshard__operation_memory_changes.cpp
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_alter_bsv.cpp
+    schemeshard__operation_alter_external_data_source.cpp
+    schemeshard__operation_alter_external_table.cpp
     schemeshard__operation_alter_extsubdomain.cpp
     schemeshard__operation_alter_fs.cpp
     schemeshard__operation_alter_index.cpp
@@ -142,8 +144,6 @@ SRCS(
     schemeshard__operation_move_table_index.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
-    schemeshard__operation_replace_external_data_source.cpp
-    schemeshard__operation_replace_external_table.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_split_merge.cpp
     schemeshard__operation_just_reject.cpp

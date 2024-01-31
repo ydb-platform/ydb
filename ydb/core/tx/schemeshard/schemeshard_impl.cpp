@@ -1455,8 +1455,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxUpdateMainTableOnIndexMove:
     case TTxState::TxAlterExternalTable:
     case TTxState::TxAlterExternalDataSource:
-    case TTxState::TxReplaceExternalTable:
-    case TTxState::TxReplaceExternalDataSource:
     case TTxState::TxAlterView:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:

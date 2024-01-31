@@ -18,7 +18,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TReplaceExternalTable TPropose"
+            << "TAlterExternalTable TPropose"
             << ", operationId: " << OperationId;
     }
 
@@ -59,7 +59,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReplaceExternalTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalTable);
 
         const auto pathId                = txState->TargetPathId;
         const auto dataSourcePathId      = txState->SourcePathId;
@@ -88,7 +88,7 @@ public:
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxReplaceExternalTable);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterExternalTable);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -96,7 +96,7 @@ public:
 };
 
 
-class TReplacetExternalTable: public TSubOperation {
+class TAlterExternalTable: public TSubOperation {
 private:
     bool IsSameDataSource = true;
     TPathId OldDataSourcePathId = InvalidPathId;
@@ -220,7 +220,7 @@ private:
                            const TPathId& externalTablePathId,
                            const TPathId& externalDataSourcePathId) const {
         TTxState& txState = context.SS->CreateTx(OperationId,
-                                                 TTxState::TxReplaceExternalTable,
+                                                 TTxState::TxAlterExternalTable,
                                                  externalTablePathId,
                                                  externalDataSourcePathId);
         txState.Shards.clear();
@@ -301,7 +301,7 @@ public:
         const auto& externalTableDescription = Transaction.GetCreateExternalTable();
         const TString& name = externalTableDescription.GetName();
 
-        LOG_N("TReplaceExternalTable Propose"
+        LOG_N("TAlterExternalTable Propose"
             << ": opId# " << OperationId
             << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists:" << externalTableDescription.GetReplaceIfExists());
 
@@ -392,13 +392,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TReplaceExternalTable AbortPropose"
+        LOG_N("TAlterExternalTable AbortPropose"
             << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TReplaceExternalTable");
+        Y_ABORT("no AbortPropose for TAlterExternalTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TReplaceExternalTable AbortUnsafe"
+        LOG_N("TAlterExternalTable AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
@@ -409,13 +409,13 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateReplaceExternalTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TReplacetExternalTable>(std::move(id), tx);
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterExternalTable>(std::move(id), tx);
 }
 
-ISubOperation::TPtr CreateReplaceExternalTable(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TReplacetExternalTable>(std::move(id), state);
+    return MakeSubOperation<TAlterExternalTable>(std::move(id), state);
 }
 
 }

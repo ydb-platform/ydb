@@ -1061,18 +1061,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateNewExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropExternalTable:
         return CreateDropExternalTable(NextPartId(), txState);
-    case TTxState::ETxType::TxReplaceExternalTable:
-        return CreateReplaceExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalTable:
-        Y_ABORT("TODO: implement");
+        return CreateAlterExternalTable(NextPartId(), txState);
     case TTxState::ETxType::TxCreateExternalDataSource:
         return CreateNewExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxDropExternalDataSource:
         return CreateDropExternalDataSource(NextPartId(), txState);
-    case TTxState::ETxType::TxReplaceExternalDataSource:
-        return CreateReplaceExternalDataSource(NextPartId(), txState);
     case TTxState::ETxType::TxAlterExternalDataSource:
-        Y_ABORT("TODO: implement");
+        return CreateAlterExternalDataSource(NextPartId(), txState);
 
     // View
     case TTxState::ETxType::TxCreateView:
@@ -1285,8 +1281,6 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateDropBlobDepot(NextPartId(), tx);
 
     // ExternalTable
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalTable:
-        Y_ABORT("this operation must be constructed by ESchemeOpCreateExternalTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         Y_ABORT("operation is handled before");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
@@ -1295,8 +1289,6 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         Y_ABORT("TODO: implement");
 
     // ExternalDataSource
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalDataSource:
-        Y_ABORT("this operation must be constructed by ESchemeOpCreateExternalTable");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
         Y_ABORT("operation is handled before");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:

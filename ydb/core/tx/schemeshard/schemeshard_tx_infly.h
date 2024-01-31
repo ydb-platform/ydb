@@ -129,8 +129,6 @@ struct TTxState {
         item(TxCreateView, 83) \
         item(TxAlterView, 84) \
         item(TxDropView, 85) \
-        item(TxReplaceExternalDataSource, 86) \
-        item(TxReplaceExternalTable, 87) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -407,8 +405,6 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
-        case TxReplaceExternalDataSource:
-        case TxReplaceExternalTable:
         case TxAlterView:
             return false;
         case TxMoveTable:
@@ -506,8 +502,6 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
-        case TxReplaceExternalDataSource:
-        case TxReplaceExternalTable:
         case TxAlterView:
             return false;
         case TxMoveTable:
@@ -608,8 +602,6 @@ struct TTxState {
         case TxAlterBlobDepot:
         case TxAlterExternalTable:
         case TxAlterExternalDataSource:
-        case TxReplaceExternalDataSource:
-        case TxReplaceExternalTable:
         case TxAlterView:
             return false;
         case TxInvalid:
@@ -706,10 +698,8 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDeallocatePersQueueGroup: return TxInvalid;
             case NKikimrSchemeOp::ESchemeOpCreateExternalTable: return TxCreateExternalTable;
             case NKikimrSchemeOp::ESchemeOpAlterExternalTable: return TxAlterExternalTable;
-            case NKikimrSchemeOp::ESchemeOpReplaceExternalTable: return TxReplaceExternalTable;
             case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource: return TxCreateExternalDataSource;
             case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource: return TxAlterExternalDataSource;
-            case NKikimrSchemeOp::ESchemeOpReplaceExternalDataSource: return TxReplaceExternalDataSource;
             case NKikimrSchemeOp::ESchemeOpCreateView: return TxCreateView;
             case NKikimrSchemeOp::ESchemeOpAlterView: return TxAlterView;
             case NKikimrSchemeOp::ESchemeOpDropView: return TxDropView;

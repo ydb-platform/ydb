@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestLs(runtime, "/MyRoot/ExternalDataSource", false, NLs::PathNotExist);
     }
 
-    Y_UNIT_TEST(CreateExternalDataSourceWithOrReplace) {
+    Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
         ui64 txId = 100;
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateExternalDataSourceWithOrReplaceShouldFailIfFeatureFlagIsNotSet) {
+    Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
         ui64 txId = 100;

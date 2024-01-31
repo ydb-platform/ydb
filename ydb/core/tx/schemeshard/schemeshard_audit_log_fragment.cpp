@@ -208,14 +208,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER BLOB DEPOT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
         return "DROP BLOB DEPOT";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalTable:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         return "CREATE EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
         return "DROP EXTERNAL TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         return "ALTER EXTERNAL TABLE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalDataSource:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
         return "CREATE EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
@@ -489,7 +487,6 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetSrcPath()}));
         result.emplace_back(NKikimr::JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetDstPath()}));
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalTable:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateExternalTable().GetName()}));
         break;
@@ -499,7 +496,6 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
         // TODO: unimplemented
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpReplaceExternalDataSource:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateExternalDataSource().GetName()}));
         break;

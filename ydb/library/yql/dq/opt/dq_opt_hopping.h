@@ -3,7 +3,6 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/ptr.h>
 
 namespace NYql::NDq::NHopping {
 

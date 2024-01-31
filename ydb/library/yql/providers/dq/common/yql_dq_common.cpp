@@ -1,4 +1,5 @@
 #include "yql_dq_common.h"
+#include "yql_dq_settings.h"
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
@@ -14,7 +15,7 @@
 #include <util/string/split.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include "yql_dq_settings.h"
+
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
@@ -144,14 +145,5 @@ bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
 }
 
 } // namespace NCommon
-
-using namespace NNodes;
-namespace NDq {
-    bool CheckJoinColumns(const TExprBase& node);
-} // namespace NDq
-
-
-const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName, S3ProviderName, PgProviderName};
-const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName, S3ProviderName};
 
 } // namespace NYql

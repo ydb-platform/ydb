@@ -19,5 +19,4 @@ bool IsRetriable(const NDq::TEvDq::TEvAbortExecution::TPtr& ev);
 bool NeedFallback(NYql::NDqProto::StatusIds::StatusCode statusCode);
 bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev);
 } // namespace NCommon
-
 } // namespace NYql

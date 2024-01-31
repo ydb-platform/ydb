@@ -22,6 +22,7 @@ PEERDIR(
     ydb/public/api/client/yc_common/api
     ydb/public/api/client/yc_common/api/tools
     ydb/public/api/client/yc_private/access
+    ydb/public/api/client/yc_private/iam
     ydb/public/api/client/yc_private/common
     ydb/public/api/client/yc_private/operation
     ydb/public/api/client/yc_private/quota

@@ -346,6 +346,16 @@
                 "ColumnId": 10,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "IsTemporary",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "OwnerActorId",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -361,7 +371,9 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3533,6 +3545,16 @@
                 "ColumnId": 11,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "IsTemporary",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "OwnerActorId",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3549,7 +3571,9 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

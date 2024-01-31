@@ -181,6 +181,19 @@ public:
     }
 };
 
+class TFinalizeSourceStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    virtual TString DoDebugString() const override {
+        return "";
+    }
+public:
+    virtual bool DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const override;
+    TFinalizeSourceStep()
+        : TBase("FINALIZE") {
+    }
+};
+
 class TFilterProgramStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

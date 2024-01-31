@@ -1,5 +1,6 @@
 #include "datashard_kqp.h"
 #include "datashard_impl.h"
+#include "datashard_user_db.h"
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
@@ -98,8 +99,7 @@ NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerialize
 }
 
 NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
-    const TInputOpData::TInReadSets* inReadSets, const NKikimrDataEvents::TKqpLocks&,
-    bool useGenericReadSets,
+    const TInputOpData::TInReadSets* inReadSets,  bool useGenericReadSets,
     NKqp::TKqpTasksRunner& tasksRunner, bool applyEffects)
 {
     THashMap<ui64, std::pair<ui64, ui32>> inputChannelsMap; // channelId -> (taskId, input index)
@@ -500,18 +500,16 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
     }
 }
 
-NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
+NYql::NDq::ERunStatus KqpRunTransaction(const TActorContext& ctx, ui64 txId, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner)
 {
-    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ false);
+    return RunKqpTransactionInternal(ctx, txId, /* inReadSets */ nullptr, useGenericReadSets, tasksRunner, /* applyEffects */ false);
 }
 
 THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const TActorContext& ctx,
-    ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets,
-    const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
+    ui64 origin, ui64 txId, const TInputOpData::TInReadSets* inReadSets, bool useGenericReadSets, NKqp::TKqpTasksRunner& tasksRunner,
     const NMiniKQL::TKqpDatashardComputeContext& computeCtx)
 {
-    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, kqpLocks, useGenericReadSets, tasksRunner, /* applyEffects */ true);
+    auto runStatus = RunKqpTransactionInternal(ctx, txId, inReadSets, useGenericReadSets, tasksRunner, /* applyEffects */ true);
 
     if (computeCtx.HadInconsistentReads()) {
         return nullptr;
@@ -690,54 +688,35 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     }
 }
 
-bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    bool hasKqpLocks = tx->GetDataTx()->HasKqpLocks();
-
-    if (!hasKqpLocks || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, 
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) 
+{
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
-    bool sendLocks = SendLocks(kqpLocks, origin);
-    YQL_ENSURE(sendLocks == !kqpLocks.GetLocks().empty());
+    bool sendLocks = SendLocks(*kqpLocks, origin);
+    YQL_ENSURE(sendLocks == !kqpLocks->GetLocks().empty());
 
     if (sendLocks) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
     }
 
-    for (auto& readSet : tx->InReadSets()) {
-        for (auto& data : readSet.second) {
-            if (tx->GetDataTx()->GetUseGenericReadSets()) {
+    for (const auto& readSet : inReadSets) {
+        for (const auto& data : readSet.second) {
+            if (useGenericReadSets) {
                 NKikimrTx::TReadSetData genericData;
                 bool ok = genericData.ParseFromString(data.Body);
-                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " origin %" PRIu64,
+                Y_ABORT_UNLESS(ok, "Failed to parse generic readset from %" PRIu64 " to %" PRIu64 " tabletId %" PRIu64,
                     readSet.first.first, readSet.first.second, data.Origin);
 
                 if (genericData.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
-                    tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                        NKikimrTxDataShard::TX_KIND_DATA,
-                        origin,
-                        tx->GetTxId(),
-                        NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
                     // Note: we don't know details on what failed at that shard
-
-                    return false;
+                    return {false, {}};
                 }
             } else {
                 NKikimrTxDataShard::TKqpReadset kqpReadset;
@@ -746,63 +725,48 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
                 if (kqpReadset.HasValidateLocksResult()) {
                     auto& validateResult = kqpReadset.GetValidateLocksResult();
                     if (!validateResult.GetSuccess()) {
-                        tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                            NKikimrTxDataShard::TX_KIND_DATA,
-                            origin,
-                            tx->GetTxId(),
-                            NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-                        tx->Result()->Record.MutableTxLocks()->CopyFrom(validateResult.GetBrokenLocks());
-
-                        return false;
+                        TVector<NKikimrDataEvents::TLock> brokenLocks;
+                        brokenLocks.reserve(validateResult.GetBrokenLocks().size());
+                        std::copy(validateResult.GetBrokenLocks().begin(), validateResult.GetBrokenLocks().end(), std::back_inserter(brokenLocks));
+                        return {false, std::move(brokenLocks)};
                     }
                 }
             }
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedValidateLocks(kqpLocks.GetOp())) {
-        return true;
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, 
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, 
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) 
+{
+    if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
+        return {true, {}};
     }
 
     // Volatile transactions cannot work with non-generic readsets
-    YQL_ENSURE(tx->GetDataTx()->GetUseGenericReadSets());
+    YQL_ENSURE(useGenericReadSets);
 
     // We may have some stale data since before the restart
     // We expect all stale data to be cleared on restarts
-    Y_ABORT_UNLESS(tx->OutReadSets().empty());
-    Y_ABORT_UNLESS(tx->AwaitingDecisions().empty());
+    Y_ABORT_UNLESS(outReadSets.empty());
+    Y_ABORT_UNLESS(awaitingDecisions.empty());
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
-    bool sendLocks = SendLocks(kqpLocks, origin);
+    bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
 
         if (!brokenLocks.empty()) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
-
-            auto* protoLocks = tx->Result()->Record.MutableTxLocks();
-            for (auto& brokenLock : brokenLocks) {
-                protoLocks->Add()->Swap(&brokenLock);
-            }
-
-            return false;
+            return {false, std::move(brokenLocks)};
         }
 
         // We need to form decision readsets for all other participants
-        for (ui64 dstTabletId : kqpLocks.GetReceivingShards()) {
+        for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
             if (dstTabletId == origin) {
                 // Don't send readsets to ourselves
                 continue;
@@ -819,15 +783,15 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             bool ok = data.SerializeToString(&bodyStr);
             Y_ABORT_UNLESS(ok, "Failed to serialize readset from %" PRIu64 " to %" PRIu64, key.first, key.second);
 
-            tx->OutReadSets()[key] = std::move(bodyStr);
+            outReadSets[key] = std::move(bodyStr);
         }
     }
 
-    bool receiveLocks = ReceiveLocks(kqpLocks, origin);
+    bool receiveLocks = ReceiveLocks(*kqpLocks, origin);
     if (receiveLocks) {
         // Note: usually only shards with side-effects receive locks, since they
         //       need the final outcome to decide whether to commit or abort.
-        for (ui64 srcTabletId : kqpLocks.GetSendingShards()) {
+        for (ui64 srcTabletId : kqpLocks->GetSendingShards()) {
             if (srcTabletId == origin) {
                 // Don't await decision from ourselves
                 continue;
@@ -836,20 +800,20 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Will wait for volatile decision from "
                 << srcTabletId << " to " << origin);
 
-            tx->AwaitingDecisions().insert(srcTabletId);
+            awaitingDecisions.insert(srcTabletId);
         }
 
         bool aborted = false;
 
-        for (auto& record : tx->DelayedInReadSets()) {
+        for (const auto& record : delayedInReadSets) {
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
             if (dstTabletId != origin) {
                 LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Ignoring unexpected readset from "
-                    << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId() << " at tablet " << origin);
+                    << srcTabletId << " to " << dstTabletId << " for txId# " << txId << " at tablet " << origin);
                 continue;
             }
-            if (!tx->AwaitingDecisions().contains(srcTabletId)) {
+            if (!awaitingDecisions.contains(srcTabletId)) {
                 continue;
             }
 
@@ -859,7 +823,7 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
 
                 // No readset data: participant aborted the transaction
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed readset without data from"
-                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << tx->GetTxId());
+                    << srcTabletId << " to " << dstTabletId << " will abort txId# " << txId);
                 aborted = true;
                 break;
             }
@@ -872,38 +836,30 @@ bool KqpValidateVolatileTx(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLo
                 // Explicit decision that is not a commit, need to abort
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed decision "
                     << ui32(data.GetDecision()) << " from " << srcTabletId << " to " << dstTabletId
-                    << " for txId# " << tx->GetTxId());
+                    << " for txId# " << txId);
                 aborted = true;
                 break;
             }
 
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Processed commit decision from "
-                << srcTabletId << " to " << dstTabletId << " for txId# " << tx->GetTxId());
-            tx->AwaitingDecisions().erase(srcTabletId);
+                << srcTabletId << " to " << dstTabletId << " for txId# " << txId);
+            awaitingDecisions.erase(srcTabletId);
         }
 
         if (aborted) {
-            tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
-                NKikimrTxDataShard::TX_KIND_DATA,
-                origin,
-                tx->GetTxId(),
-                NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED);
-
-            return false;
+            return {false, {}};
         }
     }
 
-    return true;
+    return {true, {}};
 }
 
-void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-
-    if (!tx->GetDataTx()->HasKqpLocks() || !NeedEraseLocks(kqpLocks.GetOp())) {
+void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {
+    if (kqpLocks == nullptr || !NeedEraseLocks(kqpLocks->GetOp())) {
         return;
     }
 
-    for (auto& lockProto : kqpLocks.GetLocks()) {
+    for (const auto& lockProto : kqpLocks->GetLocks()) {
         if (lockProto.GetDataShard() != origin) {
             continue;
         }
@@ -915,18 +871,14 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
     }
 }
 
-void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writeVersion, TDataShard& dataShard) {
-
-    if (!tx->GetDataTx()->HasKqpLocks()) {
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb) {
+    if (kqpLocks == nullptr) {
         return;
     }
 
-    auto& kqpLocks = tx->GetDataTx()->GetKqpLocks();
-    TSysLocks& sysLocks = dataShard.SysLocksTable();
-
-    if (NeedCommitLocks(kqpLocks.GetOp())) {
+    if (NeedCommitLocks(kqpLocks->GetOp())) {
         // We assume locks have been validated earlier
-        for (auto& lockProto : kqpLocks.GetLocks()) {
+        for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;
             }
@@ -939,10 +891,10 @@ void KqpCommitLocks(ui64 origin, TActiveTransaction* tx, const TRowVersion& writ
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
 
-            tx->GetDataTx()->CommitChanges(tableId, txId, writeVersion);
+            userDb.CommitChanges(tableId, txId, writeVersion);
         }
     } else {
-        KqpEraseLocks(origin, tx, sysLocks);
+        KqpEraseLocks(origin, kqpLocks, sysLocks);
     }
 }
 

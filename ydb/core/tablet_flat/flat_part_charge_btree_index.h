@@ -82,7 +82,7 @@ public:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
-        ui64 prevKey1Items = 0, prevKey1Bytes = 0, key1Items = 0, key1Bytes = 0;
+        ui64 key1Items = 0, key1Bytes = 0, prevKey1Items = 0, prevKey1Bytes = 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             // tryHandleChild may update them, copy for simplicity
@@ -122,7 +122,6 @@ public:
                             }
                             if (bytesLimit) {
                                 ui64 bytes = child->DataSize - firstChild->DataSize;
-                                Cerr << child->RowCount << " " << bytes << Endl;
                                 if (LimitExceeded(bytes, bytesLimit)) {
                                     overshot = false;
                                     return;

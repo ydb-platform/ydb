@@ -1,5 +1,5 @@
-{%- set publish = targets|selectattr('publish') -%}
-{%- set target0 = targets[0] -%}
+{%- set target = targets[0] -%}
+{%- set publish = target.publish -%}
 import com.google.protobuf.gradle.*
 
 val buildProtoDir = File("${buildDir}", "__proto__")
@@ -14,8 +14,8 @@ plugins {
 }
 {%- if publish %}
 
-group = "{{ target0.publish_group }}"
-version = {% if target0.publish_version -%}"{{ target0.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
+group = "{{ target.publish_group }}"
+version = {% if target.publish_version -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
 {%- endif %}
 
 repositories {
@@ -39,46 +39,36 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  for target in targets -%}
-{%-     if target.jar_source_set is defined -%}
-{%-         for source_set in target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
+{%- if target.jar_source_set is defined -%}
+{%-     for source_set in target.jar_source_set -%}
+{%-         set srcdir_glob = split(source_set, ':') -%}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%              endfor -%}
-{%-     endif -%}
-{%- endfor -%}
+{%      endfor -%}
+{%- endif -%}
 
 dependencies {
-{%- for target in targets -%}
-{%-    for library in target.consumer if library.classpath -%}
-{%-        if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) -%}
-{%-            if target.isTest %}
-    testImplementation
-{%-            else %}
+{%- for library in target.consumer if library.classpath -%}
+{%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
+    implementation(files("$project_root/{{ library.jar }}"))
+{%-     else -%}
+{%-         if library.type != "contrib" %}
     implementation
-{%-            endif -%}(files("$project_root/{{ library.jar }}"))
-{%-        else -%}
-{%-            if target.isTest %}
-    testImplementation
-{%-            elif library.type != "contrib" %}
-    implementation
-{%-            else %}
+{%-         else %}
     api
-{%-            endif -%}({{ library.classpath }})
-{%-            if library.excludes.consumer is defined %} {
-{%                 for exclude in library.excludes.consumer -%}
-{%                     set classpath = exclude.classpath|replace('"','') -%}
-{%                     set classpath_parts = split(classpath, ':') -%}
+{%-         endif -%}({{ library.classpath }})
+{%-         if library.excludes.consumer is defined %} {
+{%              for exclude in library.excludes.consumer -%}
+{%                  set classpath = exclude.classpath|replace('"','') -%}
+{%                  set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%                 endfor -%}
+{%              endfor -%}
     }
-{%-            endif -%}
 {%-         endif -%}
-{%-     endfor -%}
+{%-     endif -%}
 {%- endfor %}
 
-{% if target0.proto_namespace is defined -%}
-    protobuf(files(File(buildProtoDir, "{{ target0.proto_namespace }}")))
+{% if target.proto_namespace -%}
+    protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))
 {% else -%}
     protobuf(files(buildProtoDir))
 {% endif -%}
@@ -87,12 +77,12 @@ dependencies {
 protobuf {
     protoc {
         // Download from repositories
-        artifact = "com.google.protobuf:protoc:{%- if target0.proto_compiler_version is defined -%}{{ target0.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
+        artifact = "com.google.protobuf:protoc:{%- if target.proto_compiler_version -%}{{ target.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
     }
-{%  if target0.proto_grpc is defined -%}
+{%  if target.proto_grpc is defined -%}
     plugins {
         id("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:{%- if target0.proto_grpc_version -%}{{ target0.proto_grpc_version }}{%- else -%}1.45.0{%- endif -%}"
+            artifact = "io.grpc:protoc-gen-grpc-java:{%- if target.proto_grpc_version -%}{{ target.proto_grpc_version }}{%- else -%}1.45.0{%- endif -%}"
         }
     }
     generateProtoTasks {
@@ -107,7 +97,7 @@ protobuf {
 
 val prepareProto = tasks.register<Copy>("prepareProto") {
     from(rootDir) {
-{%- for proto in target0.proto_files %}
+{%- for proto in target.proto_files %}
         include("{{ proto }}")
 {%- endfor %}
     }

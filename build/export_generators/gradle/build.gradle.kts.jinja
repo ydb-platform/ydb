@@ -1,75 +1,78 @@
+{%- set target = targets[0] -%}
+{%- set extra_targets = targets|selectattr('isTest') -%}
+{%- set publish = target.publish -%}
+{%- set mainClass = target.app_main_class -%}
+{%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 plugins {
-{% if targets|selectattr("app_main_class") -%}
+{%  if mainClass -%}
     `application`
-{% else -%}
+{%  else -%}
     `java-library`
-{% endif -%}
-{% if targets|selectattr('publish') -%}
+{%  endif -%}
+{%  if publish -%}
     `maven-publish`
     `signing`
-{% endif -%}
+{%  endif -%}
 }
 
-{% if targets|selectattr('publish') -%}
-group = "{{ targets[0].publish_group }}"
+{%  if publish -%}
+group = "{{ target.publish_group }}"
 version = project.properties["version"]
 
-{% endif -%}
+{%  endif -%}
 repositories {
     mavenCentral()
 }
 
-{% if targets|selectattr("app_main_class") -%}
+{%  if mainClass -%}
 application {
-{% for target in targets|selectattr("app_main_class") -%}
-    mainClass.set("{{ target.app_main_class }}")
-{% endfor -%}
+    mainClass.set("{{ mainClass }}")
 }
 
-{% endif -%}
+{%  endif -%}
 java {
     withSourcesJar()
     withJavadocJar()
 }
 
 dependencies {
-{% for target in targets -%}
-{%     if target.junit5_test -%}
+{%  if hasJunit5Test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
-
     api("org.apache.commons:commons-math3:3.6.1")
-
     api("com.google.guava:guava:31.0.1-jre")
-{%     endif -%}
-{%     for library in target.consumer -%}
-{%         set classpath = library.classpath -%}
-{%         if targets|selectattr("app_main_class") -%}
-{%             if library.excludes.consumer is defined %}
+{%  endif -%}
+{%  for library in target.consumer -%}
+{%      set classpath = library.classpath -%}
+{%      if mainClass -%}
+{%          if library.excludes.consumer is defined %}
     implementation({{ classpath }}) {
-{%                 for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                     set classpath = exclude.classpath|replace('"','') -%}
-{%                     set classpath_parts = split(classpath, ':') -%}
+{%              for exclude in library.excludes.consumer if exclude.classpath -%}
+{%                  set classpath = exclude.classpath|replace('"','') -%}
+{%                  set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%                 endfor -%}
+{%              endfor -%}
     }
-{%             else -%}
+{%          else -%}
     implementation({{ classpath }})
-{%             endif -%}
-{%         elif target.isTest -%}
-    testImplementation({{ classpath }})
-{%         else -%}
+{%          endif -%}
+{%      else -%}
     api({{ classpath }})
-{%         endif -%}
-{%     endfor -%}
-{% endfor -%}
+{%      endif -%}
+{%  endfor -%}
+{%  for extra_target in extra_targets -%}
+{%      for library in extra_target.consumer -%}
+{%          set classpath = library.classpath -%}
+    testImplementation({{ classpath }})
+{%      endfor -%}
+{%  endfor -%}
 }
 
-{% if targets|selectattr("junit5_test") -%}
+{%  if hasJunit5Test -%}
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }
 
-{% endif -%}
+{%  endif -%}
 tasks.test {
     testLogging {
         showStandardStreams = true
@@ -77,7 +80,7 @@ tasks.test {
     }
 }
 
-{% include "extra-tests.gradle.kts" ignore missing %}
-{% if targets|selectattr('publish') -%}
-{% include 'publish.gradle.kts' -%}
-{% endif -%}
+{%  include "extra-tests.gradle.kts" ignore missing %}
+{%  if publish -%}
+{%  include 'publish.gradle.kts' -%}
+{%  endif -%}

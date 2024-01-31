@@ -792,7 +792,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
         };
-        Y_UNUSED(checkAddRow);
 
         checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);

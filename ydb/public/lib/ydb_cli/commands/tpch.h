@@ -42,7 +42,7 @@ protected:
     TString ExternalQueriesFile;
     TString ExternalQueriesDir;
     TString ExternalVariablesString;
-    TString QueryExecutorType;
+    TString QueryExecuterType;
 
 public:
     TTpchCommandRun();

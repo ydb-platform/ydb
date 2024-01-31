@@ -421,23 +421,23 @@ void TTpchCommandRun::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
 
-    config.Opts->AddLongOption("executor", "Query executor type."
+    config.Opts->AddLongOption("executer", "Query executer type."
             " Options: scan, generic\n"
             "scan - use scan queries;\n"
             "generic - use generic queries.")
-        .DefaultValue("scan").StoreResult(&QueryExecutorType);
+        .DefaultValue("scan").StoreResult(&QueryExecuterType);
 };
 
 
 int TTpchCommandRun::Run(TConfig& config) {
-    if (QueryExecutorType == "scan") {
+    if (QueryExecuterType == "scan") {
         const bool okay = RunBench<NYdb::NTable::TTableClient>(config);
         return !okay;
-    } else if (QueryExecutorType == "generic") {
+    } else if (QueryExecuterType == "generic") {
         const bool okay = RunBench<NYdb::NQuery::TQueryClient>(config);
         return !okay;
     } else {
-        ythrow yexception() << "Incorrect executor type. Available options: \"scan\", \"generic\"." << Endl;
+        ythrow yexception() << "Incorrect executer type. Available options: \"scan\", \"generic\"." << Endl;
     }
 };
 

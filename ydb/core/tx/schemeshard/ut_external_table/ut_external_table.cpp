@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateExternalTableWithOrReplaceShouldFailIfFeatureFlagIsNotSet) {
+    Y_UNIT_TEST(ReplaceExternalTableIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
         ui64 txId = 100;

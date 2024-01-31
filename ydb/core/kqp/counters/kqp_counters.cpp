@@ -810,8 +810,14 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
 
-    /* sequencers */
+    /* sink writes */
+    WriteActorsCount = KqpGroup->GetCounter("SinkWrites/WriteActorsCount", false);
+    WriteActorWrites = KqpGroup->GetCounter("SinkWrites/WriteActorWrites", true);
+    WriteActorWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorWritesRetries", true);
+    WriteActorWritesSizes =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesSizes", NMonitoring::ExponentialHistogram(28, 2, 1));
 
+    /* sequencers */
     SequencerActorsCount = KqpGroup->GetCounter("Sequencer/ActorCount", false);
     SequencerErrors = KqpGroup->GetCounter("Sequencer/Errors", true);
     SequencerOk = KqpGroup->GetCounter("Sequencer/Ok", true);

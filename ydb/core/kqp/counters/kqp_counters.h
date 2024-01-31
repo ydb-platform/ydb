@@ -400,6 +400,12 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Sink write counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWritesRetries;
+    NMonitoring::THistogramPtr WriteActorWritesSizes;
+
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;

@@ -89,6 +89,8 @@ public:
     {
         YQL_ENSURE(std::holds_alternative<ui64>(TxId));
         EgressStats.Level = args.StatsLevel;
+
+        Counters->WriteActorsCount->Inc();
     }
 
     void Bootstrap() {
@@ -348,15 +350,21 @@ private:
             payloadIndex,
             NKikimrDataEvents::FORMAT_ARROW);
 
-        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inFlightBatch.TxId << ", Size = " << inFlightBatch.Data.size());
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
             IEventHandle::FlagTrackDelivery);
-
         TlsActivationContext->Schedule(
             CalculateNextAttemptDelay(inFlightBatch.SendAttempts),
             new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvShardRequestTimeout(shardId, inFlightBatch.TxId)));
+
+        CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", TxId=" << inFlightBatch.TxId << ", Size = " << inFlightBatch.Data.size());
+        if (inFlightBatch.SendAttempts == 0) {
+            Counters->WriteActorWrites->Inc();
+        } else {
+            Counters->WriteActorRetries->Inc();
+        }
+        Counters->WriteActorWritesSizes->Collect(inFlightBatch.Data.size());
 
         ++inFlightBatch.SendAttempts;
     }
@@ -427,6 +435,8 @@ private:
     }
 
     void PassAway() override {
+        Counters->WriteActorsCount->Dec();
+
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpWriteActor>::PassAway();
     }

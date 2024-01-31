@@ -365,7 +365,7 @@ namespace NKikimr::NPrivate {
                     (ResultSize, record.ResultSize()),
                     (ParityPart, (blobId.PartId() <= GType.DataParts() ? "no" : "yes")));
 
-            ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
+            ui8 *buffer = reinterpret_cast<ui8*>(Buffer.GetContiguousSpanMut().data());
             if (PatchedPartId <= GType.DataParts()) {
                 AddMark("Data part");
                 if (GType.ErasureFamily() != TErasureType::ErasureMirror) {
@@ -675,7 +675,7 @@ namespace NKikimr::NPrivate {
             }
 
             if (Buffer) {
-                ui8 *buffer = reinterpret_cast<ui8*>(Buffer.UnsafeGetContiguousSpanMut().data());
+                ui8 *buffer = reinterpret_cast<ui8*>(Buffer.GetContiguousSpanMut().data());
                 ui32 dataSize = OriginalBlobId.BlobSize();
 
                 AddMark("Apply xor diff");

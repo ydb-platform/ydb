@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.93.2)
+VERSION(6.94.0)
 
 LICENSE(MPL-2.0)
 
@@ -20,6 +20,7 @@ NO_CHECK_IMPORTS(
 PY_SRCS(
     TOP_LEVEL
     _hypothesis_ftz_detector.py
+    _hypothesis_globals.py
     _hypothesis_pytestplugin.py
     hypothesis/__init__.py
     hypothesis/_settings.py

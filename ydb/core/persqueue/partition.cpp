@@ -22,6 +22,8 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 
+#include <ydb/library/dbgtrace/debug_trace.h>
+
 namespace NKikimr::NPQ {
 
 static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
@@ -206,6 +208,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
 {
+    DBGTRACE("TPartition::TPartition");
+    DBGTRACE_LOG("NewPartition=" << NewPartition);
     TabletCounters.Populate(Counters);
 
     if (!distrTxs.empty()) {
@@ -934,6 +938,7 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
+    DBGTRACE("TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest)");
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
     NKikimrClient::TResponse& resp = *response->Response;
 
@@ -942,10 +947,12 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 
     auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
     for (const auto& sourceId : ev->Get()->SourceIds) {
+        DBGTRACE_LOG("sourceId=" << sourceId);
         auto& protoInfo = *result.AddSourceIdInfo();
         protoInfo.SetSourceId(sourceId);
 
         auto info = SourceManager.Get(sourceId);
+        DBGTRACE_LOG("info.State=" << info.State);
         if (info.State == TSourceIdInfo::EState::Unknown) {
             continue;
         }
@@ -960,6 +967,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         protoInfo.SetState(TSourceIdInfo::ConvertState(info.State));
     }
 
+    DBGTRACE_LOG("send response");
     ctx.Send(Tablet, response.Release());
 }
 
@@ -1532,6 +1540,7 @@ void TPartition::RemoveDistrTx()
 bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
                                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::ProcessUserActionOrTransaction");
     Y_ABORT_UNLESS(!TxInProgress);
 
     if (t.Tx) {
@@ -1641,6 +1650,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
     PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+    PendingBootstrapConfig = event.BootstrapConfig;
 
     SendChangeConfigReply = false;
     return true;
@@ -1649,6 +1659,8 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
                                 const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndTransaction");
+
     if (PlanStep.Defined() && TxId.Defined()) {
         if (GetStepAndTxId(event) < GetStepAndTxId(*PlanStep, *TxId)) {
             ctx.Send(Tablet, MakeCommitDone(event.Step, event.TxId).Release());
@@ -1726,6 +1738,7 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxRollback& event,
 void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
                                             const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::BeginChangePartitionConfig");
     TSet<TString> hasReadRule;
 
     for (auto& [consumer, info] : UsersInfoStorage->GetAll()) {
@@ -1832,6 +1845,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
         ReportCounters(ctx, true);
         ChangeConfig = nullptr;
         PendingPartitionConfig = nullptr;
+        PendingBootstrapConfig = Nothing();
     }
 
     ProcessTxsAndUserActs(ctx);
@@ -1845,6 +1859,7 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
+    DBGTRACE("TPartition::EndChangePartitionConfig");
     Config = config;
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
@@ -1854,6 +1869,9 @@ void TPartition::EndChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& conf
     Y_ABORT_UNLESS(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
     UsersInfoStorage->UpdateConfig(Config);
+    if (PendingBootstrapConfig.Defined()) {
+        SourceIdStorage.UpdateConfig(*PendingBootstrapConfig, ctx.Now());
+    }
 
     WriteQuota->UpdateConfigIfChanged(Config.GetPartitionConfig().GetBurstSize(), Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond());
 

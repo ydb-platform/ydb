@@ -19,6 +19,7 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/client/ydb_params
+    ydb/library/dbgtrace
 )
 
 END()

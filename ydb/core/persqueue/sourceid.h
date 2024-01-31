@@ -99,6 +99,8 @@ public:
 
     TInstant MinAvailableTimestamp(TInstant now) const;
 
+    void UpdateConfig(const NKikimrPQ::TBootstrapConfig& config, TInstant now);
+
 private:
     void LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now);
     void LoadProtoSourceIdInfo(const TString& key, const TString& data);

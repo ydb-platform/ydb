@@ -1,5 +1,6 @@
 #include "partition.h"
 #include "partition_util.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -25,7 +26,9 @@ bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TP
 
 TInitializer::TInitializer(TPartition* partition)
     : Partition(partition)
-    , InProgress(false) {
+    , InProgress(false)
+{
+    DBGTRACE("TInitializer::TInitializer");
 
     Steps.push_back(MakeHolder<TInitConfigStep>(this));
     Steps.push_back(MakeHolder<TInitInternalFieldsStep>(this));
@@ -39,22 +42,27 @@ TInitializer::TInitializer(TPartition* partition)
 }
 
 void TInitializer::Execute(const TActorContext& ctx) {
+    DBGTRACE("TInitializer::Execute");
+
     Y_ABORT_UNLESS(!InProgress, "Initialization already in progress");
     InProgress = true;
     DoNext(ctx);
 }
 
 bool TInitializer::Handle(STFUNC_SIG) {
+    DBGTRACE("TInitializer::Handle");
     Y_ABORT_UNLESS(InProgress, "Initialization is not started");
     return CurrentStep->Get()->Handle(ev);
 }
 
 void TInitializer::Next(const TActorContext& ctx) {
+    DBGTRACE("TInitializer::Next");
     ++CurrentStep;
     DoNext(ctx);
 }
 
 void TInitializer::Done(const TActorContext& ctx) {
+    DBGTRACE("TInitializer::Done");
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,  "Initializing topic '" << Partition->TopicName()
                                                 << "' partition " << Partition->Partition
                                                 << ". Completed.");
@@ -63,6 +71,7 @@ void TInitializer::Done(const TActorContext& ctx) {
 }
 
 void TInitializer::DoNext(const TActorContext& ctx) {
+    DBGTRACE("TInitializer::DoNext");
     if (CurrentStep == Steps.end()) {
         Done(ctx);
         return;
@@ -70,6 +79,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
 
     if (Partition->NewPartition) {
         while(CurrentStep->Get()->SkipNewPartition) {
+            DBGTRACE_LOG("skip step for new partition");
             if (++CurrentStep == Steps.end()) {
                 Done(ctx);
                 return;
@@ -336,14 +346,16 @@ void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 //
 
 TInitInfoRangeStep::TInitInfoRangeStep(TInitializer* initializer)
-    : TBaseKVStep(initializer, "TInitInfoRangeStep", true) {
+    : TBaseKVStep(initializer, "TInitInfoRangeStep", false) {
 }
 
 void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
+    DBGTRACE("TInitInfoRangeStep::Execute");
     RequestInfoRange(ctx, Partition()->Tablet, PartitionId(), "");
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    DBGTRACE("TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse)");
     if (!ValidateResponse(*this, ev, ctx)) {
         PoisonPill(ctx);
         return;
@@ -362,6 +374,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN: {
+            DBGTRACE_LOG("OK or OVERRUN");
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
 
@@ -403,19 +416,25 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             break;
         }
-        case NKikimrProto::NODATA:
+        case NKikimrProto::NODATA: {
+            DBGTRACE_LOG("NODATA");
             Done(ctx);
             break;
-        case NKikimrProto::ERROR:
+        }
+        case NKikimrProto::ERROR: {
+            DBGTRACE_LOG("ERROR");
             LOG_ERROR_S(
                     ctx, NKikimrServices::PERSQUEUE,
                     "read topic '" << TopicName() << "' partition " << PartitionId() << " error"
             );
             PoisonPill(ctx);
             break;
-        default:
+        }
+        default: {
+            DBGTRACE_LOG("unknown: " << (int)range.GetStatus());
             Cerr << "ERROR " << range.GetStatus() << "\n";
             Y_ABORT("bad status");
+        }
     };
 }
 
@@ -992,6 +1011,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
+    DBGTRACE("RequestRange");
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     auto read = request->Record.AddCmdReadRange();
     auto range = read->MutableRange();
@@ -1023,6 +1043,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
 }
 
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
+    DBGTRACE("RequestInfoRange");
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
 }
 

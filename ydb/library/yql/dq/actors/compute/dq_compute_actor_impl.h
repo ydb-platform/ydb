@@ -1299,6 +1299,9 @@ protected:
     }
 
 protected:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() {
+        return Alloc;
+    }
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() {
         return *Alloc.get();
     }

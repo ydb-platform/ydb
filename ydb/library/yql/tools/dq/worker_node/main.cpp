@@ -400,11 +400,11 @@ int main(int argc, char** argv) {
             : TTaskRunnerInvokerFactory::TPtr(new TConcurrentInvokerFactory(2*capacity));
         YQL_ENSURE(functionRegistry);
         lwmOptions.TaskRunnerActorFactory = disablePipe
-            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(*functionRegistry.Get(), [=](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
+            ? NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory([=](NKikimr::NMiniKQL::TScopedAlloc& alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc& )
                 {
                     return lwmOptions.Factory->Get(alloc, task, statsMode);
                 })
-            : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory, functionRegistry.Get());
+            : NTaskRunnerActor::CreateTaskRunnerActorFactory(lwmOptions.Factory, lwmOptions.TaskRunnerInvokerFactory);
         lwmOptions.ComputeActorOwnsCounters = true;
         bool enableSpilling = res.Has("enable-spilling");
         auto resman = NDqs::CreateLocalWorkerManager(lwmOptions);

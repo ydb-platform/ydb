@@ -207,6 +207,11 @@ bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto &tx : physicalQuery.GetTransactions()) {
         for (const auto &stage : tx.GetStages()) {
+            for (const auto &source : stage.GetSources()) {
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
+                    return true;
+                }
+            }
             for (const auto &tableOp : stage.GetTableOps()) {
                 switch (tableOp.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:

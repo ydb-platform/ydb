@@ -51,7 +51,7 @@
   [defaults]
   collections_paths = /home/ubuntu/.ansible/collections/ansible_collections
   ```
-4. Скопируйте приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-sort-name }} в директорию `examples/9-nodes-mirror-3-dc/files`.
+4. Скопируйте приватную часть SSH-ключа для доступа к серверам кластера {{ ydb-short-name }} в директорию `examples/9-nodes-mirror-3-dc/files`.
 5. Укажите hostname и FQDN серверов кластера YDB в файле `examples/9-nodes-mirror-3-dc/files/ydb-ca-nodes.txt`:
   ```text
   static-node-1 static-node-1.ydb-cluster.com
@@ -65,7 +65,7 @@
   static-node-9 static-node-9.ydb-cluster.com
   ```
   Запустите скрипт `examples/9-nodes-mirror-3-dc/files/ydb-ca-update.sh`. Скрипт сгенерирует наборы сертификатов для TLS-шифрования трафика между YDB нодами и поместит их в поддиректорию `examples/9-nodes-mirror-3-dc/files/CA/certs/<create date>`.
-6. Скачайте архив актуальной версию YDB из раздела [{#T}](../../../downloads/index.md#ydb-server) в директорию `/examples/9-nodes-mirror-3-dc/files`.
+6. Скачайте архив актуальной версию YDB из раздела [{#T}](../../downloads/index.md#ydb-server) в директорию `/examples/9-nodes-mirror-3-dc/files`.
 
 ### Изменения инвентаризационных файлов проекта { #inventory-edit }
 
@@ -112,7 +112,7 @@
 
 ### Подготовка конфигурационного файла YDB { #ydb-config-prepare }
 
-Конфигурационный файл YDB – содержит настройки нод YDB и располагается по пути `/examples/9-nodes-mirror-3-dc/files/config.yaml` и состоит из секций настройки. С подробным описанием секций настройки конфигурационного файла YDB можно ознакомиться в стать [{#T}](../../../deploy/configuration/config.md). 
+Конфигурационный файл YDB – содержит настройки нод YDB и располагается по пути `/examples/9-nodes-mirror-3-dc/files/config.yaml` и состоит из секций настройки. С подробным описанием секций настройки конфигурационного файла YDB можно ознакомиться в стать [{#T}](../../deploy/configuration/config.md).
 
 Стандартная поставка Ansible проекта для установки YDB требует минимального изменения конфигурационного файла:   
 * отредактируйте секцию `hosts` – измените стандартные host имена на полные FQDN созданных ВМ:

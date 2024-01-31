@@ -8,6 +8,12 @@ const TDiskOperationCostEstimator TBsCostModelBase::HDDEstimator{
     { 6.089e+06, 8.1 }, // HugeWriteCoefficients
 };
 
+const TDiskOperationCostEstimator TBsCostModelBase::SSDEstimator{
+    { 180000, 3.00 },   // ReadCoefficients
+    { 430, 4.2 },     // WriteCoefficients
+    { 110000, 3.6 },     // HugeWriteCoefficients
+};
+
 const TDiskOperationCostEstimator TBsCostModelBase::NVMEEstimator{
     { 10000, 1.3 },   // ReadCoefficients
     { 3300, 1.5 },     // WriteCoefficients

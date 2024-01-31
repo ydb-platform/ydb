@@ -57,8 +57,6 @@ protected:
 
         this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
 
-        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
-
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;

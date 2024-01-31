@@ -149,6 +149,7 @@ target_proto_messages(client-yc_private-iam PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/iam_token.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/oauth_request.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/reference.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/service_account_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/client/yc_private/iam/service_account.proto

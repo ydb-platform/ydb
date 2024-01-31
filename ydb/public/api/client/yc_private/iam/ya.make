@@ -13,6 +13,7 @@ SRCS(
     iam_token_service_subject.proto
     iam_token_service.proto
     iam_token.proto
+    oauth_request.proto
     permission_stage.proto
     reference.proto
     restriction.proto

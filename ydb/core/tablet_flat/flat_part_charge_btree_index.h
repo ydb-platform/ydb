@@ -471,17 +471,19 @@ private:
     bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
 
-        Y_UNUSED(bytesLimit);
-
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
+        ui64 prevFirstChildDataSize = 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
                     from = node.Seek(beginRowId);
+                    if (from) {
+                        prevFirstChildDataSize = node.GetShortChild(from - 1).DataSize;
+                    }
                 }
                 if (node.EndRowId > endRowId) {
                     to = node.Seek(endRowId - 1) + 1;
@@ -492,6 +494,12 @@ private:
                     TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
                     ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
+                    if (bytesLimit) {
+                        ui64 bytes = child.DataSize - prevFirstChildDataSize;
+                        if (LimitExceeded(bytes, bytesLimit)) {
+                            return;
+                        }
+                    }
                 }
             }
         };

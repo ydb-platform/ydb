@@ -94,6 +94,7 @@ ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite*
 ydb/tests/functional/restarts test_restarts.py.*
+ydb/tests/functional/scheme_tests tablet_scheme_tests.py.TestTabletSchemes.test_tablet_schemes[flat_schemeshard]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--*]
 ydb/tests/functional/sqs/merge_split_common_table/fifo *
 ydb/tests/functional/sqs/merge_split_common_table/std *

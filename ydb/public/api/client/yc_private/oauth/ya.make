@@ -1,5 +1,7 @@
 PROTO_LIBRARY()
 
+EXCLUDE_TAGS(GO_PROTO)
+
 GRPC()
 SRCS(
     claim_service.proto

@@ -1,5 +1,7 @@
 PROTO_LIBRARY()
 
+EXCLUDE_TAGS(GO_PROTO)
+
 GRPC()
 SRCS(
     admin_service.proto

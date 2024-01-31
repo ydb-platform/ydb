@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/formats/arrow/compression/object.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
@@ -14,7 +13,7 @@ namespace NKikimr::NOlap {
 class TSaverContext {
 private:
     TString TierName;
-    std::optional<NArrow::TCompression> ExternalCompression;
+    std::optional<NArrow::NSerialization::TSerializerContainer> ExternalSerializer;
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, StorageOperator);
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 public:
@@ -24,11 +23,12 @@ public:
 
     }
 
-    const std::optional<NArrow::TCompression>& GetExternalCompression() const {
-        return ExternalCompression;
+    const std::optional<NArrow::NSerialization::TSerializerContainer>& GetExternalSerializer() const {
+        return ExternalSerializer;
     }
-    TSaverContext& SetExternalCompression(const std::optional<NArrow::TCompression>& value) {
-        ExternalCompression = value;
+    TSaverContext& SetExternalSerializer(const std::optional<NArrow::NSerialization::TSerializerContainer>& value) {
+        AFL_VERIFY(!!value);
+        ExternalSerializer = value;
         return *this;
     }
     const TString& GetTierName() const {
@@ -43,17 +43,17 @@ public:
 class TColumnSaver {
 private:
     NArrow::NTransformation::ITransformer::TPtr Transformer;
-    NArrow::NSerialization::ISerializer::TPtr Serializer;
+    NArrow::NSerialization::TSerializerContainer Serializer;
 public:
     TColumnSaver() = default;
-    TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::ISerializer::TPtr serializer)
+    TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer& serializer)
         : Transformer(transformer)
         , Serializer(serializer) {
         Y_ABORT_UNLESS(Serializer);
     }
 
     bool IsHardPacker() const {
-        return Serializer && Serializer->IsHardPacker();
+        return Serializer->IsHardPacker();
     }
 
     TString Apply(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field) const {
@@ -65,9 +65,9 @@ public:
     TString Apply(const std::shared_ptr<arrow::RecordBatch>& data) const {
         Y_ABORT_UNLESS(Serializer);
         if (Transformer) {
-            return Serializer->Serialize(Transformer->Transform(data));
+            return Serializer->SerializeFull(Transformer->Transform(data));
         } else {
-            return Serializer->Serialize(data);
+            return Serializer->SerializePayload(data);
         }
     }
 };
@@ -75,22 +75,22 @@ public:
 class TColumnLoader {
 private:
     NArrow::NTransformation::ITransformer::TPtr Transformer;
-    NArrow::NSerialization::IDeserializer::TPtr Deserializer;
+    NArrow::NSerialization::TSerializerContainer Serializer;
     std::shared_ptr<arrow::Schema> ExpectedSchema;
     const ui32 ColumnId;
 public:
     TString DebugString() const;
 
-    TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::IDeserializer::TPtr deserializer,
+    TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer& serializer,
         const std::shared_ptr<arrow::Schema>& expectedSchema, const ui32 columnId)
         : Transformer(transformer)
-        , Deserializer(deserializer)
+        , Serializer(serializer)
         , ExpectedSchema(expectedSchema)
         , ColumnId(columnId) {
         Y_ABORT_UNLESS(ExpectedSchema);
         auto fieldsCountStr = ::ToString(ExpectedSchema->num_fields());
         Y_ABORT_UNLESS(ExpectedSchema->num_fields() == 1, "%s", fieldsCountStr.data());
-        Y_ABORT_UNLESS(Deserializer);
+        Y_ABORT_UNLESS(Serializer);
     }
 
     ui32 GetColumnId() const {
@@ -106,8 +106,9 @@ public:
     }
 
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> Apply(const TString& data) const {
-        Y_ABORT_UNLESS(Deserializer);
-        arrow::Result<std::shared_ptr<arrow::RecordBatch>> columnArray = Deserializer->Deserialize(data);
+        Y_ABORT_UNLESS(Serializer);
+        arrow::Result<std::shared_ptr<arrow::RecordBatch>> columnArray = 
+            Transformer ? Serializer->Deserialize(data) : Serializer->Deserialize(data, ExpectedSchema);
         if (!columnArray.ok()) {
             return columnArray;
         }
@@ -134,21 +135,19 @@ struct TIndexInfo;
 class TColumnFeatures {
 private:
     ui32 ColumnId;
-    std::optional<NArrow::TCompression> Compression;
+    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
     std::shared_ptr<TColumnLoader> Loader;
 
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 
     void InitLoader(const TIndexInfo& info);
-    TColumnFeatures(const ui32 columnId)
-        : ColumnId(columnId) {
-    }
+    TColumnFeatures(const ui32 columnId);
 public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << "compression=" << (Compression ? Compression->DebugString() : "NO") << ";";
+        sb << "serializer=" << (Serializer ? Serializer->DebugString() : "NO") << ";";
         sb << "encoding=" << (DictionaryEncoding ? DictionaryEncoding->DebugString() : "NO") << ";";
         sb << "loader=" << (Loader ? Loader->DebugString() : "NO") << ";";
         return sb;
@@ -157,8 +156,6 @@ public:
     NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
     static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const TIndexInfo& indexInfo);
     static TColumnFeatures BuildFromIndexInfo(const ui32 columnId, const TIndexInfo& indexInfo);
-
-    std::unique_ptr<arrow::util::Codec> GetCompressionCodec() const;
 
     const std::shared_ptr<TColumnLoader>& GetLoader() const {
         AFL_VERIFY(Loader);

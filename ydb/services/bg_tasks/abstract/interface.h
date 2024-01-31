@@ -169,6 +169,10 @@ public:
         return !Object;
     }
 
+    operator bool() const {
+        return !!Object;
+    }
+
 };
 
 class TStringContainerProcessor {

@@ -9,9 +9,9 @@ PEERDIR(
 
 SRCS(
     abstract.cpp
-    full.cpp
-    batch_only.cpp
+    GLOBAL arrow.cpp
     stream.cpp
+    parsing.cpp
 )
 
 END()

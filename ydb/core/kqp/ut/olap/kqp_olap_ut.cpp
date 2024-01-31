@@ -29,7 +29,6 @@
 
 #include <fmt/format.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr {
 namespace NKqp {

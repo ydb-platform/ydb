@@ -109,4 +109,16 @@ public:
 
 };
 
+class TFetchedResult {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+public:
+    TFetchedResult(std::unique_ptr<TFetchedData>&& data)
+        : Batch(data->GetBatch())
+        , NotAppliedFilter(data->GetNotAppliedFilter()) {
+
+    }
+};
+
 }

@@ -16,6 +16,7 @@ bool TStepAction::DoApply(IDataReader& /*owner*/) const {
 bool TStepAction::DoExecute() {
     while (Step) {
         if (Source->IsEmptyData()) {
+            Source->Finalize();
             FinishedFlag = true;
             return true;
         }
@@ -23,11 +24,13 @@ bool TStepAction::DoExecute() {
             return true;
         }
         if (Source->IsEmptyData()) {
+            Source->Finalize();
             FinishedFlag = true;
             return true;
         }
         Step = Step->GetNextStep();
     }
+    Source->Finalize();
     FinishedFlag = true;
     return true;
 }
@@ -83,11 +86,6 @@ bool TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source
 
 bool TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
     source->ApplyIndex(IndexChecker);
-    return true;
-}
-
-bool TFinalizeSourceStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFetchingStep>& /*step*/) const {
-    source->Finalize();
     return true;
 }
 

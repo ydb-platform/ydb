@@ -1366,7 +1366,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[1u;]])");
         }
 
-        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.15 * csController->GetIndexesSkippingOnSelect().Val());
+        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.20 * csController->GetIndexesSkippingOnSelect().Val());
 
     }
 

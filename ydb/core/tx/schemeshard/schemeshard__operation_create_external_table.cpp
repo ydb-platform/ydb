@@ -396,7 +396,7 @@ namespace NKikimr::NSchemeShard {
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable);
 
-    LOG_I("CreateNewExternalTable, opId " << id << ", feature flag EnableOrReplace "
+    LOG_I("CreateNewExternalTable, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
                                                << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
                                                << tx.ShortDebugString());
 
@@ -404,9 +404,9 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalTable request: " << msg)};
     };
 
-    const auto& operation         = tx.GetCreateExternalTable();
+    const auto &operation = tx.GetCreateExternalTable();
     const auto replaceIfExists = operation.GetReplaceIfExists();
-    const TString& name           = operation.GetName();
+    const TString &name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
         return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
@@ -422,18 +422,12 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
         }
     }
 
-    const TPath dstPath        = parentPath.Child(name);
-
-    const auto checks = dstPath.Check()
-        .IsAtLocalSchemeShard();
-    if (!checks) {
-        return errorResult(checks.GetStatus(), checks.GetError());
-    }
-
     if (replaceIfExists) {
-        const auto isAlreadyExists = checks
-            .IsResolved()
-            .NotUnderDeleting();
+        const TPath dstPath = parentPath.Child(name);
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotUnderDeleting();
         if (isAlreadyExists) {
             return {CreateReplaceExternalTable(id, tx)};
         }

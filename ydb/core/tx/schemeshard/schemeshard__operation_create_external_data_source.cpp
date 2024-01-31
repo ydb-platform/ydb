@@ -303,7 +303,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
 
-    LOG_I("CreateNewExternalDataSource, opId " << id << ", feature flag EnableOrReplace "
+    LOG_I("CreateNewExternalDataSource, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
                                                << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
                                                << tx.ShortDebugString());
 
@@ -311,9 +311,9 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};
     };
 
-    const auto& operation         = tx.GetCreateExternalDataSource();
+    const auto &operation = tx.GetCreateExternalDataSource();
     const auto replaceIfExists = operation.GetReplaceIfExists();
-    const TString& name           = operation.GetName();
+    const TString &name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
         return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
@@ -329,18 +329,14 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         }
     }
 
-    const TPath dstPath = parentPath.Child(name);
 
-    const auto checks = dstPath.Check()
-        .IsAtLocalSchemeShard();
-    if (!checks) {
-        return errorResult(checks.GetStatus(), checks.GetError());
-    }
 
     if (replaceIfExists) {
-        const auto isAlreadyExists = checks
-            .IsResolved()
-            .NotUnderDeleting();
+        const TPath dstPath = parentPath.Child(name);
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotUnderDeleting();
         if (isAlreadyExists) {
             return {CreateReplaceExternalDataSource(id, tx)};
         }

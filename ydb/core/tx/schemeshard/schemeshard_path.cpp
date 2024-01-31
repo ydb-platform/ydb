@@ -585,7 +585,7 @@ const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement:
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exist but creating right now"
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
             << " (" << BasicPathInfo(Path.Base()) << ")");
     }
 
@@ -616,7 +616,7 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPa
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exist but creating right now"
+        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
             << " (" << BasicPathInfo(Path.Base()) << ")");
     }
 

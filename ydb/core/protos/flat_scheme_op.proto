@@ -14,6 +14,7 @@ import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 
@@ -387,6 +388,7 @@ message TTableDescription {
     repeated TSequenceDescription Sequences = 39;
 
     optional TTableReplicationConfig ReplicationConfig = 40;
+
     optional bool Temporary = 41;
 }
 
@@ -1553,6 +1555,8 @@ message TModifyScheme {
     optional bool FailedOnAlreadyExists = 63 [default = true];
 
     optional TViewDescription CreateView = 64;
+
+    optional NActorsProto.TActorId TempTableOwnerActorId = 65;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

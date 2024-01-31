@@ -1299,6 +1299,9 @@ protected:
     }
 
 protected:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() {
+        return Alloc;
+    }
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() {
         return *Alloc.get();
     }
@@ -1461,32 +1464,6 @@ public:
     }
 
 protected:
-    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
-        TaskRunner = taskRunner;
-    }
-
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
-        YQL_ENSURE(TaskRunner);
-
-        auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());
-        auto* alloc = guard.GetMutex();
-
-        MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
-
-        TDqTaskRunnerMemoryLimits limits;
-        limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-
-        TaskRunner->Prepare(Task, limits, execCtx);
-
-        FillIoMaps(
-            TaskRunner->GetHolderFactory(),
-            TaskRunner->GetTypeEnv(),
-            TaskRunner->GetSecureParams(),
-            TaskRunner->GetTaskParams(),
-            TaskRunner->GetReadRanges());
-    }
-
     void FillIoMaps(
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

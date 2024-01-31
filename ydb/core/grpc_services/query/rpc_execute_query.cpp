@@ -378,10 +378,10 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
 
-        NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
-        NYql::IssuesFromMessage(issueMessage, issues);
 
+        bool hasTrailingMessage = false;
+ 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Request_->SetRuHeader(record.GetConsumedRu());
 
@@ -390,8 +390,6 @@ private:
             Ydb::Query::ExecuteQueryResponsePart response;
 
             AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
-
-            bool hasTrailingMessage = false;
 
             if (kqpResponse.HasTxMeta()) {
                 hasTrailingMessage = true;
@@ -408,13 +406,20 @@ private:
 
             if (hasTrailingMessage) {
                 response.set_status(Ydb::StatusIds::SUCCESS);
+                response.mutable_issues()->CopyFrom(issueMessage);
                 TString out;
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+                const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus(), finishStreamFlag);
+                this->PassAway();
             }
         }
 
-        ReplyFinishStream(record.GetYdbStatus(), issues);
+        if (!hasTrailingMessage) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(issueMessage, issues);
+            ReplyFinishStream(record.GetYdbStatus(), issueMessage);
+        }
     }
 
 private:
@@ -459,10 +464,11 @@ private:
             response.set_status(status);
             response.mutable_issues()->CopyFrom(message);
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-            Request_->SendSerializedResult(std::move(out), status);
+            const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+            Request_->SendSerializedResult(std::move(out), status, finishStreamFlag);
+        } else {
+            Request_->FinishStream(status);
         }
-
-        Request_->FinishStream(status);
         this->PassAway();
     }
 

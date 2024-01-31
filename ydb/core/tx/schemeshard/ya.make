@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_auditsettings
+    ut_background_cleaning
     ut_backup
     ut_base
     ut_base_reboots
@@ -55,6 +56,7 @@ LIBRARY()
 SRCS(
     defs.h
     schemeshard.cpp
+    schemeshard__background_cleaning.cpp
     schemeshard__borrowed_compaction.cpp
     schemeshard__compaction.cpp
     schemeshard__clean_pathes.cpp

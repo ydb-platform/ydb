@@ -62,6 +62,7 @@ RECURSE(
     log
     plan
     simd
+    signals
     sys
     test_http_server
     threading

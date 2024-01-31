@@ -1016,5 +1016,6 @@ message TActivity {
         KAFKA_READ_SESSION_ACTOR = 623;
         GRAPH_SERVICE = 624;
         REPLICATION_WORKER = 625;
+        SCHEMESHARD_BACKGROUND_CLEANING = 626;
     };
 };

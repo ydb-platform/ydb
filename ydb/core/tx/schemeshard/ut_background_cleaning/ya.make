@@ -21,7 +21,6 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
     ydb/core/base
-    ydb/library/actors/core
 )
 
 SRCS(

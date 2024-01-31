@@ -2182,9 +2182,9 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncSend(TTestActorRuntime &runtime, ui64 targetTabletId, IEventBase *ev,
-            ui32 nodeIndex = 0, TActorId sender = TActorId()) {
+            ui32 nodeIndex, TActorId sender) {
         if (sender == TActorId()) {
-            ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(nodeIndex), ev,);
+            ForwardToTablet(runtime, targetTabletId, runtime.AllocateEdgeActor(nodeIndex), ev);
         } else {
             ForwardToTablet(runtime, targetTabletId, sender, ev, nodeIndex);
         }

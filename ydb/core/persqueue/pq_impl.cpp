@@ -756,13 +756,6 @@ void TPersQueue::EndWriteConfig(const NKikimrClient::TResponse& resp, const TAct
         }
     }
 
-//    if (resp.WriteResultSize() > 1) {
-//        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
-//                    << " restarting - have some registering of message groups");
-//            ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
-//        return;
-//    }
-
     Y_ABORT_UNLESS(resp.WriteResultSize() >= 1);
     Y_ABORT_UNLESS(resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
     if (ConfigInited && PartitionsInited == Partitions.size()) //all partitions are working well - can apply new config

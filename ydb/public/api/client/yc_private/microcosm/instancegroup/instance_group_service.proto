@@ -11,7 +11,7 @@ import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/access/access.proto";
 import "ydb/public/api/client/yc_private/microcosm/instancegroup/instance_group.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
-import "ydb/public/api/client/yc_private/reference/reference.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/microcosm/instancegroup;instancegroup";

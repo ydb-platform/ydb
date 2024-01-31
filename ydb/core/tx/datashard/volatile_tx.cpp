@@ -610,6 +610,8 @@ namespace NKikimr::NDataShard {
             Self->PromoteFollowerReadEdge();
         }
 
+        Self->EmitHeartbeats();
+
         if (!WaitingSnapshotEvents.empty()) {
             TVolatileTxInfo* next = !VolatileTxByVersion.empty() ? *VolatileTxByVersion.begin() : nullptr;
             while (!WaitingSnapshotEvents.empty()) {

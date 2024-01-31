@@ -2,7 +2,6 @@ PROTO_LIBRARY()
 
 PEERDIR(
     ydb/public/api/client/yc_private/common
-    ydb/public/api/client/yc_private/oauth
     ydb/public/api/client/yc_private/operation
 )
 

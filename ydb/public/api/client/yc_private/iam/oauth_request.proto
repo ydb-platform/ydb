@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+option java_outer_classname = "OAuthModel";
+
+// OAuth request
+message OAuthRequest {
+  // client_id
+  string client_id = 1;
+  repeated string scopes = 3;
+}

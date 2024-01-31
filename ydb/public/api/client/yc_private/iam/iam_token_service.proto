@@ -6,7 +6,7 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto";
 import "ydb/public/api/client/yc_private/iam/yandex_passport_cookie.proto";
-import "ydb/public/api/client/yc_private/oauth/oauth_request.proto";
+import "ydb/public/api/client/yc_private/iam/oauth_request.proto";
 
 service IamTokenService {
 

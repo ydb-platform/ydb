@@ -2382,7 +2382,9 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
     auto& [stats, pool] = *std::max_element(poolStats.begin(), poolStats.end(), [](const TPoolStat& lhs, const TPoolStat& rhs) {
         return lhs.first.Scatter < rhs.first.Scatter;
     });
-    if (stats.Scatter > GetMinStorageScatterToBalance()) {
+    StorageScatter = stats.Scatter;
+    TabletCounters->Simple()[NHive::COUNTER_STORAGE_SCATTER].Set(StorageScatter * 100);
+    if (StorageScatter > GetMinStorageScatterToBalance()) {
         BLOG_D("Storage Scatter = " << stats.Scatter << " in pool " << pool.Name << ", starting StorageBalancer");
         ui64 numReassigns = 1;
         auto it = pool.Groups.find(stats.MaxUsageGroupId);
@@ -2395,6 +2397,7 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
         }
         StartHiveStorageBalancer({
             .NumReassigns = numReassigns,
+            .MaxInFlight = GetStorageBalancerInflight(),
             .StoragePool = pool.Name
         });
     }

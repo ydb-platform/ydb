@@ -285,6 +285,7 @@ public:
                 // Use best effort to kill currently running tablet
                 SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
             }
+            SideEffects.Callback([counters = Self->TabletCounters] { counters->Cumulative()[NHive::COUNTER_TABLETS_STORAGE_REASSIGNED].Increment(1); });
         }
         if (needToIncreaseGeneration) {
             tablet->IncreaseGeneration();

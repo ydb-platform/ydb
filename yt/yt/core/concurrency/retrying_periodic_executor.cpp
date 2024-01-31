@@ -23,7 +23,11 @@ TRetryingInvocationTimePolicy::TRetryingInvocationTimePolicy(
     const TOptions& options)
     : TDefaultInvocationTimePolicy(options)
     , Backoff_(options)
-{ }
+{
+    CachedBackoffDuration_.store(options.MinBackoff, std::memory_order::relaxed);
+    CachedBackoffMultiplier_.store(options.BackoffJitter, std::memory_order::relaxed);
+    CachedBackoffJitter_.store(options.BackoffJitter,std::memory_order::relaxed);
+}
 
 void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 {
@@ -66,14 +70,21 @@ void TRetryingInvocationTimePolicy::SetOptions(
     }
 
     if (backoffOptions) {
+        Backoff_.UpdateOptions(*backoffOptions);
+
+        if (!IsInBackoffMode()) {
+            Backoff_.Restart();
+        }
+
+        CachedBackoffDuration_.store(
+            Backoff_.GetBackoff(),
+            std::memory_order::relaxed);
         CachedBackoffMultiplier_.store(
             backoffOptions->BackoffMultiplier,
             std::memory_order::relaxed);
         CachedBackoffJitter_.store(
             backoffOptions->BackoffJitter,
             std::memory_order::relaxed);
-
-        Backoff_.UpdateOptions(*backoffOptions);
     }
 }
 

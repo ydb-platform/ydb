@@ -474,11 +474,6 @@ bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs)
     return rawLhs == rawRhs;
 }
 
-bool operator != (const TNetworkAddress& lhs, const TNetworkAddress& rhs)
-{
-    return !(lhs == rhs);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -758,11 +753,6 @@ TString ToString(const TIP6Address& address)
 bool operator == (const TIP6Address& lhs, const TIP6Address& rhs)
 {
     return ::memcmp(lhs.GetRawBytes(), rhs.GetRawBytes(), TIP6Address::ByteSize) == 0;
-}
-
-bool operator != (const TIP6Address& lhs, const TIP6Address& rhs)
-{
-    return !(lhs == rhs);
 }
 
 TIP6Address operator|(const TIP6Address& lhs, const TIP6Address& rhs)

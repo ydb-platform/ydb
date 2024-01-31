@@ -139,7 +139,7 @@ protected:
         return InvocationOrder_.InvokerIndexes_;
     }
 
-    IDiagnosableInvokerPoolPtr CreateInvokerPool(IInvokerPtr underlyingInvoker, int invokerCount)
+    TDiagnosableInvokerPoolPtr CreateInvokerPool(IInvokerPtr underlyingInvoker, int invokerCount)
     {
         auto result = CreateFairShareInvokerPool(
             std::move(underlyingInvoker),

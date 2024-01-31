@@ -971,11 +971,6 @@ TLogicalTypePtr DenullifyLogicalType(const TLogicalTypePtr& type)
     return detagged;
 }
 
-bool operator != (const TLogicalType& lhs, const TLogicalType& rhs)
-{
-    return !(lhs == rhs);
-}
-
 bool operator == (const std::vector<TLogicalTypePtr>& lhs, const std::vector<TLogicalTypePtr>& rhs)
 {
     if (lhs.size() != rhs.size()) {

@@ -1,36 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_rusage.go
-		proto.go
-		proto_other.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_rusage.go
-		proto.go
-		proto_other.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		elf.go
 		label.go
@@ -58,7 +27,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		protomem.go
 		runtime.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		elf.go
 		label.go
@@ -72,7 +41,7 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		protomem.go
 		runtime.go
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		elf.go
 		label.go
@@ -87,34 +56,6 @@ ELSEIF (OS_DARWIN AND ARCH_AARCH64)
 		runtime.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_windows.go
-		proto.go
-		proto_windows.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_windows.go
-		proto.go
-		proto_windows.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
     SRCS(
 		elf.go
 		label.go

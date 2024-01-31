@@ -58,22 +58,6 @@ TSummarySnapshot<T>& TSummarySnapshot<T>::operator += (const TSummarySnapshot<T>
 }
 
 template <class T>
-bool TSummarySnapshot<T>::operator == (const TSummarySnapshot<T>& other) const
-{
-    return Sum_ == other.Sum_ &&
-        Min_ == other.Min_ &&
-        Max_ == other.Max_ &&
-        Last_ == other.Last_ &&
-        Count_ == other.Count_;
-}
-
-template <class T>
-bool TSummarySnapshot<T>::operator != (const TSummarySnapshot<T>& other) const
-{
-    return !(*this == other);
-}
-
-template <class T>
 T TSummarySnapshot<T>::Sum() const
 {
     return Sum_;

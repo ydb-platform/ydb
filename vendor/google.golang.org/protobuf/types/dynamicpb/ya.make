@@ -7,11 +7,4 @@ SRCS(
     types.go
 )
 
-GO_XTEST_SRCS(
-    dynamic_test.go
-    types_test.go
-)
-
 END()
-
-RECURSE(gotest)

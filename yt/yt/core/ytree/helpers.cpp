@@ -44,11 +44,6 @@ bool operator == (const IAttributeDictionary& lhs, const IAttributeDictionary& r
     return true;
 }
 
-bool operator != (const IAttributeDictionary& lhs, const IAttributeDictionary& rhs)
-{
-    return !(lhs == rhs);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TEphemeralAttributeDictionary

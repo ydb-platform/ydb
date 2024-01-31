@@ -182,7 +182,7 @@ public:
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         Pipeline.RemoveCommittingOp(op);
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-        DataShard.EmitHeartbeats(ctx);
+        DataShard.EmitHeartbeats();
 
         TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 

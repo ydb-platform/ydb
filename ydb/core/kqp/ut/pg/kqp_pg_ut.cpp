@@ -3680,7 +3680,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
 
         appConfig.MutableTableServiceConfig()->SetEnablePgConstsToParams(true);
-        appConfig.MutableTableServiceConfig()->SetEnableQueriesPerStatement(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)

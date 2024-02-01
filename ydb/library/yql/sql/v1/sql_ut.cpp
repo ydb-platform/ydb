@@ -2721,17 +2721,6 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n");
     }
 
-    Y_UNIT_TEST(AAA) {
-        TTranslationSettings settings;
-        settings.PerStatement = true;
-        auto res = SqlToAstStatements("$a = (SELECT * FROM TestDdl1);\nSELECT * FROM $a;\nUPSERT INTO TestDdl1 (Key, Value) VALUES (3, \"Three\");", settings);
-        for (auto& i : res) {
-            if (!i.Root) {
-                Cerr << Err2Str(i);
-            }
-        }
-    }
-
     Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
         NYql::TAstParseResult res = SqlToYql("SELECT @@foo@@ @ @@bar@@");
         UNIT_ASSERT(!res.Root);

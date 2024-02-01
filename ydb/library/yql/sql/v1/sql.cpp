@@ -144,7 +144,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
-        if (!settings.PerStatement) {
+        if (!settings.PerStatementExecution) {
             res.emplace_back();
             SqlASTToYqlImpl(res.back(), *astProto, ctx);
             return res;

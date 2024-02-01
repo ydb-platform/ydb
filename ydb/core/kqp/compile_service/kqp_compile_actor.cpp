@@ -52,7 +52,7 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool canDevideIntoStatements, ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst)
+        bool canDivideIntoStatements, ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -70,7 +70,7 @@ public:
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
-        , CanDevideIntoStatements(canDevideIntoStatements)
+        , CanDivideIntoStatements(canDivideIntoStatements)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
     {
@@ -130,15 +130,15 @@ private:
 private:
 
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
-        TString cluster  = QueryId.Cluster;
+        TString cluster = QueryId.Cluster;
         TString kqpTablePathPrefix = Config->_KqpTablePathPrefix.Get().GetRef();
         ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
         NSQLTranslation::EBindingsMode bindingsMode = Config->BindingsMode;
         bool isEnableExternalDataSources = AppData(ctx)->FeatureFlags.GetEnableExternalDataSources();
         bool isEnablePgConstsToParams = Config->EnablePgConstsToParams;
-        bool perStatement = Config->EnableQueriesPerStatement && CanDevideIntoStatements;
+        bool perStatementExecution = Config->EnablePerStatementQueryExecution && CanDivideIntoStatements;
 
-        return SqlToAstStatements(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, QueryId.IsSql(), perStatement);
+        return SqlToAstStatements(ConvertType(QueryId.Settings.QueryType), QueryId.Settings.Syntax, QueryId.Text, QueryId.QueryParameterTypes, cluster, kqpTablePathPrefix, kqpYqlSyntaxVersion, bindingsMode, isEnableExternalDataSources, isEnablePgConstsToParams, QueryId.IsSql(), perStatementExecution);
     }
 
     void StartParsing(const TActorContext &ctx) {
@@ -501,7 +501,7 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
 
-    bool CanDevideIntoStatements;
+    const bool CanDivideIntoStatements;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
 };
@@ -532,7 +532,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
-    kqpConfig.EnableQueriesPerStatement = serviceConfig.GetEnableQueriesPerStatement();
+    kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -549,14 +549,14 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
-    bool canDevideIntoStatements)
+    bool canDivideIntoStatements)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
                                 moduleResolverState, counters,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                canDevideIntoStatements, compileAction, std::move(queryAst));
+                                canDivideIntoStatements, compileAction, std::move(queryAst));
 }
 
 } // namespace NKqp

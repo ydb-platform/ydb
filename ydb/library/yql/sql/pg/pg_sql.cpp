@@ -328,7 +328,7 @@ public:
     }
 
     void OnResult(const List* raw, int StatementId) {
-        if (!Settings.PerStatement) {
+        if (!Settings.PerStatementExecution) {
             return OnResult(raw);
         }
 
@@ -4493,8 +4493,6 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     TVector<NYql::TAstParseResult> results;
-    size_t currentStatementId = 0;
-    bool finished;
     List* raw = NYql::PGGetStatements(query);
     if (!raw) {
         return {};

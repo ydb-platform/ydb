@@ -1769,7 +1769,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        appConfig.MutableTableServiceConfig()->SetEnableQueriesPerStatement(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1800,7 +1800,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        
+
             result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdl1 (Key, Value) VALUES (3, "Three");
             )", TTxControl::NoTx()).ExtractValueSync();
@@ -1879,9 +1879,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     PRIMARY KEY (Key)
                 );
                 UPSERT INTO TestDdl4 (Key, Val) VALUES (1, 1);
+                SELECT * FROM TestDdl4;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            // NEED TO FIX IT: RESULT MUST BE DEVIDED INTO 2 SETS
+            // NEED TO FIX IT: RESULT MUST BE DIVIDED INTO 2 SETS
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]];[[4u];["Four"]]])", FormatResultSetYson(result.GetResultSet(0)));
             //CompareYson(R"([[[1u];["One"]];[[2u];["Two"]];[[3u];["Three"]]])", FormatResultSetYson(result.GetResultSet(0)));

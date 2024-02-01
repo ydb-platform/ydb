@@ -7,57 +7,57 @@ host_configs:
 hosts:
 - host: ydb-node-zone-a-1.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 1
     data_center: 'zone-a'
     rack: '1'
 - host: ydb-node-zone-a-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 2
     data_center: 'zone-a'
     rack: '2'
 - host: ydb-node-zone-a-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 3
     data_center: 'zone-a'
     rack: '3'
 
 - host: ydb-node-zone-b-1.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 4
     data_center: 'zone-b'
     rack: '4'
 - host: ydb-node-zone-b-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 5
     data_center: 'zone-b'
     rack: '5'
 - host: ydb-node-zone-b-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 6
     data_center: 'zone-b'
     rack: '6'
 
 - host: ydb-node-zone-c-1.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 7
     data_center: 'zone-c'
     rack: '7'
 - host: ydb-node-zone-c-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 8
     data_center: 'zone-c'
     rack: '8'
 - host: ydb-node-zone-c-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 9
     data_center: 'zone-c'
     rack: '9'

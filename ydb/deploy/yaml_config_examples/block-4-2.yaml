@@ -13,7 +13,7 @@ host_configs: # the list of available host configurations in the cluster.
 hosts:
 - host: ydb-node-zone-a-1.local   # storage node DNS name
   host_config_id: 1           # numeric host configuration template identifier.
-  walle_location:             # this parameter describes where host is located.
+  location:             # this parameter describes where host is located.
     body: 1                   # string representing a host serial number.
     data_center: 'zone-a'     # string representing the datacenter / availability zone where the host is located.
                               # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
@@ -23,45 +23,45 @@ hosts:
                               # accross at least 8 racks.
 - host: ydb-node-zone-a-2.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 2
     data_center: 'zone-a'
     rack: '2'
 - host: ydb-node-zone-a-3.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 3
     data_center: 'zone-a'
     rack: '3'
 
 - host: ydb-node-zone-a-4.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 4
     data_center: 'zone-a'
     rack: '4'
 - host: ydb-node-zone-a-5.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 5
     data_center: 'zone-a'
     rack: '5'
 - host: ydb-node-zone-a-6.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 6
     data_center: 'zone-a'
     rack: '6'
 
 - host: ydb-node-zone-a-7.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 7
     data_center: 'zone-a'
     rack: '7'
 - host: ydb-node-zone-a-8.local
   host_config_id: 1
-  walle_location:
+  location:
     body: 8
     data_center: 'zone-a'
     rack: '8'

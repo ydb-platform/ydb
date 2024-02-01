@@ -9,21 +9,21 @@ hosts:
 - host: localhost
   host_config_id: 1
   port: 19001
-  walle_location:
+  location:
     body: 1
     data_center: '1'
     rack: '1'
 - host: localhost
   host_config_id: 1
   port: 19002
-  walle_location:
+  location:
     body: 2
     data_center: '2'
     rack: '2'
 - host: localhost
   host_config_id: 1
   port: 19003
-  walle_location:
+  location:
     body: 3
     data_center: '3'
     rack: '3'

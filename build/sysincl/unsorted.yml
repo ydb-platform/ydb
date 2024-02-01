@@ -260,12 +260,6 @@
 
 - includes:
   - cpu-features.h
-  - cuda/include/cuComplex.h
-  - cuda/include/cublas_v2.h
-  - cuda/include/cuda.h
-  - cuda/include/cudnn.h
-  - cuda/include/cufft.h
-  - cuda/include/curand.h
   - cpuid.h
   - nan.h
   - omp.h

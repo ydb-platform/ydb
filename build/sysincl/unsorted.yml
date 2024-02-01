@@ -276,7 +276,6 @@
   - zircon/process.h
   - sys/linux-syscalls.h
   - tr1/memory
-  - android/log.h
   - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
@@ -509,10 +508,6 @@
   - ../locale/localeinfo.h
   - ../locale/elem-hash.h
   - ../locale/coll-lookup.h
-  #endif
-  #if defined(_LINUX_ANDROID)
-  - android/api-level.h
-  - android/ndk-version.h
   #endif
   #if defined(HAVE_CONFIG_H) && TODO
   - config_auto.h
@@ -911,7 +906,6 @@
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
   - Activation.h
-  - android/native_window.h
   - Windows.System.Threading.h
   #if defined(__MINGW32__) || defined(_MSC_VER)
   - inet_net_pton.h

@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 testHelper.BulkUpsert(testTable, tableInserter);
             }
 
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(20));
 
             auto settings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult =

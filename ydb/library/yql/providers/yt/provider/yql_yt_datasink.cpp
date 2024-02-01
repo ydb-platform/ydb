@@ -333,6 +333,23 @@ public:
                 WriteColumns(writer, op.Input().Item(0).Paths().Item(0).Columns());
             }
 
+            if (op.Input().Size() > 1) {
+                writer.OnKeyedItem("InputSections");
+                auto op = maybeOp.Cast();
+                writer.OnBeginList();
+                ui64 ndx = 0;
+                for (auto section: op.Input()) {
+                    writer.OnListItem();
+                    writer.OnBeginList();
+                    for (ui64 i = 0; i < section.Paths().Size(); ++i) {
+                        writer.OnListItem();
+                        writer.OnUint64Scalar(ndx++);
+                    }
+                    writer.OnEndList();
+                }
+                writer.OnEndList();
+            }
+
             if (op.Maybe<TYtMap>() || op.Maybe<TYtMapReduce>() || op.Maybe<TYtMerge>() ||
                 op.Maybe<TYtReduce>() || op.Maybe<TYtSort>() || op.Maybe<TYtEquiJoin>())
             {

@@ -2429,9 +2429,9 @@
     ],
     "test.test[simple_columns-simple_columns_union_all_qualified_star-default.txt-Analyze]": [
         {
-            "checksum": "404221862843f5802c898a55bc03ad9b",
-            "size": 13869,
-            "uri": "https://{canondata_backend}/1880306/e4ccac619cc79d4b07e7e803e386d47da238c793/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Analyze_/plan.txt"
+            "checksum": "d3a11104572e73e245671ce56a4e6ad3",
+            "size": 14265,
+            "uri": "https://{canondata_backend}/1931696/0cf0f02388f28b9c85e51af557c6c0adc7e3c2e1/resource.tar.gz#test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_simple_columns-simple_columns_union_all_qualified_star-default.txt-Analyze_/extracted"

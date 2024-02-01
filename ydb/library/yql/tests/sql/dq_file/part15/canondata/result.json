@@ -1326,9 +1326,9 @@
     ],
     "test.test[join-premap_merge_with_remap-off-Analyze]": [
         {
-            "checksum": "b84597daa7186b22a9ce262c8355d93d",
-            "size": 15670,
-            "uri": "https://{canondata_backend}/1600758/aad142702907f13e911494c1a7b312bad34f692a/resource.tar.gz#test.test_join-premap_merge_with_remap-off-Analyze_/plan.txt"
+            "checksum": "143772b1623077942b3d55cbf8aae019",
+            "size": 15868,
+            "uri": "https://{canondata_backend}/1946324/c8058686a7decbc255d7e28ecdcab6420a760e15/resource.tar.gz#test.test_join-premap_merge_with_remap-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-premap_merge_with_remap-off-Analyze_/extracted"

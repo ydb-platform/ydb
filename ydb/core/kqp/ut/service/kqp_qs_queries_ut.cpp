@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/testlib/common_helper.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -669,6 +671,146 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1); // real drop
         checkExists(false, 1);
         checkDrop(true, EEx::IfExists, 1);
+    }
+
+    Y_UNIT_TEST(DdlColumnTable) {
+        const TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value").SetType(NScheme::NTypeIds::String)
+        };
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TTestHelper testHelper(serverSettings);
+        auto& kikimr = testHelper.GetKikimr();
+
+        auto db = kikimr.GetQueryClient();
+
+        enum EEx {
+            Empty,
+            IfExists,
+            IfNotExists,
+        };
+
+        auto checkCreate = [&](bool expectSuccess, EEx exMode, const TString& objPath, bool isStore) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfExists);
+            const TString ifNotExistsStatement = exMode == EEx::IfNotExists ? "IF NOT EXISTS" : "";
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
+            const TString hash = !isStore ? " PARTITION BY HASH(Key) " : "";
+            auto sql = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE )" << objType << " " << ifNotExistsStatement << " `" << objPath << R"(` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ))" << hash << R"(
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+                );)";
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkAlter = [&](const TString& objPath, bool isStore) {
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
+            {
+                auto sql = TStringBuilder() << R"(
+                    --!syntax_v1
+                    ALTER )" << objType << " `" << objPath << R"(`
+                        ADD COLUMN NewColumn Uint64;
+                    ;)";
+
+                auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                auto sql = TStringBuilder() << R"(
+                    --!syntax_v1
+                    ALTER )" << objType << " `" << objPath << R"(`
+                        DROP COLUMN NewColumn;
+                    ;)";
+
+                auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        };
+
+        auto checkDrop = [&](bool expectSuccess, EEx exMode,
+                const TString& objPath, bool isStore) {
+            UNIT_ASSERT_UNEQUAL(exMode, EEx::IfNotExists);
+            const TString ifExistsStatement = exMode == EEx::IfExists ? "IF EXISTS" : "";
+            const TString objType = isStore ? "TABLESTORE" : "TABLE";
+            auto sql = TStringBuilder() << R"(
+                --!syntax_v1
+                DROP )" << objType << " " << ifExistsStatement << " `" << objPath << R"(`;)";
+
+            auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT(result.GetResultSets().empty());
+        };
+
+        auto checkAddRow = [&](const TString& objPath) {
+            const size_t inserted_rows = 5;
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(objPath)
+                .SetPrimaryKey({"Key"})
+                .SetSharding({"Key"})
+                .SetSchema(schema);
+            {
+                TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+                for (size_t i = 0; i < inserted_rows; i++) {
+                    tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i));
+                }
+                testHelper.BulkUpsert(testTable, tableInserter);
+            }
+
+            Sleep(TDuration::Seconds(100));
+
+            auto sql = TStringBuilder() << R"(
+                SELECT Value FROM `)" << objPath << R"(` WHERE Key=1)";
+
+            testHelper.ReadData(sql, "[[[\"test_res_1\"]]]");
+        };
+
+        checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
+        checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
+        checkDrop(true, EEx::Empty, "/Root/TableStoreTest", true);
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
+
+        checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
+        checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
+        checkDrop(true, EEx::IfExists, "/Root/TableStoreTest", true);
+        checkDrop(false, EEx::Empty, "/Root/TableStoreTest", true);
+
+        checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
+        checkAlter("/Root/ColumnTable", false);
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
+
+        checkCreate(true, EEx::Empty, "/Root/ColumnTable", false);
+        checkCreate(false, EEx::Empty, "/Root/ColumnTable", false);
+        checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
+        checkAddRow("/Root/ColumnTable");
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
+        checkDrop(false, EEx::Empty, "/Root/ColumnTable", false);
+        checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
     }
 
     Y_UNIT_TEST(DdlUser) {

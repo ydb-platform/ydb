@@ -410,7 +410,7 @@ public:
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
             const auto& performanceParams = NPDisk::DevicePerformance.at(Impl.DeviceType);
-            const ui64 seekTimeUs = performanceParams.SeekTimeNs / 1000;
+            const ui64 seekTimeUs = (performanceParams.SeekTimeNs + 1000) / 1000 - 1;
             const ui64 readSpeedBps = performanceParams.FirstSectorReadBytesPerSec;
             const ui64 writeSpeedBps = performanceParams.FirstSectorWriteBytesPerSec;
             const ui64 readBlockSize = 65536;

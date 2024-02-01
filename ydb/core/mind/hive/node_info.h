@@ -30,9 +30,10 @@ struct TNodeInfo {
 
 protected:
     EVolatileState VolatileState;
-    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
+    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
+
     struct TTabletAvailabilityInfo {
         NKikimrLocal::TTabletAvailability FromLocal;
         ui64 EffectiveMaxCount;

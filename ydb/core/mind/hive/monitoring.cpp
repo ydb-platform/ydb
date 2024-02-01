@@ -768,7 +768,15 @@ public:
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
              TTabletTypes::ColumnShard,
-             TTabletTypes::GraphShard}) {
+             TTabletTypes::GraphShard,
+             TTabletTypes::BlockStoreVolume,
+             TTabletTypes::BlockStorePartition2,
+             TTabletTypes::Kesus,
+             TTabletTypes::SysViewProcessor,
+             TTabletTypes::FileStore,
+             TTabletTypes::SequenceShard,
+             TTabletTypes::ReplicationController,
+             TTabletTypes::StatisticsAggregator}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -856,6 +864,38 @@ public:
                 ChangeRequest = true;
                 // Self->BalancerIgnoreTabletTypes will be replaced by Self->BuildCurrentConfig()
             }
+        }
+
+        if (params.contains("DefaultTabletLimit")) {
+            auto tabletLimits = SplitString(params.Get("DefaultTabletLimit"), ";");
+            for (TStringBuf limit : tabletLimits) {
+                TStringBuf tabletType = limit.NextTok(':');
+                TTabletTypes::EType type = GetShortTabletType(TString(tabletType));
+                auto maxCount = TryFromString<ui64>(limit);
+                if (type == TTabletTypes::TypeInvalid || !maxCount) {
+                    continue;
+                }
+                ChangeRequest = true;
+                auto* protoLimit = Self->DatabaseConfig.AddDefaultTabletLimit();
+                protoLimit->SetType(type);
+                protoLimit->SetMaxCount(*maxCount);
+            }
+
+            // Get rid of duplicates & default values
+            google::protobuf::RepeatedPtrField<NKikimrConfig::THiveTabletLimit> cleanTabletLimits;
+            auto* dirtyTabletLimits = Self->DatabaseConfig.MutableDefaultTabletLimit();
+            std::unordered_set<TTabletTypes::EType> tabletTypes;
+            for (auto it = dirtyTabletLimits->rbegin(); it != dirtyTabletLimits->rend(); ++it) {
+                auto tabletType = it->GetType();
+                if (tabletTypes.contains(tabletType)) {
+                    continue;
+                }
+                tabletTypes.insert(tabletType);
+                if (it->GetMaxCount() != TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    cleanTabletLimits.Add(std::move(*it));
+                }
+            }
+            cleanTabletLimits.Swap(dirtyTabletLimits);
         }
 
         if (ChangeRequest) {
@@ -1260,74 +1300,6 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_AVAILABILITY; }
 
-    void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
-        out << "<head></head><body>";
-        out << "<script>$('.container > h2').html('Tablet availability on node " << NodeId << "');</script>";
-        if (Node == nullptr) {
-            out << "Node not found";
-            return;
-        }
-        out << "<div class='form-group'>";
-        out << "<div class='row' style='margin-bottom:10px;font-weight:bold'><div class='col-sm-3' style='text-align:right'>Tablet type</div><div class='col-sm-2'>Current max count</div><div class='col-sm-2'>Max count from Local</div><div class='col-sm-2'></div><div class='col-sm-2'></div></div>";
-        for (const auto& [tabletType, availability] : Node->TabletAvailability) {
-            ui32 typeId = tabletType;
-            ui64 currentMaxCount = availability.EffectiveMaxCount;
-            ui64 maxCountFromLocal = availability.FromLocal.GetMaxCount();
-            bool restrictionInEffect = currentMaxCount != maxCountFromLocal;
-            out << "<div class='row'>";
-            if (restrictionInEffect) {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << typeId << "'>" << tabletType << ":</label></div>";
-            } else {
-                out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << typeId << "' style='font-weight:normal'>" << tabletType << ":</label></div>";
-            }
-            out << "<div class='col-sm-2' style='padding-top:5px'><input id='val" << typeId << "' class='form-control' type='number' style='max-width:170px' min='0' max='" << maxCountFromLocal << "' value='"
-                << currentMaxCount << "' onkeydown='edit(this);' onchange='edit(this);'></div>";
-            out << "<div id='Local" << typeId << "' class='col-sm-2' style='padding-top:12px'>" << maxCountFromLocal << "</div>";
-            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='applyVal(this, \"" << typeId << "\");' disabled='true'>Apply</button></div>";
-            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << typeId << "\");' " << (restrictionInEffect ? "" : "disabled='true'") << ">Reset</button></div>";
-            out << "</div>";
-        }
-        out << "</div>";
-
-        out << R"___(
-               <script>
-               function edit(button) {
-                   $(button).parents('div').next().next().children('button').prop('disabled', false);
-               }
-
-               function applyVal(button, type) {
-                   var input = $('#val' + type);
-                   $.ajax({
-                       url: document.URL + '&changetype=' + type + '&maxcount=' + input.val(),
-                       success: function() {
-                         $(button).prop('disabled', true).removeClass('btn-danger');
-                         $(button).parent().next().children().prop('disabled', false);
-                         $(button).parent().parent().find('label').removeAttr('style');
-                       },
-                       error: function() { $(button).addClass('btn-danger'); }
-                   });
-               }
-
-               function resetVal(button, type) {
-                   var input = $('#val' + type);
-                   $.ajax({
-                       url: document.URL + '&resettype=' + type,
-                       success: function() {
-                         var v = $('#Local' + type).text();
-                         input.val(v);
-                         $(button).prop('disabled', true).removeClass('btn-danger');
-                         $(button).parent().parent().find('label').attr('style', 'font-weight:normal');
-                       },
-                       error: function() { $(button).addClass('btn-danger'); }
-                   });
-               }
-
-               </script>
-               )___";
-
-        out << "</body>";
-    }
-
     static TTabletTypes::EType ParseTabletType(const TString& str) {
         auto parsed = FromStringWithDefault<ui32>(str, TTabletTypes::TypeInvalid);
         parsed = std::min<ui32>(parsed, TTabletTypes::TypeInvalid);
@@ -1355,11 +1327,19 @@ public:
         }
         if (resetType != TTabletTypes::TypeInvalid) {
             ChangeRequest = true;
-            db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, resetType).Delete();
             Node->TabletAvailabilityRestrictions.erase(resetType);
             auto it = Node->TabletAvailability.find(resetType);
             if (it != Node->TabletAvailability.end()) {
                 it->second.RemoveRestriction();
+                if (it->second.IsSet) {
+                    db.Table<Schema::TabletAvailabilityRestrictions>()
+                      .Key(NodeId, resetType)
+                      .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
+                } else {
+                    db.Table<Schema::TabletAvailabilityRestrictions>()
+                      .Key(NodeId, resetType)
+                      .Delete();
+                }
             }
         }
         if (ChangeRequest) {
@@ -1373,9 +1353,7 @@ public:
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
         } else {
-            TStringStream str;
-            RenderHTMLPage(str, ctx);
-            ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"error\"}"));
         }
     }
 
@@ -1536,7 +1514,7 @@ public:
                "<th rowspan='2'><span class='glyphicon glyphicon-question-sign' title='Unknown state tablets' style='min-width:40px'></span></th>"
                "<th rowspan='2'><span class='glyphicon glyphicon-time' title='Starting tablets' style='min-width:40px'></span></th>"
                "<th rowspan='2'><span class='glyphicon glyphicon-flash' title='Running tablets' style='min-width:40px'></span></th>"
-               "<th style='min-width:160px; text-align:center'>Types</th>"
+               "<th style='min-width:240px; text-align:center'>Types</th>"
                "<th rowspan='2'>Usage</th>"
                "<th colspan='4' style='text-align:center'>Resources</td>"
                "<th rowspan='2' style='text-align:center'>Active</th>"
@@ -1544,7 +1522,7 @@ public:
                "<th rowspan='2' style='text-align:center'>Kick</th>"
                "<th rowspan='2' style='text-align:center'>Drain</th>"
                "<tr>"
-               "<th style='text-align:center'>" << GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit()) << "</th>"
+               "<th style='text-align:center' id='types'>" << GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit()) << "</th>"
                "<th style='min-width:70px'>cnt</th>"
                "<th style='min-width:100px'>cpu</th>"
                "<th style='min-width:100px'>mem</th>"
@@ -1826,6 +1804,7 @@ initReassignGroups();
 
 var tablets_found;
 var Nodes = {};
+var should_refresh_types = false;
 
 function queryTablets() {
     var storage_pool = $('#tablet_storage_pool').val();
@@ -1990,6 +1969,16 @@ function disableType(element, node, type) {
     $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
 }
 
+function applySetting(button, name, val) {
+    $(button).css('color', 'gray');
+    if (name == "DefaultTabletLimit") {
+        should_refresh_types = true;
+    }
+    $.ajax({
+        url: document.URL + '&page=Settings&' + name + '=' + val,
+    });
+}
+
 var Empty = true;
 
 function getBalancerString(balancer) {
@@ -2009,6 +1998,10 @@ function fillDataShort(result) {
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
             $('#storageScatter').html(result.StorageScatter);
+            if (should_refresh_types) {
+                $('#types').html(result.Types);
+                should_refresh_types = false;
+            }
 
             $('#resourceTotalCounter').html(result.ResourceTotal.Counter);
             $('#resourceTotalCPU').html(result.ResourceTotal.CPU);
@@ -2309,24 +2302,6 @@ public:
         ui64 aliveNodes = 0;
         THashMap<ui32, TVector<TTabletsRunningInfo>> tabletsByNodeByType;
 
-        /*for (const auto& pr : Self->Tablets) {
-            if (pr.second.IsRunning()) {
-                ++runningTablets;
-                ++tabletsByNodeByType[pr.second.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
-            }
-            if (pr.second.IsLockedToActor()) {
-                ++runningTablets;
-                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
-            }
-            for (const auto& sl : pr.second.Followers) {
-                if (sl.IsRunning()) {
-                    ++runningTablets;
-                    ++tabletsByNodeByType[sl.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type) + "s"];
-                }
-                ++tablets;
-            }
-            ++tablets;
-        }*/
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
                 ++aliveNodes;
@@ -2379,6 +2354,7 @@ public:
         jsonData["ObjectImbalance"] = GetValueWithColoredGlyph(Self->ObjectDistributions.GetMaxImbalance(), Self->GetObjectImbalanceToBalance());
         jsonData["StorageScatter"] = GetValueWithColoredGlyph(Self->StorageScatter, Self->GetMinStorageScatterToBalance());
         jsonData["WarmUp"] = Self->WarmUp;
+        jsonData["Types"] = GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit());
 
         if (Cgi.Get("nodes") == "1") {
             TVector<TNodeInfo*> nodeInfos;

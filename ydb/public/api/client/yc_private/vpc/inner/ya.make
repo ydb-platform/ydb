@@ -42,16 +42,16 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 PEERDIR(
-    contrib/ydb/public/api/client/yc_public/api
-    contrib/ydb/public/api/client/yc_public/api/tools
-    contrib/ydb/public/api/client/yc_private/common
-    contrib/ydb/public/api/client/yc_private/billing/v1
-    contrib/ydb/public/api/client/yc_private/compute/v1
-    contrib/ydb/public/api/client/yc_private/loadbalancer/v1
-    contrib/ydb/public/api/client/yc_private/operation
-    contrib/ydb/public/api/client/yc_private/quota
-    contrib/ydb/public/api/client/yc_private/servicecontrol/v1
-    contrib/ydb/public/api/client/yc_private/vpc/v1
+    ydb/public/api/client/yc_public/api
+    ydb/public/api/client/yc_public/api/tools
+    ydb/public/api/client/yc_private/common
+    ydb/public/api/client/yc_private/billing/v1
+    ydb/public/api/client/yc_private/compute/v1
+    ydb/public/api/client/yc_private/loadbalancer/v1
+    ydb/public/api/client/yc_private/operation
+    ydb/public/api/client/yc_private/quota
+    ydb/public/api/client/yc_private/servicecontrol/v1
+    ydb/public/api/client/yc_private/vpc/v1
 )
 END()
 

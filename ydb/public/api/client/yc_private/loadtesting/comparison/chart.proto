@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.comparison;
 
-import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/chart_type.proto";
-import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/chart_variant_type.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart_type.proto";
+import "ydb/public/api/client/yc_private/loadtesting/comparison/chart_variant_type.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
 option java_outer_classname = "LtV1ComparisonChart";

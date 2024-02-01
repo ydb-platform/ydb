@@ -3,10 +3,10 @@ syntax = "proto3";
 package yandex.cloud.priv.loadtesting.agent.v1;
 
 import "google/protobuf/field_mask.proto";
-import "contrib/ydb/public/api/client/yc_private/validation.proto";
-import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
-import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
-import "contrib/ydb/public/api/client/yc_private/loadtesting/agent/test.proto";
+import "ydb/public/api/client/yc_private/validation.proto";
+import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/agent/test.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/agent;agent";
 

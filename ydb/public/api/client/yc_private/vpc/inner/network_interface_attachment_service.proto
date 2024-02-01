@@ -4,14 +4,14 @@ package yandex.cloud.priv.vpc.v1.inner;
 
 import "google/protobuf/empty.proto";
 
-import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
-import "contrib/ydb/public/api/client/yc_private/vpc/v1/inner/common.proto";
-import "contrib/ydb/public/api/client/yc_private/billing/v1/light_metric.proto";
-import "contrib/ydb/public/api/client/yc_private/compute/v1/instance.proto";
-import "contrib/ydb/public/api/client/yc_private/compute/v1/instance_service.proto";
-import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
-import "contrib/ydb/public/api/client/yc_private/quota/quota.proto";
-import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_private/vpc/v1/inner/common.proto";
+import "ydb/public/api/client/yc_private/billing/v1/light_metric.proto";
+import "ydb/public/api/client/yc_private/compute/v1/instance.proto";
+import "ydb/public/api/client/yc_private/compute/v1/instance_service.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/quota/quota.proto";
+import "ydb/public/api/client/yc_private/validation.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
 

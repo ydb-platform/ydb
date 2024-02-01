@@ -5,7 +5,7 @@ package yandex.cloud.priv.vpc.v1.node;
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
 option java_outer_classname = "PVNVS";
 
-import "contrib/ydb/public/api/client/yc_private/vpc/v1/inner/node_registry.proto";
+import "ydb/public/api/client/yc_private/vpc/v1/inner/node_registry.proto";
 
 enum SlotReleaseStatus {
   SLOT_RELEASE_STATUS_UNSPECIFIED = 0;

@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.inner;
 
-import "contrib/ydb/public/api/client/yc_private/loadbalancer/v1/network_load_balancer.proto";
-import "contrib/ydb/public/api/client/yc_private/loadbalancer/v1/target_group.proto";
-import "contrib/ydb/public/api/client/yc_private/loadbalancer/v1/health_check.proto";
+import "ydb/public/api/client/yc_private/loadbalancer/v1/network_load_balancer.proto";
+import "ydb/public/api/client/yc_private/loadbalancer/v1/target_group.proto";
+import "ydb/public/api/client/yc_private/loadbalancer/v1/health_check.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
 option java_outer_classname = "PAC";

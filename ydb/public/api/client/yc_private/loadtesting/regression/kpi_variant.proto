@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.regression;
 
-import "contrib/ydb/public/api/client/yc_private/loadtesting/common/quantile_option.proto";
+import "ydb/public/api/client/yc_private/loadtesting/common/quantile_option.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
 

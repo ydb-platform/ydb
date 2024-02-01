@@ -4,7 +4,7 @@ package yandex.cloud.priv.loadtesting.v1.regression;
 
 import "google/protobuf/timestamp.proto";
 
-import "contrib/ydb/public/api/client/yc_private/loadtesting/regression/widget.proto";
+import "ydb/public/api/client/yc_private/loadtesting/regression/widget.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
 

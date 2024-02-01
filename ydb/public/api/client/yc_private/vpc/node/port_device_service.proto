@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.node;
 
-import "contrib/ydb/public/api/client/yc_private/validation.proto";
-import "contrib/ydb/public/api/client/yc_private/sensitive.proto";
-import "contrib/ydb/public/api/client/yc_private/vpc/v1/node/port_device.proto";
-import "contrib/ydb/public/api/client/yc_private/vpc/v1/inner/port_state.proto";
+import "ydb/public/api/client/yc_private/validation.proto";
+import "ydb/public/api/client/yc_private/sensitive.proto";
+import "ydb/public/api/client/yc_private/vpc/v1/node/port_device.proto";
+import "ydb/public/api/client/yc_private/vpc/v1/inner/port_state.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
 option java_outer_classname = "PVNPDS";

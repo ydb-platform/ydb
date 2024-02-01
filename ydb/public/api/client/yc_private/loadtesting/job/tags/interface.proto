@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.job.tags;
 
-import "contrib/ydb/public/api/client/yc_private/validation.proto";
-import "contrib/ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
+import "ydb/public/api/client/yc_private/validation.proto";
+import "ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
 
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/job/tags;tags";

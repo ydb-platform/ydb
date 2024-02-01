@@ -4,11 +4,11 @@ package yandex.cloud.priv.vpc.v1;
 
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
-import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
-import "contrib/ydb/public/api/client/yc_public/api/tools/options.proto";
-import "contrib/ydb/public/api/client/yc_private/validation.proto";
-import "contrib/ydb/public/api/client/yc_private/vpc/v1/route_table.proto";
-import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_public/api/tools/options.proto";
+import "ydb/public/api/client/yc_private/validation.proto";
+import "ydb/public/api/client/yc_private/vpc/v1/route_table.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
 option java_outer_classname = "PSRSS";

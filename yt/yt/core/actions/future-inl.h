@@ -939,11 +939,6 @@ inline bool operator==(const TCancelable& lhs, const TCancelable& rhs)
     return lhs.Impl_ == rhs.Impl_;
 }
 
-inline bool operator!=(const TCancelable& lhs, const TCancelable& rhs)
-{
-    return !(lhs == rhs);
-}
-
 inline void swap(TCancelable& lhs, TCancelable& rhs)
 {
     using std::swap;
@@ -957,12 +952,6 @@ bool operator==(const TFuture<T>& lhs, const TFuture<T>& rhs)
 }
 
 template <class T>
-bool operator!=(const TFuture<T>& lhs, const TFuture<T>& rhs)
-{
-    return !(lhs == rhs);
-}
-
-template <class T>
 void swap(TFuture<T>& lhs, TFuture<T>& rhs)
 {
     using std::swap;
@@ -973,12 +962,6 @@ template <class T>
 bool operator==(const TPromise<T>& lhs, const TPromise<T>& rhs)
 {
     return lhs.Impl_ == rhs.Impl_;
-}
-
-template <class T>
-bool operator!=(const TPromise<T>& lhs, const TPromise<T>& rhs)
-{
-    return *(lhs == rhs);
 }
 
 template <class T>

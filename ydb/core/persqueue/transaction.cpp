@@ -75,11 +75,11 @@ void TDistributedTransaction::InitPartitions()
 
     if (TabletConfig.PartitionsSize()) {
         for (const auto& partition : TabletConfig.GetPartitions()) {
-            Partitions.insert(partition.GetPartitionId());
+            Partitions.emplace(partition.GetPartitionId());
         }
     } else {
         for (auto partitionId : TabletConfig.GetPartitionIds()) {
-            Partitions.insert(partitionId);
+            Partitions.emplace(partitionId);
         }
     }
 }
@@ -155,6 +155,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             // Old configuration format without AllPartitions. Split/Merge is not supported.
             continue;
         }
+
         if (node->Children.empty()) {
             for (const auto* r : node->Parents) {
                 if (extractTabletId != r->TabletId) {
@@ -206,7 +207,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decisi
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     SetDecision(SelfDecision, decision);
 
@@ -246,7 +247,7 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     Y_ABORT_UNLESS(Step == event.Step);
     Y_ABORT_UNLESS(TxId == event.TxId);
 
-    Y_ABORT_UNLESS(Partitions.contains(event.Partition));
+    Y_ABORT_UNLESS(Partitions.contains(event.Partition.OriginalPartitionId));
 
     ++PartitionRepliesCount;
 }

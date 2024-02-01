@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/tx/replication/ydb_proxy
     ydb/library/actors/core
+    ydb/library/services
     library/cpp/json
 )
 

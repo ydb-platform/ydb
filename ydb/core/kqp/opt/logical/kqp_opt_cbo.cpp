@@ -104,9 +104,11 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     }
 
     for (auto [leftCol, rightCol] : joinConditions) {
+        // Fix for clang14, somehow structured binding does not create a variable in clang14
+        auto r = rightCol;
         if (! find_if(rightStats->KeyColumns.begin(), rightStats->KeyColumns.end(), 
-            [rightCol] (const TString& s) {
-            return rightCol.AttributeName == s;
+            [r] (const TString& s) {
+            return r.AttributeName == s;
         } )) {
             return false;
         }

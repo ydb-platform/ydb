@@ -30,6 +30,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -87,6 +88,8 @@ InterestingOrigin = Tuple[
     Type[BaseException], str, int, Tuple[Any, ...], Tuple[Tuple[Any, ...], ...]
 ]
 TargetObservations = Dict[Optional[str], Union[int, float]]
+
+T = TypeVar("T")
 
 
 class ExtraInformation:
@@ -1426,7 +1429,7 @@ class ConjectureData:
         self.events: Dict[str, Union[str, int, float]] = {}
         self.forced_indices: "Set[int]" = set()
         self.interesting_origin: Optional[InterestingOrigin] = None
-        self.draw_times: "List[float]" = []
+        self.draw_times: "Dict[str, float]" = {}
         self.max_depth = 0
         self.has_discards = False
         self.provider = PrimitiveProvider(self)
@@ -1550,6 +1553,8 @@ class ConjectureData:
 
     def draw_bytes(self, size: int, *, forced: Optional[bytes] = None) -> bytes:
         assert forced is None or len(forced) == size
+        assert size >= 0
+
         return self.provider.draw_bytes(size, forced=forced)
 
     def draw_boolean(self, p: float = 0.5, *, forced: Optional[bool] = None) -> bool:
@@ -1594,7 +1599,12 @@ class ConjectureData:
             value = repr(value)
         self.output += value
 
-    def draw(self, strategy: "SearchStrategy[Ex]", label: Optional[int] = None) -> "Ex":
+    def draw(
+        self,
+        strategy: "SearchStrategy[Ex]",
+        label: Optional[int] = None,
+        observe_as: Optional[str] = None,
+    ) -> "Ex":
         if self.is_find and not strategy.supports_find:
             raise InvalidArgument(
                 f"Cannot use strategy {strategy!r} within a call to find "
@@ -1631,7 +1641,8 @@ class ConjectureData:
                 try:
                     return strategy.do_draw(self)
                 finally:
-                    self.draw_times.append(time.perf_counter() - start_time)
+                    key = observe_as or f"unlabeled_{len(self.draw_times)}"
+                    self.draw_times[key] = time.perf_counter() - start_time
         finally:
             self.stop_example()
 
@@ -1719,6 +1730,11 @@ class ConjectureData:
         self.buffer = bytes(self.buffer)
         self.observer.conclude_test(self.status, self.interesting_origin)
 
+    def choice(self, values: Sequence[T], *, forced: Optional[T] = None) -> T:
+        forced_i = None if forced is None else values.index(forced)
+        i = self.draw_integer(0, len(values) - 1, forced=forced_i)
+        return values[i]
+
     def draw_bits(self, n: int, *, forced: Optional[int] = None) -> int:
         """Return an ``n``-bit integer from the underlying source of
         bytes. If ``forced`` is set to an integer will instead
@@ -1769,15 +1785,6 @@ class ConjectureData:
 
         assert result.bit_length() <= n
         return result
-
-    def write(self, string: bytes) -> Optional[bytes]:
-        """Write ``string`` to the output buffer."""
-        self.__assert_not_frozen("write")
-        string = bytes(string)
-        if not string:
-            return None
-        self.draw_bits(len(string) * 8, forced=int_from_bytes(string))
-        return self.buffer[-len(string) :]
 
     def __check_capacity(self, n: int) -> None:
         if self.index + n > self.max_length:

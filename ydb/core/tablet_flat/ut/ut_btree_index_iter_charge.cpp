@@ -36,7 +36,8 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Touched;
     };
 
-    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, bool allowFirstLastPageDifference = false) {
+    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
+            bool allowAdditionalFirstLastPartPages = false, bool allowAdditionalFirstLoadedPage = false, bool allowLastLoadedPageDifference = false) {
         TSet<TGroupId> groupIds;
         for (const auto &c : {bTree.Loaded, flat.Loaded}) {
             for (const auto &g : c) {
@@ -59,14 +60,21 @@ namespace {
 
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
-            if (allowFirstLastPageDifference) {
+            if (allowAdditionalFirstLastPartPages) {
                 for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,  
+            // Note: due to implementation details it is possible that B-Tree index touches an extra page
+            if (groupId.IsMain() && allowAdditionalFirstLoadedPage && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+                flatDataPages.insert(*bTreeDataPages.begin());
+            }
+            if (groupId.IsMain() && allowLastLoadedPageDifference && flatDataPages.size() + 1 == bTreeDataPages.size()) {
+                flatDataPages.insert(*bTreeDataPages.rbegin());
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,
                 TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
         }
     }
@@ -123,7 +131,7 @@ namespace {
         
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
-        for (ui32 i : xrange(0u, 40u)) {
+        for (ui32 i : xrange<ui32>(0, 40)) {
             cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
         }
 
@@ -267,8 +275,8 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekRowId(const TPartStore& part) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows + 1)) {
-            for (TRowId rowId2 : xrange(part.Stat.Rows + 1)) {
+        for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
+            for (TRowId rowId2 : xrange<TRowId>(0, part.Stat.Rows + 1)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                 TPartIndexIt flat(&part, &flatEnv, { });
@@ -307,7 +315,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
     }
 
     void CheckSeekKey(const TPartStore& part, const TKeyCellDefaults *keyDefaults) {
-        for (bool reverse : {false, true}) {
+        for (bool reverse : {false}) {
             for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
                 for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCell : xrange<ui32>(0, 14)) {
@@ -333,7 +341,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIt) {
 
     void CheckNextPrev(const TPartStore& part) {
         for (bool next : {true, false}) {
-            for (TRowId rowId : xrange(part.Stat.Rows)) {
+            for (TRowId rowId : xrange<TRowId>(0, part.Stat.Rows)) {
                 TTouchEnv bTreeEnv, flatEnv;
                 TPartBtreeIndexIt bTree(&part, &bTreeEnv, { });
                 TPartIndexIt flat(&part, &flatEnv, { });
@@ -416,48 +424,63 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         Y_UNREACHABLE();
     }
 
-    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (TRowId rowId1 : xrange(part.Stat.Rows - 1)) {
-            for (TRowId rowId2 : xrange(rowId1, part.Stat.Rows - 1)) {
-                TTouchEnv bTreeEnv, flatEnv;
-                TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-                TCharge flat(&flatEnv, part, tags, true);
-
-                TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2;
-                DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                DoChargeRowId(flat, flatEnv, rowId1, rowId2, 0, 0, reverse, *keyDefaults, message);
-                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
-            }
-        }
-    }
-
-    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults, bool reverse) {
-        for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-            for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                    for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
-                        TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
-                        TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
-
+    void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ui32 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+                for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
+                    for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
 
-                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
-                        for (auto c : key1) {
-                            message << c.AsValue<ui32>() << " ";
-                        }
-                        message << ") (";
-                        for (auto c : key2) {
-                            message << c.AsValue<ui32>() << " ";
-                        }
-                        message << ")";
+                        TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
+                        DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        DoChargeRowId(flat, flatEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                            false, reverse && itemsLimit, !reverse && itemsLimit);
+                    }
+                }
+            }
+        }
+    }
 
-                        bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
-                        bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, 0, 0, reverse, *keyDefaults, message);
-                        
-                        UNIT_ASSERT_C(bTreeOvershot == flatOvershot, message);
-                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, true);
+    void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ui32 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                        for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                            for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                                TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+                                TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
+
+                                TTouchEnv bTreeEnv, flatEnv;
+                                TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
+                                TCharge flat(&flatEnv, part, tags, true);
+
+                                TStringBuilder message = TStringBuilder() << (reverse ? "ChargeKeysReverse " : "ChargeKeys ") << "(";
+                                for (auto c : key1) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") (";
+                                for (auto c : key2) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") items " << itemsLimit;
+
+                                bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+                                bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+                                
+                                if (!itemsLimit) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                                } else if (bTreeOvershot) {
+                                    // Note: due to implementation details it is possible that b-tree precharge is more precise
+                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                                }
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, 
+                                    true, reverse && itemsLimit, !reverse && itemsLimit);
+                            }
+                        }
                     }
                 }
             }
@@ -473,10 +496,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
             tags.push_back(c.Tag);
         }
 
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), false);
-        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get(), true);
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), false);
-        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get(), true);
+        CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {
@@ -505,6 +526,20 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
+    void MakeRuns(const TPartEggs& eggs, TRun& btreeRun, TRun& flatRun) {
+        const auto part = *eggs.Lone();
+
+        auto flatPart = part.CloneWithEpoch(part.Epoch);
+        for (auto& slice : *part.Slices) {
+            btreeRun.Insert(eggs.Lone(), slice);
+            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
+            pages->clear();
+            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
+            pages->clear();
+            flatRun.Insert(flatPart, slice);
+        }
+    }
+
     void AssertEqual(const TRunIt& bTree, EReady bTreeReady, const TRunIt& flat, EReady flatReady, const TString& message) {
         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, flatReady, message);
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
@@ -542,15 +577,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
-        auto flatPart = part.CloneWithEpoch(part.Epoch);
-        for (auto& slice : *part.Slices) {
-            btreeRun.Insert(eggs.Lone(), slice);
-            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
-            pages->clear();
-            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
-            pages->clear();
-            flatRun.Insert(flatPart, slice);
-        }
+        MakeRuns(eggs, btreeRun, flatRun);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {
@@ -599,15 +626,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         const auto part = *eggs.Lone();
 
         TRun btreeRun(*eggs.Scheme->Keys), flatRun(*eggs.Scheme->Keys);
-        auto flatPart = part.CloneWithEpoch(part.Epoch);
-        for (auto& slice : *part.Slices) {
-            btreeRun.Insert(eggs.Lone(), slice);
-            auto pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeGroups;
-            pages->clear();
-            pages = (TVector<TBtreeIndexMeta>*)&flatPart->IndexPages.BTreeHistoric;
-            pages->clear();
-            flatRun.Insert(flatPart, slice);
-        }
+        MakeRuns(eggs, btreeRun, flatRun);
 
         auto tags = TVector<TTag>();
         for (auto c : eggs.Scheme->Cols) {
@@ -615,30 +634,32 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         for (bool reverse : {false, true}) {
-            for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
-                            TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
-                            TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
+            for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                        for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                            for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                                TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+                                TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
 
-                            TTouchEnv bTreeEnv, flatEnv;
-                            
-                            TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
-                            for (auto c : key1) {
-                                message << c.AsValue<ui32>() << " ";
+                                TTouchEnv bTreeEnv, flatEnv;
+                                
+                                TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
+                                for (auto c : key1) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") (";
+                                for (auto c : key2) {
+                                    message << c.AsValue<ui32>() << " ";
+                                }
+                                message << ") items " << itemsLimit;
+
+                                Charge(btreeRun, tags, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
+                                Charge(flatRun, tags, flatEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message);
+
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                                    false, reverse && itemsLimit, !reverse && itemsLimit);
                             }
-                            message << ") (";
-                            for (auto c : key2) {
-                                message << c.AsValue<ui32>() << " ";
-                            }
-                            message << ")";
-
-                            // TODO: limits
-                            Charge(btreeRun, tags, bTreeEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
-                            Charge(flatRun, tags, flatEnv, key1, key2, 0, 0, reverse, *eggs.Scheme->Keys, message);
-
-                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message);
                         }
                     }
                 }

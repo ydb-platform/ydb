@@ -1729,9 +1729,11 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
         
-        unitSpan.Attribute("Type", TypeName(unit))
-                .Attribute("Status", static_cast<int>(status))
-                .EndOk();
+        if (unitSpan) {
+            unitSpan.Attribute("Type", TypeName(unit))
+                    .Attribute("Status", static_cast<int>(status))
+                    .EndOk();
+        }
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Execution status for " << *op << " at " << Self->TabletID()

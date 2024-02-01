@@ -13,13 +13,13 @@ class TChargeBTreeIndex : public ICharge {
     using TGroupId = NPage::TGroupId;
     using TChild = TBtreeIndexNode::TChild;
 
-    // TODO: store PageId only instead of TChild?
-    struct TChildState : TChild {
+    struct TChildState {
+        TPageId PageId;
         TRowId BeginRowId;
         TRowId EndRowId;
 
-        TChildState(TChild meta, TRowId beginRowId, TRowId endRowId)
-            : TChild(meta)
+        TChildState(TPageId pageId, TRowId beginRowId, TRowId endRowId)
+            : PageId(pageId)
             , BeginRowId(beginRowId)
             , EndRowId(endRowId)
         {
@@ -27,8 +27,8 @@ class TChargeBTreeIndex : public ICharge {
     };
 
     struct TNodeState : TChildState, TBtreeIndexNode {
-        TNodeState(TSharedData data, TChild meta, TRowId beginRowId, TRowId endRowId)
-            : TChildState(meta, beginRowId, endRowId)
+        TNodeState(TSharedData data, TPageId pageId, TRowId beginRowId, TRowId endRowId)
+            : TChildState(pageId, beginRowId, endRowId)
             , TBtreeIndexNode(data)
         {
         }
@@ -66,11 +66,9 @@ public:
         endRowId++; // current interface accepts inclusive row2 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
-        bool ready = true;
+        bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
-
-        Y_UNUSED(itemsLimit);
-        Y_UNUSED(bytesLimit);
+        ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -89,6 +87,8 @@ public:
             // tryHandleChild may update them, copy for simplicity
             // always load beginRowId regardless of keys
             const TRowId levelBeginRowId = beginRowId, levelEndRowId = Max(endRowId, beginRowId + 1);
+
+            const TChild* firstChild = nullptr;
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
                     continue;
@@ -102,17 +102,50 @@ public:
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
-                    TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                    auto child = node.GetChildRef(pos);
+                    auto prevChild = pos ? node.GetChildRef(pos - 1) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
+                    TRowId endRowId = child->RowCount;
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
+                    if (itemsLimit || bytesLimit) {
+                        if (!firstChild) {
+                            // do not apply limit on the first child because beginRowId/key1 position is uncertain
+                            firstChild = child;
+                        } else {
+                            if (itemsLimit) {
+                                ui64 items = child->GetNonErasedRowCount() - firstChild->GetNonErasedRowCount();
+                                if (LimitExceeded(items, itemsLimit)) {
+                                    overshot = false;
+                                    return;
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        };
+
+        const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == key1PageId) {
+                if (chargeGroups && chargeGroupsItemsLimit) {
+                    // TODO: use erased count
+                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    if (unloadedItems < chargeGroupsItemsLimit) {
+                        chargeGroupsItemsLimit -= unloadedItems;
+                    } else {
+                        chargeGroups = false;
+                    }
+                }
+                beginRowId = Max(beginRowId, child.EndRowId);
+            }
+            if (child.PageId == key2PageId) {
+                endRowId = Min(endRowId, child.BeginRowId);
             }
         };
 
         const auto tryHandleNode = [&](TChildState child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
-                if (TryLoadNode(child, nextLevel)) { // update beginRowId, endRowId
+                if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
@@ -123,20 +156,16 @@ public:
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2PageId = node.GetShortChild(pos).PageId;
-                        endRowId = Min(endRowId, node.GetShortChild(pos).RowCount + 1); // move endRowId - 1 to the first key > key2
-                        if (node.GetShortChild(pos).RowCount <= beginRowId) {
+                        auto& key2Child = node.GetShortChild(pos);
+                        key2PageId = key2Child.PageId;
+                        endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
+                        if (key2Child.RowCount <= beginRowId) {
                             chargeGroups = false; // key2 is before current slice
                         }
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -147,7 +176,7 @@ public:
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
             if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
-                if (page) { // update beginRowId, endRowId
+                if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.PageId == key1PageId) {
                         TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults).Off();
@@ -158,13 +187,8 @@ public:
                         endRowId = Min(endRowId, key2RowId);
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -174,7 +198,7 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -183,21 +207,21 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        bool overshot = endRowId == sliceEndRowId;
+        overshot &= endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -207,11 +231,9 @@ public:
         endRowId++; // current interface accepts inclusive row1 bound
         Y_ABORT_UNLESS(beginRowId < endRowId);
         
-        bool ready = true;
+        bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
-        
-        Y_UNUSED(itemsLimit);
-        Y_UNUSED(bytesLimit);
+        ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -222,6 +244,7 @@ public:
             chargeGroups = false;
         }
 
+        // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         TPageId key1PageId = key1 ? meta.PageId : Max<TPageId>();
         TPageId key2PageId = key2 ? meta.PageId : Max<TPageId>();
@@ -230,6 +253,9 @@ public:
             // tryHandleChild may update them, copy for simplicity
             // always load endRowId - 1 regardless of keys
             const TRowId levelBeginRowId = Min(beginRowId, endRowId - 1), levelEndRowId = endRowId;
+            
+            const TChild* lastChild = nullptr;
+            const TChild* prevLastChild = nullptr;
             for (const auto &node : level) {
                 if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
                     continue;
@@ -242,42 +268,75 @@ public:
                 if (node.EndRowId > levelEndRowId) {
                     to = node.Seek(levelEndRowId - 1) + 1;
                 }
-                for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
-                    TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                for (TRecIdx posExt = to; posExt > from; posExt--) {
+                    auto child = node.GetChildRef(posExt - 1);
+                    auto prevChild = posExt - 1 ? node.GetChildRef(posExt - 2) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
+                    TRowId endRowId = child->RowCount;
+                    if (itemsLimit || bytesLimit) {
+                        if (!lastChild) {
+                            // do not apply limit on the last child because endRowId/key1 position is uncertain
+                            lastChild = child;
+                        } else {
+                            if (!prevLastChild) {
+                                prevLastChild = child;
+                            }
+                            if (itemsLimit) {
+                                ui64 items = prevLastChild->GetNonErasedRowCount() - child->GetNonErasedRowCount();
+                                if (LimitExceeded(items, itemsLimit)) {
+                                    overshot = false;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
                 }
+            }
+        };
+
+        const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == key1PageId) {
+                if (chargeGroups && chargeGroupsItemsLimit) {
+                    // TODO: use erased count
+                    ui64 unloadedItems = child.EndRowId - child.BeginRowId;
+                    if (unloadedItems < chargeGroupsItemsLimit) {
+                        chargeGroupsItemsLimit -= unloadedItems;
+                    } else {
+                        chargeGroups = false;
+                    }
+                }
+                endRowId = Min(endRowId, child.BeginRowId);
+            }
+            if (child.PageId == key2PageId) {
+                beginRowId = Max(beginRowId, child.EndRowId);
             }
         };
 
         const auto tryHandleNode = [&](TChildState child) -> bool {
             if (child.PageId == key1PageId || child.PageId == key2PageId) {
-                if (TryLoadNode(child, nextLevel)) { // update beginRowId, endRowId
+                if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.PageId == key1PageId) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1PageId = node.GetShortChild(pos).PageId;
-                        endRowId = Min(endRowId, node.GetShortChild(pos).RowCount); // move endRowId - 1 to the last key <= key1
+                        auto& key1Child = node.GetShortChild(pos);
+                        key1PageId = key1Child.PageId;
+                        endRowId = Min(endRowId, key1Child.RowCount); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.PageId == key2PageId) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         key2PageId = node.GetShortChild(pos).PageId;
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount - 1); // move beginRowId to the last key < key2
-                            if (node.GetShortChild(pos - 1).RowCount >= endRowId) {
+                            auto& prevKey2Child = node.GetShortChild(pos - 1);
+                            beginRowId = Max(beginRowId, prevKey2Child.RowCount - 1); // move beginRowId to the last key < key2
+                            if (prevKey2Child.RowCount >= endRowId) {
                                 chargeGroups = false; // key2 is after current slice
                             }
                         }                        
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -288,7 +347,7 @@ public:
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
             if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
-                if (page) { // update beginRowId, endRowId
+                if (page) {
                     auto data = NPage::TDataPage(page);
                     if (child.PageId == key1PageId) {
                         auto iter = data.LookupKeyReverse(key1, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
@@ -309,13 +368,8 @@ public:
                         }
                     }
                     return true;
-                } else { // skip unloaded page rows
-                    if (child.PageId == key1PageId) {
-                        endRowId = Min(endRowId, child.BeginRowId);
-                    }
-                    if (child.PageId == key2PageId) {
-                        beginRowId = Max(beginRowId, child.EndRowId);
-                    }
+                } else {
+                    skipUnloadedRows(child);
                     return false;
                 }
             } else {
@@ -325,7 +379,7 @@ public:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -334,40 +388,63 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+            ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
         // flat index doesn't treat key placement within data page, so let's do the same
         // TODO: remove it later
-        bool overshot = beginRowId == sliceBeginRowId;
+        overshot &= beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId); // precharge groups using the latest row bounds
+        ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
 
 private:
-    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId) const noexcept {
+    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
+            if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
+                endRowId = beginRowId + itemsLimit + 1;
+            }
+
             for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId);
+                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
             }
         }
 
         return ready;
     }
 
-    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId) const noexcept {
+    bool DoPrechargeGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
+        
+        if (chargeGroups && beginRowId < endRowId) {
+            if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
+                beginRowId = endRowId - itemsLimit - 1;
+            }
+
+            for (auto groupId : Groups) {
+                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
+            }
+        }
+
+        return ready;
+    }
+
+private:
+    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
+        bool ready = true;
+
+        Y_UNUSED(bytesLimit);
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
@@ -383,10 +460,11 @@ private:
                     to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetChild(pos);
-                    TRowId beginRowId = pos ? node.GetChild(pos - 1).RowCount : node.BeginRowId;
+                    auto child = node.GetShortChild(pos);
+                    auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child, beginRowId, endRowId));
+                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
                 }
             }
         };
@@ -401,7 +479,7 @@ private:
 
         for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
             if (height == 0) {
-                ready &= tryHandleNode(TChildState(meta, 0, meta.RowCount));
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
             } else {
                 iterateLevel(tryHandleNode);
             }
@@ -414,7 +492,7 @@ private:
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(TChildState(meta, 0, meta.RowCount));
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
         }
@@ -456,6 +534,10 @@ private:
             ? 0
             // Missing point cells are filled with a virtual +inf
             : (left.size() > right.size() ? -1 : 1);
+    }
+
+    bool LimitExceeded(ui64 value, ui64 limit) const noexcept {
+        return limit && value > limit;
     }
 
 private:

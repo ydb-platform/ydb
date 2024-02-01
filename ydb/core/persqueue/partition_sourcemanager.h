@@ -106,8 +106,6 @@ private:
     TSourceIdStorage& GetSourceIdStorage() const;
     bool HasParents() const;
 
-    TActorId PartitionRequester(TPartitionId id, ui64 tabletId);
-
 
 private:
     TPartition& Partition;

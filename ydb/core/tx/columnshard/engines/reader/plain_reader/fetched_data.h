@@ -48,13 +48,6 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> GetBatch() const {
-        if (!Table) {
-            return nullptr;
-        }
-        return NArrow::ToBatch(Table, true);
-    }
-
     void AddNulls(THashMap<TBlobRange, ui32>&& blobs) {
         for (auto&& i : blobs) {
             AFL_VERIFY(Blobs.emplace(i.first, i.second).second);
@@ -107,6 +100,19 @@ public:
         }
     }
 
+};
+
+class TFetchedResult {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+public:
+    TFetchedResult(std::unique_ptr<TFetchedData>&& data)
+        : NotAppliedFilter(data->GetNotAppliedFilter()) {
+        if (data->GetTable()) {
+            Batch = NArrow::ToBatch(data->GetTable(), true);
+        }
+    }
 };
 
 }

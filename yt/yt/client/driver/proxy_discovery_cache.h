@@ -20,8 +20,7 @@ struct TProxyDiscoveryRequest
     TString NetworkName = NApi::NRpcProxy::DefaultNetworkName;
     bool IgnoreBalancers = false;
 
-    bool operator==(const TProxyDiscoveryRequest& other) const;
-    bool operator!=(const TProxyDiscoveryRequest& other) const;
+    bool operator==(const TProxyDiscoveryRequest& other) const = default;
 
     operator size_t() const;
 };

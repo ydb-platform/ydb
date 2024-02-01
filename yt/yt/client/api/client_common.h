@@ -155,6 +155,8 @@ struct TSelectRowsOptionsBase
     bool UseCanonicalNullRelations = false;
     //! Merge versioned rows from different stores when reading.
     bool MergeVersionedRows = true;
+    //! Query language syntax version.
+    int SyntaxVersion = 1;
 };
 
 struct TSelectRowsOptions

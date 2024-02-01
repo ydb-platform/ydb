@@ -10,7 +10,7 @@
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
 #include <library/cpp/yt/small_containers/compact_set.h>
 
-#include <library/cpp/yt/misc/enum_indexed_array.h>
+#include <library/cpp/yt/containers/enum_indexed_array.h>
 
 #include <optional>
 #include <variant>
@@ -308,16 +308,6 @@ inline constexpr TEntitySerializationKey::TEntitySerializationKey()
 inline constexpr TEntitySerializationKey::TEntitySerializationKey(int index)
     : Index(index)
 { }
-
-inline constexpr bool TEntitySerializationKey::operator == (TEntitySerializationKey rhs) const
-{
-    return Index == rhs.Index;
-}
-
-inline constexpr bool TEntitySerializationKey::operator != (TEntitySerializationKey rhs) const
-{
-    return !(*this == rhs);
-}
 
 inline constexpr TEntitySerializationKey::operator bool() const
 {
@@ -1027,15 +1017,9 @@ public:
             return Index_ == other.Index_;
         }
 
-        bool operator != (const TIteratorWrapper& other) const
-        {
-            return Index_ != other.Index_;
-        }
-
     private:
         const TIterators* const Iterators_;
         size_t Index_;
-
     };
 
     explicit TCollectionSorter(const T& set)

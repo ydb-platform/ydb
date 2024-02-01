@@ -2289,7 +2289,7 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         PromoteFollowerReadEdge();
     }
 
-    EmitHeartbeats(ctx);
+    EmitHeartbeats();
 }
 
 void TDataShard::CheckMediatorStateRestored() {

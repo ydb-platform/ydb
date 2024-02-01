@@ -170,8 +170,6 @@ struct TEvPQ {
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
         EvFetchResponse,
-        EvSourceIdRequest,
-        EvSourceIdResponse,
         EvPublishRead,
         EvForgetRead,
         EvRegisterDirectReadSession,
@@ -313,13 +311,18 @@ struct TEvPQ {
     };
 
     struct TEvMonResponse : public TEventLocal<TEvMonResponse, EvMonResponse> {
-        TEvMonResponse(ui32 partition, const TVector<TString>& res, const TString& str)
+        TEvMonResponse(const NPQ::TPartitionId& partition, const TVector<TString>& res, const TString& str)
         : Partition(partition)
         , Res(res)
         , Str(str)
         {}
 
-        ui32 Partition;
+        TEvMonResponse(const TVector<TString>& res, const TString& str)
+        : Res(res)
+        , Str(str)
+        {}
+
+        TMaybe<NPQ::TPartitionId> Partition;
         TVector<TString> Res;
         TString Str;
     };
@@ -398,11 +401,13 @@ struct TEvPQ {
     };
 
     struct TEvPartitionOffsetsResponse : public TEventLocal<TEvPartitionOffsetsResponse, EvPartitionOffsetsResponse> {
-        explicit TEvPartitionOffsetsResponse(NKikimrPQ::TOffsetsResponse::TPartResult& partResult)
+        TEvPartitionOffsetsResponse(NKikimrPQ::TOffsetsResponse::TPartResult& partResult, const NPQ::TPartitionId& partition)
         : PartResult(partResult)
+        , Partition(partition)
         {}
 
         NKikimrPQ::TOffsetsResponse::TPartResult PartResult;
+        NPQ::TPartitionId Partition;
     };
 
     struct TEvPartitionStatus : public TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
@@ -424,11 +429,13 @@ struct TEvPQ {
     };
 
     struct TEvPartitionStatusResponse : public TEventLocal<TEvPartitionStatusResponse, EvPartitionStatusResponse> {
-        explicit TEvPartitionStatusResponse(NKikimrPQ::TStatusResponse::TPartResult& partResult)
+        TEvPartitionStatusResponse(NKikimrPQ::TStatusResponse::TPartResult& partResult, const NPQ::TPartitionId& partition)
         : PartResult(partResult)
+        , Partition(partition)
         {}
 
         NKikimrPQ::TStatusResponse::TPartResult PartResult;
+        NPQ::TPartitionId Partition;
     };
 
 
@@ -442,11 +449,11 @@ struct TEvPQ {
     };
 
     struct TEvInitComplete : public TEventLocal<TEvInitComplete, EvInitComplete> {
-        explicit TEvInitComplete(const ui32 partition)
+        explicit TEvInitComplete(const NPQ::TPartitionId& partition)
         : Partition(partition)
         {}
 
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
     };
 
     struct TEvError : public TEventLocal<TEvError, EvError> {
@@ -462,7 +469,7 @@ struct TEvPQ {
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
-        TEvBlobRequest(const TString& user, const ui64 cookie, const ui32 partition, const ui64 readOffset,
+        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition, const ui64 readOffset,
                        TVector<NPQ::TRequestedBlob>&& blobs)
         : User(user)
         , Cookie(cookie)
@@ -473,7 +480,7 @@ struct TEvPQ {
 
         TString User;
         ui64 Cookie;
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
         ui64 ReadOffset;
         TVector<NPQ::TRequestedBlob> Blobs;
     };
@@ -565,12 +572,12 @@ struct TEvPQ {
     };
 
     struct TEvPartitionConfigChanged : public TEventLocal<TEvPartitionConfigChanged, EvPartitionConfigChanged> {
-        explicit TEvPartitionConfigChanged(ui32 partition) :
+        explicit TEvPartitionConfigChanged(const NPQ::TPartitionId& partition) :
             Partition(partition)
         {
         }
 
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
     };
 
     struct TEvChangeCacheConfig : public TEventLocal<TEvChangeCacheConfig, EvChangeCacheConfig> {
@@ -588,35 +595,35 @@ struct TEvPQ {
     };
 
     struct TEvPartitionCounters : public TEventLocal<TEvPartitionCounters, EvPartitionCounters> {
-        TEvPartitionCounters(const ui32 partition, const TTabletCountersBase& counters)
+        TEvPartitionCounters(const NPQ::TPartitionId& partition, const TTabletCountersBase& counters)
             : Partition(partition)
         {
             Counters.Populate(counters);
         }
 
-        const ui32 Partition;
+        const NPQ::TPartitionId Partition;
         TTabletCountersBase Counters;
     };
 
     struct TEvPartitionLabeledCounters : public TEventLocal<TEvPartitionLabeledCounters, EvPartitionLabeledCounters> {
-        TEvPartitionLabeledCounters(const ui32 partition, const TTabletLabeledCountersBase& labeledCounters)
+        TEvPartitionLabeledCounters(const NPQ::TPartitionId& partition, const TTabletLabeledCountersBase& labeledCounters)
             : Partition(partition)
             , LabeledCounters(labeledCounters)
         {
         }
 
-        const ui32 Partition;
+        const NPQ::TPartitionId Partition;
         TTabletLabeledCountersBase LabeledCounters;
     };
 
     struct TEvPartitionLabeledCountersDrop : public TEventLocal<TEvPartitionLabeledCountersDrop, EvPartitionLabeledCountersDrop> {
-        TEvPartitionLabeledCountersDrop(const ui32 partition, const TString& group)
+        TEvPartitionLabeledCountersDrop(const NPQ::TPartitionId& partition, const TString& group)
             : Partition(partition)
             , Group(group)
         {
         }
 
-        const ui32 Partition;
+        const NPQ::TPartitionId Partition;
         TString Group;
     };
 
@@ -798,7 +805,7 @@ struct TEvPQ {
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
-        TEvTxCalcPredicateResult(ui64 step, ui64 txId, ui32 partition, bool predicate) :
+        TEvTxCalcPredicateResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition, bool predicate) :
             Step(step),
             TxId(txId),
             Partition(partition),
@@ -808,7 +815,7 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
         bool Predicate = false;
     };
 
@@ -826,7 +833,7 @@ struct TEvPQ {
     };
 
     struct TEvProposePartitionConfigResult : public TEventLocal<TEvProposePartitionConfigResult, EvProposePartitionConfigResult> {
-        TEvProposePartitionConfigResult(ui64 step, ui64 txId, ui32 partition) :
+        TEvProposePartitionConfigResult(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
             Step(step),
             TxId(txId),
             Partition(partition)
@@ -835,7 +842,7 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
     };
 
     struct TEvTxCommit : public TEventLocal<TEvTxCommit, EvTxCommit> {
@@ -850,7 +857,7 @@ struct TEvPQ {
     };
 
     struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
-        TEvTxCommitDone(ui64 step, ui64 txId, ui32 partition) :
+        TEvTxCommitDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
             Step(step),
             TxId(txId),
             Partition(partition)
@@ -859,7 +866,7 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
-        ui32 Partition;
+        NPQ::TPartitionId Partition;
     };
 
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {

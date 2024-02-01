@@ -91,18 +91,18 @@ protected:
     struct TCalcPredicateMatcher {
         TMaybe<ui64> Step;
         TMaybe<ui64> TxId;
-        TMaybe<ui32> Partition;
+        TMaybe<TPartitionId> Partition;
         TMaybe<bool> Predicate;
     };
 
     struct TCommitTxDoneMatcher {
         TMaybe<ui64> Step;
         TMaybe<ui64> TxId;
-        TMaybe<ui32> Partition;
+        TMaybe<TPartitionId> Partition;
     };
 
     struct TChangePartitionConfigMatcher {
-        TMaybe<ui32> Partition;
+        TMaybe<TPartitionId> Partition;
     };
 
     struct TTxOperationMatcher {
@@ -263,7 +263,7 @@ void TPartitionFixture::CreatePartitionActor(ui32 id,
     TopicConverter = factory.MakeTopicConverter(Config);
 
     auto actor = new NPQ::TPartition(Ctx->TabletId,
-                                     id,
+                                     TPartitionId(id),
                                      Ctx->Edge,
                                      0,
                                      Ctx->Edge,
@@ -680,7 +680,7 @@ void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
             auto pair = read->AddPair();
             pair->SetStatus(NKikimrProto::OK);
 
-            NPQ::TKeyPrefix key(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUser);
+            NPQ::TKeyPrefix key(NPQ::TKeyPrefix::TypeInfo, TPartitionId(partition), NPQ::TKeyPrefix::MarkUser);
             key.Append(c.Consumer.data(), c.Consumer.size());
             pair->SetKey(key.Data(), key.Size());
 
@@ -719,7 +719,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, 1, begin, 0, end - begin, 0);
+    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(1), begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
     //pair->SetValueSize();
@@ -1094,14 +1094,14 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
 
     SendCommitTx(step, txId);
 
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCommitTxDone({.TxId=txId, .Partition=partition});
+    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
@@ -1121,23 +1121,23 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId_1, client, 0, 1);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
 
     SendCalcPredicate(step, txId_2, client, 0, 2);
     SendCalcPredicate(step, txId_3, client, 0, 2);
 
     SendCommitTx(step, txId_1);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
     SendRollbackTx(step, txId_2);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=TPartitionId(partition), .Predicate=false});
     SendRollbackTx(step, txId_3);
 
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitCommitTxDone({.TxId=txId_1, .Partition=partition});
+    WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
@@ -1162,7 +1162,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
     WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
     SendCommitTx(step, txId);
 
     WaitCmdWrite({.Count=5, .UserInfos={
@@ -1183,7 +1183,7 @@ Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
 
     SendCommitTx(step, txId);
-    WaitCommitTxDone({.TxId=txId, .Partition=partition});
+    WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
@@ -1211,7 +1211,7 @@ Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
 
     SendCommitTx(step, 11111);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=22222, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=22222, .Partition=TPartitionId(partition), .Predicate=true});
     SendCommitTx(step, 22222);
 
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session=session, .Offset=4}}}});
@@ -1240,7 +1240,7 @@ Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
                     .Config={.Consumers={{.Consumer=consumer, .Offset=0, .Session=session}}}
                     });
 
-    WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=11111, .Partition=TPartitionId(partition), .Predicate=true});
 }
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
@@ -1258,7 +1258,7 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId, client, 4, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
     SendRollbackTx(step, txId);
 
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
     ++txId;
 
     SendCalcPredicate(step, txId, client, 2, 4);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
     SendRollbackTx(step, txId);
 
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId});
@@ -1276,7 +1276,7 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
     ++txId;
 
     SendCalcPredicate(step, txId, client, 0, 11);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=false});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
@@ -1295,12 +1295,12 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
     CreateSession(client, session);
 
     SendCalcPredicate(step, txId_1, client, 0, 2);
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
 
     SendCalcPredicate(step, txId_2, client, 0, 5);
     SendRollbackTx(step, txId_1);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=true});
 }
 
 Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
@@ -1333,7 +1333,7 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     //
     SendCalcPredicate(step, txId_2, "client-2", 0, 2);
 
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=partition, .Predicate=true});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
     SendCommitTx(step, txId_1);
 
     //
@@ -1350,12 +1350,12 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
                  }});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
-    WaitPartitionConfigChanged({.Partition=partition});
+    WaitPartitionConfigChanged({.Partition=TPartitionId(partition)});
 
     //
     // consumer 'client-2' was deleted
     //
-    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=partition, .Predicate=false});
+    WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
     SendRollbackTx(step, txId_2);
 }
 

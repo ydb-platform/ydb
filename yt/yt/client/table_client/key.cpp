@@ -125,11 +125,6 @@ bool operator==(const TKey& lhs, const TKey& rhs)
     return CompareValueRanges(lhs.Elements(), rhs.Elements()) == 0;
 }
 
-bool operator!=(const TKey& lhs, const TKey& rhs)
-{
-    return !(lhs == rhs);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TKey& key, TStringBuf /*format*/)
 {
     if (key) {

@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package yandex.cloud.operation;
+
+import "google/api/annotations.proto";
+import "ydb/public/api/client/yc_public/api/tools/options.proto";
+import "ydb/public/api/client/yc_public/operation/operation.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_public/operation;operation";
+option java_package = "yandex.cloud.api.operation";
+
+// A set of methods for managing operations for asynchronous API requests.
+service OperationService {
+  // Returns the specified Operation resource.
+  rpc Get (GetOperationRequest) returns (Operation) {
+    option (google.api.http) = { get: "/operations/{operation_id}" };
+  }
+
+  // Cancels the specified operation.
+  //
+  // Note that currently Object Storage API does not support cancelling operations.
+  rpc Cancel (CancelOperationRequest) returns (Operation) {
+    option (google.api.http) = { get: "/operations/{operation_id}:cancel" };
+    option (yandex.cloud.api.tools.method).lint_skip.http_verb = true;
+  }
+}
+
+message GetOperationRequest {
+  // ID of the Operation resource to return.
+  string operation_id = 1 [(required) = true];
+}
+
+message CancelOperationRequest {
+  // ID of the operation to cancel.
+  string operation_id = 1 [(required) = true];
+}

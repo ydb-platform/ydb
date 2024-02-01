@@ -3,16 +3,16 @@ syntax = "proto3";
 package yandex.cloud.events.ydb;
 
 import "google/protobuf/timestamp.proto";
-import "yandex/cloud/events/common.proto";
-import "yandex/cloud/validation.proto";
-import "yandex/cloud/ydb/database.proto";
-import "yandex/cloud/ydb/backup.proto";
-import "yandex/cloud/events/options.proto";
+import "ydb/public/api/client/yc_public/events/common.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/ydb/database.proto";
+import "ydb/public/api/client/yc_public/ydb/backup.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
 import "google/rpc/status.proto";
 import "google/protobuf/field_mask.proto";
 
 
-option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/events/ydb;ydb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_public/events/ydb;ydb";
 option java_package = "yandex.cloud.api.events.ydb";
 
 message CreateDatabase {

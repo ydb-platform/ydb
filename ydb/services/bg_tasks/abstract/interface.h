@@ -111,6 +111,12 @@ public:
         : Object(object) {
     }
 
+    template <class TDerived>
+    TCommonInterfaceContainer(std::shared_ptr<TDerived> object)
+        : Object(object) {
+        static_assert(std::is_base_of<IInterface, TDerived>::value);
+    }
+
     bool Initialize(const TString& className) {
         AFL_VERIFY(!Object)("problem", "initialize for not-empty-object");
         Object.reset(TFactory::Construct(className));
@@ -167,6 +173,10 @@ public:
 
     bool operator!() const {
         return !Object;
+    }
+
+    operator bool() const {
+        return !!Object;
     }
 
 };

@@ -43,8 +43,8 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
     Y_ABORT_UNLESS(tiering);
-    auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
-    if (!compression) {
+    auto serializer = tiering->GetSerializer(evictFeatures.TargetTierName);
+    if (!serializer) {
         // Nothing to recompress. We have no other kinds of evictions yet.
         evictFeatures.DataChanges = false;
         auto result = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
@@ -58,7 +58,7 @@ std::optional<TPortionInfoWithBlobs> TTTLColumnEngineChanges::UpdateEvictedPorti
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
 
     TSaverContext saverContext(evictFeatures.StorageOperator, SaverContext.GetStoragesManager());
-    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
+    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalSerializer(*serializer);
     auto withBlobs = TPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs);
     withBlobs.GetPortionInfo().InitOperator(evictFeatures.StorageOperator, true);
     withBlobs.GetPortionInfo().MutableMeta().SetTierName(evictFeatures.TargetTierName);

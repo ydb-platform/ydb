@@ -4,8 +4,7 @@
 #include <arrow/ipc/api.h>
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
-#include <ydb/core/formats/arrow/serializer/batch_only.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -76,8 +75,8 @@ namespace NYql::NConnector {
     }
 
     std::shared_ptr<arrow::RecordBatch> ArrowIPCStreamingToArrowRecordBatch(const TProtoStringType dump) {
-        NKikimr::NArrow::NSerialization::TFullDataDeserializer deser;
-        auto result = deser.Deserialize(dump);
+        NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
+        auto result = deser->Deserialize(dump);
         if (!result.ok()) {
             ythrow yexception() << result.status().ToString();
         }

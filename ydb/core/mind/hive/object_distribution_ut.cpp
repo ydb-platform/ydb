@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             node.ServicedDomains.push_back(TEST_DOMAIN);
             node.RegisterInDomains();
             node.LocationAcquired = true;
-            node.TabletAvailability.emplace(std::piecewise_construct, 
-                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy), 
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
                                             std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
         }
 
@@ -142,8 +142,8 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             node.ServicedDomains.push_back(nodeId * 2 < NUM_NODES ? DOMAIN_A : DOMAIN_B);
             node.RegisterInDomains();
             node.LocationAcquired = true;
-            node.TabletAvailability.emplace(std::piecewise_construct, 
-                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy), 
+            node.TabletAvailability.emplace(std::piecewise_construct,
+                                            std::tuple<TTabletTypes::EType>(TTabletTypes::Dummy),
                                             std::tuple<NKikimrLocal::TTabletAvailability>(dummyTabletAvailability));
         }
 

@@ -755,7 +755,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                     "Topic PartitionStatus PartitionSize: " << result.GetPartitionSize()
                     << " UsedReserveSize: " << result.GetUsedReserveSize()
                     << " ReserveSize: " << ReserveSize()
-                    << " PartitionConfig" << Config.GetPartitionConfig();
+                    << " PartitionConfig: " << Config.GetPartitionConfig();
         );
     }
 
@@ -1566,7 +1566,7 @@ void TPartition::RemoveDistrTx()
     Y_ABORT_UNLESS(UserActionAndTransactionEventsFrontIs<TTransaction>());
 
     UserActionAndTransactionEvents.pop_front();
-    PendingPartitionConfig = nullptr;
+    PendingPartitionConfig = Nothing();
 }
 
 bool TPartition::ProcessUserActionOrTransaction(TTransaction& t,
@@ -1875,7 +1875,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(ui64 cookie, const TActorC
     if (ChangeConfig) {
         ReportCounters(ctx, true);
         ChangeConfig = nullptr;
-        PendingPartitionConfig = nullptr;
+        PendingPartitionConfig = Nothing();
     }
 
     ProcessTxsAndUserActs(ctx);
@@ -2656,9 +2656,9 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     Send(ev->Sender, response.Release());
 }
 
-const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
+TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> TPartition::GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
 {
-    return NPQ::GetPartitionConfig(config, Partition.OriginalPartitionId);
+    return NPQ::GetPartitionConfig(config, Partition);
 }
 
 } // namespace NKikimr::NPQ

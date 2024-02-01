@@ -586,8 +586,8 @@ private:
     TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
-    const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
-    const NKikimrPQ::TPQTabletConfig::TPartition* PendingPartitionConfig = nullptr;
+    TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> PartitionConfig;
+    TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> PendingPartitionConfig;
 
     const TTabletCountersBase& Counters;
     NPersQueue::TTopicConverterPtr TopicConverter;

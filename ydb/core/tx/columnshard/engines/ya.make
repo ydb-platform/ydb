@@ -29,7 +29,6 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/insert_table
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
-    ydb/core/formats/arrow/compression
     ydb/core/tx/program
 
     # for NYql::NUdf alloc stuff used in binary_json

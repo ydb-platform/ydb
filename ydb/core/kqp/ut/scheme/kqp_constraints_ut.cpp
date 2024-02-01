@@ -7,7 +7,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 

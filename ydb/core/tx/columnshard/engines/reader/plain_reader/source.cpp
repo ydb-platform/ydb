@@ -3,7 +3,6 @@
 #include "fetched_data.h"
 #include "plain_read_data.h"
 #include "constructor.h"
-#include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>

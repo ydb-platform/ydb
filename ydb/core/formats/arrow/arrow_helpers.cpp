@@ -4,7 +4,7 @@
 #include "common/validation.h"
 #include "merging_sorted_input_stream.h"
 #include "permutations.h"
-#include "serializer/batch_only.h"
+#include "serializer/native.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
 #include "simple_arrays_cache.h"
@@ -106,7 +106,7 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
 }
 
 TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
-    return NSerialization::TBatchPayloadSerializer(options).Serialize(batch);
+    return NSerialization::TNativeSerializer(options).SerializePayload(batch);
 }
 
 TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -117,7 +117,7 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
 
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema)
 {
-    auto result = NSerialization::TBatchPayloadDeserializer(schema).Deserialize(blob);
+    auto result = NSerialization::TNativeSerializer().Deserialize(blob, schema);
     if (result.ok()) {
         return *result;
     } else {

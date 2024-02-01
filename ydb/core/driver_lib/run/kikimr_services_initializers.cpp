@@ -8,7 +8,6 @@
 #include <ydb/core/actorlib_impl/mad_squirrel.h>
 
 #include "ydb/core/audit/audit_log.h"
-#include "ydb/core/jaeger_tracing/sampling_throttling_configurator.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/config_units.h>
@@ -40,6 +39,7 @@
 #include <ydb/core/cms/console/configs_cache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
 #include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
@@ -1639,6 +1639,13 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                           appData->UserPoolId)));
         }
+        // TODO(pumpurum): Move this initialization to CMS setup somehow
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                TActorId(),
+                TActorSetupCmd(
+                    NConsole::CreateJaegerTracingConfigurator(std::move(tracingConfigurator), Config.GetTracingConfig()),
+                    TMailboxType::ReadAsFilled,
+                    appData->UserPoolId)));
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

@@ -1,3 +1,5 @@
+#include "jaeger_tracing_configurator.h"
+
 #include "configs_dispatcher.h"
 #include "console.h"
 
@@ -68,6 +70,11 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
 
 TMaybe<TString> TJaegerTracingConfigurator::ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg) {
     return TracingConfigurator.HandleConfigs(cfg);
+}
+
+IActor* CreateJaegerTracingConfigurator(NJaegerTracing::TSamplingThrottlingConfigurator tracingConfigurator,
+                                        const NKikimrConfig::TTracingConfig& cfg) {
+    return new TJaegerTracingConfigurator(std::move(tracingConfigurator), cfg);
 }
 
 } // namespace NKikimr::NConsole

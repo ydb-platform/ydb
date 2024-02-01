@@ -2091,8 +2091,8 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
                 return nullptr;
             }
-            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "") {
-                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
+            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
             if (Settings.GUCSettings) {

@@ -84,6 +84,15 @@ bool TPKRangesFilter::IsPortionInUsage(const TPortionInfo& info, const TIndexInf
     return SortedRanges.empty();
 }
 
+bool TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end, const TIndexInfo& indexInfo) const {
+    for (auto&& i : SortedRanges) {
+        if (i.IsPortionInPartialUsage(start, end, indexInfo)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TPKRangesFilter::TPKRangesFilter(const bool reverse)
     : ReverseFlag(reverse)
 {

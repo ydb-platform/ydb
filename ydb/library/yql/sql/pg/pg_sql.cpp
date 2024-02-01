@@ -2092,7 +2092,7 @@ public:
                 return nullptr;
             }
             if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "") {
-                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'public', 'pg_catalogue', '' but got: '" << rawStr << "'");
+                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
             if (Settings.GUCSettings) {

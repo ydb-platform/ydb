@@ -699,7 +699,7 @@ ITransactionPtr TClient::AttachTransaction(
 
 void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)
 {
-    if (!NRpc::IsChannelFailureError(error)) {
+    if (!NRpc::IsChannelFailureError(error) && !Config_->RetryAnyError) {
         return;
     }
 

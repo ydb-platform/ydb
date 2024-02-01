@@ -17,7 +17,6 @@ PEERDIR(
 )
 
 SRCS(
-    dq_arrow_helpers.cpp
     dq_async_input.cpp
     dq_async_output.cpp
     dq_columns_resolve.cpp

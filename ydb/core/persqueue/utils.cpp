@@ -54,6 +54,21 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
     return nullptr;
 }
 
+TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
+    for(const auto& p : config.GetPartitions()) {
+        if (partitionId.OriginalPartitionId == p.GetPartitionId()) {
+            if (partitionId.WriteId.Defined()) {
+                auto newConfig = p;
+                newConfig.SetPartitionId(partitionId.InternalPartitionId);
+                return newConfig;
+            } else {
+                return p;
+            }
+        }
+    }
+    return Nothing();
+}
+
 TPartitionGraph::TPartitionGraph() {
 }
 

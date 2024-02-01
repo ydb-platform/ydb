@@ -16,7 +16,6 @@ ui64 PutUnitsSize(const ui64 size);
 
 TString SourceIdHash(const TString& sourceId);
 
-const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId);
 
 // The graph of split-merge operations. 

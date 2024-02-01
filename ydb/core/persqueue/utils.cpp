@@ -45,15 +45,6 @@ ui64 PutUnitsSize(const ui64 size) {
     return putUnitsCount;        
 }
 
-const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId) {
-    for(const auto& p : config.GetPartitions()) {
-        if (partitionId == p.GetPartitionId()) {
-            return &p;
-        }
-    }
-    return nullptr;
-}
-
 TMaybe<NKikimrPQ::TPQTabletConfig::TPartition> GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
     for(const auto& p : config.GetPartitions()) {
         if (partitionId.OriginalPartitionId == p.GetPartitionId()) {

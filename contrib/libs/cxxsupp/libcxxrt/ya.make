@@ -23,14 +23,10 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CXXFLAGS(
-    -nostdinc++
-)
+CXXFLAGS(-nostdinc++)
 
 IF (CXX_UNWIND == "glibcxx_dynamic" OR ARCH_PPC64LE)
-    LDFLAGS(
-        -lgcc_s
-    )
+    LDFLAGS(-lgcc_s)
 ELSE()
     PEERDIR(
         contrib/libs/libunwind
@@ -39,7 +35,6 @@ ENDIF()
 
 IF (SANITIZER_TYPE == undefined OR FUZZING)
     NO_SANITIZE()
-
     NO_SANITIZE_COVERAGE()
 ENDIF()
 

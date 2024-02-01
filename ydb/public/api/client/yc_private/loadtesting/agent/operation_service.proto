@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+
+
+service OperationService {
+  rpc Get (GetOperationRequest) returns (operation.Operation);
+  rpc List (ListOperationsRequest) returns (ListOperationsResponse);
+}
+
+message GetOperationRequest {
+  string operation_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListOperationsRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=200"];
+}
+
+message ListOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

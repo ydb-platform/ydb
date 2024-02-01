@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.job.monitoring;
+
+import "yandex/cloud/priv/loadtesting/v1/job/monitoring/metric_data.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/job/monitoring;job_monitoring";
+option java_outer_classname = "LtV1JobMonitoringChart";
+
+message MonitoringChart {
+  string monitored_host = 1;
+
+  string job_id = 2;
+  string name = 3;
+  string description = 4;
+
+  repeated int64 ts = 5;
+  repeated int64 responses_per_second = 6;
+  repeated int64 threads = 7;
+
+  repeated MetricData metric_data = 8;
+
+  string x_axis_label = 9;
+  string y_axis_label = 10;
+}

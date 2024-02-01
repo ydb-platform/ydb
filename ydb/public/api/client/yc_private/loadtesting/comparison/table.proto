@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "yandex/cloud/priv/loadtesting/v1/comparison/table_type.proto";
+import "yandex/cloud/priv/loadtesting/v1/comparison/table_variant_type.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonTable";
+
+message ComparisonTable {
+    message Variant {
+        string title = 1;
+        string description = 2;
+        repeated Header headers = 3;
+        repeated Row rows = 4;
+        TableVariantType variant_type = 5;
+    }
+    message Header {
+        string title = 1;
+    }
+    message Row {
+        string title = 1;
+        string job_id = 2;
+        repeated Cell cells = 3;
+    }
+    message Cell {
+        double value = 1;
+    }
+
+    string title = 1;
+    string description = 2;
+    repeated Variant variants = 3;
+    TableType table_type = 4;
+}

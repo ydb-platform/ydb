@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/comparison;comparison";
+option java_outer_classname = "LtV1ComparisonTableType";
+
+enum TableType {
+    TABLE_TYPE_UNSPECIFIED = 0;
+    NETWORK_CODES = 1;
+    PROTOCOL_CODES = 2;
+    QUANTILES = 3;
+    MONITORING = 4;
+}

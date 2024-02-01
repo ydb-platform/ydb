@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/inner/node_registry.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PVNRS";
+
+service NodeRegistryService {
+  // Register used by vpc-node for initial port state initialization.
+  // Sends all PortStates for previously subscribed ports.
+  rpc Register(NodeRegistryRegisterRequest)
+      returns (NodeRegistryRegisterResponse);
+  // Unregister removes all subscriptions for concrete vpc-node.
+  rpc Unregister(NodeRegistryUnregisterRequest)
+      returns (NodeRegistryUnregisterResponse);
+  // AddDataPlane used by vpc-node only to initialize the specified data plane.
+  rpc AddDataPlane(NodeRegistryAddDataPlaneRequest)
+      returns (NodeRegistryAddDataPlaneResponse);
+  // RemoveDataPlane used by vpc-node only to remove the specified data plane.
+  rpc RemoveDataPlane(NodeRegistryRemoveDataPlaneRequest)
+      returns (NodeRegistryRemoveDataPlaneResponse);
+
+
+  // DataplanesUpdate quite similar with Register, but will sends only
+  // changed PortStates in response.
+  rpc DataplanesUpdate(NodeRegistryDataplanesUpdateRequest)
+      returns (NodeRegistryDataplanesUpdateResponse);
+}
+
+message NodeRegistryRegisterRequest {
+  string node_fqdn = 1 [ (required) = true ];
+  repeated DataplaneState dataplane_states = 2 [ (size)=">0" ];
+}
+
+message NodeRegistryRegisterResponse {}
+
+message NodeRegistryUnregisterRequest {
+  string node_fqdn = 1 [ (required) = true ];
+}
+
+message NodeRegistryUnregisterResponse {}
+
+message NodeRegistryAddDataPlaneRequest {
+  string node_fqdn = 1 [ (required) = true ];
+  DataplaneState dataplane_state = 2 [ (required) = true ];
+}
+
+message NodeRegistryAddDataPlaneResponse {}
+
+message NodeRegistryRemoveDataPlaneRequest {
+  string node_fqdn = 1 [ (required) = true ];
+  DataplaneState dataplane_state = 2 [ (required) = true ];
+}
+
+message NodeRegistryRemoveDataPlaneResponse {}
+
+message NodeRegistryDataplanesUpdateRequest {
+  string node_fqdn = 1 [ (required) = true ];
+  repeated DataplaneState dataplane_states = 2 [ (size)=">0" ];
+}
+
+message NodeRegistryDataplanesUpdateResponse {}

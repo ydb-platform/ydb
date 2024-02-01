@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/billing/v1/light_metric.proto";
+import "yandex/cloud/priv/compute/v1/instance_service.proto";
+import "yandex/cloud/priv/loadtesting/v1/tank_instance.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option java_outer_classname = "PTIS";
+
+service TankInstanceService {
+  rpc Get (GetTankInstanceRequest) returns (GetTankInstanceResponse);
+  rpc List (ListTankInstancesRequest) returns (TankInstancesList) {};
+  rpc Create (CreateTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTankInstanceMetadata"
+      response: "TankInstance"};
+  };
+  rpc Delete (DeleteTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTankInstanceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+  rpc Restart (RestartTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RestartTankInstanceMetadata"
+      response: "TankInstance"
+    };
+  };
+  rpc Stop (StopTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StopTankInstanceMetadata"
+      response: "TankInstance"
+    };
+  };
+  rpc Start (StartTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "StartTankInstanceMetadata"
+      response: "TankInstance"
+    };
+  };
+  rpc UpgradeImage (UpgradeImageTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpgradeImageTankInstanceMetadata"
+      response: "TankInstance"
+    };
+  };
+  rpc Update (UpdateTankInstanceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTankInstanceMetadata"
+      response: "TankInstance"
+    };
+  };
+  rpc ListOperations (ListTankInstancesOperationsRequest) returns (ListTankInstancesOperationsResponse);
+  rpc SimulateBillingMetrics (CreateTankInstanceRequest) returns (billing.v1.ConsoleLightMetricsListResponse);
+}
+
+message GetTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetTankInstanceResponse {
+  TankInstance tank_instance = 1;
+}
+
+message ListTankInstancesRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 page_size = 2 [(yandex.cloud.priv.value) = "0-1000"];
+  string page_token = 3 [(yandex.cloud.priv.length) = "<=100"];
+  string filter = 4 [(yandex.cloud.priv.length) = "<=1000"];
+}
+
+message TankInstancesList {
+  string folder_id = 1;
+  repeated TankInstance tank_instances = 2;
+  string next_page_token = 3;
+}
+
+message CreateTankInstanceRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 2 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+  map<string, string> labels = 4 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  string preset_id = 5 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string service_account_id = 6 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=256"];
+  string tank_folder_id = 7 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+
+  // Instance cpu/memory/disk resources are managed by ResourcePreset,
+  // all the rest fields are taken from CreateInstanceRequest
+  string zone_id = 8 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  repeated compute.v1.NetworkInterfaceSpec network_interface_specs = 9 [(size)=">0"];
+  map<string, string> metadata = 10 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+  string agent_version_id = 11 [(yandex.cloud.priv.length) = "<=50"];
+}
+
+message CreateTankInstanceMetadata {
+  string id = 1;
+}
+
+message DeleteTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message DeleteTankInstanceMetadata {
+  string id = 1;
+}
+
+message RestartTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message RestartTankInstanceMetadata {
+  string id = 1;
+}
+
+message StopTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message StopTankInstanceMetadata {
+  string id = 1;
+}
+
+message StartTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message StartTankInstanceMetadata {
+  string id = 1;
+}
+
+message UpgradeImageTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message UpgradeImageTankInstanceMetadata {
+  string id = 1;
+}
+
+message UpdateTankInstanceRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2 [(yandex.cloud.priv.required) = true];
+  string name = 3 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 4 [(yandex.cloud.priv.length) = "<=256"];
+  map<string, string> labels = 5 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+      (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+      (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message UpdateTankInstanceMetadata {
+  string tank_instance_id = 1;
+}
+
+message ListTankInstancesOperationsRequest {
+  string id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 page_size = 2 [(yandex.cloud.priv.value) = "0-1000"];
+  string page_token = 3 [(yandex.cloud.priv.length) = "<=100"];
+}
+
+message ListTankInstancesOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

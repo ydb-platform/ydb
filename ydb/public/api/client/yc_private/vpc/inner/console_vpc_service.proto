@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/network.proto";
+import "yandex/cloud/priv/vpc/v1/subnet.proto";
+import "yandex/cloud/priv/vpc/v1/route_table.proto";
+import "yandex/cloud/priv/vpc/v1/security_group.proto";
+import "yandex/cloud/priv/vpc/v1/address.proto";
+import "yandex/cloud/priv/vpc/v1/gateway.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+
+option java_outer_classname = "PVCS";
+
+service ConsoleVpcService {
+  rpc ListFolderOperations (ListFolderOperationsRequest) returns (ListFolderOperationsResponse);
+
+  rpc BulkGetVpcObjects (BulkGetVpcObjectsRequest) returns (BulkGetVpcObjectsResponse);
+}
+
+message ListFolderOperationsRequest {
+  string folder_id = 1 [(required) = true];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListFolderOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message BulkGetVpcObjectsRequest {
+  string cloud_id = 1 [(required) = true];
+  Mode mode = 2;
+  repeated string types = 3; // supported types: ["networks", "subnets", "route_tables", "security_groups"]
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    GET = 1;
+    USE = 2;
+  }
+}
+
+message BulkGetVpcObjectsResponse {
+  repeated Network networks = 1;
+  repeated Subnet subnets = 2;
+  repeated RouteTable route_tables = 3;
+  repeated SecurityGroup security_groups = 4;
+  repeated Address addresses = 5;
+  repeated Gateway gateways = 6;
+}

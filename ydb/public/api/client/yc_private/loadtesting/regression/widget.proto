@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.regression;
+
+import "yandex/cloud/priv/loadtesting/v1/regression/chart_widget.proto";
+import "yandex/cloud/priv/loadtesting/v1/regression/text_widget.proto";
+import "yandex/cloud/priv/loadtesting/v1/regression/title_widget.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/regression;regression";
+
+message Widget {
+    message LayoutPosition {
+        int64 x = 1;
+        int64 y = 2;
+        int64 w = 3;
+        int64 h = 4;
+    }
+
+    LayoutPosition position = 1;
+    oneof widget {
+        ChartWidget chart = 2;
+        TextWidget text = 3;
+        TitleWidget title = 4;
+    }
+}

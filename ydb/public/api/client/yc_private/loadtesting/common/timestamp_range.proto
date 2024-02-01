@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.common;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/common;common";
+option java_outer_classname = "LtV1CommonTimestampRange";
+
+message TimestampRange {
+  int64 begin_ts = 1;
+  int64 end_ts = 2;
+}

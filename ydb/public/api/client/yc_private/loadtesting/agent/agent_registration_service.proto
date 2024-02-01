@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+
+
+service AgentRegistrationService {
+
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  rpc ExternalAgentRegister (ExternalAgentRegisterRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ExternalAgentRegisterMetadata"
+      response: "AgentInstance"
+    };
+  };
+}
+
+message RegisterRequest {
+  string compute_instance_id = 1;
+}
+
+message RegisterResponse {
+  string agent_instance_id = 1;
+}
+
+message ExternalAgentRegisterRequest {
+  string folder_id = 1;
+  string compute_instance_id = 2;
+  string name = 3;
+  string agent_version = 4;
+  map<string, string> labels = 5 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message ExternalAgentRegisterMetadata {
+  string agent_instance_id = 1;
+}

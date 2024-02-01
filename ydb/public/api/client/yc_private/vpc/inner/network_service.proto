@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/vpc/v1/network.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "IPES";
+
+service NetworkService {
+
+  rpc BatchGet (BatchGetNetworksRequest) returns (BatchGetNetworksResponse) {
+  }
+
+}
+
+message BatchGetNetworksRequest {
+  repeated string route_targets = 1; //deprecated
+
+  oneof params {
+    RouteTargetParams route_target_params = 2;
+    NetworkIdParams network_id_params = 3;
+  }
+
+  message RouteTargetParams {
+    repeated string route_targets = 1 [(length) = "<=1000"];
+  }
+
+  message NetworkIdParams {
+    repeated string network_ids = 1 [(length) = "<=1000"];
+  }
+}
+
+message BatchGetNetworksResponse {
+  repeated Network networks = 1;
+}

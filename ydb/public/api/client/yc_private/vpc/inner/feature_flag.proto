@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PFF";
+
+message FeatureFlag {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    UPDATING = 1;
+    READY = 2;
+    DELETING = 3;
+  }
+
+  // Well-known id with vpc.featureFlags.flagName
+  // See: https://wiki.yandex-team.ru/cloud/iamrm/guides/system-resources/
+  string id = 1 [(length) = "<=100"];
+
+  bool active = 2;
+
+  Status status = 3;
+
+  repeated string tags = 4;
+}

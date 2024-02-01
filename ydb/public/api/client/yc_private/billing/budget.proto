@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+
+message Budget {
+    string id = 1;
+    string name = 2;
+    google.protobuf.Timestamp created_at = 3;
+
+    string billing_account_id = 4;
+    BudgetStatus status = 5;
+    oneof budget_spec {
+        option (exactly_one) = true;
+
+        CostBudgetSpec cost_budget = 6;
+        ExpenseBudgetSpec expense_budget = 7;
+        BalanceBudgetSpec balance_budget = 8;
+    }
+}
+
+enum BudgetStatus {
+    BUDGET_STATUS_UNSPECIFIED = 0;
+
+    CREATING = 1;
+
+    ACTIVE = 2;
+
+    FINISHED = 3;
+}
+
+message CostBudgetSpec {
+    string amount = 1 [(required) = true];
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+    repeated ThresholdRule threshold_rules = 3;
+
+    ConsumptionFilter filter = 4;
+
+    oneof start_type {
+        option (exactly_one) = true;
+
+        ResetPeriodType reset_period = 5;
+        string start_date = 6;
+    }
+    string end_date = 7 [(required) = true];  //custom date type or timestamp?
+}
+
+message ExpenseBudgetSpec {
+    string amount = 1 [(required) = true];
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+    repeated ThresholdRule threshold_rules = 3;
+
+    ConsumptionFilter filter = 4;
+
+    oneof start_type {
+        option (exactly_one) = true;
+
+        ResetPeriodType reset_period = 5;
+        string start_date = 6;
+    }
+    string end_date = 7 [(required) = true];  //custom date type or timestamp?
+}
+
+message BalanceBudgetSpec {
+    string amount = 1 [(required) = true];
+    repeated string notification_user_account_ids = 2 [(size) = ">=1"];
+    repeated ThresholdRule threshold_rules = 3;
+    string start_date = 4;
+    string end_date = 5 [(required) = true];
+}
+
+enum ResetPeriodType {
+    RESET_PERIOD_TYPE_UNSPECIFIED = 0;
+
+    MONTHLY = 1;
+
+    QUARTER = 2;
+
+    ANNUALLY = 3;
+}
+
+message ConsumptionFilter {
+    repeated string service_ids = 1;
+    repeated CloudFoldersConsumptionFilter cloud_folders_filters = 2;
+}
+
+message CloudFoldersConsumptionFilter {
+    string cloud_id = 1;
+    repeated string folder_ids = 2;
+}
+
+enum ThresholdType {
+    THRESHOLD_TYPE_UNSPECIFIED = 0;
+
+    PERCENT = 1;
+
+    AMOUNT = 2;
+}
+
+message ThresholdRule {
+    ThresholdType type = 1 [(required) = true];
+    string amount = 2 [(required) = true];
+    repeated string notification_user_account_ids = 3;
+}

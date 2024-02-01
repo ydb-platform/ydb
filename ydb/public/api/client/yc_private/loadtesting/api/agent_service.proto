@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1;loadtesting";
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/agent/create_compute_instance.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/agent/agent.proto";
+import "yandex/cloud/priv/validation.proto";
+
+service AgentService {
+  rpc Create(CreateAgentRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/agent" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateAgentMetadata"
+      response: "agent.Agent"
+    };
+  };
+  rpc Get(GetAgentRequest) returns (agent.Agent) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/agent/{agent_id}" };
+  };
+  rpc List(ListAgentsRequest) returns (ListAgentsResponse) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/agent" };
+  };
+  rpc Delete(DeleteAgentRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/loadtesting/api/v1/agent/{agent_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteAgentMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+  rpc Update(UpdateAgentRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/loadtesting/api/v1/agent/{agent_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAgentMetadata"
+      response: "agent.Agent"
+    };
+  };
+}
+
+message CreateAgentRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string name = 2 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+  agent.CreateComputeInstance compute_instance_params = 4;
+  string agent_version = 5;
+  map<string, string> labels = 6 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message CreateAgentMetadata {
+  string agent_id = 1;
+}
+
+message GetAgentRequest {
+  string agent_id = 2;
+}
+
+message DeleteAgentRequest {
+  string agent_id = 2;
+}
+
+message DeleteAgentMetadata {
+  string agent_id = 1;
+}
+
+message ListAgentsRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 page_size = 2 [(yandex.cloud.priv.value) = "<=1000"];
+  string page_token = 3 [(yandex.cloud.priv.length) = "<=100"];
+  string filter = 4 [(yandex.cloud.priv.length) = "<=1000"];
+}
+
+message ListAgentsResponse {
+  repeated agent.Agent agents = 1;
+  string next_page_token = 2 [(yandex.cloud.priv.length) = "<=100"];
+}
+
+message UpdateAgentRequest {
+  string agent_id = 1 [(yandex.cloud.priv.required) = true];
+  google.protobuf.FieldMask update_mask = 2 [(yandex.cloud.priv.required) = true];
+  string name = 3 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 4 [(yandex.cloud.priv.length) = "<=256"];
+  agent.CreateComputeInstance compute_instance_params = 5;
+  map<string, string> labels = 6 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message UpdateAgentMetadata {
+  string agent_id = 1;
+}

@@ -1,0 +1,305 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/loadtesting/v1/job/tags/tag.proto";
+import "yandex/cloud/priv/loadtesting/v1/report/status.proto";
+import "yandex/cloud/priv/loadtesting/v1/report/chart/charts.proto";
+import "yandex/cloud/priv/loadtesting/v1/storage.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option java_outer_classname = "PTJ";
+
+message TankJob {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATED = 1;
+    INITIATED = 2;
+    PREPARING = 3;
+    RUNNING = 4;
+    FINISHING = 5;
+    DONE = 6;
+    POST_PROCESSING = 7;
+    FAILED = 8;
+    STOPPING = 9;
+    STOPPED = 10;
+    AUTOSTOPPED = 11;
+    WAITING = 12;
+    DELETING = 13;
+    LOST = 14;
+  }
+
+  enum Generator {
+    GENERATOR_UNSPECIFIED = 0;
+    PANDORA = 1;
+    PHANTOM = 2;
+    JMETER = 3;
+  }
+
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    SINGLE = 1;
+    MULTI_CONTAINER = 2;
+    MULTI_PART = 3;
+  }
+
+  message ShortDescription {
+    string id = 1;
+    string folder_id = 2;
+    string name = 3;
+    string description = 4;
+    map<string, string> labels = 5;
+
+    google.protobuf.Timestamp created_at = 6;
+    google.protobuf.Timestamp started_at = 7;
+    google.protobuf.Timestamp finished_at = 8;
+    google.protobuf.Timestamp updated_at = 9;
+
+    Generator generator = 10;
+
+    // TankInstance ID where TankJob is running.
+    string tank_instance_id = 11;
+
+    // Target VM ID.
+    string target_address = 12;
+    int64 target_port = 13;
+
+    // Version of object under test.
+    string target_version = 14;
+
+    // Test details
+    reserved 15, 26, 16, 17;
+    repeated string cases = 18;
+
+    Status status = 19;
+    repeated string errors = 20;
+    bool favorite = 21;
+
+    int64 imbalance_point = 22;
+    int64 imbalance_ts = 23;
+
+    reserved 24;
+    google.protobuf.Timestamp imbalance_at = 25;
+    reserved 27;
+
+    Type job_type = 28;
+    string container_id = 29;
+    reserved 30; // Just to be in touch with long version.
+
+    string created_by = 31;
+
+    repeated job.tags.Tag tags = 32;
+
+    string log_group_id = 33;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  string name = 3;
+  string description = 4;
+  // = 5 deprecated
+
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+
+  Generator generator = 10;
+
+  // TankInstance ID where TankJob is running.
+  string tank_instance_id = 11;
+
+  // Target VM ID.
+  string target_address = 12;
+  int64 target_port = 13;
+
+  // Version of object under test.
+  string target_version = 14;
+
+  // Test details
+  string config = 15;
+  string loadscheme = 26;
+  // = 16 deprecated
+  // = 17 deprecated
+
+
+  Status status = 19;
+  repeated string errors = 20;
+  // = 21 deprecated
+
+  int64 imbalance_point = 22;
+  int64 imbalance_ts = 23;
+  google.protobuf.Timestamp imbalance_at = 25;
+  string imbalance_comment = 27;
+
+  repeated Autostop autostops = 24;
+
+  Type job_type = 28;
+  string container_id = 29;
+
+  repeated ShortDescription parts = 30;
+
+  string created_by = 31;
+
+  repeated job.tags.Tag tags = 32;
+
+  string log_group_id = 33;
+
+  repeated TestDataEntry data_payload = 34;
+
+  TestArtifactUploadSettings artifact_upload_settings = 35;
+  StorageObject s3_artifact = 36;
+
+  // Deprecated. Do not use.
+  map<string, string> labels = 5 [deprecated = true];
+  bool favorite = 21 [deprecated = true];
+  oneof ammo {
+    string ammo_urls = 16 [deprecated = true];
+    string ammo_id = 17 [deprecated = true];
+  }
+  repeated string cases = 18 [deprecated = true];
+}
+
+message Autostop {
+  enum AutostopType {
+    AUTOSTOP_TYPE_UNSPECIFIED = 0;
+    TIME = 1;
+    HTTP = 2;
+    NET = 3;
+    QUANTILE = 4;
+    INSTANCES = 5;
+    METRIC_LOWER = 6;
+    METRIC_HIGHER = 7;
+    STEADY_CUMULATIVE = 8;
+    LIMIT = 9;
+    TOTAL_TIME = 10;
+    TOTAL_HTTP = 11;
+    TOTAL_NET = 12;
+    NEGATIVE_HTTP = 13;
+    NEGATIVE_NET = 14;
+    HTTP_TREND = 15;
+  }
+
+  AutostopType autostop_type = 1;
+  string autostop_criteria = 2;
+  string autostop_case = 3;
+
+}
+
+// Ammo type for generators: phantom.ammo_type,
+// ammo.type in pandora.config_content.pool
+enum AmmoType {
+  AMMO_TYPE_UNSPECIFIED = 0;
+  HTTP_JSON = 1;
+  RAW = 2;
+  URI = 3;
+  URIPOST = 4;
+  PHANTOM = 5;
+  ACCESS = 6;
+}
+
+// Phantom and Pandora schedule details
+
+// Load type: phantom.load_profile.load_type,
+enum LoadType {
+  LOAD_TYPE_UNSPECIFIED = 0;
+  RPS = 1;
+  INSTANCES = 2;
+  STPD_FILE = 3;
+}
+
+// Schedule type: phantom.load_profile.schedule,
+// rps.schedule.type in pandora.config_content.pool
+enum ScheduleType {
+  SCHEDULE_TYPE_UNSPECIFIED = 0;
+  ONCE = 1;
+  CONST = 2;
+  LINE = 3;
+  STEP = 4;
+}
+
+//  Load schedule string:
+// {duration: 180s, type: line, from: 1, to: 10000} for pandora,
+// step(25, 5, 5, 60) for phantom.
+message LoadSchedule {
+  ScheduleType type = 1;
+  int64 instances = 2;  // times for pandora
+  string duration = 3;
+  int64 rps_from = 4;
+  int64 rps_to = 5;
+  int64 step = 6;
+  int64 ops = 7;
+  string stpd_path = 8;
+}
+
+// Load profile in general: phantom.load_profile, pool schedule for pandora
+message Schedule {
+  LoadType load_type = 1;
+  repeated LoadSchedule load_schedule = 2;
+  repeated string load_profile = 3;
+}
+
+message TankReport {
+  string job_id = 1;
+  repeated TankChart charts = 2;
+  bool finished = 3;
+  int64 imbalance_point = 4;
+  int64 imbalance_ts = 5;
+  google.protobuf.Timestamp imbalance_at = 9;
+  TimestampRange entire_report_time = 10;
+  report.chart.Charts charts_by_cases = 11;
+}
+
+message TankChart {
+  enum ChartType {
+    CHART_TYPE_UNSPECIFIED = 0;
+    INSTANCES = 1;
+    QUANTILES = 2;
+    PROTO_CODES = 3;
+    NET_CODES = 4;
+  }
+
+  ChartType chart_type = 1;
+
+  string job_id = 2;
+  string name = 3;
+  string description = 4;
+
+  repeated int64 ts = 5;
+  repeated int64 responses_per_second = 6;
+  repeated int64 threads = 7;
+  repeated MetricData cases_data = 8;
+
+  string x_axis_label = 9;
+  string y_axis_label = 10;
+
+  map<string, report.Status> case_statuses = 11;
+}
+
+message MetricData {
+  string case_name = 1;
+  string metric_name = 2;
+  repeated double metric_value = 3;
+  bool disabled = 4;
+}
+
+message TimestampRange {
+  int64 begin_ts = 1;
+  int64 end_ts = 2;
+}
+
+message TestDataEntry {
+  string name = 1;
+  oneof payload {
+    string transient_file_id = 2;
+    StorageObject storage_object = 3;
+  }
+}
+
+message TestArtifactUploadSettings {
+  string output_bucket = 1;
+  bool is_archive = 2;
+  repeated string filter_include = 3;
+  repeated string filter_exclude = 4;
+}

@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/vpc/v1/gateway.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option java_outer_classname = "PVGS";
+
+service GatewayService {
+  rpc Get (GetGatewayRequest) returns (Gateway);
+
+  rpc List (ListGatewaysRequest) returns (ListGatewaysResponse);
+
+  rpc Create (CreateGatewayRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateGatewayMetadata"
+      response: "Gateway"
+    };
+  };
+
+  rpc Update (UpdateGatewayRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateGatewayMetadata"
+      response: "Gateway"
+    };
+  };
+
+  rpc Delete (DeleteGatewayRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteGatewayMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+
+  rpc ListOperations (ListGatewayOperationsRequest) returns (ListGatewayOperationsResponse);
+
+  rpc Move (MoveGatewayRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveGatewayMetadata"
+      response: "Gateway"
+    };
+  }
+}
+
+message GetGatewayRequest {
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListGatewaysRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListGatewaysResponse {
+  repeated Gateway gateways = 1;
+  string next_page_token = 2;
+}
+
+message ListGatewayOperationsRequest {
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListGatewayOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message SharedEgressGatewaySpec {
+}
+
+// message DedicatedEgressGatewaySpec {
+//   oneof addresses {
+//     repeated string address_ids = 1;
+//     string address_pool_id = 2;
+//   }
+// }
+
+message CreateGatewayRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 3 [(length) = "<=256"];
+  map<string, string> labels = 4 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  oneof gateway {
+    SharedEgressGatewaySpec shared_egress_gateway_spec = 5;
+    // DedicatedEgressGatewaySpec dedicated_egress_gateway_spec = 6;
+  }
+}
+
+message CreateGatewayMetadata {
+  string gateway_id = 1;
+}
+
+message UpdateGatewayRequest {
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  map<string, string> labels = 5 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+
+  oneof gateway {
+    SharedEgressGatewaySpec shared_egress_gateway_spec = 6;
+    // DedicatedEgressGatewaySpec dedicated_egress_gateway_spec = 7;
+  }
+}
+
+message UpdateGatewayMetadata {
+  string gateway_id = 1;
+}
+
+message DeleteGatewayRequest {
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteGatewayMetadata {
+  string gateway_id = 1;
+}
+
+message MoveGatewayRequest {
+  string gateway_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message MoveGatewayMetadata {
+  string gateway_id = 1;
+}

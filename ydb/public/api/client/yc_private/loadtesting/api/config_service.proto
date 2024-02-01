@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1;loadtesting";
+
+import "google/api/annotations.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/config/config.proto";
+import "yandex/cloud/priv/validation.proto";
+
+service ConfigService {
+  rpc Create(CreateConfigRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/loadtesting/api/v1/configs" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateConfigMetadata"
+      response: "config.Config"
+    };
+  };
+  rpc Get(GetConfigRequest) returns (config.Config) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/configs/{config_id}" };
+  }
+  rpc List(ListConfigsRequest) returns (ListConfigsResponse) {
+    option (google.api.http) = { get: "/loadtesting/api/v1/configs/list" };
+  }
+  rpc Delete(DeleteConfigRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/loadtesting/api/v1/configs/{config_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteConfigMetadata"
+      response: "google.protobuf.Empty"
+    };
+  };
+}
+
+message CreateConfigRequest {
+  string folder_id = 1;
+  oneof config {
+    string yaml_string = 2;
+  }
+  string name = 10;
+}
+
+message CreateConfigMetadata {
+  string config_id = 1;
+}
+
+message GetConfigRequest {
+  string config_id = 1;
+}
+
+message ListConfigsRequest {
+  string folder_id = 1;
+  int64 page_size = 2;
+  string page_token = 3;
+  string filter = 4 [(yandex.cloud.priv.length) = "<=1000"];
+}
+
+message ListConfigsResponse {
+  repeated config.Config configs = 1;
+  string next_page_token = 2;
+}
+
+message DeleteConfigRequest {
+  string config_id = 1;
+}
+
+message DeleteConfigMetadata {
+  string config_id = 1;
+}

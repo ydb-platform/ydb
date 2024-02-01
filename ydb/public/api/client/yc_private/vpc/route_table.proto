@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option java_outer_classname = "PSRS";
+
+message RouteTable {
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  string network_id = 7;  // constrains usage of route_table within single virtual network
+  repeated StaticRoute static_routes = 8;
+}
+
+message StaticRoute {
+  oneof destination {
+    string destination_prefix = 1;
+  }
+  oneof next_hop {
+    string next_hop_address = 2;
+    string gateway_id = 4;
+  }
+  map<string, string> labels = 3;
+}

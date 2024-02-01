@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.common;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/common;common";
+
+message Quantiles {
+  double q50 = 1;
+  double q75 = 2;
+  double q80 = 3;
+  double q85 = 4;
+  double q90 = 5;
+  double q95 = 6;
+  double q98 = 7;
+  double q99 = 8;
+  double q100 = 9;
+}

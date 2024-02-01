@@ -1,0 +1,41 @@
+syntax = "proto3";
+package yandex.cloud.priv.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+
+message Sku {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string service_id = 4;
+    string pricing_unit = 5;
+    repeated PricingVersion pricing_versions = 6;
+}
+
+message PricingVersion {
+    PricingVersionType type = 1;
+    google.protobuf.Timestamp effective_time = 2;
+    repeated PricingExpression pricing_expressions = 3;
+}
+
+enum PricingVersionType {
+
+    PRICING_VERSION_TYPE_UNSPECIFIED = 0;
+
+    STREET_PRICE = 1;
+
+    CONTRACT_PRICE = 2;
+}
+
+message PricingExpression {
+    repeated Rate rates = 2;
+}
+
+message Rate {
+    string start_pricing_quantity = 1;
+    string unit_price = 2;
+    string currency = 3;
+}

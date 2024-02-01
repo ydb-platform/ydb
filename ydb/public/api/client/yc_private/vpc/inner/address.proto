@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PA";
+
+//TODO: add users, ptr, fqdns
+message Address {
+
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    INTERNAL = 1;
+    EXTERNAL = 2;
+  }
+
+  enum IpVersion {
+    IP_VERSION_UNSPECIFIED = 0;
+    IPV4 = 1;
+    IPV6 = 2;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  string address = 7;
+  IpVersion ip_version = 8;
+
+  Type type = 9;
+  string subnet_id = 10; // presented for internal ip
+
+  string zone_id = 11;
+  string region_id = 12;
+
+  bool ephemeral = 13;
+
+  bool used = 14;
+  oneof user {
+    string instance_id = 15;
+    string network_load_balancer_id = 16;
+  }
+
+  string ddos_protection_provider = 17; //None, "qrator"... Not making it enum, so we don't have to change API for new provider
+  string outgoing_smtp_capability = 18; //None, "direct", "relay"
+}

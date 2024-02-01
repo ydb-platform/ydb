@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.test;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/test;test";
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  CREATED = 1;
+  INITIATED = 2;
+  PREPARING = 3;
+  RUNNING = 4;
+  FINISHING = 5;
+  DONE = 6;
+  POST_PROCESSING = 7;
+  FAILED = 8;
+  STOPPING = 9;
+  STOPPED = 10;
+  AUTOSTOPPED = 11;
+  WAITING = 12;
+  DELETING = 13;
+  LOST = 14;
+}

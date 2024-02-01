@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option java_outer_classname = "PLTRJA";
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/loadtesting/v1/tank_job.proto";
+
+message RegressionChartJobAnnotation {
+    string job_id = 1;
+    string job_name = 2;
+    string job_author = 3;
+    TankJob.Status job_status = 4;
+    google.protobuf.Timestamp job_started_at = 5;
+    google.protobuf.Timestamp job_finished_at = 6;
+    int64 job_duration_s = 7;
+}

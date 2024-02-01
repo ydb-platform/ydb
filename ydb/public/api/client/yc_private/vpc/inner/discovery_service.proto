@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/duration.proto";
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/inner/discovery.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PVIDS";
+
+service DiscoveryService {
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc DeregisterHost(DeregisterHostRequest) returns (DeregisterHostResponse);
+
+  rpc UpsertService(UpsertServiceRequest) returns (Service); // Allows to create/update service heartbeat interval, disconnect timeout options.
+  rpc DeleteService(DeleteServiceRequest) returns (DeleteServiceResponse); // Allows to remove service
+  rpc GetService(GetServiceRequest) returns (Service); // Allows to read service options.
+  rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+  rpc ListHosts(ListHostsRequest) returns (ListHostsResponse); // Allows to list hosts in service.
+}
+
+message HeartbeatRequest {
+  string service_id = 1 [(required) = true, (length) = "<=50"];
+  string fqdn = 2 [(required) = true, (length) = "<=128"];
+  repeated string extra_service_ids = 3 [(size) = "<=15", (length) = "<=50"];
+  map<string, string> labels = 4 [(size) = "<=64", (length) = "<=63", (pattern) = "[-_./\\@0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_./\\@0-9a-z]*"];
+}
+
+message HeartbeatResponse {
+}
+
+message DeregisterHostRequest {
+  string service_id = 1 [(required) = true, (length) = "<=50"];
+  string fqdn = 2 [(required) = true, (length) = "<=128"];
+  repeated string extra_service_ids = 3 [(size) = "<=15", (length) = "<=50"];
+}
+
+message DeregisterHostResponse {
+}
+
+message UpsertServiceRequest {
+  string service_id = 1 [(required) = true, (length) = "<=50"];
+  string cloud_id = 2 [(required) = true, (length) = "<=50"];
+
+  google.protobuf.Duration heartbeat_interval = 3;
+  google.protobuf.Duration heartbeat_timeout = 4;
+}
+
+message DeleteServiceRequest {
+  string service_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteServiceResponse {
+}
+
+message ListHostsRequest {
+  string service_id = 1 [(required) = true, (length) = "<=50"];
+  // TODO: Do we need something like filter? To be able to filter by zone, alive/dead, etc?
+  int64 page_size = 2;
+  string page_token = 3;
+}
+
+message ListHostsResponse {
+  repeated Host hosts = 1;
+  string next_page_token = 2;
+}
+
+message GetServiceRequest {
+  string service_id = 1;
+}
+
+message ListServicesRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2;
+  string page_token = 3;
+}
+
+message ListServicesResponse {
+  repeated Service services = 1;
+  string next_page_token = 2;
+}

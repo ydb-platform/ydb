@@ -1,0 +1,20 @@
+syntax = "proto3";
+package yandex.cloud.priv.billing.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+message Usage {
+    // Decimal
+    string quantity = 1;
+    google.protobuf.Timestamp start = 2; // UTC timestamp
+    google.protobuf.Timestamp finish = 3; // UTC timestamp
+    string unit = 4;
+    enum Type {
+        TYPE_UNSPECIFIED = 0;
+        CUMULATIVE = 1;
+        DELTA = 2;
+        GAUGE = 3;
+    }
+}

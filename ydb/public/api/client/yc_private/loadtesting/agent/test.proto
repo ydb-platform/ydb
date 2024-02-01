@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+
+
+message Test {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATED = 1;
+    INITIATED = 2;
+    PREPARING = 3;
+    RUNNING = 4;
+    FINISHING = 5;
+    DONE = 6;
+    POST_PROCESSING = 7;
+    FAILED = 8;
+    STOPPING = 9;
+    STOPPED = 10;
+    AUTOSTOPPED = 11;
+    WAITING = 12;
+    DELETING = 13;
+    LOST = 14;
+  }
+
+  enum Generator {
+    GENERATOR_UNSPECIFIED = 0;
+    PANDORA = 1;
+    PHANTOM = 2;
+    JMETER = 3;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+
+  Generator generator = 10;
+
+  // AgentInstance ID where Test is running.
+  string agent_instance_id = 11;
+
+  // Target VM.
+  string target_address = 12;
+  int64 target_port = 13;
+
+  // Version of object under test.
+  string target_version = 14;
+
+  // Test details
+  string config = 15;
+  oneof ammo {
+    string ammo_urls = 16;
+    string ammo_id = 17;
+  }
+  repeated string cases = 18;
+
+  Status status = 19;
+  repeated string errors = 20;
+  bool favorite = 21;
+
+  int64 imbalance_point = 22;
+  int64 imbalance_ts = 23;
+  google.protobuf.Timestamp imbalance_at = 25;
+
+  repeated Autostop autostops = 24;
+}
+
+
+message Autostop {
+  enum AutostopType {
+    AUTOSTOP_TYPE_UNSPECIFIED = 0;
+    TIME = 1;
+    HTTP = 2;
+    NET = 3;
+    QUANTILE = 4;
+    INSTANCES = 5;
+    METRIC_LOWER = 6;
+    METRIC_HIGHER = 7;
+    STEADY_CUMULATIVE = 8;
+    LIMIT = 9;
+    TOTAL_TIME = 10;
+    TOTAL_HTTP = 11;
+    TOTAL_NET = 12;
+    NEGATIVE_HTTP = 13;
+    NEGATIVE_NET = 14;
+    HTTP_TREND = 15;
+  }
+
+  AutostopType autostop_type = 1;
+  string autostop_criteria = 2;
+  string autostop_case = 3;
+
+}
+
+// Ammo type for generators: phantom.ammo_type,
+// ammo.type in pandora.config_content.pool
+enum AmmoType {
+  AMMO_TYPE_UNSPECIFIED = 0;
+  HTTP_JSON = 1;
+  RAW = 2;
+  URI = 3;
+  URIPOST = 4;
+  PHANTOM = 5;
+  ACCESS = 6;
+}
+
+// Phantom and Pandora schedule details
+
+// Load type: phantom.load_profile.load_type,
+enum LoadType {
+  LOAD_TYPE_UNSPECIFIED = 0;
+  RPS = 1;
+  INSTANCES = 2;
+  STPD_FILE = 3;
+}
+
+// Schedule type: phantom.load_profile.schedule,
+// rps.schedule.type in pandora.config_content.pool
+enum ScheduleType {
+  SCHEDULE_TYPE_UNSPECIFIED = 0;
+  ONCE = 1;
+  CONST = 2;
+  LINE = 3;
+  STEP = 4;
+}
+
+//  Load schedule string:
+// {duration: 180s, type: line, from: 1, to: 10000} for pandora,
+// step(25, 5, 5, 60) for phantom.
+message LoadSchedule {
+  ScheduleType type = 1;
+  int64 instances = 2;  // times for pandora
+  string duration = 3;
+  int64 rps_from = 4;
+  int64 rps_to = 5;
+  int64 step = 6;
+  int64 ops = 7;
+  string stpd_path = 8;
+}
+
+// Load profile in general: phantom.load_profile, pool schedule for pandora
+message Schedule {
+  LoadType load_type = 1;
+  repeated LoadSchedule load_schedule = 2;
+  repeated string load_profile = 3;
+}

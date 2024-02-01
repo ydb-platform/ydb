@@ -1,0 +1,41 @@
+syntax = "proto3";
+package yandex.cloud.priv.billing.v1;
+
+import "google/protobuf/any.proto";
+
+import "yandex/cloud/priv/billing/v1/usage.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+//https://wiki.yandex-team.ru/cloud/devel/billing/how-to-meter/#chtotakoemetrika
+message LightMetric {
+    string schema = 1;
+    Usage usage = 2;
+    map<string, string> tags = 3;
+
+    string id = 4;
+    string cloud_id = 5;
+    string folder_id = 6;
+    repeated string labels = 7;
+    string resource_id = 8;
+    string source_id = 9;
+    string source_wt = 10;
+    string version = 11;
+}
+
+message LightMetricsListResponse {
+    repeated LightMetric metrics = 1;
+}
+
+// Used by services that send metric to console (`usage` is set by console)
+message ConsoleLightMetric {
+    string schema = 1;
+    map<string, google.protobuf.Any> tags = 2;
+
+    string cloud_id = 3;
+    string folder_id = 4;
+}
+
+message ConsoleLightMetricsListResponse {
+    repeated ConsoleLightMetric metrics = 1;
+}

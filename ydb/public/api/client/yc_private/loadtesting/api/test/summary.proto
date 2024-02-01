@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.test;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/test;test";
+
+import "yandex/cloud/priv/loadtesting/api/v1/test/imbalance_point.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/test/status.proto";
+import "google/protobuf/timestamp.proto";
+
+// Process of test and some results
+message Summary {
+  Status status = 1;
+  google.protobuf.Timestamp created_at = 2;
+  string created_by = 3;
+  google.protobuf.Timestamp started_at = 4;
+  google.protobuf.Timestamp finished_at = 5;
+
+  bool is_finished = 6;
+  string error = 7;
+  ImbalancePoint imbalance_point = 8;
+  string assigned_agent_id = 9;
+}

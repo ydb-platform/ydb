@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/loadtesting/agent/v1/test.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+
+
+service TestService {
+  rpc Get (GetTestRequest) returns (Test);
+  rpc Create (CreateTestRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTestMetadata"
+      response: "Test"
+    };
+  };
+  rpc Update (UpdateTestRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateTestMetadata"
+      response: "Test"
+    };
+  };
+}
+
+message GetTestRequest {
+  string test_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message CreateTestRequest {
+//  The rest
+
+  string folder_id = 1 [(yandex.cloud.priv.length) = "<=50"];
+  string name = 2  [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 3 [(yandex.cloud.priv.length) = "<=256"];
+  map<string, string> labels = 4 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+
+  Test.Generator generator = 5;
+  string agent_instance_id = 6 [(yandex.cloud.priv.length) = "<=50"];
+
+  // Fields for TankConfig creation. These fields have the higher priority than yaml config.
+  // These fields are taken from Form
+  string target_address = 7 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  int64 target_port = 8;
+  string target_version = 9 [(yandex.cloud.priv.length) = "<=50"];
+  int64 instances = 10;
+  Schedule load_schedule = 11;
+
+  string config = 12 [(yandex.cloud.priv.required) = true];
+  string ammo_id = 13 [(yandex.cloud.priv.length) = "<=50"];
+  repeated string ammo_urls = 14 [(yandex.cloud.priv.length) = "<=1024"];
+  repeated string ammo_headers = 15;
+  AmmoType ammo_type = 16;
+  bool ssl = 17;
+
+  int64 imbalance_point = 18;
+  int64 imbalance_ts = 19;
+
+  string logging_log_group_id = 20;
+
+  repeated Autostop autostops = 21;
+
+}
+
+message CreateTestMetadata {
+  string test_id = 1;
+}
+
+message UpdateTestRequest {
+  string test_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string name = 3 [(yandex.cloud.priv.pattern) = "|[a-z][-a-z0-9]{1,61}[a-z0-9]"];
+  string description = 4 [(yandex.cloud.priv.length) = "<=256"];
+  map<string, string> labels = 5 [(yandex.cloud.priv.size) = "<=64", (yandex.cloud.priv.length) = "<=63",
+    (yandex.cloud.priv.pattern) = "[-_0-9a-z]*", (yandex.cloud.priv.map_key).length = "1-63",
+    (yandex.cloud.priv.map_key).pattern = "[a-z][-_0-9a-z]*"];
+  bool favorite = 6;
+  string target_version = 7 [(yandex.cloud.priv.length) = "<=50"];
+  int64 imbalance_point = 8;
+  int64 imbalance_ts = 9;
+  string imbalance_comment = 10;
+  }
+
+message UpdateTestMetadata {
+  string test_id = 1;
+}

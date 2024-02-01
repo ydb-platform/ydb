@@ -1,0 +1,341 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/api/tools/options.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/network.proto";
+import "yandex/cloud/priv/vpc/v1/subnet.proto";
+import "yandex/cloud/priv/vpc/v1/security_group.proto";
+import "yandex/cloud/priv/vpc/v1/route_table.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/reference/reference.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option java_outer_classname = "PES";
+
+service NetworkService {
+
+  rpc Get (GetNetworkRequest) returns (Network) {
+    option (google.api.http) = { get: "/compute/v1/networks/{network_id}" };
+  }
+
+  rpc List (ListNetworksRequest) returns (ListNetworksResponse) {
+    option (google.api.http) = { get: "/compute/v1/networks" };
+  }
+
+  rpc Create (CreateNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/networks" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateNetworkMetadata"
+      response: "Network"
+    };
+  }
+
+  rpc Update (UpdateNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/networks/{network_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateNetworkMetadata"
+      response: "Network"
+    };
+  }
+
+  rpc Delete (DeleteNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/networks/{network_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteNetworkMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListSubnets (ListNetworkSubnetsRequest) returns (ListNetworkSubnetsResponse) {
+    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/subnets" };
+  }
+
+  rpc ListSecurityGroups (ListNetworkSecurityGroupsRequest) returns (ListNetworkSecurityGroupsResponse) {
+    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/security_groups" };
+  }
+
+  rpc ListRouteTables (ListNetworkRouteTablesRequest) returns (ListNetworkRouteTablesResponse) {
+    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/route_tables" };
+  }
+
+  rpc ListOperations (ListNetworkOperationsRequest) returns (ListNetworkOperationsResponse) {
+    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/operations" };
+  }
+
+  rpc CreateDefaultNetwork (CreateDefaultNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/defaultNetwork" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDefaultNetworkMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc CreateNetworkSystemRouteTable (CreateNetworkSystemRouteTableRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/systemRouteTable" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateNetworkSystemRouteTableMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc Move (MoveNetworkRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/move" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "MoveNetworkMetadata"
+      response: "Network"
+    };
+  }
+
+  rpc CreateDefaultSecurityGroup (CreateDefaultSecurityGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/defaultSecurityGroup" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateDefaultSecurityGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc DeleteDefaultSecurityGroup (DeleteDefaultSecurityGroupRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/networks/{network_id}/defaultSecurityGroup" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteDefaultSecurityGroupMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ManageRouteTarget(ManageRouteTargetRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ManageRouteTargetMetadata"
+      response: "Network"
+    };
+  }
+
+  rpc ManageRouteTargets(ManageRouteTargetsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ManageRouteTargetsMetadata"
+      response: "ManageRouteTargetsResponse"
+    };
+  }
+
+  rpc ListReferences (ListNetworkReferencesRequest) returns (ListNetworkReferencesResponse);
+
+  rpc UpdateReferences (UpdateNetworkReferencesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateNetworkReferencesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc BatchUpdateReferences (BatchUpdateNetworkReferencesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "BatchUpdateNetworkReferencesMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetNetworkRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListNetworksRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListNetworksResponse {
+  repeated Network networks = 1;
+  string next_page_token = 2;
+}
+
+message CreateNetworkRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+  bool create_subnets = 5;
+}
+
+message CreateNetworkMetadata {
+  string network_id = 1;
+}
+
+message UpdateNetworkRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+}
+
+message UpdateNetworkMetadata {
+  string network_id = 1;
+}
+
+message DeleteNetworkRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteNetworkMetadata {
+  string network_id = 1;
+}
+
+message ListNetworkSubnetsRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListNetworkSubnetsResponse {
+  repeated Subnet subnets = 1;
+  string next_page_token = 2;
+}
+
+message ListNetworkSecurityGroupsRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListNetworkSecurityGroupsResponse {
+  repeated SecurityGroup security_groups = 1;
+  string next_page_token = 2;
+}
+
+message ListNetworkRouteTablesRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListNetworkRouteTablesResponse {
+  repeated RouteTable route_tables = 1;
+  string next_page_token = 2;
+}
+
+message ListNetworkOperationsRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+}
+
+message ListNetworkOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message CreateDefaultNetworkRequest {
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4 [(priv.size) = "<=64", (length) = "<=63", (pattern) = "[-_0-9a-z]*", (map_key).length = "1-63", (map_key).pattern = "[a-z][-_0-9a-z]*"];
+}
+
+message CreateDefaultNetworkMetadata {
+  string name = 1;
+  string create_network_operation_id = 2;
+  repeated string create_subnet_operation_ids = 3;
+}
+
+message CreateNetworkSystemRouteTableRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateNetworkSystemRouteTableMetadata {
+  string network_id = 1;
+}
+
+message MoveNetworkRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+  string destination_folder_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message CreateDefaultSecurityGroupRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteDefaultSecurityGroupRequest {
+  string network_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message MoveNetworkMetadata {
+  string network_id = 1;
+}
+
+message CreateDefaultSecurityGroupMetadata {
+  string network_id = 1;
+}
+
+message DeleteDefaultSecurityGroupMetadata {
+  string network_id = 1;
+}
+
+message ManageRouteTargetRequest {
+  string network_id = 1;
+  bool deny_route_target_deallocation = 2;
+  bool skip_route_target_allocation = 3;
+  string route_target = 4;
+  string cloud_router_routing_instance_id = 5;
+}
+
+message ManageRouteTargetMetadata {
+  string network_id = 1;
+}
+
+message ManageRouteTargetsRequest {
+  repeated ManageRouteTargetRequest requests = 5;
+}
+
+message ManageRouteTargetsMetadata {
+  repeated string network_ids = 1;
+}
+
+message ManageRouteTargetsResponse {
+  repeated Network networks = 1;
+}
+
+message ListNetworkReferencesRequest {
+  string network_id = 1 [(required) = true];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListNetworkReferencesResponse {
+  repeated reference.Reference references = 1;
+  string next_page_token = 2;
+}
+
+message UpdateNetworkReferencesRequest {
+  string network_id = 1 [(required) = true];
+  repeated reference.Reference reference_additions = 2;
+  repeated reference.Reference reference_deletions = 3;
+}
+
+message UpdateNetworkReferencesMetadata {
+  string network_id = 1;
+}
+
+message NetworkReferences {
+  string network_id = 1 [(required) = true];
+  repeated reference.Reference references = 2;
+}
+
+message BatchUpdateNetworkReferencesRequest {
+  repeated UpdateNetworkReferencesRequest references = 1;
+}
+
+message BatchUpdateNetworkReferencesMetadata {
+  repeated string network_ids = 1;
+}

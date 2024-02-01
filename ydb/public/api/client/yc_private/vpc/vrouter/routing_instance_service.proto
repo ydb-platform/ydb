@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.vrouter;
+
+import "yandex/cloud/api/tools/options.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/vrouter/routing_instance.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/vrouter;vrouter";
+option java_outer_classname = "PVRRIS";
+
+service RoutingInstanceService {
+  rpc GetRoutes (GetRoutesRequest) returns (GetRoutesResponse);
+}
+
+message GetRoutesRequest {
+  enum Table {
+    option (cloud.api.tools.enumeration).lint_skip.unspecified_value = true;
+
+    INET4_UNICAST = 0;
+    INET6_UNICAST = 1;
+  }
+
+  string instance_id = 1 [(required) = true];
+  string network_interface_index = 2;
+
+  string ri_suffix = 3;
+  Table table = 4;
+  string prefix = 5;
+}
+
+message GetRoutesResponse {
+  repeated Route routes = 1;
+}

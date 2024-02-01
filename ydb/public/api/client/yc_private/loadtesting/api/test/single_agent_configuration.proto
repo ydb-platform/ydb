@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.test;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/test;test";
+
+import "yandex/cloud/priv/loadtesting/api/v1/test/agent_selector.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/test/file_pointer.proto";
+
+message SingleAgentConfiguration {
+  string config_id = 1;
+  AgentSelector agent_selector = 2;
+  map<string, FilePointer> files = 3;
+}

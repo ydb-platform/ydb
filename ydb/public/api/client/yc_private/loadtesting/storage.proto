@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option java_outer_classname = "PLTS";
+
+message Storage {
+  string id = 1;
+  string folder_id = 2;
+  string name = 3;
+  string description = 4;
+  map<string, string> labels = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string object_storage_bucket = 7;
+
+  int64 used_size = 8;
+  int64 simple_object_count = 9;
+}
+
+message StorageObject {
+  string object_storage_bucket = 1;
+  string object_storage_filename = 2;
+}

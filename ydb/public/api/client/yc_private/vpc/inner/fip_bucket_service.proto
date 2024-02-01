@@ -1,0 +1,277 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/vpc/v1/inner/fip_bucket.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PFBS";
+
+service FipBucketService {
+
+  rpc Get (GetFipBucketRequest) returns (FipBucket) {
+    option (google.api.http) = { get: "/compute/v1/fipBuckets/{bucket_id}" };
+  }
+
+  rpc List (ListFipBucketsRequest) returns (ListFipBucketsResponse) {
+    option (google.api.http) = { get: "/compute/v1/fipBuckets" };
+  }
+
+  rpc Create (CreateFipBucketRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/fipBuckets" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFipBucketMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc Update (UpdateFipBucketRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/compute/v1/fipBuckets/{bucket_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFipBucketMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc Resize (ResizeFipBucketRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "ResizeFipBucketMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc Delete (DeleteFipBucketRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/compute/v1/fipBuckets/{bucket_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFipBucketMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc AddCidrs (AddFipBucketCidrsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}/add-cidrs" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddFipBucketCidrsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc RemoveCidrs (RemoveFipBucketCidrsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}/delete-cidrs" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveFipBucketCidrsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc AddRouteTargets (AddFipBucketRouteTargetsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddFipBucketRouteTargetsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc RemoveRouteTargets (RemoveFipBucketRouteTargetsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RemoveFipBucketRouteTargetsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc EnableCidrs (EnableFipBucketCidrsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "EnableFipBucketCidrsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc DisableCidrs (DisableFipBucketCidrsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DisableFipBucketCidrsMetadata"
+      response: "FipBucket"
+    };
+  }
+
+  rpc CommitDraft (CommitDraftRequest) returns (CommitDraftResponse) {
+  }
+
+  rpc LockDrafts (LockDraftsRequest) returns (LockDraftsResponse) {
+  }
+
+  rpc UnlockDraft (UnlockDraftRequest) returns (UnlockDraftResponse) {
+  }
+
+}
+
+message LockDraftsRequest {
+  string zone_id = 1;
+  string flavor = 2;
+}
+
+message LockDraftsResponse {
+  repeated FipBucket fip_buckets = 1;
+}
+
+message UnlockDraftRequest {
+  string bucket_id = 1;
+}
+
+message UnlockDraftResponse {
+  FipBucket fip_bucket = 1;
+}
+
+message CommitDraftRequest {
+  string bucket_id = 1;
+  repeated string cidrs = 2;
+}
+
+message CommitDraftResponse {
+  FipBucket fip_bucket = 1;
+}
+
+message GetFipBucketRequest {
+  string bucket_id = 1;
+}
+
+message ListFipBucketsRequest {
+  string folder_id = 1;
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=1000"];
+  string filter = 4;
+}
+
+message ListFipBucketsResponse {
+  repeated FipBucket fip_buckets = 1;
+  string next_page_token = 2;
+}
+
+message CreateFipBucketRequest {
+  string folder_id = 1;
+  string name = 2;
+  string description = 3;
+  map<string, string> labels = 4;
+
+  string flavor = 5;
+  // FipBucketScope scope = 6; deprecated
+  repeated string cidrs = 7;
+
+  repeated string import_rts = 8;
+  repeated string export_rts = 9;
+
+  IpVersion ip_version = 10;
+  string scope = 11;
+
+  bool use_workflow = 12;
+}
+
+message CreateFipBucketMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message UpdateFipBucketRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string description = 3;
+  map<string, string> labels = 4;
+
+  repeated string cidrs = 5;
+
+  repeated string import_rts = 6;
+  repeated string export_rts = 7;
+
+  repeated string disabled_cidrs = 8;
+}
+
+message ResizeFipBucketRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  string cidr = 2 [(required) = true, (length) = "<=50"];
+}
+
+message UpdateFipBucketMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message ResizeFipBucketMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message DeleteFipBucketRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteFipBucketMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message AddFipBucketCidrsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string cidrs = 2;
+}
+
+message AddFipBucketCidrsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message RemoveFipBucketCidrsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string cidrs = 2;
+}
+
+message RemoveFipBucketCidrsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message AddFipBucketRouteTargetsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string import_rts = 2;
+  repeated string export_rts = 3;
+}
+
+message AddFipBucketRouteTargetsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message RemoveFipBucketRouteTargetsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string import_rts = 2;
+  repeated string export_rts = 3;
+}
+
+message RemoveFipBucketRouteTargetsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message EnableFipBucketCidrsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string cidrs = 2;
+}
+
+message EnableFipBucketCidrsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}
+
+message DisableFipBucketCidrsRequest {
+  string bucket_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string cidrs = 2;
+}
+
+message DisableFipBucketCidrsMetadata {
+  string bucket_id = 1;
+  string fip_bucket_id = 2;
+}

@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/vpc/v1/inner/discovery.proto";
+import "yandex/cloud/priv/vpc/v1/inner/semaphore.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PVISS";
+
+service SemaphoreService {
+  rpc Upsert(UpsertSemaphoreRequest) returns (Semaphore);
+  rpc Get(GetSemaphoreRequest) returns (Semaphore);
+  rpc Delete(DeleteSemaphoreRequest) returns (DeleteSemaphoreResponse);
+
+  rpc Acquire(AcquireSemaphoreRequest) returns (AcquireSemaphoreResponse);
+  rpc Release(ReleaseSemaphoreRequest) returns (ReleaseSemaphoreResponse);
+  rpc List(ListSemaphoresRequest) returns (ListSemaphoresResponse);
+  rpc ListLocks(ListSemaphoreLocksRequest) returns (ListSemaphoreLocksResponse);
+  rpc ListHosts(ListSemaphoreHostsRequest) returns (ListSemaphoreHostsResponse);
+}
+
+message UpsertSemaphoreRequest {
+  string semaphore_id = 1 [(required) = true, (length) = "<=50"];
+  string cloud_id = 2 [(required) = true, (length) = "<=50"];
+
+  int64 max_concurrent_locks = 3;
+  double min_available_hosts = 4; // >=1 - amount, <1 - percentage
+}
+
+message GetSemaphoreRequest {
+  string semaphore_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSemaphoreRequest {
+  string semaphore_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSemaphoreResponse {
+}
+
+message AcquireSemaphoreRequest {
+  string semaphore_id = 1 [(required) = true, (length) = "<=50"];
+  string fqdn = 2 [(required) = true, (length) = "<=128"];
+  string owner = 3 [(length) = "<=128"];
+}
+
+message AcquireSemaphoreResponse {
+  Semaphore semaphore = 1;
+}
+
+message ReleaseSemaphoreRequest {
+  string semaphore_id = 1 [(required) = true, (length) = "<=50"];
+  string fqdn = 2 [(required) = true, (length) = "<=128"];
+  string owner = 3 [(length) = "<=128"];
+}
+
+message ReleaseSemaphoreResponse {
+  // Empty for now.
+}
+
+message ListSemaphoresRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSemaphoresResponse {
+  repeated Semaphore semaphores = 1;
+  string next_page_token = 2;
+}
+
+message ListSemaphoreLocksRequest {
+  string semaphore_id = 1;
+  int64 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSemaphoreLocksResponse {
+  repeated SemaphoreLock locks = 1;
+  string next_page_token = 2;
+}
+
+message ListSemaphoreHostsRequest {
+  string semaphore_id = 1;
+  int64 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSemaphoreHostsResponse {
+  repeated Host hosts = 1;
+  string next_page_token = 2;
+}

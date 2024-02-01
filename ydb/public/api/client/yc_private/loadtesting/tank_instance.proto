@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option java_outer_classname = "PTI";
+
+message TankInstance {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    PREPARING_TEST = 1;
+    READY_FOR_TEST = 2;
+    TESTING = 3;
+    TANK_FAILED = 4;
+    PROVISIONING = 5;
+    STOPPING = 6;
+    STOPPED = 7;
+    STARTING = 8;
+    RESTARTING = 9;
+    UPDATING = 10;
+    ERROR = 11;
+    CRASHED = 12;
+    DELETING = 13;
+    LOST_CONNECTION_WITH_TANK = 14;
+    INITIALIZING_CONNECTION = 15;
+    LOST_CONNECTION_WITH_AGENT = 16;
+    UPLOADING_ARTIFACTS = 17;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp compute_instance_updated_at = 4;
+  string name = 5;
+  string description = 6;
+  map<string, string> labels = 7;
+
+  string service_account_id = 8;
+
+  string preset_id = 9;
+  string tank_version = 10;
+
+  // Current status: current job, errors, Status
+  Status status = 11;
+  repeated string errors = 12;
+  string current_job = 13;
+
+  // Compute Instance Id and status
+  string compute_instance_id = 14;
+
+  AgentVersion agent_version = 15;
+  bool may_be_updated = 16;
+}
+
+message AgentVersion {
+  enum VersionStatus {
+    VERSION_STATUS_UNSPECIFIED = 0;
+    ACTUAL = 1;
+    DEPRECATED = 2;
+    OUTDATED = 3;
+    UNSET = 4;
+    UNKNOWN = 5;
+    TESTING = 6;
+  }
+
+  string id = 1;
+  VersionStatus status = 2;
+  int64 revision = 3;
+  string description = 4;
+  string status_comment = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string compute_image_id = 7;
+}

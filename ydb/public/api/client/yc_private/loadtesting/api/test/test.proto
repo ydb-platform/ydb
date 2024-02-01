@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.test;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/test;test";
+
+import "yandex/cloud/priv/loadtesting/api/v1/test/single_agent_configuration.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/test/details.proto";
+import "yandex/cloud/priv/loadtesting/api/v1/test/summary.proto";
+
+message Test {
+  string id = 1;
+  repeated SingleAgentConfiguration configurations = 2;
+  Details details = 3;
+  Summary summary = 4;
+  string folder_id = 5;
+}

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.report.table.tables;
+
+import "yandex/cloud/priv/loadtesting/v1/common/quantiles.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table/tables;tables";
+option java_outer_classname = "PRTTQ";
+
+message Quantiles {
+  message Row {
+    string case_name = 1;
+    loadtesting.v1.common.Quantiles quantiles = 2;
+  }
+
+  string name = 1;
+  repeated string column_names = 2;
+  repeated Row rows = 3;
+}

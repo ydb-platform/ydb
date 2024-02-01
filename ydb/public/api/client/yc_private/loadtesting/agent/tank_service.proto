@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.agent.v1;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+
+
+service TankService {
+
+  rpc ClaimStatus (ClaimTankStatusRequest) returns (ClaimTankStatusResponse);
+
+}
+
+message ClaimTankStatusRequest {
+  string compute_instance_id = 1;
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    READY_FOR_TEST = 1;
+    PREPARING_TEST = 2;
+    TESTING = 3;
+    TANK_FAILED = 4;
+    UPLOADING_ARTIFACTS = 5;
+  }
+  Status status = 2;
+  string error = 3;
+}
+
+message ClaimTankStatusResponse {
+  int64 code = 1;
+}

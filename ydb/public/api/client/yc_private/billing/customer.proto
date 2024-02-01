@@ -1,0 +1,21 @@
+syntax = "proto3";
+package yandex.cloud.priv.billing.v1;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+
+message Customer {
+    string id = 1;
+    string billing_account_id = 2;
+}
+
+message CustomerPerson {
+    string name = 1;
+    string longname = 2;
+    string phone = 3;
+    string email = 4;
+    string post_code = 5;
+    string post_address = 6;
+    string legal_address = 7;
+    string tin = 8;
+}

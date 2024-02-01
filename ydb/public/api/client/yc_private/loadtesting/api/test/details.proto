@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.test;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/test;test";
+
+import "yandex/cloud/priv/loadtesting/api/v1/common/tag.proto";
+
+// Details specific for Cloud, without progress and results.
+// These details will be used for retry also.
+message Details {
+  string name = 1;
+  string description = 2;
+  repeated common.Tag tags = 3;
+  string logging_log_group_id = 4;
+}

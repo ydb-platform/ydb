@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.vrouter;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/vrouter;vrouter";
+option java_outer_classname = "PVRF";
+
+import "yandex/cloud/priv/vpc/v1/vrouter/routing_instance.proto";
+
+message RouteWithRoutingInstance {
+  // Short VRF name and suffix
+  string ri_name = 1;
+  string ri_suffix = 2;
+
+  // Specific route resolved for source / destination IP (unsupported)
+  Route route = 3;
+
+  // ECMP index are filled in in flow for destination route
+  int64 ecmp_index = 4;
+}
+
+message FlowStats {
+  int64 packets = 1;
+  int64 bytes = 2;
+}
+
+message DefaultFlowData {
+  FlowStats flow_stats = 1;
+}
+
+message RootFlowData {
+  int64 subordinate_count = 1;
+  FlowStats flow_stats = 2;
+}
+
+message SubordinateFlowData {
+  int64 root_index = 1;
+}
+
+message Flow {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+
+    DROP = 1;
+    HOLD = 2;
+    FORWARD = 3;
+    NAT = 4;
+  }
+
+  int64 index = 1;
+  int64 gen_id = 2;
+  int64 rev_index = 3;
+
+  // Flow addresses are encoded in introspection in format IP/PLEN:PORT
+  string source = 4;
+  string destination = 5;
+
+  string protocol_name = 6;
+  int64 protocol_number = 7;
+
+  Action action = 8;
+  repeated string flags = 9;
+  string drop_reason = 10;
+
+  repeated string tcp_flags = 11;
+
+  RouteWithRoutingInstance source_route = 12;
+  RouteWithRoutingInstance destination_route = 13;
+
+  oneof extra_data {
+    DefaultFlowData default_data = 14;
+    RootFlowData root_flow = 15;
+    SubordinateFlowData subordinate_flow = 16;
+  }
+}

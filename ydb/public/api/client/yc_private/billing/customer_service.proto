@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.billing.v1;
+
+import "yandex/cloud/priv/billing/v1/customer.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/billing/v1;billing";
+
+
+service CustomerService {
+
+    rpc List(ListCustomersRequest) returns (ListCustomersResponse);
+
+    rpc Invite(InviteCustomerRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "CustomerMetadata"
+            response: "Customer"
+        };
+    };
+
+    rpc CreateResellerServed(CreateResellerServedCustomerRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "CustomerMetadata"
+            response: "Customer"
+        };
+    }
+
+    rpc Activate(ActivateCustomerRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "CustomerMetadata"
+            response: "Customer"
+        };
+    };
+
+    rpc Suspend(SuspendCustomerRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "CustomerMetadata"
+            response: "Customer"
+        };
+    };
+}
+
+message ListCustomersRequest {
+    string reseller_id = 1 [(required) = true, (length) = "<=50"];
+
+    int64 page_size = 3 [(value) = "<=1000"];
+
+    string page_token = 4 [(length) = "<=100"];
+}
+
+message ListCustomersResponse {
+    repeated Customer customers = 1;
+
+    string next_page_token = 2;
+}
+
+message InviteCustomerRequest {
+    string reseller_id = 1 [(required) = true, (length) = "<=50"];
+    string name = 2 [(required) = true];
+    string invitation_email = 3 [(required) = true];
+    CustomerPerson person = 4 [(required) = true];
+}
+
+message CreateResellerServedCustomerRequest {
+    string reseller_id = 1 [(required) = true, (length) = "<=50"];
+    string name = 2 [(required) = true];
+    CustomerPerson person = 3 [(required) = true];
+}
+
+message ActivateCustomerRequest {
+    string customer_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message SuspendCustomerRequest {
+    string customer_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CustomerMetadata {
+    string reseller_id = 1;
+    string customer_id = 2;
+}

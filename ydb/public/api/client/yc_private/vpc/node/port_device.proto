@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.node;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
+option java_outer_classname = "PVNPD";
+
+enum PortDeviceRole {
+  PORT_DEVICE_ROLE_UNSPECIFIED = 0;
+  // Primary port will be attached to dataplane on creation.
+  PRIMARY = 1;
+  // Secondary port will be attached to dataplane only after migration from primary port.
+  // Both ports types are used in local migration scenarios.
+  SECONDARY = 2;
+}
+
+message PortDeviceData {
+  string mac_address = 1;
+  int64 queues = 2;
+  int64 tx_queue_length = 3;
+  int64 owner = 4;
+}

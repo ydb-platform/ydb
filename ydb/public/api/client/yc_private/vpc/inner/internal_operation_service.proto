@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+
+// Private VPC inner internal operation service.
+option java_outer_classname = "PVIIOS";
+
+// OperationService clashes with vpc.v1.OperationService
+service InternalOperationService {
+  rpc Get (GetInternalOperationRequest) returns (operation.Operation);
+}
+
+message GetInternalOperationRequest {
+  string operation_id = 1 [(length) = "<=50"];
+}

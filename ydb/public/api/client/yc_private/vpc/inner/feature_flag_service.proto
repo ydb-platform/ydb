@@ -1,0 +1,312 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/duration.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/vpc/v1/inner/feature_flag.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/servicecontrol/v1/resource.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PFFS";
+
+service FeatureFlagService {
+  // FeatureFlags CRUD API
+  rpc Get (GetFeatureFlagRequest) returns (FeatureFlag);
+
+  rpc List (ListFeatureFlagsRequest) returns (ListFeatureFlagsResponse);
+
+  rpc Create (CreateFeatureFlagRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFeatureFlagMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc Delete (DeleteFeatureFlagRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFeatureFlagMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Update (UpdateFeatureFlagRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFeatureFlagMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc ListForScope (ListFeatureFlagsForScopeRequest) returns (ListFeatureFlagsForScopeResponse);
+
+  rpc ListOperations (ListFeatureFlagOperationsRequest) returns (ListFeatureFlagOperationsResponse);
+
+  rpc SetActive (SetActiveFeatureFlagRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetActiveFeatureFlagMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc SetInactive (SetInactiveFeatureFlagRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetInactiveFeatureFlagMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc GetWhiteList (GetFeatureFlagWhiteListRequest) returns (GetFeatureFlagWhiteListResponse);
+
+  rpc AddToWhiteList (AddToFeatureFlagWhiteListRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddToFeatureFlagWhiteListMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc DeleteFromWhiteList (DeleteFromFeatureFlagWhiteListRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFromFeatureFlagWhiteListMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc GetBlackList (GetFeatureFlagBlackListRequest) returns (GetFeatureFlagBlackListResponse);
+
+  rpc AddToBlackList (AddToFeatureFlagBlackListRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddToFeatureFlagBlackListMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc DeleteFromBlackList (DeleteFromFeatureFlagBlackListRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFromFeatureFlagBlackListMetadata"
+      response: "FeatureFlag"
+    };
+  }
+
+  rpc IsEnabled (IsEnabledRequest) returns (IsEnabledResponse);
+
+  rpc GetEnabledFlags (GetEnabledFlagsRequest) returns (GetEnabledFlagsResponse);
+
+  rpc SyncScopes(SyncScopesRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "SyncScopesMetadata"
+      response: "FeatureFlag"
+    };
+  }
+}
+
+// FeatureFlags CRUD API
+message GetFeatureFlagRequest {
+  string feature_flag_id = 1;
+}
+
+message ListFeatureFlagsRequest {
+  int64 page_size = 1 [(value) = "<=1000"];
+  string page_token = 2 [(length) = "<=1000"];
+  string filter = 3;
+}
+
+message ListFeatureFlagsResponse {
+  repeated FeatureFlag feature_flags = 1;
+  string next_page_token = 2;
+}
+
+message CreateFeatureFlagRequest {
+  string id = 1;
+  bool active = 2;
+  repeated string tags = 3;
+  repeated servicecontrol.v1.Resource whitelist = 4;
+  repeated servicecontrol.v1.Resource blacklist = 5;
+}
+
+message CreateFeatureFlagMetadata {
+  string feature_flag_id = 1;
+}
+
+message DeleteFeatureFlagRequest {
+  string feature_flag_id = 1;
+}
+
+message DeleteFeatureFlagMetadata {
+  string feature_flag_id = 1;
+}
+
+message ListFeatureFlagsForScopeRequest {
+  int64 page_size = 1 [(value) = "<=1000"];
+  string page_token = 2 [(length) = "<=1000"];
+  string scope = 3;
+}
+
+message ListFeatureFlagsForScopeResponse {
+  repeated FeatureFlag feature_flags = 1;
+  string next_page_token = 2;
+}
+
+message ListFeatureFlagOperationsRequest {
+  int64 page_size = 1 [(value) = "<=1000"];
+  string page_token = 2 [(length) = "<=1000"];
+  string feature_flag_id = 3;
+}
+
+message ListFeatureFlagOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message UpdateFeatureFlagRequest {
+  string feature_flag_id = 1;
+  google.protobuf.FieldMask update_mask = 2;
+  bool active = 3;
+  repeated servicecontrol.v1.Resource whitelist = 4;
+  repeated servicecontrol.v1.Resource blacklist = 5;
+  repeated string tags = 6;
+  bool skip_sync = 7;
+  bool sync_only_new = 8;
+}
+
+message UpdateFeatureFlagMetadata {
+  string feature_flag_id = 1;
+}
+
+message SetActiveFeatureFlagRequest {
+  string feature_flag_id = 1;
+  bool skip_sync = 2;
+}
+
+message SetInactiveFeatureFlagRequest {
+  string feature_flag_id = 1;
+  bool skip_sync = 2;
+}
+
+message SetActiveFeatureFlagMetadata {
+  string feature_flag_id = 1;
+}
+
+message SetInactiveFeatureFlagMetadata {
+  string feature_flag_id = 1;
+}
+
+message GetFeatureFlagWhiteListRequest {
+  int64 page_size = 1 [(value) = "<=1000"];
+  string page_token = 2 [(length) = "<=1000"];
+  string feature_flag_id = 3;
+}
+
+message GetFeatureFlagWhiteListResponse {
+  repeated servicecontrol.v1.Resource scopes = 1;
+  string next_page_token = 2;
+}
+
+message FeatureFlagScopeSyncConfig {
+  int64 pending_tasks_threshold = 1;
+  google.protobuf.Duration wait_duration = 2;
+}
+
+message AddToFeatureFlagWhiteListRequest {
+  string feature_flag_id = 1;
+  repeated servicecontrol.v1.Resource scopes = 2;
+  bool skip_sync = 3;
+  bool sync_only_new = 4;
+  FeatureFlagScopeSyncConfig sync_config = 5;
+}
+
+message AddToFeatureFlagWhiteListMetadata {
+  string feature_flag_id = 1;
+}
+
+message DeleteFromFeatureFlagWhiteListRequest {
+  string feature_flag_id = 1;
+  repeated servicecontrol.v1.Resource scopes = 2;
+  bool skip_sync = 3;
+  FeatureFlagScopeSyncConfig sync_config = 4;
+}
+
+message DeleteFromFeatureFlagWhiteListMetadata {
+  string feature_flag_id = 1;
+}
+
+message GetFeatureFlagBlackListRequest {
+  int64 page_size = 1 [(value) = "<=1000"];
+  string page_token = 2 [(length) = "<=1000"];
+  string feature_flag_id = 3;
+}
+
+message GetFeatureFlagBlackListResponse {
+  repeated servicecontrol.v1.Resource scopes = 1;
+  string next_page_token = 2;
+}
+
+message AddToFeatureFlagBlackListRequest {
+  string feature_flag_id = 1;
+  repeated servicecontrol.v1.Resource scopes = 2;
+  bool skip_sync = 3;
+  bool sync_only_new = 4;
+  FeatureFlagScopeSyncConfig sync_config = 5;
+}
+
+message AddToFeatureFlagBlackListMetadata {
+  string feature_flag_id = 1;
+}
+
+message DeleteFromFeatureFlagBlackListRequest {
+  string feature_flag_id = 1;
+  repeated servicecontrol.v1.Resource scopes = 2;
+  bool skip_sync = 3;
+  FeatureFlagScopeSyncConfig sync_config = 4;
+}
+
+message DeleteFromFeatureFlagBlackListMetadata {
+  string feature_flag_id = 1;
+}
+
+message IsEnabledRequest {
+  string feature_flag_id = 1;
+  oneof target {
+    NetworkInterfaceSpec interface_spec = 2;
+    string subnet_id = 3;
+    string network_load_balancer_id = 4;
+
+    servicecontrol.v1.ResourcePath resource_path = 5;
+  }
+}
+
+message IsEnabledResponse {
+  bool is_enabled = 1;
+}
+
+message GetEnabledFlagsRequest {
+  string container_flag_id = 1;
+
+  oneof target {
+    NetworkInterfaceSpec interface_spec = 2;
+    string subnet_id = 3;
+    string network_load_balancer_id = 4;
+
+    servicecontrol.v1.ResourcePath resource_path = 5;
+  }
+}
+
+message GetEnabledFlagsResponse {
+  repeated string enabled_flags = 1;
+}
+
+message NetworkInterfaceSpec {
+  string instance_id = 1;
+  int64 interface_id = 2;
+}
+
+message SyncScopesRequest {
+  string feature_flag_id = 1;
+  repeated servicecontrol.v1.Resource scopes = 2;
+}
+
+message SyncScopesMetadata {
+  string feature_flag_id = 1;
+}

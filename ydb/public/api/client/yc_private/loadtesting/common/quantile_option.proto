@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.common;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/common;common";
+
+enum QuantileOption {
+    QUANTILE_OPTION_UNSPECIFIED = 0;
+    Q50 = 1;
+    Q75 = 2;
+    Q80 = 3;
+    Q85 = 4;
+    Q90 = 5;
+    Q95 = 6;
+    Q98 = 7;
+    Q99 = 8;
+    Q100 = 9;
+}

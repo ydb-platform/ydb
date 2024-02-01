@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option java_outer_classname = "PFB";
+
+message FipBucket {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    DELETING = 3;
+    UPDATING = 4;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  string flavor = 7;
+  // FipBucketScope scope = 8; deprecated
+  repeated string cidrs = 9;
+
+  repeated string import_rts = 10;
+  repeated string export_rts = 11;
+
+  Status status = 12;
+  IpVersion ip_version = 13;
+  string scope = 14;
+
+  repeated string final_cidrs = 15;
+  repeated string limbo_cidrs = 16;
+  repeated string draft_cidrs = 17;
+  DraftStatus draft_status = 18;
+  repeated string disabled_cidrs = 19;
+}
+
+enum DraftStatus {
+  DRAFT_STATUS_UNSPECIFIED = 0;
+  ACTUAL = 1;
+  DIRTY = 2;
+  PROCESSING = 3;
+  DEPLOYED = 4;
+  CGW_DEPLOYED = 5;
+}
+
+enum FipBucketScope {
+  FIP_BUCKET_SCOPE_UNSPECIFIED = 0;
+  PUBLIC = 1;
+  MARTIAN = 2;
+  STUB = 3;
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+  IPV4 = 1;
+  IPV6 = 2;
+}

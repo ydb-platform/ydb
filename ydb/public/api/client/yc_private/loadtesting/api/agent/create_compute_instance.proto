@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.api.v1.agent ;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/api/v1/agent;agent";
+
+import "yandex/cloud/priv/compute/v1/validation.proto";
+import "yandex/cloud/priv/compute/v1/instance_service.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/validation.proto";
+
+
+message CreateComputeInstance {
+  // Resource labels as `key:value` pairs.
+  map<string, string> labels = 4 [(compute.v1.valid) = "labels"];
+
+  // ID of the availability zone where the instance resides.
+  // To get a list of available zones, use the [yandex.cloud.compute.v1.ZoneService.List] request
+  string zone_id = 5 [(compute.v1.valid) = "zone_id", (compute.v1.required) = true];
+
+  // Computing resources of the instance, such as the amount of memory and number of cores.
+  // To get a list of available values, see [Levels of core performance](/docs/compute/concepts/performance-levels).
+  compute.v1.ResourcesSpec resources_spec = 7 [(compute.v1.required) = true];
+
+  // The metadata `key:value` pairs that will be assigned to this instance. This includes custom metadata and predefined keys.
+  // The total size of all keys and values must be less than 512 KB.
+  //
+  // Values are free-form strings, and only have meaning as interpreted by the programs which configure the instance.
+  // The values must be 256 KB or less.
+  //
+  // For example, you may use the metadata in order to provide your public SSH key to the instance.
+  // For more information, see [Metadata](/docs/compute/concepts/vm-metadata).
+  map<string, string> metadata = 8 [(compute.v1.valid) = "metadata", (sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+
+  // Boot disk to attach to the instance.
+  compute.v1.AttachedDiskSpec boot_disk_spec = 9 [(compute.v1.required) = true];
+
+  // Network configuration for the instance. Specifies how the network interface is configured
+  // to interact with other services on the internal network and on the internet.
+  // Currently only one network interface is supported per instance.
+  repeated compute.v1.NetworkInterfaceSpec network_interface_specs = 11 [(size) = "1"];
+
+  // ID of the service account to use for [authentication inside the instance](/docs/compute/operations/vm-connect/auth-inside-vm).
+  // To get the service account ID, use a [yandex.cloud.iam.v1.ServiceAccountService.List] request.
+  string service_account_id = 14;
+}

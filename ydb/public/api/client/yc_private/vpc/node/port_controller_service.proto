@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.node;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
+option java_outer_classname = "PVNPCS";
+
+import "yandex/cloud/priv/vpc/v1/inner/port_state.proto";
+
+// PortControllerService implements interface to allow manipulate with port states.
+service PortControllerService {
+  // Get returns port state for specified port identifier
+  // Debug handler for duty tools
+  rpc Get(PortControllerGetRequest) returns (PortControllerGetResponse);
+
+  // List returns all known port states
+  // Debug handler for duty tools
+  rpc List(PortControllerListRequest) returns (PortControllerListResponse);
+
+  // ReloadAll forces the update of all port states: calls PortStateService.Subscribe for all portStates
+  // Called by slotController when dataplanes are changed.
+  rpc ReloadAll(PortControllerReloadAllRequest)
+      returns (PortControllerReloadAllResponse);
+
+  // ReloadPortState forces the update of the specified port state: calls PortStateService.Subscribe
+  // Debug handler for duty tools
+  rpc ReloadPortState(PortControllerReloadPortStateRequest)
+      returns (PortControllerReloadPortStateResponse);
+
+  // Update sets a new port state. Called by vpc-api on each port config update.
+  rpc Update(PortControllerUpdateRequest)
+      returns (PortControllerUpdateResponse);
+}
+
+message PortControllerListRequest {}
+message PortControllerListResponse {
+  repeated inner.PortState port_states = 1;
+}
+
+message PortControllerGetRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+message PortControllerGetResponse {
+  inner.PortState port_state = 1;
+}
+
+message PortControllerReloadAllRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+message PortControllerReloadAllResponse {
+  repeated inner.PortState port_states = 1;
+}
+
+message PortControllerReloadPortStateRequest {
+  inner.PortIdentifier port_identifier = 1 [ (required) = true ];
+}
+message PortControllerReloadPortStateResponse {
+  inner.PortState port_state = 1;
+}
+
+message PortControllerUpdateRequest {
+  inner.PortState port_state = 1 [ (required) = true ];
+}
+
+enum PortUpdateStatus {
+  PORT_UPDATE_STATUS_UNSPECIFIED = 0;
+  // Final state
+  DONE = 1;
+
+  // Error during update portState in vpc node
+  // Retryable status
+  ERROR = 2;
+
+  // Busy means that port already exist in update state
+  // Retryable status
+  BUSY = 3;
+
+  // Not_Exists means that port already not exists in vpc-node.
+  // This case is possible, as example, when the update task got error, then port can be removed from vpc-node.
+  // Retryable status
+  NOT_EXIST = 4;
+}
+
+message PortControllerUpdateResponse {
+  PortUpdateStatus status = 1 [ (required) = true ];
+}

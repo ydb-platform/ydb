@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.job;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/loadtesting/v1/job/tags/tag.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/job;job";
+option java_outer_classname = "LtV1JobInterface";
+
+message LinkTagsRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  repeated tags.Tag tags = 2;
+  repeated string job_ids = 3;
+}
+
+message LinkTagsResponse {
+}
+
+message UnlinkTagsRequest {
+  string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  repeated tags.Tag tags = 2;
+  repeated string job_ids = 3;
+}
+
+message UnlinkTagsResponse {
+}
+
+message GetDynformPayloadRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetDynformPayloadResponse {
+  string dynform_payload = 1 [(yandex.cloud.priv.required) = true];
+}
+
+message GetMonitoringReportRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+  string host = 2 [(yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetMonitoringHostsRequest {
+  string job_id = 1  [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+}
+
+message GetMonitoringHostsResponse {
+  repeated string hosts = 1;
+}

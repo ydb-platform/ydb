@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option java_outer_classname = "PVA";
+
+message Address {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    INTERNAL = 1;
+    EXTERNAL = 2;
+  }
+
+  enum IpVersion {
+    IP_VERSION_UNSPECIFIED = 0;
+    IPV4 = 1;
+    IPV6 = 2;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  oneof address {
+    option (exactly_one) = true;
+
+    ExternalIpv4Address external_ipv4_address = 7;
+    InternalIpv4Address internal_ipv4_address = 9;
+    Ipv6Address ipv6_address = 8;
+  }
+
+  bool reserved = 15;
+  bool used = 16;
+
+  Type type = 17;
+  IpVersion ip_version = 18;
+  bool deletion_protection = 19;
+
+  repeated DnsRecord dns_records = 20;
+}
+
+message ExternalIpv4Address {
+  string address = 1;
+  string zone_id = 2;
+  string region_id = 3;
+
+  AddressRequirements requirements = 4;
+  // string pool_id = 5;
+}
+
+message Ipv6Address {
+  string address = 1;
+  oneof scope {
+    string subnet_id = 2;
+    // string pool_id = 4;
+  }
+  AddressRequirements requirements = 3;
+}
+
+message InternalIpv4Address {
+  string address = 1;
+  oneof scope {
+    option (exactly_one) = true;
+
+    string subnet_id = 2;
+    // string pool_id = 3;
+  }
+}
+
+message AddressRequirements {
+  string ddos_protection_provider = 1;
+  string outgoing_smtp_capability = 2;
+  repeated string hints = 3;
+}
+
+message DnsRecord {
+  string fqdn = 1;
+  string dns_zone_id = 2;
+  int64 ttl = 3;
+  bool ptr = 4;
+}

@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1;
+
+import "google/protobuf/field_mask.proto";
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/loadtesting/v1/regression/dashboard.proto";
+
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+
+service RegressionDashboardService {
+    rpc Get (GetRegressionDashboardRequest) returns (regression.Dashboard);
+    rpc List (ListRegressionDashboardsRequest) returns (ListRegressionDashboardsResponse);
+
+    rpc Create (CreateRegressionDashboardRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "CreateRegressionDashboardMetadata"
+            response: "regression.Dashboard"
+        };
+    };
+    rpc Update (UpdateRegressionDashboardRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "UpdateRegressionDashboardMetadata"
+            response: "regression.Dashboard"
+        };
+    };
+    rpc Delete (DeleteRegressionDashboardRequest) returns (operation.Operation) {
+        option (yandex.cloud.api.operation) = {
+            metadata: "DeleteRegressionDashboardMetadata"
+            response: "google.protobuf.Empty"
+        };
+    };
+}
+
+message GetRegressionDashboardRequest {
+    string dashboard_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+    google.protobuf.FieldMask get_mask = 2;
+}
+
+message ListRegressionDashboardsRequest {
+    string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+    google.protobuf.FieldMask get_mask = 2;
+}
+
+message ListRegressionDashboardsResponse {
+    repeated regression.Dashboard dashboards = 1;
+}
+
+message CreateRegressionDashboardRequest {
+    string folder_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+    string name = 2 [(yandex.cloud.priv.required) = true];
+    string description = 3;
+    regression.Dashboard.Content content = 4;
+}
+
+message CreateRegressionDashboardMetadata {
+    string dashboard_id = 1;
+}
+
+message UpdateRegressionDashboardRequest {
+    string dashboard_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+    string etag = 2;
+
+    google.protobuf.FieldMask update_mask = 3;
+    string name = 4;
+    string description = 5;
+    regression.Dashboard.Content content = 6;
+}
+
+message UpdateRegressionDashboardMetadata {
+    string dashboard_id = 1;
+}
+
+message DeleteRegressionDashboardRequest {
+    string dashboard_id = 1 [(yandex.cloud.priv.required) = true, (yandex.cloud.priv.length) = "<=50"];
+    string etag = 2;
+}
+
+message DeleteRegressionDashboardMetadata {
+    string dashboard_id = 1;
+}

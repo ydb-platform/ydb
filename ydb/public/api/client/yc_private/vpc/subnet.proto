@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option java_outer_classname = "PS";
+
+message Subnet {
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    DELETING = 3;
+  }
+
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+
+  string network_id = 7;
+
+  string zone_id = 8; // if subnet will be zonal
+  string region_id = 9; // even if subnet will be zonal
+
+  repeated string v4_cidr_blocks = 10;
+  repeated string v6_cidr_blocks = 11;
+
+  Status status = 12;
+
+  bool ip_forwarding = 13;
+  string route_table_id = 14;
+  bool egress_nat_enable = 15;
+
+  DhcpOptions dhcp_options = 16;
+  ExtraParams extra_params = 17;
+}
+
+message DhcpOptions {
+  repeated string domain_name_servers = 1 [(length) = "<=50"];
+  string domain_name = 2;
+  repeated string ntp_servers = 3 [(length) = "<=50"];
+}
+
+// can't use SubnetExtraParams from subnet_service.spec
+message ExtraParams {
+  repeated string import_rts = 1;
+  repeated string export_rts = 2;
+  string next_vdns = 3;
+  bool hbf_enabled = 4;
+  bool rpf_enabled = 5;
+  repeated string feature_flags = 6;
+}
+
+enum IpVersion {
+  IP_VERSION_UNSPECIFIED = 0;
+  IPV4 = 1;
+  IPV6 = 2;
+}

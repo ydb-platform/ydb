@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.comparison;
+
+import "yandex/cloud/priv/loadtesting/v1/common/timestamp_range.proto";
+import "yandex/cloud/priv/loadtesting/v1/comparison/case.proto";
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/comparison;comparison";
+option java_outer_classname = "LtV1Comparison";
+
+message ComparisonInfo {
+    common.TimestampRange entire_time = 1;
+    repeated string all_cases = 2;
+}
+
+message ComparisonCharts {
+    repeated CaseCharts cases = 1;
+}
+
+message ComparisonTables {
+    repeated CaseTables cases = 1;
+}

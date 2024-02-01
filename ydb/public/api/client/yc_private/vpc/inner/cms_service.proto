@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.vpc.v1.inner;
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+
+service CMSService {
+  rpc Acquire(AcquireRequest) returns (AcquireResponse);
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+  rpc ListServiceIds(ListServiceIdsRequest) returns (ListServiceIdsResponse);
+}
+
+message AcquireRequest {
+  // FQDN of acquirer host
+  string owner_fqdn = 1;
+  // Intended for manual conflict resolution only
+  repeated string semaphore_ids = 2;
+}
+
+message AcquireResponse {
+}
+
+message ReleaseRequest {
+  // FQDN of acquirer host
+  string owner_fqdn = 1;
+  // Intended for manual conflict resolution only
+  repeated string semaphore_ids = 2;
+}
+
+message ReleaseResponse {
+}
+
+message ListServiceIdsRequest {
+}
+
+message ListServiceIdsResponse {
+  repeated string service_ids = 1;
+}

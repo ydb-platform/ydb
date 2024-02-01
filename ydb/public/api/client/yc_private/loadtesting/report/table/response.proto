@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.loadtesting.v1.report.table;
+
+import "yandex/cloud/priv/loadtesting/v1/report/table/tables/codes.proto";
+import "yandex/cloud/priv/loadtesting/v1/report/table/tables/quantiles.proto";
+
+
+option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table;table";
+option java_outer_classname = "PRTRES";
+
+message GetReportTablesResponse {
+  string job_id = 1;
+  bool finished = 2;
+
+  tables.Quantiles quantiles = 3;
+  tables.Codes http_codes = 4;
+  tables.Codes net_codes = 5;
+}

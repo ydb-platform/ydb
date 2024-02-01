@@ -7,6 +7,7 @@ RECURSE(
     change_exchange
     client
     cms
+    config
     control
     debug
     debug_tools

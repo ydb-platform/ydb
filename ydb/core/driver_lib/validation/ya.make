@@ -2,8 +2,8 @@ PROGRAM()
 
 PEERDIR(
     contrib/libs/protoc
-    ydb/public/api/protos/annotations
     ydb/public/lib/validation/helpers
+    ydb/core/config/proto_options
 )
 
 SRCS(

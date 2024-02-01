@@ -1,0 +1,8 @@
+import "google/protobuf/descriptor.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+extend google.protobuf.MessageOptions {
+    optional bool ConfigRoot = 81001;
+}

@@ -32,6 +32,7 @@ import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
 import "ydb/library/yql/providers/common/proto/gateways_config.proto";
+import "ydb/core/config/proto_options/marker.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1689,6 +1690,7 @@ message TLabel {
 }
 
 message TAppConfig {
+    option (ConfigRoot) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;
     optional TStaticNameserviceConfig NameserviceConfig = 3;

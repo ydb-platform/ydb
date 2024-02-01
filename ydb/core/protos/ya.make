@@ -158,7 +158,10 @@ PEERDIR(
     ydb/library/yql/public/types
     ydb/library/services
     ydb/library/ydb_issue/proto
+    ydb/core/config/proto_options
 )
+
+CPP_PROTO_PLUGIN0(validation ydb/core/driver_lib/validation)
 
 EXCLUDE_TAGS(GO_PROTO)
 

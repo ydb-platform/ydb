@@ -40,6 +40,13 @@ TString ClassName(const google::protobuf::Descriptor* message) {
     return className;
 }
 
+TString FullyQualifiedClassName(const google::protobuf::Descriptor* message) {
+    TString className = message->full_name();
+    SubstGlobal(className, ".", "::");
+    className.insert(0, "::");
+    return className;
+}
+
 bool IsCustomMessage(const google::protobuf::Descriptor* message) {
     if (!message) {
         return false;

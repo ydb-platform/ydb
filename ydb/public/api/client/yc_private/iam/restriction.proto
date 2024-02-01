@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package yandex.cloud.priv.iam;
+package yandex.cloud.priv.iam.v1;
 
 import "google/protobuf/timestamp.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";

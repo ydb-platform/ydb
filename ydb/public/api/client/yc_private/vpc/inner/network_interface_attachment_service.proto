@@ -4,7 +4,7 @@ package yandex.cloud.priv.vpc.v1.inner;
 
 import "google/protobuf/empty.proto";
 
-import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_private/vpc/v1/inner/common.proto";
 import "ydb/public/api/client/yc_private/billing/v1/light_metric.proto";
 import "ydb/public/api/client/yc_private/compute/v1/instance.proto";

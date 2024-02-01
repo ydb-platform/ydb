@@ -741,22 +741,6 @@ protected:
         return true;
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
-        CA_LOG_D("Save state");
-        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
-        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-        data.SetBlob(TaskRunner->Save());
-
-        for (auto& [inputIndex, source] : SourcesMap) {
-            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
-            source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
-        }
-    }
-
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         CA_LOG_D("Commit state");
         for (auto& [inputIndex, source] : SourcesMap) {
@@ -810,15 +794,7 @@ protected:
         }
     }
 
-    virtual void DoLoadRunnerState(TString&& blob) {
-        TMaybe<TString> error = Nothing();
-        try {
-            TaskRunner->Load(blob);
-        } catch (const std::exception& e) {
-            error = e.what();
-        }
-        Checkpoints->AfterStateLoading(error);
-    }
+    virtual void DoLoadRunnerState(TString&& blob) = 0;
 
     void LoadState(NDqProto::TComputeActorState&& state) override {
         CA_LOG_D("Load state");

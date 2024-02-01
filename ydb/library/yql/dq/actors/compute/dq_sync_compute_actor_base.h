@@ -44,6 +44,32 @@ public:
         return inputTransformInfo.Buffer.Get();
     }
 protected:
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
+        CA_LOG_D("Save state");
+        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
+        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
+        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
+        data.SetBlob(this->TaskRunner->Save());
+
+        for (auto& [inputIndex, source] : this->SourcesMap) {
+            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
+            NDqProto::TSourceState& sourceState = *state.AddSources();
+            source.AsyncInput->SaveState(checkpoint, sourceState);
+            sourceState.SetInputIndex(inputIndex);
+        }
+    }
+
+    void DoLoadRunnerState(TString&& blob) override {
+        TMaybe<TString> error = Nothing();
+        try {
+            this->TaskRunner->Load(blob);
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        this->Checkpoints->AfterStateLoading(error);
+    }
+
     void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
         this->TaskRunner = taskRunner;
     }

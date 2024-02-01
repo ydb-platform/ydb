@@ -1171,9 +1171,9 @@
     ],
     "test.test[join-mergejoin_force_align2-off-Analyze]": [
         {
-            "checksum": "6eaf3fd7dd5adc9ca33ba2f64a1989d0",
-            "size": 19637,
-            "uri": "https://{canondata_backend}/1942415/7d9fcad11ea234fc47a782f53c1a4f380c99e5df/resource.tar.gz#test.test_join-mergejoin_force_align2-off-Analyze_/plan.txt"
+            "checksum": "598dd82035e92b664abbd12fccbd5b12",
+            "size": 20033,
+            "uri": "https://{canondata_backend}/1903885/49cf3745e9db8d8a1887752705c18b066cdcb225/resource.tar.gz#test.test_join-mergejoin_force_align2-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-mergejoin_force_align2-off-Analyze_/extracted"

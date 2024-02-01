@@ -12,7 +12,7 @@ import "ydb/public/api/client/yc_private/vpc/subnet.proto";
 import "ydb/public/api/client/yc_private/vpc/security_group.proto";
 import "ydb/public/api/client/yc_private/vpc/route_table.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
-import "ydb/public/api/client/yc_private/reference/reference.proto";
+import "ydb/public/api/client/yc_private/iam/reference.proto";
 
 option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
 option java_outer_classname = "PES";

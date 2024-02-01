@@ -1,10 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/arrow.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(Splitter) {
@@ -23,7 +22,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults()));
+            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TArrowSerializer>());
         }
 
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {
@@ -36,7 +35,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NKikimr::NOlap::TColumnLoader GetColumnLoader(const ui32 columnId) const {
             arrow::FieldVector v = {std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>())};
             auto schema = std::make_shared<arrow::Schema>(v);
-            return NKikimr::NOlap::TColumnLoader(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataDeserializer>(), schema, columnId);
+            return NKikimr::NOlap::TColumnLoader(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TArrowSerializer>(), schema, columnId);
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
@@ -72,7 +71,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
         void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
             NKikimr::NColumnShard::TIndexationCounters counters("test");
-            NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
+            NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings().SetMaxPortionSize(4000000));
             std::vector<std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>>> chunksForBlob;
             std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
             std::vector<i64> blobsSize;

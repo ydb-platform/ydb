@@ -34,7 +34,7 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
     } else if (columnInfo.HasCompression()) {
         AFL_VERIFY(result.Serializer.DeserializeFromProto(columnInfo.GetCompression()));
     } else {
-        result.Serializer = NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TArrowSerializer>());
+        result.Serializer = std::make_shared<NArrow::NSerialization::TArrowSerializer>();
     }
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());

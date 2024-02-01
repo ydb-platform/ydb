@@ -46,7 +46,7 @@ private:
     NArrow::NSerialization::TSerializerContainer Serializer;
 public:
     TColumnSaver() = default;
-    TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer& serializer)
+    TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer serializer)
         : Transformer(transformer)
         , Serializer(serializer) {
         Y_ABORT_UNLESS(Serializer);

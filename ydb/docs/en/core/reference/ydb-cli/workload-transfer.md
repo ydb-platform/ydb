@@ -76,12 +76,12 @@ Parameter name | Parameter Description | Default value
 `--consumer-threads`, `-t` | Number of consumer threads | `1`
 `--consumers`, `-c` | Number of consumers | `1`
 `--message-size`, `-m` | Message size in bytes. It is possible to specify in KB, MB, GB by adding suffixes `K`, `M`, `G` respectively | `10240`
-`--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` | `0` parameter
-`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the --message-rate parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
+`--message-rate` | Target total write speed. In messages per second. Excludes the use of the `--byte-rate` parameter | `0`
+`--byte-rate` | Target total write speed. In bytes per second. Excludes the use of the `--message-rate` parameter. It is possible to specify in KB/s, MB/s, GB/s by adding suffixes `K`, `M`, `G` respectively | `0`
 `--commit-period` | The period between `COMMIT` calls. In seconds | `10`
 `--commit-messages` | The period between `COMMIT` calls. Number of messages | `1000000`
-`--only-topic-in-tx` | Only topic partitions are forced to participate in transactions | `0`
-`--only-table-in-tx` | Only table shards are forced to participate in transactions | `0`
+`--only-topic-in-tx` | Only topic partitions are forced to participate in transactions Excludes the use of the `--only-table-in-tx` parameter | `0`
+`--only-table-in-tx` | Only table shards are forced to participate in transactions. Excludes the use of the `--only-topic-in-tx` parameter | `0`
 
 For example, the command `{{ ydb-cli }} --profile quickstart workload transfer topic-to-table run` will run a test lasting 60 seconds. The data for the first 5 seconds will not be taken into account in the work statistics. Example of console output:
 

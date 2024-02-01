@@ -44,6 +44,7 @@
   - curses.h
   - dispatch/dispatch.h
   - editline/readline.h
+  - Files.h
   - ffi/ffi.h
   - form.h
   - gssapi.h
@@ -133,6 +134,7 @@
   - simd/simd.h
   - strhash.h
   - sys/_types.h
+  - sys/_types/_mbstate_t.h
   - sys/acl.h
   - sys/aio.h
   - sys/attr.h
@@ -173,7 +175,11 @@
   - xpc/xpc.h
 
   # OSX frameworks
+  - AEObjects.h
+  - AEPackObject.h
+  - AERegistry.h
   - Accelerate/Accelerate.h
+  - AppleEvents.h
   - AppKit/AppKit.h
   - AppKit/NSView.h
   - ApplicationServices/ApplicationServices.h
@@ -204,12 +210,15 @@
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
   - DeviceCheck/DCAppAttestService.h
+  - Files.h
   - Foundation/Foundation.h
   - Foundation/NSException.h
   - Foundation/NSString.h
   - Foundation/NSKeyValueObserving.h
   - Foundation/NSObject.h
+  - Gestalt.h
   - GLKit/GLKit.h
+  - ImageCompression.h
   - IOKit/IOBSD.h
   - IOKit/IOKitLib.h
   - IOKit/kext/KextManager.h
@@ -230,10 +239,15 @@
   - OpenGLES/ES2/glext.h
   - OpenGLES/ES3/gl.h
   - OpenGLES/ES3/glext.h
+  - Palettes.h
+  - PictUtils.h
+  - Processes.h
   - Speech/Speech.h
+  - QDOffscreen.h
   - QuartzCore/QuartzCore.h
   - QuartzCore/CAEAGLLayer.h
   - QuartzCore/CAMetalLayer.h
+  - QuickDraw.h
   - Security/SecCertificate.h
   - Security/SecItem.h
   - Security/SecImportExport.h
@@ -244,6 +258,8 @@
   - Security/Security.h
   - SystemConfiguration/SystemConfiguration.h
   - SystemConfiguration/SCDynamicStoreCopySpecific.h
+  - TextUtils.h
+  - Types.h
   - UIKit/UIImage.h
   - UIKit/UIKit.h
   - UIKit/UIScreen.h

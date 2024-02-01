@@ -70,13 +70,13 @@ void FillDelete(const TKeyPrefix& key, NKikimrClient::TKeyValueRequest::TCmdDele
     range.SetIncludeTo(true);
 }
 
-void FillDelete(ui32 partition, const TString& sourceId, TKeyPrefix::EMark mark, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
+void FillDelete(const TPartitionId& partition, const TString& sourceId, TKeyPrefix::EMark mark, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, mark);
     key.Append(sourceId.c_str(), sourceId.size());
     FillDelete(key, cmd);
 }
 
-void FillDelete(ui32 partition, const TString& sourceId, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
+void FillDelete(const TPartitionId& partition, const TString& sourceId, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
     FillDelete(partition, sourceId, TKeyPrefix::MarkProtoSourceId, cmd);
 }
 
@@ -263,7 +263,7 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
     }
 }
 
-bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, ui32 partition, const NKikimrPQ::TPartitionConfig& config) {
+bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, const TPartitionId& partition, const NKikimrPQ::TPartitionConfig& config) {
     TVector<std::pair<ui64, TString>> toDelOffsets;
 
     ui64 maxDeleteSourceIds = 0;
@@ -478,7 +478,7 @@ TKeyPrefix::EMark TSourceIdWriter::FormatToMark(ESourceIdFormat format) {
     }
 }
 
-void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, ui32 partition) {
+void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition) {
     TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(Format));
     TBuffer data;
 

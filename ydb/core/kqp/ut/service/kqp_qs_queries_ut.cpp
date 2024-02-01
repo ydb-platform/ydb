@@ -765,6 +765,29 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(result.GetResultSets().empty());
         };
 
+        auto checkAddRow = [&](const TString& objPath) {
+            const size_t inserted_rows = 5;
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(objPath)
+                .SetPrimaryKey({"Key"})
+                .SetSharding({"Key"})
+                .SetSchema(schema);
+            {
+                TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+                for (size_t i = 0; i < inserted_rows; i++) {
+                    tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i));
+                }
+                testHelper.BulkUpsert(testTable, tableInserter);
+            }
+
+            Sleep(TDuration::Seconds(100));
+
+            auto sql = TStringBuilder() << R"(
+                SELECT Value FROM `)" << objPath << R"(` WHERE Key=1)";
+
+            testHelper.ReadData(sql, "[[[\"test_res_1\"]]]");
+        };
+
         checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
@@ -784,6 +807,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkCreate(true, EEx::Empty, "/Root/ColumnTable", false);
         checkCreate(false, EEx::Empty, "/Root/ColumnTable", false);
         checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
+        checkAddRow("/Root/ColumnTable");
         checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
         checkDrop(false, EEx::Empty, "/Root/ColumnTable", false);
         checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);

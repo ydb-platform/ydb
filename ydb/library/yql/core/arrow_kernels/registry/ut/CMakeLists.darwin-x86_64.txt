@@ -24,7 +24,7 @@ target_link_libraries(ydb-library-yql-core-arrow_kernels-registry-ut PUBLIC
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   url_udf
   json2_udf
 )
@@ -32,8 +32,6 @@ target_link_options(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry/ut/registry_ut.cpp
@@ -63,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

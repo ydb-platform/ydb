@@ -82,9 +82,6 @@ target_link_options(string_udf.dyn PRIVATE
   -Wl,-z,notext
   -Wl,-Bsymbolic
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(string_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/string/string_udf.cpp

@@ -29,6 +29,9 @@ target_link_libraries(library-rewrapper-proto PUBLIC
 target_proto_messages(library-rewrapper-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/rewrapper/proto/serialization.proto
 )
+target_sources(library-rewrapper-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/rewrapper/proto/serialization.pb.h
+)
 target_proto_addincls(library-rewrapper-proto
   ./
   ${CMAKE_SOURCE_DIR}/

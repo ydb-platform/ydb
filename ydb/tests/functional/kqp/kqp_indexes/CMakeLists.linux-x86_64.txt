@@ -24,9 +24,6 @@ target_link_options(ydb-tests-functional-kqp-kqp_indexes PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-tests-functional-kqp-kqp_indexes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/tests/functional/kqp/kqp_indexes/main.cpp
@@ -56,6 +53,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

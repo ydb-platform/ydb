@@ -23,8 +23,6 @@ target_link_options(ydb-library-persqueue-topic_parser-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-persqueue-topic_parser-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
@@ -54,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

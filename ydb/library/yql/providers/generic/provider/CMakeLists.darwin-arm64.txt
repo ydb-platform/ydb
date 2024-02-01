@@ -25,7 +25,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   yql-core-type_ann
   yql-dq-expr_nodes
   yql-dq-integration
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   providers-common-config
   providers-common-db_id_async_resolver
   providers-common-dq
@@ -43,6 +43,10 @@ target_link_libraries(providers-generic-provider PUBLIC
   yql-utils-plan
 )
 target_sources(providers-generic-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_state.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink_execution.cpp

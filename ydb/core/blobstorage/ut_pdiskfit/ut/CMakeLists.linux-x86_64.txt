@@ -23,9 +23,6 @@ target_link_options(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/ut/main.cpp
@@ -55,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   LARGE
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -22,9 +22,6 @@ target_link_options(ydb-library-actors-core-ut_fat PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-actors-core-ut_fat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/core/ut_fat/actor_benchmark.cpp
@@ -54,6 +51,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   LARGE
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -26,6 +26,14 @@ target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
   dq-actors-yt
   providers-dq-actors
   dq-actors-compute
+  minikql-computation-llvm14
+  minikql-comp_nodes-llvm14
+  dq-integration-transform
+  yql-dq-comp_nodes
+  providers-common-comp_nodes
+  yql-minikql-comp_nodes
+  yql-dq-transform
+  providers-dq-task_runner
 )
 target_link_options(yql-providers-dq-global_worker_manager-ut PRIVATE
   -ldl
@@ -33,10 +41,6 @@ target_link_options(yql-providers-dq-global_worker_manager-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
-  -lutil
 )
 target_sources(yql-providers-dq-global_worker_manager-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/global_worker_manager_ut.cpp
@@ -67,6 +71,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

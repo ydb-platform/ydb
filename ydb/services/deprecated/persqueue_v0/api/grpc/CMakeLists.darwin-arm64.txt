@@ -40,6 +40,10 @@ target_link_libraries(api-grpc-persqueue-deprecated PUBLIC
 target_proto_messages(api-grpc-persqueue-deprecated PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.proto
 )
+target_sources(api-grpc-persqueue-deprecated PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.pb.h
+  ${CMAKE_BINARY_DIR}/ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h
+)
 target_proto_addincls(api-grpc-persqueue-deprecated
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -24,9 +24,6 @@ target_link_options(pdiskfit PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(pdiskfit PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp

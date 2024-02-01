@@ -38,6 +38,35 @@ target_link_libraries(library-actors-interconnect PUBLIC
   library-cpp-packedtypes
 )
 target_sources(library-actors-interconnect PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/channel_scheduler.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/event_filter.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/event_holder_pool.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/events_local.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_address.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_channel.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_common.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_handshake.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_impl.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_mon.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_proxy_wrapper.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_proxy.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_server.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_session.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/load.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/logging.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/packet.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_select.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/profiler.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/slowpoke_actor.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/types.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/watchdog_timer.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_epoll.h
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_address.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_channel.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_counters.cpp

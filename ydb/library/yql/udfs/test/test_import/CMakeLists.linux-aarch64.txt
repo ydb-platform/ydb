@@ -32,9 +32,6 @@ target_link_options(test_import_udf.dyn PRIVATE
   -Wl,-z,notext
   -Wl,-Bsymbolic
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(test_import_udf.dyn PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/test/test_import/test_import_udf.cpp

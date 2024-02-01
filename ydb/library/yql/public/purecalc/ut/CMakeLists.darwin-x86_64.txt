@@ -26,10 +26,10 @@ target_link_options(ydb-library-yql-public-purecalc-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_sexpr.cpp
@@ -64,6 +64,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

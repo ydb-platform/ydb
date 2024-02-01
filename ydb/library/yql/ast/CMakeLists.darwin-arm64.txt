@@ -30,6 +30,16 @@ target_link_libraries(library-yql-ast PUBLIC
   api-protos
 )
 target_sources(library-yql-ast PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_escaping.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_errors.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_types.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_gc_nodes.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_constraint.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_annotation.cpp

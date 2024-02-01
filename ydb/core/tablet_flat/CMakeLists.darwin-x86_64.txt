@@ -80,6 +80,30 @@ target_proto_messages(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.proto
 )
 target_sources(ydb-core-tablet_flat PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/flat_executor.pb.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_cxx_database.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_database.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_bootlogic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_borrowlogic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_compaction_logic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_counters.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_tx_env.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_txloglogic.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_iterator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_part.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_stat_table.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_update_op.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_memtable.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.h
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_lease.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_misc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp.cpp

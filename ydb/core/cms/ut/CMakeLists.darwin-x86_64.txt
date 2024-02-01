@@ -28,10 +28,9 @@ target_link_options(ydb-core-cms-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-cms-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut_common.h
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tenants_ut.cpp
@@ -64,6 +63,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

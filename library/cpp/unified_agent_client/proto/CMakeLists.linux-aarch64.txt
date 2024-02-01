@@ -46,6 +46,10 @@ target_link_libraries(cpp-unified_agent_client-proto PUBLIC
 target_proto_messages(cpp-unified_agent_client-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/unified_agent_client/proto/unified_agent.proto
 )
+target_sources(cpp-unified_agent_client-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
+  ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h
+)
 generate_enum_serilization(cpp-unified_agent_client-proto
   ${CMAKE_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
   INCLUDE_HEADERS

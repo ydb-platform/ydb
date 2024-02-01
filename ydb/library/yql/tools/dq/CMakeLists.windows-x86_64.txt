@@ -7,3 +7,4 @@
 
 
 add_subdirectory(dq_cli)
+add_subdirectory(worker_job)

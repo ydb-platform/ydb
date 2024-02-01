@@ -17,5 +17,4 @@ target_link_libraries(restricted-boost-container_hash INTERFACE
   restricted-boost-config
   restricted-boost-describe
   restricted-boost-mp11
-  restricted-boost-type_traits
 )

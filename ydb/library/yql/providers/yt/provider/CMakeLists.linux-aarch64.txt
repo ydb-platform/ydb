@@ -74,6 +74,8 @@ target_link_libraries(providers-yt-provider PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(providers-yt-provider PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider.h
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_constraints.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_exec.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/provider/yql_yt_datasink_finalize.cpp

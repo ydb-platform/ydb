@@ -28,6 +28,12 @@ target_link_libraries(cpp-http-fetch PUBLIC
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(cpp-http-fetch PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpagent.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpfetcher.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpparser.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpzreader.h
+  ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/sockhandler.h
   ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/http_digest.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/http_socket.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/http/fetch/httpheader.cpp

@@ -8,9 +8,6 @@
 
 
 add_executable(ydb-library-yql-sql-pg-ut)
-target_compile_options(ydb-library-yql-sql-pg-ut PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
 target_include_directories(ydb-library-yql-sql-pg-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
@@ -33,9 +30,6 @@ target_link_options(ydb-library-yql-sql-pg-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-yql-sql-pg-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql_ut.cpp
@@ -68,6 +62,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -23,7 +23,7 @@ target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   yql-parser-pg_catalog
   yql-public-udf
   udf-service-exception_policy
-  minikql-comp_nodes-llvm
+  minikql-comp_nodes-llvm14
   yql-parser-pg_wrapper
 )
 target_sources(ydb-library-yql-parser-pg_catalog-ut PRIVATE
@@ -55,6 +55,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

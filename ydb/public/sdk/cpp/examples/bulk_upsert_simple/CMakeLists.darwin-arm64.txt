@@ -18,8 +18,6 @@ target_link_options(bulk_upsert_simple PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(bulk_upsert_simple PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/bulk_upsert_simple/main.cpp

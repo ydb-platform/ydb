@@ -23,9 +23,6 @@ target_link_options(ydb-core-ymq-http-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-ymq-http-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/http/ut/xml_builder_ut.cpp
@@ -55,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -135,6 +135,24 @@ target_proto_messages(contrib-libs-opentelemetry-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto
 )
+target_sources(contrib-libs-opentelemetry-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/common/v1/common.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.grpc.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h
+  ${CMAKE_BINARY_DIR}/contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.grpc.pb.h
+)
 target_proto_addincls(contrib-libs-opentelemetry-proto
   ./contrib/libs/opentelemetry-proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/opentelemetry-proto

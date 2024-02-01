@@ -23,9 +23,6 @@ target_link_options(pq_read PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(pq_read PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/tests/tools/pq_read/main.cpp

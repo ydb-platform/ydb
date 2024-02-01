@@ -18,6 +18,22 @@ target_link_libraries(ydb-core-blob_depot PUBLIC
   ydb-core-protos
 )
 target_sources(ydb-core-blob_depot PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/defs.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/types.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/events.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/schema.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot_tablet.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/coro_tx.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_resolve.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/mon_main.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.h
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/testing.h
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp

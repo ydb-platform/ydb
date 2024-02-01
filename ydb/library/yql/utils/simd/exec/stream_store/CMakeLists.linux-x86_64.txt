@@ -21,9 +21,6 @@ target_link_options(stream_store PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(stream_store PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/simd/exec/stream_store/main.cpp

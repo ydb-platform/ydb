@@ -32,9 +32,6 @@ target_link_options(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-core-blobstorage-ut_mirror3of4 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_mirror3of4/main.cpp
@@ -64,6 +61,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

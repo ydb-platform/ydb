@@ -38,8 +38,6 @@ target_link_options(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -framework
-  CoreFoundation
 )
 target_sources(ydb-core-tx-datashard-ut_change_exchange PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_change_exchange.cpp
@@ -69,6 +67,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   MEDIUM
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

@@ -21,7 +21,7 @@ target_link_libraries(providers-yt-job PUBLIC
   cpp-yson-node
   cpp-mapreduce-interface
   mapreduce-library-user_job_statistics
-  minikql-comp_nodes-llvm
+  yql-minikql-comp_nodes
   yql-public-udf
   library-yql-utils
   yql-utils-backtrace
@@ -38,6 +38,7 @@ target_link_libraries(providers-yt-job PUBLIC
   yt-lib-mkql_helpers
 )
 target_sources(providers-yt-job PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/job/yql_job_registry.h
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/job/yql_job_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/job/yql_job_calc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/job/yql_job_factory.cpp

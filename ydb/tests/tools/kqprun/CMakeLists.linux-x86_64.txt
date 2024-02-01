@@ -29,9 +29,6 @@ target_link_options(kqprun PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(kqprun PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/tests/tools/kqprun/kqprun.cpp

@@ -23,9 +23,6 @@ target_link_options(ydb-library-yaml_config-static_validator-ut PRIVATE
   -Wl,--no-as-needed
   -fPIC
   -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 target_sources(ydb-library-yaml_config-static_validator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/test.cpp
@@ -55,6 +52,7 @@ set_yunittest_property(
   PROPERTY
   LABELS
   SMALL
+  $FILTER_ONLY_TEST_TAGS
 )
 set_yunittest_property(
   TEST

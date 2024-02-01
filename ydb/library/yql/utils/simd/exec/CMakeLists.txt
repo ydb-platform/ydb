@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(add_columns)
 add_subdirectory(pack_tuple)
 add_subdirectory(stream_store)
 add_subdirectory(tuples_to_bucket)

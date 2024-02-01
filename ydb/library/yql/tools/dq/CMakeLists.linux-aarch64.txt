@@ -8,4 +8,5 @@
 
 add_subdirectory(dq_cli)
 add_subdirectory(service_node)
+add_subdirectory(worker_job)
 add_subdirectory(worker_node)

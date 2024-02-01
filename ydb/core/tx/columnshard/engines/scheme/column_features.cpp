@@ -1,6 +1,6 @@
 #include "column_features.h"
 #include "index_info.h"
-#include <ydb/core/formats/arrow/serializer/arrow.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap {
@@ -34,7 +34,7 @@ std::optional<NKikimr::NOlap::TColumnFeatures> TColumnFeatures::BuildFromProto(c
     } else if (columnInfo.HasCompression()) {
         AFL_VERIFY(result.Serializer.DeserializeFromProto(columnInfo.GetCompression()));
     } else {
-        result.Serializer = std::make_shared<NArrow::NSerialization::TArrowSerializer>();
+        result.Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
     }
     if (columnInfo.HasDictionaryEncoding()) {
         auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
@@ -53,7 +53,7 @@ NKikimr::NOlap::TColumnFeatures TColumnFeatures::BuildFromIndexInfo(const ui32 c
 
 TColumnFeatures::TColumnFeatures(const ui32 columnId)
     : ColumnId(columnId)
-    , Serializer(std::make_shared<NArrow::NSerialization::TArrowSerializer>())
+    , Serializer(NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer())
 {
 
 }

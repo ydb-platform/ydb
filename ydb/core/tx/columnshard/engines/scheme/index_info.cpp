@@ -3,7 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/sort_cursor.h>
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/formats/arrow/serializer/arrow.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/base/appdata.h>
 
@@ -311,7 +311,7 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     } else if (DefaultSerializer) {
         return TColumnSaver(transformer, DefaultSerializer);
     } else {
-        return TColumnSaver(transformer, NArrow::NSerialization::TSerializerContainer(std::make_shared<NArrow::NSerialization::TArrowSerializer>()));
+        return TColumnSaver(transformer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     }
 }
 

@@ -902,13 +902,17 @@ namespace NKikimr::NYaml {
         // Patch disk types
         if (json.Has("host_configs")) {
             for(auto& hostConfig : json["host_configs"].GetArraySafe()) {
+                int sectorMapIndex = 0;
                 for(auto& drive : hostConfig["drive"].GetArraySafe()) {
                     if (!drive.Has("type")) {
                         drive["type"] = "SSD";
                     }
                     if (GetStringSafe(drive, "type") == "RAM") {
+                        ++sectorMapIndex;
+                        TStringStream path;
+                        path << "SectorMap:" << sectorMapIndex << ":64";
+                        drive["path"] = path.Str();
                         drive["type"] = "SSD";
-                        drive["path"] = "SectorMap:1:64";
                     }
                 }
             }

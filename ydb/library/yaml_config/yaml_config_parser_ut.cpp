@@ -23,6 +23,7 @@ hosts:
   port: 19003
   drive:
     - type: RAM
+    - type: RAM
 domains_config:
   domain:
   - name: Root
@@ -55,6 +56,7 @@ domains_config:
         }
         UNIT_ASSERT_VALUES_EQUAL(transformedCfg["host_configs"][2]["drive"][0]["type"], "SSD");
         UNIT_ASSERT_VALUES_EQUAL(transformedCfg["host_configs"][2]["drive"][0]["path"], "SectorMap:1:64");
+        UNIT_ASSERT_VALUES_EQUAL(transformedCfg["host_configs"][2]["drive"][1]["path"], "SectorMap:2:64");
     }
 
     Y_UNIT_TEST(SingleNodeCase) {

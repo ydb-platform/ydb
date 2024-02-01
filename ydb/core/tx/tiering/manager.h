@@ -15,7 +15,8 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
-NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compression);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
 
 class TManager {
 private:

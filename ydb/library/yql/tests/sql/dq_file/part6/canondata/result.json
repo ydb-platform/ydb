@@ -1178,9 +1178,9 @@
     "test.test[insert-trivial_select-default.txt-Results]": [],
     "test.test[join-anyjoin_common_nodata_keys-off-Analyze]": [
         {
-            "checksum": "87fa77cf9f8a3e5c1f68d91878ea2b59",
-            "size": 15451,
-            "uri": "https://{canondata_backend}/1942671/4db54c8ba9dedccdc8391210d1657c5ca4bd34ec/resource.tar.gz#test.test_join-anyjoin_common_nodata_keys-off-Analyze_/plan.txt"
+            "checksum": "db24769a8f98b92b567d5aad8e54f031",
+            "size": 15847,
+            "uri": "https://{canondata_backend}/1923547/3837386c5673f42d0a262b53fa145c1210e06267/resource.tar.gz#test.test_join-anyjoin_common_nodata_keys-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-anyjoin_common_nodata_keys-off-Analyze_/extracted"
@@ -1472,9 +1472,9 @@
     ],
     "test.test[join-mapjoin_with_anonymous-off-Analyze]": [
         {
-            "checksum": "038488877f3200608d43ca5695df05d6",
-            "size": 9497,
-            "uri": "https://{canondata_backend}/1942671/4db54c8ba9dedccdc8391210d1657c5ca4bd34ec/resource.tar.gz#test.test_join-mapjoin_with_anonymous-off-Analyze_/plan.txt"
+            "checksum": "dd633d7842e53dcf043bef144795f5b4",
+            "size": 9695,
+            "uri": "https://{canondata_backend}/1923547/3837386c5673f42d0a262b53fa145c1210e06267/resource.tar.gz#test.test_join-mapjoin_with_anonymous-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-mapjoin_with_anonymous-off-Analyze_/extracted"
@@ -1581,9 +1581,9 @@
     ],
     "test.test[join-yql-8125-off-Analyze]": [
         {
-            "checksum": "24ec2eaf4f5ba4bf2babb82b6a1946d5",
-            "size": 18431,
-            "uri": "https://{canondata_backend}/1942671/4db54c8ba9dedccdc8391210d1657c5ca4bd34ec/resource.tar.gz#test.test_join-yql-8125-off-Analyze_/plan.txt"
+            "checksum": "df6c63c8d03c9e8dad23aac777f21e74",
+            "size": 18827,
+            "uri": "https://{canondata_backend}/1923547/3837386c5673f42d0a262b53fa145c1210e06267/resource.tar.gz#test.test_join-yql-8125-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-yql-8125-off-Analyze_/extracted"

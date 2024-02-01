@@ -127,7 +127,8 @@ void MkqlAllocSetFree(MemoryContext context, void* pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
         header->U.Entry.Unlink();
-        MKQLFreeWithSize(header, header->Size, EMemorySubPool::Default);
+        auto fullSize = header->Size + sizeof(TMkqlPAllocHeader);
+        MKQLFreeWithSize(header, fullSize, EMemorySubPool::Default);
     }
 }
 

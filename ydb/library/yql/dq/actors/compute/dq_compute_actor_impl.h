@@ -186,7 +186,7 @@ protected:
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
                     NKikimr::TAlignedPagePoolCounters(),
-                    FunctionRegistry->SupportsSizedAllocators(),
+                    true,
                     false
         );
         InitMonCounters(taskCounters);
@@ -477,7 +477,7 @@ protected:
         }
 
         {
-            auto guard = MaybeBindAllocator(); // Source/Sink could destroy mkql values inside PassAway, which requires allocator to be bound
+            auto guard = BindAllocator(); // Source/Sink could destroy mkql values inside PassAway, which requires allocator to be bound
 
             for (auto& [_, source] : SourcesMap) {
                 if (source.Actor) {
@@ -741,22 +741,6 @@ protected:
         return true;
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
-        CA_LOG_D("Save state");
-        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
-        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-        data.SetBlob(TaskRunner->Save());
-
-        for (auto& [inputIndex, source] : SourcesMap) {
-            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
-            source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
-        }
-    }
-
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         CA_LOG_D("Commit state");
         for (auto& [inputIndex, source] : SourcesMap) {
@@ -810,15 +794,7 @@ protected:
         }
     }
 
-    virtual void DoLoadRunnerState(TString&& blob) {
-        TMaybe<TString> error = Nothing();
-        try {
-            TaskRunner->Load(blob);
-        } catch (const std::exception& e) {
-            error = e.what();
-        }
-        Checkpoints->AfterStateLoading(error);
-    }
+    virtual void DoLoadRunnerState(TString&& blob) = 0;
 
     void LoadState(NDqProto::TComputeActorState&& state) override {
         CA_LOG_D("Load state");
@@ -1087,12 +1063,8 @@ protected:
         TerminateSources(TIssues({TIssue(message)}), success);
     }
 
-    virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
-        return TaskRunner->BindAllocator();
-    }
-
-    virtual std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() {
-        return TaskRunner->BindAllocator();
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
+        return Guard(GetAllocator());
     }
 
     virtual bool SayHelloOnBootstrap() {
@@ -1503,7 +1475,7 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .TaskCounters = TaskCounters,
-                        .Alloc = TaskRunner ? Alloc : nullptr,
+                        .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),

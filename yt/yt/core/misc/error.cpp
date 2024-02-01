@@ -1022,11 +1022,6 @@ bool operator == (const TError& lhs, const TError& rhs)
         lhs.InnerErrors() == rhs.InnerErrors();
 }
 
-bool operator != (const TError& lhs, const TError& rhs)
-{
-    return !(lhs == rhs);
-}
-
 void FormatValue(TStringBuilderBase* builder, const TError& error, TStringBuf /*spec*/)
 {
     AppendError(builder, error, 0);

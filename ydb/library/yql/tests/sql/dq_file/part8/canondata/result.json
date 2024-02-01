@@ -1166,9 +1166,9 @@
     ],
     "test.test[hor_join-group_yamr--Analyze]": [
         {
-            "checksum": "5a8462847a255e575d57e602e1a5ea85",
-            "size": 8241,
-            "uri": "https://{canondata_backend}/1946324/c7905148ccc6742256ee4a209186276ffdcd07ac/resource.tar.gz#test.test_hor_join-group_yamr--Analyze_/plan.txt"
+            "checksum": "b10750492842583f8ee735faec32b1ef",
+            "size": 8637,
+            "uri": "https://{canondata_backend}/1946324/4bc0ddf4ca6b7e4f4e1de76060425e0c30bc65fb/resource.tar.gz#test.test_hor_join-group_yamr--Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_hor_join-group_yamr--Analyze_/extracted"

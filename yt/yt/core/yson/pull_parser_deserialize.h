@@ -4,7 +4,7 @@
 
 #include "pull_parser.h"
 
-#include <library/cpp/yt/misc/enum_indexed_array.h>
+#include <library/cpp/yt/containers/enum_indexed_array.h>
 
 namespace NYT::NYson {
 

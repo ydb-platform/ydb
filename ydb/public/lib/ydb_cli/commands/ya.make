@@ -69,6 +69,7 @@ RESOURCE(
     click_bench_queries.sql click_bench_queries.sql
     click_bench_schema.sql click_bench_schema.sql
     tpch_schema.sql tpch_schema.sql
+    tpch_queries.sql tpch_queries.sql
     click_bench_canonical/q0.result q0.result
     click_bench_canonical/q1.result q1.result
     click_bench_canonical/q2.result q2.result

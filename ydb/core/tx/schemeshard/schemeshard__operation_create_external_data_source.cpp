@@ -298,10 +298,50 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateExternalDataSource>(id, tx);
-}
+TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
+                                                         const TTxTransaction& tx,
+                                                         TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
 
+    LOG_I("CreateNewExternalDataSource, opId " << id << ", feature flag EnableReplaceIfExistsForExternalEntities "
+                                               << context.SS->EnableReplaceIfExistsForExternalEntities << ", tx "
+                                               << tx.ShortDebugString());
+
+    auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
+        return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};
+    };
+
+    const auto &operation = tx.GetCreateExternalDataSource();
+    const auto replaceIfExists = operation.GetReplaceIfExists();
+    const TString &name = operation.GetName();
+
+    if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {
+        return errorResult(NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off");
+    }
+
+    const TString& parentPathStr = tx.GetWorkingDir();
+    const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+
+    {
+        const auto checks = NExternalDataSource::IsParentPathValid(parentPath);
+        if (!checks) {
+            return errorResult(checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    if (replaceIfExists) {
+        const TPath dstPath = parentPath.Child(name);
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotUnderDeleting();
+        if (isAlreadyExists) {
+            return {CreateAlterExternalDataSource(id, tx)};
+        }
+    }
+
+    return {MakeSubOperation<TCreateExternalDataSource>(id, tx)};
+}
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TCreateExternalDataSource>(id, state);

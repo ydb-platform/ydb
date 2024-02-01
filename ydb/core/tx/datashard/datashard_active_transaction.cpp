@@ -206,6 +206,13 @@ TValidatedDataTx::~TValidatedDataTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
+TDataShardUserDb& TValidatedDataTx::GetUserDb() {
+    return EngineBay.GetUserDb();
+}
+const TDataShardUserDb& TValidatedDataTx::GetUserDb() const {
+    return EngineBay.GetUserDb();
+}
+
 ui32 TValidatedDataTx::ExtractKeys(bool allowErrors)
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;

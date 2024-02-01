@@ -793,6 +793,12 @@ void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>&
 
 void TTcpConnection::OnEvent(EPollControl control)
 {
+    auto multiplexingBand = MultiplexingBand_.load();
+    if (multiplexingBand != ActualMultiplexingBand_) {
+        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
+        ActualMultiplexingBand_ = multiplexingBand;
+    }
+
     EPollControl action;
     {
         auto rawPendingControl = PendingControl_.load(std::memory_order::acquire);

@@ -654,7 +654,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     {
         txRes.Ops.insert(node.Raw());
         bool result = ExploreTx(TExprBase(node.Ref().ChildPtr(0)), ctx, dataSink, txRes, tablesData, types);
-        Cerr << KqpExprToPrettyString(*node.Raw(), ctx) << Endl;
+//        Cerr << KqpExprToPrettyString(*node.Raw(), ctx) << Endl;
         txRes.AddResult(node);
         return result;
     }

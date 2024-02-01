@@ -11,15 +11,7 @@ SRCS(
     value.go
     value_equal.go
     value_union.go
-    value_unsafe.go
-)
-
-GO_TEST_SRCS(
-    proto_test.go
-    source_test.go
-    value_test.go
+    value_unsafe_go121.go
 )
 
 END()
-
-RECURSE(gotest)

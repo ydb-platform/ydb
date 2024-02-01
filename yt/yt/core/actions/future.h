@@ -97,14 +97,10 @@ template <class T>
 template <class T>
 bool operator==(const TFuture<T>& lhs, const TFuture<T>& rhs);
 template <class T>
-bool operator!=(const TFuture<T>& lhs, const TFuture<T>& rhs);
-template <class T>
 void swap(TFuture<T>& lhs, TFuture<T>& rhs);
 
 template <class T>
 bool operator==(const TPromise<T>& lhs, const TPromise<T>& rhs);
-template <class T>
-bool operator!=(const TPromise<T>& lhs, const TPromise<T>& rhs);
 template <class T>
 void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 
@@ -153,7 +149,6 @@ private:
     TIntrusivePtr<NYT::NDetail::TCancelableStateBase> Impl_;
 
     friend bool operator==(const TCancelable& lhs, const TCancelable& rhs);
-    friend bool operator!=(const TCancelable& lhs, const TCancelable& rhs);
     friend void swap(TCancelable& lhs, TCancelable& rhs);
     template <class U>
     friend struct ::THash;
@@ -322,8 +317,6 @@ protected:
     template <class U>
     friend bool operator==(const TFuture<U>& lhs, const TFuture<U>& rhs);
     template <class U>
-    friend bool operator!=(const TFuture<U>& lhs, const TFuture<U>& rhs);
-    template <class U>
     friend void swap(TFuture<U>& lhs, TFuture<U>& rhs);
     template <class U>
     friend struct ::THash;
@@ -485,8 +478,6 @@ protected:
 
     template <class U>
     friend bool operator==(const TPromise<U>& lhs, const TPromise<U>& rhs);
-    template <class U>
-    friend bool operator!=(const TPromise<U>& lhs, const TPromise<U>& rhs);
     template <class U>
     friend void swap(TPromise<U>& lhs, TPromise<U>& rhs);
     template <class U>

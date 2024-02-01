@@ -11,6 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yt/exception
+    library/cpp/yt/assert
 )
 
 CHECK_DEPENDENT_DIRS(

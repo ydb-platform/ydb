@@ -321,7 +321,11 @@ namespace NYql::NDq::NWorker {
 
         auto proxyFactory = NTaskRunnerProxy::CreatePipeFactory(pfOptions);
         ITaskRunnerInvokerFactory::TPtr invokerFactory = new TConcurrentInvokerFactory(2*capacity);
+#if defined(Y_YQL_DQ_TASK_RUNNER_ACTOR_FACTORY_COMPATIBILITY_1)
+            auto taskRunnerActorFactory = NTaskRunnerActor::CreateTaskRunnerActorFactory(proxyFactory, invokerFactory, coordinator->GetRuntimeData());
+#else
         auto taskRunnerActorFactory = NTaskRunnerActor::CreateTaskRunnerActorFactory(proxyFactory, invokerFactory, nullptr, coordinator->GetRuntimeData());
+#endif
 
         TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Factory = proxyFactory;

@@ -83,6 +83,7 @@ ydb/services/ydb/ut YdbYqlClient.TestYqlSessionClosed
 ydb/tests/fq/generic *
 ydb/tests/fq/mem_alloc *
 ydb/tests/fq/multi_plane *
+ydb/tests/fq/plans test_stats_mode.py.TestStatsMode.test_mode[v1-STATS_MODE_FULL-client0]
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit*
 ydb/tests/fq/s3 *
 ydb/tests/fq/yds *

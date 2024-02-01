@@ -17,8 +17,18 @@ group = "{{ target.publish_group }}"
 version = {% if target.publish_version -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
 {%- endif %}
 
+val bucketUsername: String by project
+val bucketPassword: String by project
 repositories {
-    mavenCentral()
+   repositories {
+    maven {
+        url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+        credentials {
+            username = "$bucketUsername"
+            password = "$bucketPassword"
+        }
+    }
+}
 }
 
 java {

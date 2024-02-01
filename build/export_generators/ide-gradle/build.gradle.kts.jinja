@@ -47,8 +47,21 @@ group = "{{ target.publish_group }}"
 version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]{%- endif %}
 {%  endif %}
 
+
+val bucketUsername: String by project
+val bucketPassword: String by project
 repositories {
-    mavenCentral()
+   repositories {
+    maven {
+        url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+        credentials {
+            username = "$bucketUsername"
+            password = "$bucketPassword"
+        }
+    }
+}
+
+
 }
 
 val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"

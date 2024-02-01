@@ -1,6 +1,6 @@
 # StorageLoad
 
-Tests the read/write performance to and from Distributed Storage. The load is generated on Distributed Storage directly without using any tablet and Query Processor layers. When testing write performance, the actor writes data to the specified VDisk group. To test read performance, the actor first writes data to the specified VDisk group and then reads the data. After the load is removed, all the data written by the actor is deleted.
+Tests the read/write performance to and from Distributed Storage. The load is generated on Distributed Storage directly without using any tablet and Query Processor layers. When testing write performance, the actor writes data to the specified storage group. To test read performance, the actor first writes data to the specified storage group and then reads the data. After the load is removed, all the data written by the actor is deleted.
 
 You can generate three types of load:
 

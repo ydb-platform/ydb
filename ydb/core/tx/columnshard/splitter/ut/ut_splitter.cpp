@@ -3,7 +3,7 @@
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(Splitter) {
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
-            return NKikimr::NOlap::TColumnSaver(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer());
+            return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {

@@ -833,15 +833,18 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(TKikimrTableMetadataPtr metadata, bool createDir) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
+        TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, const TAlterColumnTableSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster, const TCreateTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
+        const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTableStore(const TString& cluster, const TAlterTableStoreSettings& settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster, const TDropTableStoreSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropTableStore(const TString& cluster,
+        const TDropTableStoreSettings& settings, bool missingOk) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateExternalTable(const TString& cluster, const TCreateExternalTableSettings& settings, bool createDir, bool existingOk, bool replaceIfExists) = 0;
 

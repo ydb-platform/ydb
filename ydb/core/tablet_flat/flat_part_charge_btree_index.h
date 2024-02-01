@@ -70,6 +70,7 @@ public:
         bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
         ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
+        TRowId beginBytesLimitRowId = Max<TRowId>();
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -143,6 +144,9 @@ public:
                     } else {
                         chargeGroups = false;
                     }
+                }
+                if (chargeGroups && bytesLimit) {
+                    beginBytesLimitRowId = Max(beginRowId, child.BeginRowId);
                 }
                 beginRowId = Max(beginRowId, child.EndRowId);
             }
@@ -221,7 +225,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroups(chargeGroups, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -235,7 +239,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroups(chargeGroups, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -248,6 +252,7 @@ public:
         bool ready = true, overshot = true;
         bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
         ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
+        TRowId endBytesLimitRowId = Max<TRowId>();
 
         const auto& meta = Part->IndexPages.BTreeGroups[0];
         Y_ABORT_UNLESS(endRowId <= meta.RowCount);
@@ -326,6 +331,9 @@ public:
                     } else {
                         chargeGroups = false;
                     }
+                }
+                if (chargeGroups && bytesLimit) {
+                    endBytesLimitRowId = Min(endRowId, child.EndRowId);
                 }
                 endRowId = Min(endRowId, child.BeginRowId);
             }
@@ -416,7 +424,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -430,38 +438,44 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
 
 private:
-    bool DoGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
             if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
                 endRowId = beginRowId + itemsLimit + 1;
             }
+            if (beginBytesLimitRowId == Max<TRowId>()) {
+                beginBytesLimitRowId = beginRowId;
+            }
 
             for (auto groupId : Groups) {
-                ready &= DoGroup(groupId, beginRowId, endRowId, bytesLimit);
+                ready &= DoGroup(groupId, beginRowId, endRowId, beginBytesLimitRowId, bytesLimit);
             }
         }
 
         return ready;
     }
 
-    bool DoGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, TRowId endBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
             if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
                 beginRowId = endRowId - itemsLimit - 1;
             }
+            if (endBytesLimitRowId == Max<TRowId>()) {
+                endBytesLimitRowId = endRowId;
+            }
 
             for (auto groupId : Groups) {
-                ready &= DoGroupReverse(groupId, beginRowId, endRowId, bytesLimit);
+                ready &= DoGroupReverse(groupId, beginRowId, endRowId, endBytesLimitRowId, bytesLimit);
             }
         }
 
@@ -469,38 +483,40 @@ private:
     }
 
 private:
-    bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
+    bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
-        ui64 prevFirstChildDataSize = 0;
+        ui64 prevBeginDataSize = 0;
+        ui64 prevBeginBytesLimitDataSize = bytesLimit ? GetPrevDataSize(meta, beginBytesLimitRowId) : 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
+            ui64 prevChildDataSize = prevBeginDataSize;
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
                     from = node.Seek(beginRowId);
                     if (from) {
-                        prevFirstChildDataSize = node.GetShortChild(from - 1).DataSize;
+                        prevChildDataSize = prevBeginDataSize = node.GetShortChild(from - 1).DataSize;
                     }
                 }
                 if (node.EndRowId > endRowId) {
                     to = node.Seek(endRowId - 1) + 1;
                 }
                 for (TRecIdx pos : xrange(from, to)) {
-                    auto child = node.GetShortChild(pos);
+                    auto child = node.GetShortChildRef(pos);
                     auto prevChild = pos ? node.GetShortChildRef(pos - 1) : nullptr;
                     TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
-                    TRowId endRowId = child.RowCount;
-                    ready &= tryHandleChild(TChildState(child.PageId, beginRowId, endRowId));
+                    TRowId endRowId = child->RowCount;
                     if (bytesLimit) {
-                        ui64 bytes = child.DataSize - prevFirstChildDataSize;
-                        if (LimitExceeded(bytes, bytesLimit)) {
+                        if (prevChildDataSize > prevBeginBytesLimitDataSize && LimitExceeded(prevChildDataSize - prevBeginBytesLimitDataSize, bytesLimit)) {
                             return;
                         }
                     }
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
+                    prevChildDataSize = child->DataSize;
                 }
             }
         };
@@ -536,16 +552,16 @@ private:
         return ready;
     }
 
-    bool DoGroupReverse(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
+    bool DoGroupReverse(TGroupId groupId, TRowId beginRowId, TRowId endRowId, TRowId endBytesLimitRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
 
         // level's nodes is in reverse order
         TVector<TNodeState> level, nextLevel(::Reserve(3));
+        ui64 endBytesLimitDataSize = bytesLimit ? GetDataSize(meta, endBytesLimitRowId - 1) : 0;
 
         const auto iterateLevel = [&](const auto& tryHandleChild) {
-            const TShortChild* lastChild = nullptr;
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
@@ -560,13 +576,8 @@ private:
                     TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
                     TRowId endRowId = child->RowCount;
                     if (bytesLimit) {
-                        if (!lastChild) {
-                            lastChild = child;
-                        } else {
-                            ui64 bytes = lastChild->DataSize - child->DataSize;
-                            if (LimitExceeded(bytes, bytesLimit)) {
-                                return;
-                            }
+                        if (endBytesLimitDataSize > child->DataSize && LimitExceeded(endBytesLimitDataSize - child->DataSize, bytesLimit)) {
+                            return;
                         }
                     }
                     ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
@@ -606,6 +617,45 @@ private:
     }
 
 private:
+    ui64 GetPrevDataSize(const TBtreeIndexMeta& meta, TRowId rowId) const {
+        TPageId pageId = meta.PageId;
+        ui64 result = 0;
+
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
+            auto page = Env->TryGetPage(Part, pageId);
+            if (!page) {
+                return result;
+            }
+            auto node = TBtreeIndexNode(*page);
+            auto pos = node.Seek(rowId);
+            pageId = node.GetShortChild(pos).PageId;
+            if (pos) {
+                result = node.GetShortChild(pos - 1).DataSize;
+            }
+        }
+
+        return result;
+    }
+
+    ui64 GetDataSize(TBtreeIndexMeta meta, TRowId rowId) const {
+        TPageId pageId = meta.PageId;
+        ui64 result = meta.DataSize;
+
+        for (ui32 height = 0; height < meta.LevelCount; height++) {
+            auto page = Env->TryGetPage(Part, pageId);
+            if (!page) {
+                return result;
+            }
+            auto node = TBtreeIndexNode(*page);
+            auto pos = node.Seek(rowId);
+            pageId = node.GetShortChild(pos).PageId;
+            result = node.GetShortChild(pos).DataSize;
+        }
+
+        return result;
+    }
+
+private:
     const TSharedData* TryGetDataPage(TPageId pageId, TGroupId groupId) const noexcept {
         return Env->TryGetPage(Part, pageId, groupId);
     };
@@ -614,7 +664,7 @@ private:
         return bool(Env->TryGetPage(Part, pageId, groupId));
     }
 
-    bool TryLoadNode(TChildState& child, TVector<TNodeState>& level) const noexcept {
+    bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level) const noexcept {
         auto page = Env->TryGetPage(Part, child.PageId);
         if (!page) {
             return false;

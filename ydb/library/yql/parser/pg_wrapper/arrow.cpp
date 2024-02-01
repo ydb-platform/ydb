@@ -232,7 +232,7 @@ TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::Data
             return PgConvertNumeric<double>(value);
         };
     case arrow::Type::DECIMAL128: {
-        auto decimal128Ptr = std::dynamic_pointer_cast<arrow::Decimal128Type>(originalType);
+        auto decimal128Ptr = std::static_pointer_cast<arrow::Decimal128Type>(originalType);
         int32_t precision = decimal128Ptr->precision();
         int32_t scale     = decimal128Ptr->scale();
         return [precision, scale](const std::shared_ptr<arrow::Array>& value) {

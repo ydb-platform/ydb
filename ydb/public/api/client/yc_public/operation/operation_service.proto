@@ -3,7 +3,7 @@ syntax = "proto3";
 package yandex.cloud.operation;
 
 import "google/api/annotations.proto";
-import "ydb/public/api/client/yc_public/api/tools/options.proto";
+import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_public/operation/operation.proto";
 import "ydb/public/api/client/yc_public/common/validation.proto";
 

@@ -144,7 +144,6 @@ TString GetConditionalBoldString(const TString& str, bool condition);
 TString GetConditionalRedString(const TString& str, bool condition);
 TString GetValueWithColoredGlyph(double val, double maxVal);
 TString GetDataCenterName(ui64 dataCenterId);
-TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
@@ -153,6 +152,7 @@ TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmU
 bool IsResourceDrainingState(TTabletInfo::EVolatileState state);
 bool IsAliveState(TTabletInfo::EVolatileState state);
 TString GetTabletTypeShortName(TTabletTypes::EType type);
+TTabletTypes::EType GetTabletTypeByShortName(const TString& name);
 TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {

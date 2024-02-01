@@ -220,6 +220,42 @@ inline std::tuple<ResourceTypes...> GetStDev(const TVector<std::tuple<ResourceTy
     return tuple_cast<ResourceTypes...>::cast(st_dev);
 }
 
+template <typename K, typename V>
+std::unordered_map<V, K> MakeReverseMap(const std::unordered_map<K, V>& map) {
+    std::unordered_map<V, K> result;
+    for (const auto& [k, v] : map) {
+        result.emplace(v, k);
+    }
+    return result;
+}
+
+const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES = {{TTabletTypes::SchemeShard, "SS"},
+                                                                                  {TTabletTypes::Hive, "H"},
+                                                                                  {TTabletTypes::DataShard, "DS"},
+                                                                                  {TTabletTypes::ColumnShard, "CS"},
+                                                                                  {TTabletTypes::KeyValue, "KV"},
+                                                                                  {TTabletTypes::PersQueue, "PQ"},
+                                                                                  {TTabletTypes::PersQueueReadBalancer, "PQRB"},
+                                                                                  {TTabletTypes::Dummy, "DY"},
+                                                                                  {TTabletTypes::Coordinator, "C"},
+                                                                                  {TTabletTypes::Mediator, "M"},
+                                                                                  {TTabletTypes::BlockStoreVolume, "BV"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::Kesus, "K"},
+                                                                                  {TTabletTypes::SysViewProcessor, "SV"},
+                                                                                  {TTabletTypes::FileStore, "FS"},
+                                                                                  {TTabletTypes::TestShard, "TS"},
+                                                                                  {TTabletTypes::SequenceShard, "SQ"},
+                                                                                  {TTabletTypes::ReplicationController, "RC"},
+                                                                                  {TTabletTypes::BlobDepot, "BD"},
+                                                                                  {TTabletTypes::StatisticsAggregator, "SA"},
+                                                                                  {TTabletTypes::GraphShard, "GS"},
+                                                                                  {TTabletTypes::NodeBroker, "NB"},
+                                                                                  {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
+                                                                                 };
+
+const auto TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);
+
 class THive;
 
 struct THiveSharedSettings {

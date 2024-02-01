@@ -754,36 +754,6 @@ public:
         }
     }
 
-    static TTabletTypes::EType GetShortTabletType(const TString& shortType) {
-        for (TTabletTypes::EType tabletType : {
-             TTabletTypes::DataShard,
-             TTabletTypes::Coordinator,
-             TTabletTypes::Mediator,
-             TTabletTypes::SchemeShard,
-             TTabletTypes::Hive,
-             TTabletTypes::KeyValue,
-             TTabletTypes::PersQueue,
-             TTabletTypes::PersQueueReadBalancer,
-             TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard,
-             TTabletTypes::GraphShard,
-             TTabletTypes::BlockStoreVolume,
-             TTabletTypes::BlockStorePartition2,
-             TTabletTypes::Kesus,
-             TTabletTypes::SysViewProcessor,
-             TTabletTypes::FileStore,
-             TTabletTypes::SequenceShard,
-             TTabletTypes::ReplicationController,
-             TTabletTypes::StatisticsAggregator}) {
-            if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
-                return tabletType;
-            }
-        }
-        return TTabletTypes::TypeInvalid;
-    }
-
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& params(Event->Cgi());
         NIceDb::TNiceDb db(txc.DB);
@@ -870,7 +840,7 @@ public:
             auto tabletLimits = SplitString(params.Get("DefaultTabletLimit"), ";");
             for (TStringBuf limit : tabletLimits) {
                 TStringBuf tabletType = limit.NextTok(':');
-                TTabletTypes::EType type = GetShortTabletType(TString(tabletType));
+                TTabletTypes::EType type = GetTabletTypeByShortName(TString(tabletType));
                 auto maxCount = TryFromString<ui64>(limit);
                 if (type == TTabletTypes::TypeInvalid || !maxCount) {
                     continue;
@@ -906,7 +876,7 @@ public:
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
             for (TStringBuf tabletAllowedMetrics : allowedMetrics) {
                 TStringBuf tabletType = tabletAllowedMetrics.NextTok(':');
-                TTabletTypes::EType type = GetShortTabletType(TString(tabletType));
+                TTabletTypes::EType type = GetTabletTypeByShortName(TString(tabletType));
                 if (type != TTabletTypes::TypeInvalid) {
                     static const TVector<i64> metricsPos = {
                         NKikimrTabletBase::TMetrics::kCPUFieldNumber,
@@ -1184,7 +1154,7 @@ public:
              TTabletTypes::ColumnShard}) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
-                   "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";
+                   "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox' checked='' disabled='' style='width:20px;height:20px;margin:2px auto'</input></td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox'";
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetrics.end()) {
@@ -2288,7 +2258,7 @@ public:
             str << " ";
             str << LeaderCount;
             if (FollowerCount > 0) {
-                str << "; " << FollowerCount << "f";
+                str << " (" << FollowerCount << ")";
             }
             str << "</span>";
             return str;

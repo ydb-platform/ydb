@@ -357,20 +357,6 @@ TString GetDataCenterName(ui64 dataCenterId) {
     }
 }
 
-TString LongToShortTabletName(const TString& longTabletName) {
-    TString shortName;
-
-    for (char c : longTabletName) {
-        if (c >= 'A' && c <= 'Z') {
-            shortName += c;
-        }
-    }
-    if (shortName.empty()) {
-        shortName = longTabletName;
-    }
-    return shortName;
-}
-
 TString GetLocationString(const NActors::TNodeLocation& location) {
     NActorsInterconnect::TNodeLocation proto;
     location.Serialize(&proto, false);
@@ -439,52 +425,20 @@ bool IsAliveState(TTabletInfo::EVolatileState state) {
 }
 
 TString GetTabletTypeShortName(TTabletTypes::EType type) {
-    switch(type) {
-    case TTabletTypes::SchemeShard:
-        return "SS";
-    case TTabletTypes::Hive:
-        return "H";
-    case TTabletTypes::DataShard:
-        return "DS";
-    case TTabletTypes::ColumnShard:
-        return "CS";
-    case TTabletTypes::KeyValue:
-        return "KV";
-    case TTabletTypes::PersQueue:
-        return "PQ";
-    case TTabletTypes::PersQueueReadBalancer:
-        return "PQRB";
-    case TTabletTypes::Dummy:
-        return "DY";
-    case TTabletTypes::Coordinator:
-        return "C";
-    case TTabletTypes::Mediator:
-        return "M";
-    case TTabletTypes::BlockStoreVolume:
-        return "BV";
-    case TTabletTypes::BlockStorePartition:
-    case TTabletTypes::BlockStorePartition2:
-        return "BP";
-    case TTabletTypes::Kesus:
-        return "K";
-    case TTabletTypes::SysViewProcessor:
-        return "SV";
-    case TTabletTypes::FileStore:
-        return "FS";
-    case TTabletTypes::TestShard:
-        return "TS";
-    case TTabletTypes::SequenceShard:
-        return "S";
-    case TTabletTypes::ReplicationController:
-        return "RC";
-    case TTabletTypes::BlobDepot:
-        return "BD";
-    case TTabletTypes::StatisticsAggregator:
-        return "SA";
-    case TTabletTypes::GraphShard:
-        return "GS";
-    default:
-        return Sprintf("%d", (int)type);
+    auto it = TABLET_TYPE_SHORT_NAMES.find(type);
+    if (it == TABLET_TYPE_SHORT_NAMES.end()) {
+        return TStringBuilder() << (ui32)type;
+    } else {
+        return it->second;
+    }
+}
+
+TTabletTypes::EType GetTabletTypeByShortName(const TString& name) {
+    auto it = TABLET_TYPE_BY_SHORT_NAME.find(name);
+    if (it == TABLET_TYPE_BY_SHORT_NAME.end()) {
+        return TTabletTypes::TypeInvalid;
+    } else {
+        return it->second;
     }
 }
 
@@ -495,13 +449,18 @@ TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std
             str << " ";
         }
         auto it = tabletLimits.find(type);
-        auto typeName = GetTabletTypeShortName(type);
+        auto shortTypeName = GetTabletTypeShortName(type);
+        auto longTypeName = TTabletTypes::TypeToStr(type);
         if (it == tabletLimits.end() || it->second.GetMaxCount() > 0) {
-            str << "<span class='box' onclick='applySetting(this,\"DefaultTabletLimit\",\"" << typeName << ":0\")'>";
+            str << "<span class='box' title='" << longTypeName
+                << "' onclick='applySetting(this,\"DefaultTabletLimit\",\"" << shortTypeName
+                << ":0\")'>";
         } else {
-            str << "<span class='box disabled' onclick='applySetting(this, \"DefaultTabletLimit\", \"" << typeName << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\")'>";
+            str << "<span class='box disabled' title='" << longTypeName
+                << "' onclick='applySetting(this, \"DefaultTabletLimit\", \"" << shortTypeName
+                << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\")'>";
         }
-        str << typeName;
+        str << shortTypeName;
         str << "</span>";
     }
     return str;

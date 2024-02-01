@@ -91,28 +91,27 @@ namespace {
         NPage::TConf conf;
         switch (params.Levels) {
         case 0:
-            if (params.Groups) {
-                conf.Group(3).PageRows = 1;
-            }
+            conf.Group(0).PageRows = 999;
             break;
         case 1:
+            conf.Group(0).PageRows = 2;
+            break;
         case 3:
             conf.Group(0).PageRows = 2;
-            if (params.Groups) {
-                for (auto i : xrange(1, 4)) {
-                    conf.Group(i).PageRows = 1;
-                }
-            }
-            if (params.Levels == 3) {
-                conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
-                if (params.Groups) {
-                    conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 2;
-                    conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
-                }
-            }
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
             break;
         default:
             Y_Fail("Unknown levels");
+        }
+
+        if (params.Groups) {
+            conf.Group(1).PageRows = params.Levels ? 1 : 999;
+            conf.Group(2).PageRows = 3;
+            conf.Group(3).PageRows = 1;
+
+            conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = conf.Group(0).BTreeIndexNodeKeysMax;
+            conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
+            conf.Group(3).BTreeIndexNodeKeysMin = conf.Group(3).BTreeIndexNodeKeysMax = 999;
         }
 
         TLayoutCook lay;
@@ -189,9 +188,8 @@ namespace {
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
         if (params.Groups) {
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
             UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount, params.Levels);
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount, 1);
         }
 
@@ -489,7 +487,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void CheckChargeBytesLimit(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
-            for (ui64 bytesLimit : xrange<ui64>(1, part.Stat.Bytes + 1, part.Stat.Bytes / 100)) {
+            for (ui64 bytesLimit : xrange<ui64>(1, part.Stat.Bytes + 100, part.Stat.Bytes / 100)) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                         TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);

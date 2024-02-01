@@ -881,9 +881,9 @@ message AlterPartitioningSettings {
     // Zero value means default - 100.
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
     // Settings for split the partition.
-    AlterSplitSettings split_settings = 4;
+    AlterSplitSettings alter_split_settings = 4;
     // Settings for merge partitions.
-    AlterMergeSettings merge_settings = 5;
+    AlterMergeSettings alter_merge_settings = 5;
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.

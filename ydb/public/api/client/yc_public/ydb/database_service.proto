@@ -4,7 +4,7 @@ package yandex.cloud.ydb.v1;
 
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
-import "ydb/public/api/client/yc_public/api/operation.proto";
+import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_public/access/access.proto";
 import "ydb/public/api/client/yc_public/operation/operation.proto";
 import "ydb/public/api/client/yc_public/common/validation.proto";

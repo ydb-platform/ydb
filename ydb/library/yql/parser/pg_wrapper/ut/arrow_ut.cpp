@@ -71,6 +71,7 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     builder.AppendNull();
     builder.Append(-1.337);
     builder.Append(0.0);
+    builder.Append(1.234111);
 
     std::shared_ptr<arrow::Array> array;
     builder.Finish(&array);
@@ -78,56 +79,111 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     auto result = PgConvertNumeric<double>(array);
     
     const char* expected[] = {
-        "1.1", "31.37", nullptr, "-1.337", "0"
+        "1.1", "31.37", nullptr, "-1.337", "0", "1.234111"
     };
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     checkResult<false>(expected, result, &reader, numeric_out);
 }
 
-Y_UNIT_TEST(PgConvertNumericDecimal128) {
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale1) {
     TArenaMemoryContext arena;
 
-    std::string val = "";
-    for (int precision = 1; precision <= 5; ++precision) {
-        val.push_back('0' + precision);
-        for (int scale = 1; scale < precision; ++scale) {
-            std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
-            arrow::Decimal128Builder builder(type);
+    int32_t precision = 6;
+    int32_t scale = 1;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
 
-            std::string expected_val = val;
+    const char* expected[] = {
+        "12345.0", "-12345.0", nullptr
+    };
 
-            if (scale > 0) {
-                expected_val.insert(expected_val.size() - scale, 1, '.');
-            }
+    builder.Append(arrow::Decimal128::FromString("12345.0").ValueOrDie());
+    builder.Append(arrow::Decimal128::FromString("-12345.0").ValueOrDie());
+    builder.AppendNull();
 
-            const char* expected[] = {
-                expected_val.data()
-            };
-            
-            arrow::Decimal128 v(expected_val);
-            builder.Append(v);
-            
-            std::shared_ptr<arrow::Array> array;
-            builder.Finish(&array);
+    std::shared_ptr<arrow::Array> array;
+    builder.Finish(&array);
 
-            auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
-            NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            const auto& data = result->data();
-            if (result->IsNull(0)) {
-                UNIT_ASSERT(expected[0] == nullptr);
-            } else {
-                UNIT_ASSERT(expected[0] != nullptr);
-                Datum item;
-                item = Datum(reader.GetItem(*data, 0).AsStringRef().Data() + sizeof(void*));
-                UNIT_ASSERT_VALUES_EQUAL(
-                    TString(DatumGetCString(DirectFunctionCall1(numeric_out, item))),
-                    expected[0]
-                );
-            }
-        }
-    }
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale2) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 5;
+    int32_t scale = 2;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "123.45", "-123.45", nullptr
+    };
+
+    builder.Append(arrow::Decimal128::FromString("123.45").ValueOrDie());
+    builder.Append(arrow::Decimal128::FromString("-123.45").ValueOrDie());
+    builder.AppendNull();
+
+    std::shared_ptr<arrow::Array> array;
+    builder.Finish(&array);
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale3) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 3;
+    int32_t scale = 3;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "0.123", "-0.123", nullptr
+    };
+
+    builder.Append(arrow::Decimal128::FromString("0.123").ValueOrDie());
+    builder.Append(arrow::Decimal128::FromString("-0.123").ValueOrDie());
+    builder.AppendNull();
+
+    std::shared_ptr<arrow::Array> array;
+    builder.Finish(&array);
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+Y_UNIT_TEST(PgConvertNumericDecimal128Scale5) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 7;
+    int32_t scale = 5;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "12.34567", "-12.34567", nullptr
+    };
+
+    builder.Append(arrow::Decimal128::FromReal(12.34567, precision, scale).ValueOrDie());
+    builder.Append(arrow::Decimal128::FromReal(-12.34567, precision, scale).ValueOrDie());
+    builder.AppendNull();
+
+    std::shared_ptr<arrow::Array> array;
+    builder.Finish(&array);
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
 }
 
 Y_UNIT_TEST(PgConvertNumericInt) {

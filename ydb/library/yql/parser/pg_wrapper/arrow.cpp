@@ -202,7 +202,8 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
 }
 
 Numeric PgDecimal128ToNumeric(int64_t high_bits, uint64_t low_bits, int32_t precision, int32_t scale) {
-    return int64_div_fast_to_numeric(low_bits, scale);
+    Numeric res = int64_div_fast_to_numeric(low_bits, scale);
+    return res;
 }
 
 TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
@@ -221,17 +222,20 @@ TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::Data
         };
     case arrow::Type::FLOAT:
         return [](const std::shared_ptr<arrow::Array>& value) {
-             return PgConvertNumeric<float>(value);
+            return PgConvertNumeric<float>(value);
         };
     case arrow::Type::DOUBLE:
         return [](const std::shared_ptr<arrow::Array>& value) {
             return PgConvertNumeric<double>(value);
         };
-    case arrow::Type::DECIMAL128:
-        return [originalType](const std::shared_ptr<arrow::Array>& value) {
-            auto decimal128Ptr = std::dynamic_pointer_cast<arrow::Decimal128Type>(originalType);
-            return PgDecimal128ConvertNumeric(value, decimal128Ptr->precision(), decimal128Ptr->scale());
+    case arrow::Type::DECIMAL128: {
+        auto decimal128Ptr = std::dynamic_pointer_cast<arrow::Decimal128Type>(originalType);
+        int32_t precision = decimal128Ptr->precision();
+        int32_t scale     = decimal128Ptr->scale();
+        return [precision, scale](const std::shared_ptr<arrow::Array>& value) {
+            return PgDecimal128ConvertNumeric(value, precision, scale);
         };
+    }
     default:
         return {};
     }

@@ -24,6 +24,7 @@ target_link_libraries(ydb-library-yql-minikql-codegen-llvm14-ut PUBLIC
   Target-X86-Disassembler
   lib-Transforms-IPO
   lib-Transforms-ObjCARC
+  library-cpp-resource
   minikql-codegen-llvm14
 )
 target_sources(ydb-library-yql-minikql-codegen-llvm14-ut PRIVATE

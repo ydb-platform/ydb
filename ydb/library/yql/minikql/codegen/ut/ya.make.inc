@@ -23,6 +23,10 @@ COPY_FILE(
         codegen_ut_llvm_deps.h
 )
 
+PEERDIR( 
+	library/cpp/resource
+)
+
 SRCDIR(ydb/library/yql/minikql/codegen/ut)
 
 IF (OS_WINDOWS)

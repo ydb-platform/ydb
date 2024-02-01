@@ -79,7 +79,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
             }
             current = current->AttachNext(std::make_shared<TFilterProgramStep>(i));
         }
-        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns;
+        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PredicateColumns;
         if (columnsAdditionalFetch.GetColumnsCount()) {
             current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
             current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
@@ -104,7 +104,7 @@ std::shared_ptr<NKikimr::NOlap::NPlainReader::IFetchingStep> TSpecialReadContext
             }
             current = current->AttachNext(std::make_shared<TFilterProgramStep>(i));
         }
-        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns;
+        const TColumnsSet columnsAdditionalFetch = *FFColumns - *EFColumns - *SpecColumns - *PKColumns - *PredicateColumns;
         if (columnsAdditionalFetch.GetColumnsCount()) {
             current = current->AttachNext(std::make_shared<TBlobsFetchingStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));
             current = current->AttachNext(std::make_shared<TAssemblerStep>(std::make_shared<TColumnsSet>(columnsAdditionalFetch)));

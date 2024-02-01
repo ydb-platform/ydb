@@ -1,5 +1,3 @@
-{%- set target = targets[0] -%}
-{%- set extra_targets = targets|selectattr('isTest') -%}
 {%- set publish = target.publish -%}
 {%- set mainClass = target.app_main_class -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}

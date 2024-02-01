@@ -1,5 +1,3 @@
-{%- set target = targets[0] -%}
-{%- set extra_targets = targets|selectattr('isTest') -%}
 {%- set mainClass = target.app_main_class -%}
 {%- set publish = target.publish -%}
 {%- set with_kotlin = target.with_kotlin -%}

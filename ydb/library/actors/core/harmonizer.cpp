@@ -1,9 +1,11 @@
+#include "executor_thread_ctx.h"
+#include "probes.h"
 #include "harmonizer.h"
 
-#include "probes.h"
 #include "actorsystem.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_shared.h"
 
 #include <ydb/library/actors/util/cpu_load_log.h>
 #include <ydb/library/actors/util/datetime.h>
@@ -301,6 +303,8 @@ private:
     TAtomic MaxBookedCpu = 0;
     TAtomic MinBookedCpu = 0;
 
+    TSharedExecutorPool* Shared = nullptr;
+
     std::atomic<double> AvgAwakeningTimeUs = 0;
     std::atomic<double> AvgWakingUpTimeUs = 0;
 
@@ -317,6 +321,7 @@ public:
     void Enable(bool enable) override;
     TPoolHarmonizerStats GetPoolStats(i16 poolId) const override;
     THarmonizerStats GetStats() const override;
+    void SetSharedPool(TSharedExecutorPool* pool) override;
 };
 
 THarmonizer::THarmonizer(ui64 ts) {
@@ -417,6 +422,26 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         pool.BasicPool->ClearWaitingStats();
     }
 
+    std::vector<bool> hasSharedThread(Pools.size());
+    std::vector<bool> hasSharedThreadWhichWasNotBorrowed(Pools.size());
+    std::vector<bool> hasBorrowedSharedThread(Pools.size());
+    if (Shared) {
+        auto sharedState = Shared->GetState();
+        for (ui32 poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+            i16 threadIdx = sharedState.ThreadByPool[poolIdx];
+            if (threadIdx != -1) {
+                hasSharedThread[poolIdx] = true;
+                if (sharedState.PoolByBorrowedThread[threadIdx] == -1) {
+                    hasSharedThreadWhichWasNotBorrowed[poolIdx] = true;
+                }
+
+            }
+            if (sharedState.BorrowedThreadByPool[poolIdx] != -1) {
+                hasBorrowedSharedThread[poolIdx] = true;
+            }
+        }
+    }
+
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         TPoolInfo& pool = Pools[poolIdx];
         total += pool.DefaultThreadCount;
@@ -440,7 +465,8 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             isStarvedPresent = true;
         }
 
-        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && poolBooked >= currentThreadCount;
+        ui32 sharedHalfThreadCount = hasSharedThread[poolIdx] + hasSharedThreadWhichWasNotBorrowed[poolIdx] + hasBorrowedSharedThread[poolIdx];
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (2 * poolBooked >= 2 * currentThreadCount + sharedHalfThreadCount);
         if (pool.AvgPingCounter) {
             if (pool.LastUpdateTs + Us2Ts(3'000'000ull) > ts) {
                 isNeedy = false;
@@ -462,6 +488,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         AtomicSet(pool.LastFlags, (i64)isNeedy | ((i64)isStarved << 1) | ((i64)isHoggish << 2));
         LWPROBE(HarmonizeCheckPool, poolIdx, pool.Pool->GetName(), poolBooked, poolConsumed, lastSecondPoolBooked, lastSecondPoolConsumed, pool.GetThreadCount(), pool.MaxThreadCount, isStarved, isNeedy, isHoggish);
     }
+
     double budget = total - Max(booked, lastSecondBooked);
     i16 budgetInt = static_cast<i16>(Max(budget, 0.0));
     if (budget < -0.1) {
@@ -491,6 +518,9 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             for (ui16 poolIdx : PriorityOrder) {
                 TPoolInfo &pool = Pools[poolIdx];
                 i64 threadCount = pool.GetThreadCount();
+                if (hasSharedThread[poolIdx] && !hasSharedThreadWhichWasNotBorrowed[poolIdx]) {
+                    Shared->ReturnOwnHalfThread(poolIdx);
+                }
                 while (threadCount > pool.DefaultThreadCount) {
                     pool.SetThreadCount(--threadCount);
                     AtomicIncrement(pool.DecreasingThreadsByStarvedState);
@@ -577,6 +607,9 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     for (size_t hoggishPoolIdx : hoggishPools) {
         TPoolInfo &pool = Pools[hoggishPoolIdx];
         i64 threadCount = pool.GetThreadCount();
+        if (hasBorrowedSharedThread[hoggishPoolIdx]) {
+            Shared->ReturnBorrowedHalfThread(hoggishPoolIdx);
+        }
         if (pool.BasicPool && pool.LocalQueueSize > NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE) {
             pool.LocalQueueSize = std::min<ui16>(NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE, pool.LocalQueueSize / 2);
             pool.BasicPool->SetLocalQueueSize(pool.LocalQueueSize);
@@ -696,6 +729,10 @@ THarmonizerStats THarmonizer::GetStats() const {
         .AvgAwakeningTimeUs = AvgAwakeningTimeUs,
         .AvgWakingUpTimeUs = AvgWakingUpTimeUs,
     };
+}
+
+void THarmonizer::SetSharedPool(TSharedExecutorPool* pool) {
+    Shared = pool;
 }
 
 }

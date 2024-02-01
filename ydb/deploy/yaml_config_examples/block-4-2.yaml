@@ -74,7 +74,6 @@ domains_config:
     storage_pool_types:
     - pool_config:
         box_id: 1
-        vdisk_kind: Default
   state_storage:
   - ring:
       node: [1, 2, 3, 4, 5, 6, 7, 8]

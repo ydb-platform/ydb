@@ -47,7 +47,6 @@ domains_config:
           realm_level_end: 20
           domain_level_begin: 10
           domain_level_end: 256
-        vdisk_kind: Default
   state_storage:
   - ring:
       node: [1, 2, 3]

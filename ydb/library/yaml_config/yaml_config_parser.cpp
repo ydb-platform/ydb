@@ -907,6 +907,9 @@ namespace NKikimr::NYaml {
                                         }
                                     };
                                 }
+                                if (!poolConfig.Has("vdisk_kind")) {
+                                    poolConfig["vdisk_kind"] = "Default";
+                                }
                             }
                         }
                     }

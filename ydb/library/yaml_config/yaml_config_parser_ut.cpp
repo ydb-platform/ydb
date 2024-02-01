@@ -154,7 +154,6 @@ domains_config:
     storage_pool_types:
     - pool_config:
         box_id: 1
-        vdisk_kind: Default
   state_storage:
   - ring:
       node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -230,6 +229,7 @@ grpc_config:
         UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["kind"], diskTypeLower);
         UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["pool_config"]["kind"], diskTypeLower);
         UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["pool_config"]["pdisk_filter"][0]["property"][0]["type"], diskType);
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["pool_config"]["vdisk_kind"], "Default");
         UNIT_ASSERT_VALUES_EQUAL(group["erasure_species"], TErasureType::ErasureMirror3dc);
         for (const auto& pdisk : serviceSet["pdisks"].GetArraySafe()) {
           UNIT_ASSERT_VALUES_EQUAL(pdisk["pdisk_category"].GetUIntegerSafe(), 2 /* NVME */);

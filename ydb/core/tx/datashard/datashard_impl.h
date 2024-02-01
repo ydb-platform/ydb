@@ -1877,7 +1877,7 @@ public:
 
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
-    void EmitHeartbeats(const TActorContext& ctx);
+    void EmitHeartbeats();
 
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
@@ -2630,9 +2630,6 @@ private:
     TControlWrapper DataTxProfileLogThresholdMs;
     TControlWrapper DataTxProfileBufferThresholdMs;
     TControlWrapper DataTxProfileBufferSize;
-
-    TControlWrapper ReadColumnsScanEnabled;
-    TControlWrapper ReadColumnsScanInUserPool;
 
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;

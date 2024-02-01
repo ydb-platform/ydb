@@ -11,7 +11,7 @@ select  dt.d_year
     and store_sales.ss_item_sk = item.i_item_sk
     and item.i_manager_id = 1
     and dt.d_moy=12
-    and dt.d_year=1998
+    and dt.d_year=2000
  group by dt.d_year
  	,item.i_brand
  	,item.i_brand_id

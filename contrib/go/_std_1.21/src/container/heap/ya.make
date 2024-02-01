@@ -1,17 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    heap.go
-)
-
-GO_TEST_SRCS(heap_test.go)
-
-GO_XTEST_SRCS(
-    example_intheap_test.go
-    example_pq_test.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		heap.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		heap.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		heap.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		heap.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		heap.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

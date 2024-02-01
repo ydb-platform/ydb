@@ -14,639 +14,798 @@ class TDelegatingClient
 public:
     explicit TDelegatingClient(IClientPtr underlying);
 
-    // IClientBase methods
+    #define DELEGATE_METHOD(returnType, method, signature, args) \
+        returnType method signature override \
+        { \
+            return Underlying_->method args; \
+        }
 
-    IConnectionPtr GetConnection() override;
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull = true) override;
+    // IClientBase methods
+    DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
+
+    DELEGATE_METHOD(std::optional<TStringBuf>, GetClusterName,
+        (bool fetchIfNull),
+        (fetchIfNull))
+
+    // IClient methods
+    DELEGATE_METHOD(void, Terminate, (), ())
+
+    DELEGATE_METHOD(const NTabletClient::ITableMountCachePtr&, GetTableMountCache, (), ())
+
+    DELEGATE_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (), ())
+
+    DELEGATE_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, (), ())
 
     // Transactions
-    TFuture<ITransactionPtr> StartTransaction(
+    DELEGATE_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,
-        const TTransactionStartOptions& options = {}) override;
+        const TTransactionStartOptions& options),
+        (type, options))
 
     // Tables
-    TFuture<TUnversionedLookupRowsResult> LookupRows(
+    DELEGATE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
-        const TLookupRowsOptions& options = {}) override;
+        const TLookupRowsOptions& options),
+        (path, nameTable, keys, options))
 
-    TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
+    DELEGATE_METHOD(TFuture<TVersionedLookupRowsResult>, VersionedLookupRows, (
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
-        const TVersionedLookupRowsOptions& options = {}) override;
+        const TVersionedLookupRowsOptions& options),
+        (path, nameTable, keys, options))
 
-    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookupRows(
+    DELEGATE_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookupRows, (
         const std::vector<TMultiLookupSubrequest>& subrequests,
-        const TMultiLookupOptions& options = {}) override;
+        const TMultiLookupOptions& options),
+        (subrequests, options))
 
-    TFuture<TSelectRowsResult> SelectRows(
+    DELEGATE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
         const TString& query,
-        const TSelectRowsOptions& options = {}) override;
+        const TSelectRowsOptions& options),
+        (query, options))
 
-    TFuture<NYson::TYsonString> ExplainQuery(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
         const TString& query,
-        const TExplainQueryOptions& options = {}) override;
+        const TExplainQueryOptions& options),
+        (query, options))
 
-    TFuture<TPullRowsResult> PullRows(
+    DELEGATE_METHOD(TFuture<TPullRowsResult>, PullRows, (
         const NYPath::TYPath& path,
-        const TPullRowsOptions& options = {}) override;
+        const TPullRowsOptions& options),
+        (path, options))
 
-    TFuture<ITableReaderPtr> CreateTableReader(
+    DELEGATE_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (
         const NYPath::TRichYPath& path,
-        const TTableReaderOptions& options = {}) override;
+        const TTableReaderOptions& options),
+        (path, options))
 
-    TFuture<ITableWriterPtr> CreateTableWriter(
+    DELEGATE_METHOD(TFuture<ITableWriterPtr>, CreateTableWriter, (
         const NYPath::TRichYPath& path,
-        const TTableWriterOptions& options = {}) override;
+        const TTableWriterOptions& options),
+        (path, options))
 
     // Queues
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
+    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueue, (
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullQueueOptions& options = {}) override;
+        const TPullQueueOptions& options),
+        (queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    DELEGATE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullConsumer, (
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) override;
+        const TPullConsumerOptions& options),
+        (consumerPath, queuePath, offset, partitionIndex, rowBatchReadOptions, options))
 
-    TFuture<void> RegisterQueueConsumer(
+    DELEGATE_METHOD(TFuture<void>, RegisterQueueConsumer, (
         const NYPath::TRichYPath& queuePath,
         const NYPath::TRichYPath& consumerPath,
         bool vital,
-        const TRegisterQueueConsumerOptions& options = {}) override;
+        const TRegisterQueueConsumerOptions& options),
+        (queuePath, consumerPath, vital, options))
 
-    TFuture<void> UnregisterQueueConsumer(
+    DELEGATE_METHOD(TFuture<void>, UnregisterQueueConsumer, (
         const NYPath::TRichYPath& queuePath,
         const NYPath::TRichYPath& consumerPath,
-        const TUnregisterQueueConsumerOptions& options = {}) override;
+        const TUnregisterQueueConsumerOptions& options),
+        (queuePath, consumerPath, options))
 
-    TFuture<std::vector<TListQueueConsumerRegistrationsResult>> ListQueueConsumerRegistrations(
+    DELEGATE_METHOD(TFuture<std::vector<TListQueueConsumerRegistrationsResult>>, ListQueueConsumerRegistrations, (
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
-        const TListQueueConsumerRegistrationsOptions& options = {}) override;
+        const TListQueueConsumerRegistrationsOptions& options),
+        (queuePath, consumerPath, options))
 
     // Cypress
-    TFuture<NYson::TYsonString> GetNode(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetNode, (
         const NYPath::TYPath& path,
-        const TGetNodeOptions& options = {}) override;
+        const TGetNodeOptions& options),
+        (path, options))
 
-    TFuture<void> SetNode(
+    DELEGATE_METHOD(TFuture<void>, SetNode, (
         const NYPath::TYPath& path,
         const NYson::TYsonString& value,
-        const TSetNodeOptions& options = {}) override;
+        const TSetNodeOptions& options),
+        (path, value, options))
 
-    TFuture<void> MultisetAttributesNode(
+    DELEGATE_METHOD(TFuture<void>, MultisetAttributesNode, (
         const NYPath::TYPath& path,
         const NYTree::IMapNodePtr& attributes,
-        const TMultisetAttributesNodeOptions& options = {}) override;
+        const TMultisetAttributesNodeOptions& options),
+        (path, attributes, options))
 
-    TFuture<void> RemoveNode(
+    DELEGATE_METHOD(TFuture<void>, RemoveNode, (
         const NYPath::TYPath& path,
-        const TRemoveNodeOptions& options = {}) override;
+        const TRemoveNodeOptions& options),
+        (path, options))
 
-    TFuture<NYson::TYsonString> ListNode(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, ListNode, (
         const NYPath::TYPath& path,
-        const TListNodeOptions& options = {}) override;
+        const TListNodeOptions& options),
+        (path, options))
 
-    TFuture<NCypressClient::TNodeId> CreateNode(
+    DELEGATE_METHOD(TFuture<NCypressClient::TNodeId>, CreateNode, (
         const NYPath::TYPath& path,
         NObjectClient::EObjectType type,
-        const TCreateNodeOptions& options = {}) override;
+        const TCreateNodeOptions& options),
+        (path, type, options))
 
-    TFuture<TLockNodeResult> LockNode(
+    DELEGATE_METHOD(TFuture<TLockNodeResult>, LockNode, (
         const NYPath::TYPath& path,
         NCypressClient::ELockMode mode,
-        const TLockNodeOptions& options = {}) override;
+        const TLockNodeOptions& options),
+        (path, mode, options))
 
-    TFuture<void> UnlockNode(
+    DELEGATE_METHOD(TFuture<void>, UnlockNode, (
         const NYPath::TYPath& path,
-        const TUnlockNodeOptions& options = {}) override;
+        const TUnlockNodeOptions& options),
+        (path, options))
 
-    TFuture<NCypressClient::TNodeId> CopyNode(
+    DELEGATE_METHOD(TFuture<NCypressClient::TNodeId>, CopyNode, (
         const NYPath::TYPath& srcPath,
         const NYPath::TYPath& dstPath,
-        const TCopyNodeOptions& options = {}) override;
+        const TCopyNodeOptions& options),
+        (srcPath, dstPath, options))
 
-    TFuture<NCypressClient::TNodeId> MoveNode(
+    DELEGATE_METHOD(TFuture<NCypressClient::TNodeId>, MoveNode, (
         const NYPath::TYPath& srcPath,
         const NYPath::TYPath& dstPath,
-        const TMoveNodeOptions& options = {}) override;
+        const TMoveNodeOptions& options),
+        (srcPath, dstPath, options))
 
-    TFuture<NCypressClient::TNodeId> LinkNode(
+    DELEGATE_METHOD(TFuture<NCypressClient::TNodeId>, LinkNode, (
         const NYPath::TYPath& srcPath,
         const NYPath::TYPath& dstPath,
-        const TLinkNodeOptions& options = {}) override;
+        const TLinkNodeOptions& options),
+        (srcPath, dstPath, options))
 
-    TFuture<void> ConcatenateNodes(
+    DELEGATE_METHOD(TFuture<void>, ConcatenateNodes, (
         const std::vector<NYPath::TRichYPath>& srcPaths,
         const NYPath::TRichYPath& dstPath,
-        const TConcatenateNodesOptions& options = {}) override;
+        const TConcatenateNodesOptions& options),
+        (srcPaths, dstPath, options))
 
-    TFuture<bool> NodeExists(
+    DELEGATE_METHOD(TFuture<bool>, NodeExists, (
         const NYPath::TYPath& path,
-        const TNodeExistsOptions& options = {}) override;
+        const TNodeExistsOptions& options),
+        (path, options))
 
-    TFuture<void> ExternalizeNode(
+    DELEGATE_METHOD(TFuture<void>, ExternalizeNode, (
         const NYPath::TYPath& path,
         NObjectClient::TCellTag cellTag,
-        const TExternalizeNodeOptions& options = {}) override;
+        const TExternalizeNodeOptions& options),
+        (path, cellTag, options))
 
-    TFuture<void> InternalizeNode(
+    DELEGATE_METHOD(TFuture<void>, InternalizeNode, (
         const NYPath::TYPath& path,
-        const TInternalizeNodeOptions& options = {}) override;
+        const TInternalizeNodeOptions& options),
+        (path, options))
 
     // Objects
-    TFuture<NObjectClient::TObjectId> CreateObject(
+    DELEGATE_METHOD(TFuture<NObjectClient::TObjectId>, CreateObject, (
         NObjectClient::EObjectType type,
-        const TCreateObjectOptions& options = {}) override;
-
+        const TCreateObjectOptions& options),
+        (type, options))
 
     // Files
-    TFuture<IFileReaderPtr> CreateFileReader(
+    DELEGATE_METHOD(TFuture<IFileReaderPtr>, CreateFileReader, (
         const NYPath::TYPath& path,
-        const TFileReaderOptions& options = {}) override;
+        const TFileReaderOptions& options),
+        (path, options))
 
-    IFileWriterPtr CreateFileWriter(
+    DELEGATE_METHOD(IFileWriterPtr, CreateFileWriter, (
         const NYPath::TRichYPath& path,
-        const TFileWriterOptions& options = {}) override;
+        const TFileWriterOptions& options),
+        (path, options))
 
-    // Journals
-    IJournalReaderPtr CreateJournalReader(
+    DELEGATE_METHOD(IJournalReaderPtr, CreateJournalReader, (
         const NYPath::TYPath& path,
-        const TJournalReaderOptions& options = {}) override;
+        const TJournalReaderOptions& options),
+        (path, options))
 
-    IJournalWriterPtr CreateJournalWriter(
+    DELEGATE_METHOD(IJournalWriterPtr, CreateJournalWriter, (
         const NYPath::TYPath& path,
-        const TJournalWriterOptions& options = {}) override;
-
-    // IClient methods
-
-    void Terminate() override;
-
-    const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
-
-    const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() override;
-
-    const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
+        const TJournalWriterOptions& options),
+        (path, options))
 
     // Transactions
-    ITransactionPtr AttachTransaction(
+    DELEGATE_METHOD(ITransactionPtr, AttachTransaction, (
         NTransactionClient::TTransactionId transactionId,
-        const TTransactionAttachOptions& options = {}) override;
+        const TTransactionAttachOptions& options),
+        (transactionId, options))
 
     // Tables
-    TFuture<void> MountTable(
+    DELEGATE_METHOD(TFuture<void>, MountTable, (
         const NYPath::TYPath& path,
-        const TMountTableOptions& options = {}) override;
+        const TMountTableOptions& options),
+        (path, options))
 
-    TFuture<void> UnmountTable(
+    DELEGATE_METHOD(TFuture<void>, UnmountTable, (
         const NYPath::TYPath& path,
-        const TUnmountTableOptions& options = {}) override;
+        const TUnmountTableOptions& options),
+        (path, options))
 
-    TFuture<void> RemountTable(
+    DELEGATE_METHOD(TFuture<void>, RemountTable, (
         const NYPath::TYPath& path,
-        const TRemountTableOptions& options = {}) override;
+        const TRemountTableOptions& options),
+        (path, options))
 
-    TFuture<void> FreezeTable(
+    DELEGATE_METHOD(TFuture<void>, FreezeTable, (
         const NYPath::TYPath& path,
-        const TFreezeTableOptions& options = {}) override;
+        const TFreezeTableOptions& options),
+        (path, options))
 
-    TFuture<void> UnfreezeTable(
+    DELEGATE_METHOD(TFuture<void>, UnfreezeTable, (
         const NYPath::TYPath& path,
-        const TUnfreezeTableOptions& options = {}) override;
+        const TUnfreezeTableOptions& options),
+        (path, options))
 
-    TFuture<void> ReshardTable(
+    DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
         const std::vector<NTableClient::TLegacyOwningKey>& pivotKeys,
-        const TReshardTableOptions& options = {}) override;
+        const TReshardTableOptions& options),
+        (path, pivotKeys, options))
 
-    TFuture<void> ReshardTable(
+    DELEGATE_METHOD(TFuture<void>, ReshardTable, (
         const NYPath::TYPath& path,
         int tabletCount,
-        const TReshardTableOptions& options = {}) override;
+        const TReshardTableOptions& options),
+        (path, tabletCount, options))
 
-    TFuture<std::vector<NTabletClient::TTabletActionId>> ReshardTableAutomatic(
+    DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, ReshardTableAutomatic, (
         const NYPath::TYPath& path,
-        const TReshardTableAutomaticOptions& options = {}) override;
+        const TReshardTableAutomaticOptions& options),
+        (path, options))
 
-    TFuture<void> TrimTable(
+    DELEGATE_METHOD(TFuture<void>, TrimTable, (
         const NYPath::TYPath& path,
         int tabletIndex,
         i64 trimmedRowCount,
-        const TTrimTableOptions& options = {}) override;
+        const TTrimTableOptions& options),
+        (path, tabletIndex, trimmedRowCount, options))
 
-    TFuture<void> AlterTable(
+    DELEGATE_METHOD(TFuture<void>, AlterTable, (
         const NYPath::TYPath& path,
-        const TAlterTableOptions& options = {}) override;
+        const TAlterTableOptions& options),
+        (path, options))
 
-    TFuture<void> AlterTableReplica(
+    DELEGATE_METHOD(TFuture<void>, AlterTableReplica, (
         NTabletClient::TTableReplicaId replicaId,
-        const TAlterTableReplicaOptions& options = {}) override;
+        const TAlterTableReplicaOptions& options),
+        (replicaId, options))
 
-    TFuture<void> AlterReplicationCard(
+    DELEGATE_METHOD(TFuture<void>, AlterReplicationCard, (
         NChaosClient::TReplicationCardId replicationCardId,
-        const TAlterReplicationCardOptions& options = {}) override;
+        const TAlterReplicationCardOptions& options),
+        (replicationCardId, options))
 
-    TFuture<NYson::TYsonString> GetTablePivotKeys(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (
         const NYPath::TYPath& path,
-        const TGetTablePivotKeysOptions& options = {}) override;
+        const TGetTablePivotKeysOptions& options),
+        (path, options))
 
-    TFuture<void> CreateTableBackup(
+    DELEGATE_METHOD(TFuture<void>, CreateTableBackup, (
         const TBackupManifestPtr& manifest,
-        const TCreateTableBackupOptions& options = {}) override;
+        const TCreateTableBackupOptions& options),
+        (manifest, options))
 
-    TFuture<void> RestoreTableBackup(
+    DELEGATE_METHOD(TFuture<void>, RestoreTableBackup, (
         const TBackupManifestPtr& manifest,
-        const TRestoreTableBackupOptions& options = {}) override;
+        const TRestoreTableBackupOptions& options),
+        (manifest, options))
 
-    TFuture<std::vector<NTabletClient::TTableReplicaId>> GetInSyncReplicas(
+    DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (
         const NYPath::TYPath& path,
         const NTableClient::TNameTablePtr& nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
-        const TGetInSyncReplicasOptions& options = {}) override;
+        const TGetInSyncReplicasOptions& options),
+        (path, nameTable, keys, options))
 
-    TFuture<std::vector<NTabletClient::TTableReplicaId>> GetInSyncReplicas(
+    DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (
         const NYPath::TYPath& path,
-        const TGetInSyncReplicasOptions& options = {}) override;
+        const TGetInSyncReplicasOptions& options),
+        (path, options))
 
-    TFuture<std::vector<TTabletInfo>> GetTabletInfos(
+    DELEGATE_METHOD(TFuture<std::vector<TTabletInfo>>, GetTabletInfos, (
         const NYPath::TYPath& path,
         const std::vector<int>& tabletIndexes,
-        const TGetTabletInfosOptions& options = {}) override;
+        const TGetTabletInfosOptions& options),
+        (path, tabletIndexes, options))
 
-    TFuture<TGetTabletErrorsResult> GetTabletErrors(
+    DELEGATE_METHOD(TFuture<TGetTabletErrorsResult>, GetTabletErrors, (
         const NYPath::TYPath& path,
-        const TGetTabletErrorsOptions& options = {}) override;
+        const TGetTabletErrorsOptions& options),
+        (path, options))
 
-    TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
+    DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (
         const TString& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
-        const TBalanceTabletCellsOptions& options = {}) override;
+        const TBalanceTabletCellsOptions& options),
+        (tabletCellBundle, movableTables, options))
 
-    TFuture<NChaosClient::TReplicationCardPtr> GetReplicationCard(
+    DELEGATE_METHOD(TFuture<NChaosClient::TReplicationCardPtr>, GetReplicationCard, (
         NChaosClient::TReplicationCardId replicationCardId,
-        const TGetReplicationCardOptions& options = {}) override;
+        const TGetReplicationCardOptions& options),
+        (replicationCardId, options))
 
-    TFuture<void> UpdateChaosTableReplicaProgress(
+    DELEGATE_METHOD(TFuture<void>, UpdateChaosTableReplicaProgress, (
         NChaosClient::TReplicaId replicaId,
-        const TUpdateChaosTableReplicaProgressOptions& options = {}) override;
+        const TUpdateChaosTableReplicaProgressOptions& options),
+        (replicaId, options))
 
-    TFuture<TSkynetSharePartsLocationsPtr> LocateSkynetShare(
+    DELEGATE_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (
         const NYPath::TRichYPath& path,
-        const TLocateSkynetShareOptions& options = {}) override;
+        const TLocateSkynetShareOptions& options),
+        (path, options))
 
-    TFuture<std::vector<NTableClient::TColumnarStatistics>> GetColumnarStatistics(
+    DELEGATE_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (
         const std::vector<NYPath::TRichYPath>& path,
-        const TGetColumnarStatisticsOptions& options = {}) override;
+        const TGetColumnarStatisticsOptions& options),
+        (path, options))
 
-    TFuture<TMultiTablePartitions> PartitionTables(
+    DELEGATE_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (
         const std::vector<NYPath::TRichYPath>& paths,
-        const TPartitionTablesOptions& options) override;
+        const TPartitionTablesOptions& options),
+        (paths, options))
 
     // Journals
-    TFuture<void> TruncateJournal(
+    DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
         i64 rowCount,
-        const TTruncateJournalOptions& options = {}) override;
+        const TTruncateJournalOptions& options),
+        (path, rowCount, options))
 
     // Files
-    TFuture<TGetFileFromCacheResult> GetFileFromCache(
+    DELEGATE_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
         const TString& md5,
-        const TGetFileFromCacheOptions& options = {}) override;
+        const TGetFileFromCacheOptions& options),
+        (md5, options))
 
-    TFuture<TPutFileToCacheResult> PutFileToCache(
+    DELEGATE_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
         const TString& expectedMD5,
-        const TPutFileToCacheOptions& options = {}) override;
+        const TPutFileToCacheOptions& options),
+        (path, expectedMD5, options))
 
     // Security
-    TFuture<void> AddMember(
+    DELEGATE_METHOD(TFuture<void>, AddMember, (
         const TString& group,
         const TString& member,
-        const TAddMemberOptions& options = {}) override;
+        const TAddMemberOptions& options),
+        (group, member, options))
 
-    TFuture<void> RemoveMember(
+    DELEGATE_METHOD(TFuture<void>, RemoveMember, (
         const TString& group,
         const TString& member,
-        const TRemoveMemberOptions& options = {}) override;
+        const TRemoveMemberOptions& options),
+        (group, member, options))
 
-    TFuture<TCheckPermissionResponse> CheckPermission(
+    DELEGATE_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (
         const TString& user,
         const NYPath::TYPath& path,
         NYTree::EPermission permission,
-        const TCheckPermissionOptions& options = {}) override;
+        const TCheckPermissionOptions& options),
+        (user, path, permission, options))
 
-    TFuture<TCheckPermissionByAclResult> CheckPermissionByAcl(
+    DELEGATE_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (
         const std::optional<TString>& user,
         NYTree::EPermission permission,
         NYTree::INodePtr acl,
-        const TCheckPermissionByAclOptions& options = {}) override;
+        const TCheckPermissionByAclOptions& options),
+        (user, permission, acl, options))
 
-    TFuture<void> TransferAccountResources(
+    DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
         const TString& srcAccount,
         const TString& dstAccount,
         NYTree::INodePtr resourceDelta,
-        const TTransferAccountResourcesOptions& options = {}) override;
+        const TTransferAccountResourcesOptions& options),
+        (srcAccount, dstAccount, resourceDelta, options))
 
     // Scheduler
-    TFuture<void> TransferPoolResources(
+    DELEGATE_METHOD(TFuture<void>, TransferPoolResources, (
         const TString& srcPool,
         const TString& dstPool,
         const TString& poolTree,
         NYTree::INodePtr resourceDelta,
-        const TTransferPoolResourcesOptions& options = {}) override;
+        const TTransferPoolResourcesOptions& options),
+        (srcPool, dstPool, poolTree, resourceDelta, options))
 
-    TFuture<NScheduler::TOperationId> StartOperation(
+    DELEGATE_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,
-        const TStartOperationOptions& options = {}) override;
+        const TStartOperationOptions& options),
+        (type, spec, options))
 
-    TFuture<void> AbortOperation(
+    DELEGATE_METHOD(TFuture<void>, AbortOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TAbortOperationOptions& options = {}) override;
+        const TAbortOperationOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<void> SuspendOperation(
+    DELEGATE_METHOD(TFuture<void>, SuspendOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TSuspendOperationOptions& options = {}) override;
+        const TSuspendOperationOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<void> ResumeOperation(
+    DELEGATE_METHOD(TFuture<void>, ResumeOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TResumeOperationOptions& options = {}) override;
+        const TResumeOperationOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<void> CompleteOperation(
+    DELEGATE_METHOD(TFuture<void>, CompleteOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TCompleteOperationOptions& options = {}) override;
+        const TCompleteOperationOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<void> UpdateOperationParameters(
+    DELEGATE_METHOD(TFuture<void>, UpdateOperationParameters, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const NYson::TYsonString& parameters,
-        const TUpdateOperationParametersOptions& options = {}) override;
+        const TUpdateOperationParametersOptions& options),
+        (operationIdOrAlias, parameters, options))
 
-    TFuture<TOperation> GetOperation(
+    DELEGATE_METHOD(TFuture<TOperation>, GetOperation, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TGetOperationOptions& options = {}) override;
+        const TGetOperationOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<void> DumpJobContext(
+    DELEGATE_METHOD(TFuture<void>, DumpJobContext, (
         NJobTrackerClient::TJobId jobId,
         const NYPath::TYPath& path,
-        const TDumpJobContextOptions& options = {}) override;
+        const TDumpJobContextOptions& options),
+        (jobId, path, options))
 
-    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> GetJobInput(
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobInput, (
         NJobTrackerClient::TJobId jobId,
-        const TGetJobInputOptions& options = {}) override;
+        const TGetJobInputOptions& options),
+        (jobId, options))
 
-    TFuture<NYson::TYsonString> GetJobInputPaths(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJobInputPaths, (
         NJobTrackerClient::TJobId jobId,
-        const TGetJobInputPathsOptions& options = {}) override;
+        const TGetJobInputPathsOptions& options),
+        (jobId, options))
 
-    TFuture<NYson::TYsonString> GetJobSpec(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJobSpec, (
         NJobTrackerClient::TJobId jobId,
-        const TGetJobSpecOptions& options = {}) override;
+        const TGetJobSpecOptions& options),
+        (jobId, options))
 
-    TFuture<TSharedRef> GetJobStderr(
+    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobStderr, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
-        const TGetJobStderrOptions& options = {}) override;
+        const TGetJobStderrOptions& options),
+        (operationIdOrAlias, jobId, options))
 
-    TFuture<TSharedRef> GetJobFailContext(
+    DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
-        const TGetJobFailContextOptions& options = {}) override;
+        const TGetJobFailContextOptions& options),
+        (operationIdOrAlias, jobId, options))
 
-    TFuture<TListOperationsResult> ListOperations(
-        const TListOperationsOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<TListOperationsResult>, ListOperations, (
+        const TListOperationsOptions& options),
+        (options))
 
-    TFuture<TListJobsResult> ListJobs(
+    DELEGATE_METHOD(TFuture<TListJobsResult>, ListJobs, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
-        const TListJobsOptions& options = {}
-    ) override;
+        const TListJobsOptions& options),
+        (operationIdOrAlias, options))
 
-    TFuture<NYson::TYsonString> GetJob(
+    DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
-        const TGetJobOptions& options = {}) override;
+        const TGetJobOptions& options),
+        (operationIdOrAlias, jobId, options))
 
-    TFuture<void> AbandonJob(
+    DELEGATE_METHOD(TFuture<void>, AbandonJob, (
         NJobTrackerClient::TJobId jobId,
-        const TAbandonJobOptions& options = {}) override;
+        const TAbandonJobOptions& options),
+        (jobId, options))
 
-    TFuture<TPollJobShellResponse> PollJobShell(
+    DELEGATE_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (
         NJobTrackerClient::TJobId jobId,
         const std::optional<TString>& shellName,
         const NYson::TYsonString& parameters,
-        const TPollJobShellOptions& options = {}) override;
+        const TPollJobShellOptions& options),
+        (jobId, shellName, parameters, options))
 
-    TFuture<void> AbortJob(
+    DELEGATE_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
-        const TAbortJobOptions& options = {}) override;
+        const TAbortJobOptions& options),
+        (jobId, options))
 
     // Metadata
-    TFuture<TClusterMeta> GetClusterMeta(
-        const TGetClusterMetaOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (
+        const TGetClusterMetaOptions& options),
+        (options))
 
-    TFuture<void> CheckClusterLiveness(
-        const TCheckClusterLivenessOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<void>, CheckClusterLiveness, (
+        const TCheckClusterLivenessOptions& options),
+        (options))
 
     // Administration
-    TFuture<int> BuildSnapshot(
-        const TBuildSnapshotOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<int>, BuildSnapshot, (
+        const TBuildSnapshotOptions& options),
+        (options))
 
-    TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
-        const TBuildMasterSnapshotsOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<TCellIdToSnapshotIdMap>, BuildMasterSnapshots, (
+        const TBuildMasterSnapshotsOptions& options),
+        (options))
 
-    TFuture<void> ExitReadOnly(
+    DELEGATE_METHOD(TFuture<void>, ExitReadOnly, (
         NHydra::TCellId cellId,
-        const TExitReadOnlyOptions& options) override;
+        const TExitReadOnlyOptions& options),
+        (cellId, options))
 
-    TFuture<void> MasterExitReadOnly(
-        const TMasterExitReadOnlyOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<void>, MasterExitReadOnly, (
+        const TMasterExitReadOnlyOptions& options),
+        (options))
 
-    TFuture<void> DiscombobulateNonvotingPeers(
+    DELEGATE_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
         NHydra::TCellId cellId,
-        const TDiscombobulateNonvotingPeersOptions& options) override;
+        const TDiscombobulateNonvotingPeersOptions& options),
+        (cellId, options))
 
-    TFuture<void> SwitchLeader(
+    DELEGATE_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
         const TString& newLeaderAddress,
-        const TSwitchLeaderOptions& options = {}) override;
+        const TSwitchLeaderOptions& options),
+        (cellId, newLeaderAddress, options))
 
-    TFuture<void> ResetStateHash(
+    DELEGATE_METHOD(TFuture<void>, ResetStateHash, (
         NHydra::TCellId cellId,
-        const TResetStateHashOptions& options = {}) override;
+        const TResetStateHashOptions& options),
+        (cellId, options))
 
-    TFuture<void> GCCollect(
-        const TGCCollectOptions& options = {}) override;
+    DELEGATE_METHOD(TFuture<void>, GCCollect, (
+        const TGCCollectOptions& options),
+        (options))
 
-    TFuture<void> KillProcess(
+    DELEGATE_METHOD(TFuture<void>, KillProcess, (
         const TString& address,
-        const TKillProcessOptions& options = {}) override;
+        const TKillProcessOptions& options),
+        (address, options))
 
-    TFuture<TString> WriteCoreDump(
+    DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
         const TString& address,
-        const TWriteCoreDumpOptions& options = {}) override;
+        const TWriteCoreDumpOptions& options),
+        (address, options))
 
-    TFuture<TGuid> WriteLogBarrier(
+    DELEGATE_METHOD(TFuture<TGuid>, WriteLogBarrier, (
         const TString& address,
-        const TWriteLogBarrierOptions& options = {}) override;
+        const TWriteLogBarrierOptions& options),
+        (address, options))
 
-    TFuture<TString> WriteOperationControllerCoreDump(
+    DELEGATE_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
-        const TWriteOperationControllerCoreDumpOptions& options = {}) override;
+        const TWriteOperationControllerCoreDumpOptions& options),
+        (operationId, options))
 
-    TFuture<void> HealExecNode(
+    DELEGATE_METHOD(TFuture<void>, HealExecNode, (
         const TString& address,
-        const THealExecNodeOptions& options = {}) override;
+        const THealExecNodeOptions& options),
+        (address, options))
 
-    TFuture<void> SuspendCoordinator(
+    DELEGATE_METHOD(TFuture<void>, SuspendCoordinator, (
         NObjectClient::TCellId coordinatorCellId,
-        const TSuspendCoordinatorOptions& options = {}) override;
+        const TSuspendCoordinatorOptions& options),
+        (coordinatorCellId, options))
 
-    TFuture<void> ResumeCoordinator(
+    DELEGATE_METHOD(TFuture<void>, ResumeCoordinator, (
         NObjectClient::TCellId coordinatorCellId,
-        const TResumeCoordinatorOptions& options = {}) override;
+        const TResumeCoordinatorOptions& options),
+        (coordinatorCellId, options))
 
-    TFuture<void> MigrateReplicationCards(
+    DELEGATE_METHOD(TFuture<void>, MigrateReplicationCards, (
         NObjectClient::TCellId chaosCellId,
-        const TMigrateReplicationCardsOptions& options = {}) override;
+        const TMigrateReplicationCardsOptions& options),
+        (chaosCellId, options))
 
-    TFuture<void> SuspendChaosCells(
+    DELEGATE_METHOD(TFuture<void>, SuspendChaosCells, (
         const std::vector<NObjectClient::TCellId>& cellIds,
-        const TSuspendChaosCellsOptions& options = {}) override;
+        const TSuspendChaosCellsOptions& options),
+        (cellIds, options))
 
-    TFuture<void> ResumeChaosCells(
+    DELEGATE_METHOD(TFuture<void>, ResumeChaosCells, (
         const std::vector<NObjectClient::TCellId>& cellIds,
-        const TResumeChaosCellsOptions& options = {}) override;
+        const TResumeChaosCellsOptions& options),
+        (cellIds, options))
 
-    TFuture<void> SuspendTabletCells(
+    DELEGATE_METHOD(TFuture<void>, SuspendTabletCells, (
         const std::vector<NObjectClient::TCellId>& cellIds,
-        const TSuspendTabletCellsOptions& options = {}) override;
+        const TSuspendTabletCellsOptions& options),
+        (cellIds, options))
 
-    TFuture<void> ResumeTabletCells(
+    DELEGATE_METHOD(TFuture<void>, ResumeTabletCells, (
         const std::vector<NObjectClient::TCellId>& cellIds,
-        const TResumeTabletCellsOptions& options = {}) override;
+        const TResumeTabletCellsOptions& options),
+        (cellIds, options))
 
-    TFuture<TMaintenanceId> AddMaintenance(
+    DELEGATE_METHOD(TFuture<TMaintenanceId>, AddMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         EMaintenanceType type,
         const TString& comment,
-        const TAddMaintenanceOptions& options = {}) override;
+        const TAddMaintenanceOptions& options),
+        (component, address, type, comment, options))
 
-    TFuture<TMaintenanceCounts> RemoveMaintenance(
+    DELEGATE_METHOD(TFuture<TMaintenanceCounts>, RemoveMaintenance, (
         EMaintenanceComponent component,
         const TString& address,
         const TMaintenanceFilter& filter,
-        const TRemoveMaintenanceOptions& options = {}) override;
+        const TRemoveMaintenanceOptions& options),
+        (component, address, filter, options))
 
-    TFuture<TDisableChunkLocationsResult> DisableChunkLocations(
+    DELEGATE_METHOD(TFuture<TDisableChunkLocationsResult>, DisableChunkLocations, (
         const TString& nodeAddress,
         const std::vector<TGuid>& locationUuids,
-        const TDisableChunkLocationsOptions& options = {}) override;
+        const TDisableChunkLocationsOptions& options),
+        (nodeAddress, locationUuids, options))
 
-    TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
+    DELEGATE_METHOD(TFuture<TDestroyChunkLocationsResult>, DestroyChunkLocations, (
         const TString& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
-        const TDestroyChunkLocationsOptions& options = {}) override;
+        const TDestroyChunkLocationsOptions& options),
+        (nodeAddress, recoverUnlinkedDisks, locationUuids, options))
 
-    TFuture<TResurrectChunkLocationsResult> ResurrectChunkLocations(
+    DELEGATE_METHOD(TFuture<TResurrectChunkLocationsResult>, ResurrectChunkLocations, (
         const TString& nodeAddress,
         const std::vector<TGuid>& locationUuids,
-        const TResurrectChunkLocationsOptions& options = {}) override;
+        const TResurrectChunkLocationsOptions& options),
+        (nodeAddress, locationUuids, options))
 
-    TFuture<TRequestRestartResult> RequestRestart(
+    DELEGATE_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
         const TString& nodeAddress,
-        const TRequestRestartOptions& options = {}) override;
+        const TRequestRestartOptions& options),
+        (nodeAddress, options))
 
-    TFuture<void> SetUserPassword(
+    DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
         const TString& user,
         const TString& currentPasswordSha256,
         const TString& newPasswordSha256,
-        const TSetUserPasswordOptions& options) override;
+        const TSetUserPasswordOptions& options),
+        (user, currentPasswordSha256, newPasswordSha256, options))
 
-    TFuture<TIssueTokenResult> IssueToken(
+    DELEGATE_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
         const TString& user,
         const TString& passwordSha256,
-        const TIssueTokenOptions& options) override;
+        const TIssueTokenOptions& options),
+        (user, passwordSha256, options))
 
-    TFuture<void> RevokeToken(
+    DELEGATE_METHOD(TFuture<void>, RevokeToken, (
         const TString& user,
         const TString& passwordSha256,
         const TString& tokenSha256,
-        const TRevokeTokenOptions& options) override;
+        const TRevokeTokenOptions& options),
+        (user, passwordSha256, tokenSha256, options))
 
-    TFuture<TListUserTokensResult> ListUserTokens(
+    DELEGATE_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
         const TString& user,
         const TString& passwordSha256,
-        const TListUserTokensOptions& options) override;
+        const TListUserTokensOptions& options),
+        (user, passwordSha256, options))
 
     // Query tracker
-
-    TFuture<NQueryTrackerClient::TQueryId> StartQuery(
+    DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
         const TString& query,
-        const TStartQueryOptions& options) override;
+        const TStartQueryOptions& options),
+        (engine, query, options))
 
-    TFuture<void> AbortQuery(
+    DELEGATE_METHOD(TFuture<void>, AbortQuery, (
         NQueryTrackerClient::TQueryId queryId,
-        const TAbortQueryOptions& options) override;
+        const TAbortQueryOptions& options),
+        (queryId, options))
 
-    TFuture<TQueryResult> GetQueryResult(
-        NQueryTrackerClient::TQueryId queryId,
-        i64 resultIndex,
-        const TGetQueryResultOptions& options) override;
-
-    TFuture<IUnversionedRowsetPtr> ReadQueryResult(
+    DELEGATE_METHOD(TFuture<TQueryResult>, GetQueryResult, (
         NQueryTrackerClient::TQueryId queryId,
         i64 resultIndex,
-        const TReadQueryResultOptions& options) override;
+        const TGetQueryResultOptions& options),
+        (queryId, resultIndex, options))
 
-    TFuture<TQuery> GetQuery(
+    DELEGATE_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (
         NQueryTrackerClient::TQueryId queryId,
-        const TGetQueryOptions& options) override;
+        i64 resultIndex,
+        const TReadQueryResultOptions& options),
+        (queryId, resultIndex, options))
 
-    TFuture<TListQueriesResult> ListQueries(const TListQueriesOptions& options) override;
-
-    TFuture<void> AlterQuery(
+    DELEGATE_METHOD(TFuture<TQuery>, GetQuery, (
         NQueryTrackerClient::TQueryId queryId,
-        const TAlterQueryOptions& options) override;
+        const TGetQueryOptions& options),
+        (queryId, options))
+
+    DELEGATE_METHOD(TFuture<TListQueriesResult>, ListQueries, (
+        const TListQueriesOptions& options),
+        (options))
+
+    DELEGATE_METHOD(TFuture<void>, AlterQuery, (
+        NQueryTrackerClient::TQueryId queryId,
+        const TAlterQueryOptions& options),
+        (queryId, options))
 
     // Bundle Controller
-
-    virtual TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
+    DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const TString& bundleName,
-        const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
+        const NBundleControllerClient::TGetBundleConfigOptions& options),
+        (bundleName, options))
 
-    virtual TFuture<void> SetBundleConfig(
+    DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
         const TString& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
-        const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
+        const NBundleControllerClient::TSetBundleConfigOptions& options),
+        (bundleName, bundleConfig, options))
 
     // Flow
-
-    TFuture<void> StartPipeline(
+    DELEGATE_METHOD(TFuture<TGetPipelineSpecResult>, GetPipelineSpec, (
         const NYPath::TYPath& pipelinePath,
-        const TStartPipelineOptions& options) override;
+        const TGetPipelineSpecOptions& options),
+        (pipelinePath, options))
 
-    TFuture<void> StopPipeline(
+    DELEGATE_METHOD(TFuture<TSetPipelineSpecResult>, SetPipelineSpec, (
         const NYPath::TYPath& pipelinePath,
-        const TStopPipelineOptions& options) override;
+        const NYson::TYsonString& spec,
+        const TSetPipelineSpecOptions& options),
+        (pipelinePath, spec, options))
 
-    TFuture<void> PausePipeline(
+    DELEGATE_METHOD(TFuture<TGetPipelineDynamicSpecResult>, GetPipelineDynamicSpec, (
         const NYPath::TYPath& pipelinePath,
-        const TPausePipelineOptions& options) override;
+        const TGetPipelineDynamicSpecOptions& options),
+        (pipelinePath, options))
 
-    TFuture<TPipelineStatus> GetPipelineStatus(
+    DELEGATE_METHOD(TFuture<TSetPipelineDynamicSpecResult>, SetPipelineDynamicSpec, (
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options) override;
+        const NYson::TYsonString& spec,
+        const TSetPipelineDynamicSpecOptions& options),
+        (pipelinePath, spec, options))
+
+    DELEGATE_METHOD(TFuture<void>, StartPipeline, (
+        const NYPath::TYPath& pipelinePath,
+        const TStartPipelineOptions& options),
+        (pipelinePath, options))
+
+    DELEGATE_METHOD(TFuture<void>, StopPipeline, (
+        const NYPath::TYPath& pipelinePath,
+        const TStopPipelineOptions& options),
+        (pipelinePath, options))
+
+    DELEGATE_METHOD(TFuture<void>, PausePipeline, (
+        const NYPath::TYPath& pipelinePath,
+        const TPausePipelineOptions& options),
+        (pipelinePath, options))
+
+    DELEGATE_METHOD(TFuture<TPipelineStatus>, GetPipelineStatus, (
+        const NYPath::TYPath& pipelinePath,
+        const TGetPipelineStatusOptions& options),
+        (pipelinePath, options))
+
+    #undef DELEGATE_METHOD
 
 protected:
     const IClientPtr Underlying_;

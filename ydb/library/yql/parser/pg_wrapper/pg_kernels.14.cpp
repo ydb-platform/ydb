@@ -28,12 +28,15 @@ namespace NYql {
 
 extern "C" {
 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
 #ifdef USE_SLOW_PG_KERNELS
 #include "pg_kernels.slow.14.inc"
 #else
 #include "pg_proc_policies.14.inc"
 #include "pg_kernels.14.inc"
 #endif
+Y_PRAGMA_DIAGNOSTIC_POP
 
 }
 

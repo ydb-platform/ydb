@@ -1,5 +1,8 @@
 #include "codegen.h"
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Wbitwise-instead-of-logical\"")
 #include "codegen_llvm_deps.h" // Y_IGNORE
+Y_PRAGMA_DIAGNOSTIC_POP
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <util/generic/maybe.h>
@@ -567,9 +570,7 @@ public:
         std::unique_ptr<void, void(*)(void*)> delDis(dis, LLVMDisasmDispose);
         LLVMSetDisasmOptions(dis, LLVMDisassembler_Option_AsmPrinterVariant);
         char outline[1024];
-        int pos;
-
-        pos = 0;
+        size_t pos = 0;
         while (pos < size) {
             size_t l = LLVMDisasmInstruction(dis, (uint8_t*)buf + pos, size - pos, 0, outline, sizeof(outline));
             if (!l) {
@@ -719,7 +720,9 @@ private:
     std::string Diagnostic_;
     std::string Triple_;
     llvm::Module* Module_;
+#ifdef __linux__    
     llvm::JITEventListener* PerfListener_ = nullptr;
+#endif
     std::unique_ptr<llvm::ExecutionEngine> Engine_;
     std::vector<std::pair<llvm::object::SectionRef, ui64>> CodeSections_;
     ui64 TotalObjectSize = 0;

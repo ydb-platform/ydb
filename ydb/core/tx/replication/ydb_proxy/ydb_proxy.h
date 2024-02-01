@@ -83,6 +83,18 @@ struct TEvYdbProxy {
         using TBase = TGenericRequest<TDerived, EventType, void>;
     };
 
+    template <typename T>
+    class THasOutFunc {
+        template <typename U>
+        static constexpr std::false_type Detect(...);
+
+        template <typename U, typename = decltype(std::declval<U>().Out(std::declval<IOutputStream&>()))>
+        static constexpr std::true_type Detect(int);
+
+    public:
+        static constexpr bool Value = decltype(Detect<T>(0))::value;
+    };
+
     template <typename TDerived, ui32 EventType, typename T>
     struct TGenericResponse: public TEventLocal<TDerived, EventType> {
         using TResult = T;
@@ -94,6 +106,14 @@ struct TEvYdbProxy {
         explicit TGenericResponse(Args&&... args)
             : Result(std::forward<Args>(args)...)
         {
+        }
+
+        TString ToString() const override {
+            auto ret = TStringBuilder() << this->ToStringHeader();
+            if constexpr (THasOutFunc<TResult>::Value) {
+                ret << " { Result: " << Result << " }";
+            }
+            return ret;
         }
 
         using TBase = TGenericResponse<TDerived, EventType, T>;
@@ -126,6 +146,7 @@ struct TEvYdbProxy {
             const TString& GetData() const { return Data; }
             TString& GetData() { return Data; }
             ECodec GetCodec() const { return Codec; }
+            void Out(IOutputStream& out) const;
 
         private:
             ui64 Offset;
@@ -145,6 +166,8 @@ struct TEvYdbProxy {
                 }
             }
         }
+
+        void Out(IOutputStream& out) const;
 
         TVector<TMessage> Messages;
     };

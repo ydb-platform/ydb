@@ -56,7 +56,7 @@ public:
             cluster = input->Child(TNode::idx_Cluster)->Content();
         }
 
-        if (cluster != "pg_catalog") {
+        if (cluster != "pg_catalog" && cluster != "information_schema") {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unexpected cluster: " << cluster));
             return TStatus::Error;
         }
@@ -107,31 +107,14 @@ public:
 
         auto tableName = input->Child(TNode::idx_Table)->Content();
         TVector<const TItemExprType*> items;
-        if (tableName == "pg_type") {
-            FillPgTypeSchema(items, ctx);
-        } else if (tableName == "pg_database") {
-            FillPgDatabaseSchema(items, ctx);
-        } else if (tableName == "pg_tablespace") {
-            FillPgTablespaceSchema(items, ctx);
-        } else if (tableName == "pg_shdescription") {
-            FillPgShDescriptionSchema(items, ctx);
-        } else if (tableName == "pg_trigger") {
-            FillPgTriggerSchema(items, ctx);
-        } else if (tableName == "pg_locks") {
-            FillPgLocksSchema(items, ctx);
-        } else if (tableName == "pg_stat_gssapi") {
-            FillPgStatGssapiSchema(items, ctx);
-        } else if (tableName == "pg_inherits") {
-            FillPgInheritsSchema(items, ctx);
-        } else if (tableName == "pg_stat_activity") {
-            FillPgStatActivitySchema(items, ctx);
-        } else if (tableName == "pg_timezone_names") {
-            FillPgTimezoneNamesSchema(items, ctx);
-        } else if (tableName == "pg_timezone_abbrevs") {
-            FillPgTimezoneAbbrevsSchema(items, ctx);
-        } else {
+        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{ cluster, TString(tableName) });
+        if (!columnsPtr) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;
+        }
+
+        for (const auto& c: *columnsPtr) {
+            AddColumn(items, ctx, c.Name, c.UdtType);
         }
 
         TVector<TString> columnOrder;
@@ -160,81 +143,6 @@ public:
     }
 
 private:
-    void FillPgTypeSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "oid", "oid");
-        AddColumn(items, ctx, "typname", "name");
-        AddColumn(items, ctx, "typinput", "regproc");
-        AddColumn(items, ctx, "typnamespace", "oid");
-        AddColumn(items, ctx, "typtype", "char");
-    }
-
-    void FillPgDatabaseSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "oid", "oid");
-        AddColumn(items, ctx, "datname", "name");
-        AddColumn(items, ctx, "encoding", "int4");
-        AddColumn(items, ctx, "datallowconn", "bool");
-        AddColumn(items, ctx, "datistemplate", "bool");
-        AddColumn(items, ctx, "datdba", "oid");
-    }
-
-    void FillPgTablespaceSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "oid", "oid");
-        AddColumn(items, ctx, "spcname", "name");
-    }
-
-    void FillPgShDescriptionSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "objoid", "oid");
-        AddColumn(items, ctx, "classoid", "oid");
-        AddColumn(items, ctx, "description", "text");
-    }
-
-    void FillPgTriggerSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "tgrelid", "oid");
-        AddColumn(items, ctx, "tgenabled", "char");
-    }
-
-    void FillPgLocksSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "transactionid", "xid");
-    }
-
-    void FillPgStatGssapiSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "encrypted", "bool");
-        AddColumn(items, ctx, "gss_authenticated", "bool");
-        AddColumn(items, ctx, "pid", "int4");
-    }
-
-    void FillPgInheritsSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "inhrelid", "oid");
-        AddColumn(items, ctx, "inhparent", "oid");
-    }
-
-    void FillPgStatActivitySchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "application_name", "text");
-        AddColumn(items, ctx, "backend_start", "timestamptz");
-        AddColumn(items, ctx, "backend_type", "text");
-        AddColumn(items, ctx, "client_addr", "inet");
-        AddColumn(items, ctx, "datname", "name");
-        AddColumn(items, ctx, "pid", "int4");
-        AddColumn(items, ctx, "query", "text");
-        AddColumn(items, ctx, "query_start", "timestamptz");
-        AddColumn(items, ctx, "state", "text");
-        AddColumn(items, ctx, "state_change", "timestamptz");
-        AddColumn(items, ctx, "usename", "name");
-        AddColumn(items, ctx, "wait_event", "text");
-        AddColumn(items, ctx, "wait_event_type", "text");
-        AddColumn(items, ctx, "xact_start", "timestamptz");
-    }
-
-    void FillPgTimezoneNamesSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "name", "text");
-        AddColumn(items, ctx, "is_dst", "bool");
-    }
-
-    void FillPgTimezoneAbbrevsSchema(TVector<const TItemExprType*>& items, TExprContext& ctx) {
-        AddColumn(items, ctx, "abbrev", "text");
-        AddColumn(items, ctx, "is_dst", "bool");
-    }
-
     void AddColumn(TVector<const TItemExprType*>& items, TExprContext& ctx, const TString& name, const TString& type) {
         items.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TPgExprType>(NPg::LookupType(type).TypeId)));
     }

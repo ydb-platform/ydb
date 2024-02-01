@@ -233,6 +233,7 @@ protected:
     friend class TTxTabletOwnersReply;
     friend class TTxRequestTabletOwners;
     friend class TTxUpdateTabletsObject;
+    friend class TTxUpdateTabletGroups;
 
     friend class TDeleteTabletActor;
 
@@ -327,6 +328,7 @@ protected:
     ui32 DataCenters = 1;
     ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
+    double StorageScatter = 0;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
@@ -923,6 +925,10 @@ public:
 
     double GetMinStorageScatterToBalance() const {
         return CurrentConfig.GetMinStorageScatterToBalance();
+    }
+
+    ui64 GetStorageBalancerInflight() const {
+        return CurrentConfig.GetStorageBalancerInflight();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

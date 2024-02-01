@@ -611,9 +611,8 @@ protected:
 
             auto listObj = listPacker.Unpack(TRope(serialized), HolderFactory);
             UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
-            ui32 i = 0;
             const auto iter = listObj.GetListIterator();
-            for (NUdf::TUnboxedValue uVal; iter.Next(uVal); ++i) {
+            for (NUdf::TUnboxedValue uVal; iter.Next(uVal);) {
                 UNIT_ASSERT(uVal);
                 UNIT_ASSERT_VALUES_EQUAL(std::string_view(uVal.AsStringRef()), str);
             }

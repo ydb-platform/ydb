@@ -1,17 +1,28 @@
 GO_LIBRARY()
-
-SRCS(
-    ioutil.go
-    tempfile.go
-)
-
-GO_XTEST_SRCS(
-    example_test.go
-    ioutil_test.go
-    tempfile_test.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ioutil.go
+		tempfile.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ioutil.go
+		tempfile.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ioutil.go
+		tempfile.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ioutil.go
+		tempfile.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ioutil.go
+		tempfile.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

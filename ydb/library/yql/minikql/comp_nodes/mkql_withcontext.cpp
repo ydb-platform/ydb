@@ -250,6 +250,7 @@ public:
 
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
             getres.second[idx] = [idx, arrayPtr, arrayType, indexType, valueType] (const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto itemPtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, (TString("ptr_") += ToString(idx)).c_str(), block);
                 return new LoadInst(valueType, itemPtr, (TString("item_") += ToString(idx)).c_str(), block);
             };

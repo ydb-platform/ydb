@@ -1,14 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    trace.go
-)
-
-GO_TEST_SRCS(trace_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		trace.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		trace.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		trace.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		trace.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		trace.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

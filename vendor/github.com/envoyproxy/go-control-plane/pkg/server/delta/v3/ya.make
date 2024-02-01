@@ -11,4 +11,6 @@ GO_TEST_SRCS(watches_test.go)
 
 END()
 
-RECURSE(gotest)
+RECURSE(
+    gotest
+)

@@ -208,7 +208,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
 
 void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TOffsetsResponse::TPartResult result;
-    result.SetPartition(Partition);
+    result.SetPartition(Partition.InternalPartitionId);
     result.SetStartOffset(StartOffset);
     result.SetEndOffset(EndOffset);
     result.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -228,15 +228,15 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
             result.SetReadCreateTimestampMS(userInfo->GetReadCreateTimestamp().MilliSeconds());
         }
     }
-    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result));
+    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TOffsetsResponse::TPartResult result;
-    result.SetPartition(Partition);
+    result.SetPartition(Partition.InternalPartitionId);
     result.SetErrorCode(NPersQueue::NErrorCode::INITIALIZING);
     result.SetErrorReason("partition is not ready yet");
-    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result));
+    ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));
 }
 
 std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui64 offset) const {
@@ -314,7 +314,7 @@ TReadAnswer TReadInfo::FormAnswer(
     const TActorContext& ctx,
     const TEvPQ::TEvBlobResponse& blobResponse,
     const ui64 endOffset,
-    const ui32 partition,
+    const TPartitionId& partition,
     TUserInfo* userInfo,
     const ui64 destination,
     const ui64 sizeLag,
@@ -409,7 +409,7 @@ TReadAnswer TReadInfo::FormAnswer(
         }
         Y_ABORT_UNLESS(offset <= Offset);
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
-        TKey key(TKeyPrefix::TypeData, 0, offset, partNo, count, internalPartsCount, false);
+        TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
         for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();
             auto& header = batch.Header;

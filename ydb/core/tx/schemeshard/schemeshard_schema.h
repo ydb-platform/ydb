@@ -118,6 +118,8 @@ struct Schema : NIceDb::Schema {
         struct TTLSettings : Column<8, NScheme::NTypeIds::String> {};
         struct IsBackup : Column<9, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig : Column<10, NScheme::NTypeIds::String> {};
+        struct IsTemporary : Column<11, NScheme::NTypeIds::Bool> {};
+        struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -130,7 +132,9 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
-            ReplicationConfig
+            ReplicationConfig,
+            IsTemporary,
+            OwnerActorId
         >;
     };
 
@@ -147,6 +151,8 @@ struct Schema : NIceDb::Schema {
         struct TTLSettings :         Column<9, NScheme::NTypeIds::String> {};
         struct IsBackup :            Column<10, NScheme::NTypeIds::Bool> {};
         struct ReplicationConfig :   Column<11, NScheme::NTypeIds::String> {};
+        struct IsTemporary :         Column<12, NScheme::NTypeIds::Bool> {};
+        struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -160,7 +166,9 @@ struct Schema : NIceDb::Schema {
             PartitioningVersion,
             TTLSettings,
             IsBackup,
-            ReplicationConfig
+            ReplicationConfig,
+            IsTemporary,
+            OwnerActorId
         >;
     };
 
@@ -1726,13 +1734,17 @@ struct Schema : NIceDb::Schema {
         struct ColumnNo : Column<2, NScheme::NTypeIds::Uint64> {};
         struct ColumnName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct DefaultFromLiteral : Column<4, NScheme::NTypeIds::String> {};
+        struct NotNull : Column<5, NScheme::NTypeIds::Bool> {};
+        struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
             Id,
             ColumnNo,
             ColumnName,
-            DefaultFromLiteral
+            DefaultFromLiteral,
+            NotNull,
+            FamilyName
         >;
     };
 

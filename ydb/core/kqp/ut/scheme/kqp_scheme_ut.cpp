@@ -4882,7 +4882,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External table are disabled. Please contact your system administrator to enable it");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it");
     }
 
     Y_UNIT_TEST(CreateExternalTableCheckPrimaryKey) {
@@ -5369,6 +5369,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
             TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
+        
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         TTestHelper::TColumnTable testTable;
 
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
@@ -5553,7 +5555,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`ADD COLUMN new_column Uint64 NOT NULL;";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::BAD_REQUEST, alterResult.GetIssues().ToString());
         }
     }
 

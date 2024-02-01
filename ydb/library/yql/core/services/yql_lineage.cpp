@@ -218,7 +218,7 @@ private:
             HandleFlatMap(lineage, node);
         } else if (node.IsCallable("Aggregate")) {
             HandleAggregate(lineage, node);
-        } else if (node.IsCallable("Extend")) {
+        } else if (node.IsCallable({"Extend","OrderedExtend","Merge"})) {
             HandleExtend(lineage, node);
         } else if (node.IsCallable({"CalcOverWindow","CalcOverSessionWindow","CalcOverWindowGroup"})) {
             HandleWindow(lineage, node);
@@ -295,10 +295,6 @@ private:
         std::vector<TFieldsLineage> results;
         TMaybe<bool> hasStructItems;
         for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
-            if (index == 0 && node.IsCallable("If")) {
-                continue;
-            }
-
             if (index != 0 && node.IsCallable("SqlIn")) {
                 continue;
             }

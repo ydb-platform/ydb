@@ -43,7 +43,7 @@ IInvokerPtr CreateIdenticalInvokerByConstReference(const IInvokerPtr& invoker)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMockInvoker;
-using IMockInvokerPool = IGenericInvokerPool<TMockInvoker>;
+using IMockInvokerPool = TGenericInvokerPool<TMockInvoker>;
 using IMockInvokerPoolPtr = TIntrusivePtr<IMockInvokerPool>;
 
 ////////////////////////////////////////////////////////////////////////////////

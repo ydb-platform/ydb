@@ -91,29 +91,32 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
 
-    auto* appData = env.Runtime->GetAppData();
-    Y_ABORT_UNLESS(appData);
-
     auto vdisksTotal = [&](TString subsystem, TString counter, bool derivative = false) {
         ui64 ctr = 0;
-        for (ui32 i = 0; i < groupSize; ++i) {
-            ctr += GetServiceCounters(appData->Counters, "vdisks")->
-                    GetSubgroup("storagePool", env.StoragePoolName)->
-                    GetSubgroup("group", std::to_string(groupId))->
-                    GetSubgroup("orderNumber", "0" + std::to_string(i))->
-                    GetSubgroup("pdisk", "00000" + std::to_string(pdiskIds[i]))->
-                    GetSubgroup("media", "rot")->
-                    GetSubgroup("subsystem", subsystem)->
-                    GetCounter(counter, derivative)->Val();
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            auto* appData = env.Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+            for (ui32 i = 0; i < groupSize; ++i) {
+                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                        GetSubgroup("storagePool", env.StoragePoolName)->
+                        GetSubgroup("group", std::to_string(groupId))->
+                        GetSubgroup("orderNumber", "0" + std::to_string(i))->
+                        GetSubgroup("pdisk", "00000" + std::to_string(pdiskIds[i]))->
+                        GetSubgroup("media", "rot")->
+                        GetSubgroup("subsystem", subsystem)->
+                        GetCounter(counter, derivative)->Val();
+            }
         }
         return ctr;
     };
 
     auto updateCounters = [&]() {
-        dsproxyCost = GetServiceCounters(appData->Counters, "dsproxynode")->
-                GetSubgroup("subsystem", "request")->
-                GetSubgroup("storagePool", env.StoragePoolName)->
-                GetCounter("DSProxyDiskCostNs")->Val();
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            auto* appData = env.Runtime->GetNode(vslot.GetVSlotId().GetNodeId())->AppData.get();
+            dsproxyCost += GetServiceCounters(appData->Counters, "dsproxynode")->
+                    GetSubgroup("subsystem", "request")->
+                    GetSubgroup("storagePool", env.StoragePoolName)->
+                    GetCounter("DSProxyDiskCostNs")->Val();
+        }
         vdiskCost = vdisksTotal("cost", "SkeletonFrontUserCostNs");
     };
 
@@ -135,7 +138,6 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
 
     if constexpr(VERBOSE) {
         Cerr << str.Str() << Endl;
-        // env.Runtime->GetAppData()->Counters->OutputPlainText(Cerr);
     }
     UNIT_ASSERT_VALUES_EQUAL_C(dsproxyCost, vdiskCost, str.Str());
 }

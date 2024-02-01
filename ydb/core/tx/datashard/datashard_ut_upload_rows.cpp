@@ -778,7 +778,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         });
 
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NDataShard::TEvChangeExchange::EvEnqueueRecords) {
+            if (ev->GetTypeRewrite() == NChangeExchange::TEvChangeExchange::EvEnqueueRecords) {
                 blockedEnqueueRecords.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

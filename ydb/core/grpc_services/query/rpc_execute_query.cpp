@@ -176,6 +176,25 @@ bool NeedReportStats(const Ydb::Query::ExecuteQueryRequest& req) {
     }
 }
 
+bool NeedReportAst(const Ydb::Query::ExecuteQueryRequest& req) {
+    switch (req.exec_mode()) {
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            return true;
+
+        case Ydb::Query::EXEC_MODE_EXECUTE:
+            switch (req.stats_mode()) {
+                case Ydb::Query::StatsMode::STATS_MODE_FULL:
+                case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+                    return true;
+                default:
+                    return false;
+            }
+
+        default:
+            return false;
+    }
+}
+
 class TExecuteQueryRPC : public TActorBootstrapped<TExecuteQueryRPC> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -359,10 +378,10 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record.GetRef();
 
-        NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
-        NYql::IssuesFromMessage(issueMessage, issues);
 
+        bool hasTrailingMessage = false;
+ 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Request_->SetRuHeader(record.GetConsumedRu());
 
@@ -372,8 +391,6 @@ private:
 
             AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
 
-            bool hasTrailingMessage = false;
-
             if (kqpResponse.HasTxMeta()) {
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
@@ -382,17 +399,25 @@ private:
             if (NeedReportStats(*Request_->GetProtoRequest())) {
                 hasTrailingMessage = true;
                 FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
+                if (NeedReportAst(*Request_->GetProtoRequest())) {
+                    response.mutable_exec_stats()->set_query_ast(kqpResponse.GetQueryAst());
+                }
             }
 
             if (hasTrailingMessage) {
                 response.set_status(Ydb::StatusIds::SUCCESS);
+                response.mutable_issues()->CopyFrom(issueMessage);
                 TString out;
                 Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-                Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
+                ReplySerializedAndFinishStream(record.GetYdbStatus(), std::move(out));
             }
         }
 
-        ReplyFinishStream(record.GetYdbStatus(), issues);
+        if (!hasTrailingMessage) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(issueMessage, issues);
+            ReplyFinishStream(record.GetYdbStatus(), issueMessage);
+        }
     }
 
 private:
@@ -405,6 +430,12 @@ private:
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
             "Client should not see this message, if so... may the force be with you");
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
+    }
+
+    void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
+        const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+        Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        this->PassAway();
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {
@@ -437,10 +468,11 @@ private:
             response.set_status(status);
             response.mutable_issues()->CopyFrom(message);
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
-            Request_->SendSerializedResult(std::move(out), status);
+            const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
+            Request_->SendSerializedResult(std::move(out), status, finishStreamFlag);
+        } else {
+            Request_->FinishStream(status);
         }
-
-        Request_->FinishStream(status);
         this->PassAway();
     }
 

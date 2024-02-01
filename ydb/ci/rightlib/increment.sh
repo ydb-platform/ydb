@@ -1,6 +1,6 @@
 # Usage: cherrypick.sh <ydb_repo_root>
-# Expects previous github SHA in <ydb_repo_root>/library_import.txt
-# Reads new commits from the 'rightlib' branch, cheery-picks them to a new branch, and creates PR
+# Expects previous github SHA in <ydb_repo_root>/library/rightlib_sha.txt
+# Reads new commits from the 'rightlib' branch, cheery-picks them to the current branch, updates library/rightlib_sha.txt in the working tree
 
 set -e
 set -o pipefail
@@ -30,9 +30,5 @@ for sha in $list;do
   echo "---"
 done
 
-exit
-
-rsync -r $LIB_ROOT/ya $LIB_ROOT/build $LIB_ROOT/certs $LIB_ROOT/cmake $LIB_ROOT/contrib $LIB_ROOT/library $LIB_ROOT/tools $LIB_ROOT/util $LIB_ROOT/vendor $LIB_ROOT/yt $MAIN_ROOT \
-  --filter '- **/a.yaml' --filter '- **/.arcignore' --filter '- **/.yandex_meta/' --filter '- contrib/ydb/' --filter '- build/internal/' --filter '- build/ext_mapping.conf.json' \
-  --filter '- **/CMakeLists*.txt' --delete
+echo ${newsha} > ${shapath}
 

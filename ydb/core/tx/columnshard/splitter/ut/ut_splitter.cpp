@@ -40,8 +40,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-            Y_ABORT_UNLESS(false);
-            return nullptr;
+            return std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>());
         }
 
         virtual ui32 GetColumnId(const std::string& columnName) const override {
@@ -80,7 +79,6 @@ Y_UNIT_TEST_SUITE(Splitter) {
             bool hasMultiSplit = false;
             ui32 blobsCount = 0;
             ui32 slicesCount = 0;
-            ui32 chunksCount = 0;
             std::shared_ptr<arrow::RecordBatch> sliceBatch;
             while (limiter.Next(chunksForBlob, sliceBatch)) {
                 ++slicesCount;
@@ -94,7 +92,6 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     for (auto&& iData : chunks) {
                         auto i = dynamic_pointer_cast<NKikimr::NOlap::IPortionColumnChunk>(iData);
                         AFL_VERIFY(i);
-                        ++chunksCount;
                         const ui32 columnId = i->GetColumnId();
                         recordsCountByColumn[columnId] += i->GetRecordsCountVerified();
                         restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));

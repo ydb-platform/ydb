@@ -24,7 +24,6 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs);
 TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs);
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer);
 

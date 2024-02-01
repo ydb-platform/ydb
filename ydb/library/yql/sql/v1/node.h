@@ -970,8 +970,8 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> StoreExternalBlobs;
 
         TNodePtr DataSourcePath;
-        TNodePtr Location;
-        TVector<std::pair<TIdentifier, TNodePtr>> ExternalSourceParameters;
+        NYql::TResetableSetting<TNodePtr, void> Location;
+        TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
         bool IsSet() const {
             return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad
@@ -1231,9 +1231,9 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
         std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-        bool existingOk, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+        bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
     TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-        std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+        std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
     TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
         bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
     TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,

@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
@@ -707,8 +708,8 @@ private:
                             TStringBuilder rangeDesc;
                             rangeDesc << keyColumns[colId] << " "
                                 << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                                << (from[colId].HaveValue() ? from[colId].GetDataText() : "-∞") << ", "
-                                << (to[colId].HaveValue() ? to[colId].GetDataText() : "+∞")
+                                << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
+                                << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
                                 << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                             readInfo.ScanBy.push_back(rangeDesc);
@@ -1357,7 +1358,7 @@ private:
     }
 
     void AddOptimizerEstimates(TOperator& op, const TExprBase& expr) {
-        if (!SerializerCtx.Config->HasOptEnableCostBasedOptimization()) {
+        if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel)==0) {
             return;
         }
 
@@ -1469,8 +1470,8 @@ private:
                         TStringBuilder rangeDesc;
                         rangeDesc << keyColumns[colId] << " "
                             << (from[keyColumns.size()].GetDataText() == "1" ? "[" : "(")
-                            << (from[colId].HaveValue() ? from[colId].GetDataText() : "-∞") << ", "
-                            << (to[colId].HaveValue() ? to[colId].GetDataText() : "+∞")
+                            << (from[colId].HaveValue() ? from[colId].GetSimpleValueText() : "-∞") << ", "
+                            << (to[colId].HaveValue() ? to[colId].GetSimpleValueText() : "+∞")
                             << (to[keyColumns.size()].GetDataText() == "1" ? "]" : ")");
 
                         readInfo.ScanBy.push_back(rangeDesc);

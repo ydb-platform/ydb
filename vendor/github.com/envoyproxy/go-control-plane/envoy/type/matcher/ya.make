@@ -23,4 +23,6 @@ SRCS(
 
 END()
 
-RECURSE(v3)
+RECURSE(
+    v3
+)

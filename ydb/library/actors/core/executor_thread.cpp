@@ -95,7 +95,9 @@ namespace NActors {
                 ui32 eventsPerMailbox)
         : TGenericExecutorThread(workerId, actorSystem, threadCtx->ExecutorPools[0].load(), poolCount, threadName, softProcessingDurationTs, timePerMailbox, eventsPerMailbox)
         , ThreadCtx(threadCtx)
-    {}
+    {
+        Ctx.SharedThread = threadCtx;
+    }
 
     TGenericExecutorThread::~TGenericExecutorThread()
     { }

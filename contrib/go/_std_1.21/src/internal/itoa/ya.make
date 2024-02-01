@@ -1,12 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    itoa.go
-)
-
-GO_XTEST_SRCS(itoa_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		itoa.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		itoa.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		itoa.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		itoa.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		itoa.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

@@ -162,7 +162,7 @@ struct TEqualsOp;
 
 template<typename TLeft, typename TRight>
 struct TEqualsOp<TLeft, TRight, bool> : public TEquals<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template<typename TLeft, typename TRight, bool Aggr>
@@ -190,7 +190,7 @@ struct TDiffDateEqualsOp;
 
 template<typename TLeft, typename TRight>
 struct TDiffDateEqualsOp<TLeft, TRight, NUdf::TDataType<bool>> : public TDiffDateEquals<TLeft, TRight, false> {
-    static constexpr bool DefaultNulls = true;
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
 };
 
 template <typename TLeft, typename TRight, bool Aggr>

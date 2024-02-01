@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation/llvm
+    ydb/library/yql/minikql/computation/llvm14
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/common/codec

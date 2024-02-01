@@ -8,13 +8,14 @@
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NPlainReader {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<IFetchingStep>& fetchingFirstStep, const std::shared_ptr<IDataSource>& sourcePtr, const bool isExclusive) {
     AFL_VERIFY(fetchingFirstStep);
     if (AtomicCas(&FilterStageFlag, 1, 0)) {
-        StageData = std::make_shared<TFetchedData>(isExclusive);
+        StageData = std::make_unique<TFetchedData>(isExclusive);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", fetchingFirstStep->DebugString())("source_idx", SourceIdx);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
         if (IsAborted()) {
@@ -73,10 +74,10 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)("reading_action", readingAction->GetStorageId())("columns", columnIds.size());
 }
 
-bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr,
-    const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) {
+bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& columns) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step->GetName());
-    Y_ABORT_UNLESS(columns->GetColumnsCount());
+    AFL_VERIFY(columns->GetColumnsCount());
+    AFL_VERIFY(!StageData->GetAppliedFilter() || !StageData->GetAppliedFilter()->IsTotalDenyFilter());
     auto& columnIds = columns->GetColumnIds();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step->GetName())("fetching_info", step->DebugString());
 
@@ -88,6 +89,42 @@ bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSourc
         StageData->AddNulls(std::move(nullBlocks));
     }
 
+    if (!readAction->GetExpectedBlobsSize()) {
+        return false;
+    }
+
+    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
+    auto constructor = std::make_shared<TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step->GetName(), "");
+    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
+    return true;
+}
+
+bool TPortionDataSource::DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TIndexesSet>& indexes) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step->GetName());
+    Y_ABORT_UNLESS(indexes->GetIndexesCount());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step->GetName())("fetching_info", step->DebugString());
+
+    auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::" + step->GetName());
+    readAction->SetIsBackgroundProcess(false);
+    {
+        std::set<ui32> indexIds;
+        for (auto&& i : Portion->GetIndexes()) {
+            if (!indexes->GetIndexIdsSet().contains(i.GetIndexId())) {
+                continue;
+            }
+            indexIds.emplace(i.GetIndexId());
+            readAction->AddRange(i.GetBlobRange());
+        }
+        if (indexes->GetIndexIdsSet().size() != indexIds.size()) {
+            return false;
+        }
+    }
+
+    if (!readAction->GetExpectedBlobsSize()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
+        return false;
+    }
+
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
     auto constructor = std::make_shared<TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step->GetName(), "");
     NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
@@ -95,6 +132,42 @@ bool TPortionDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSourc
 }
 
 void TPortionDataSource::DoAbort() {
+}
+
+void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) {
+    THashMap<ui32, std::vector<TString>> indexBlobs;
+    std::set<ui32> indexIds = indexChecker->GetIndexIds();
+//    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
+    std::vector<TPortionInfo::TPage> pages = Portion->BuildPages();
+    NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
+    for (auto&& p : pages) {
+        for (auto&& i : p.GetIndexes()) {
+            if (!indexIds.contains(i->GetIndexId())) {
+                continue;
+            }
+            indexBlobs[i->GetIndexId()].emplace_back(StageData->ExtractBlob(i->GetBlobRange()));
+        }
+        for (auto&& i : indexIds) {
+            if (!indexBlobs.contains(i)) {
+                return;
+            }
+        }
+        if (indexChecker->Check(indexBlobs)) {
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(true);
+            constructor.Add(true, p.GetRecordsCount());
+        } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(false);
+            constructor.Add(false, p.GetRecordsCount());
+        }
+    }
+    AFL_VERIFY(constructor.Size() == Portion->GetRecordsCount());
+    if (constructor.IsTotalDenyFilter()) {
+        StageData->AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+    } else if (constructor.IsTotalAllowFilter()) {
+        return;
+    } else {
+        StageData->AddFilter(constructor);
+    }
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const std::shared_ptr<IFetchingStep>& step, const std::shared_ptr<TColumnsSet>& /*columns*/) {

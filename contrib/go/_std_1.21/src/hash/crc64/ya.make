@@ -1,12 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    crc64.go
-)
-
-GO_TEST_SRCS(crc64_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		crc64.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		crc64.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		crc64.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		crc64.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		crc64.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

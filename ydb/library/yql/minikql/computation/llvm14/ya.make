@@ -1,7 +1,5 @@
 LIBRARY()
 
-NO_COMPILER_WARNINGS()
-
 PEERDIR(
     ydb/library/yql/minikql/codegen/llvm14
     contrib/libs/llvm14/lib/IR

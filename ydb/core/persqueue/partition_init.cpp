@@ -15,8 +15,8 @@ void CalcTopicWriteQuotaParams(const NKikimrPQ::TPQConfig& pqConfig,
                                TString& topicWriteQuoterPath,
                                TString& topicWriteQuotaResourcePath);
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
-void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
-void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key);
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
 //
@@ -108,7 +108,7 @@ TPartition* TInitializerStep::Partition() const {
     return Initializer->Partition;
 }
 
-ui32 TInitializerStep::PartitionId() const {
+const TPartitionId& TInitializerStep::PartitionId() const {
     return Initializer->Partition->Partition;
 }
 
@@ -179,8 +179,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
 
     case NKikimrProto::NODATA:
         Partition()->Config = Partition()->TabletConfig;
-        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition);
-        Partition()->PartitionGraph.Rebuild(Partition()->Config);
+        Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
+        Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
         break;
 
     case NKikimrProto::ERROR:
@@ -255,7 +255,7 @@ TInitMetaStep::TInitMetaStep(TInitializer* initializer)
 }
 
 void TInitMetaStep::Execute(const TActorContext& ctx) {
-    auto addKey = [](NKikimrClient::TKeyValueRequest& request, TKeyPrefix::EType type, ui32 partition) {
+    auto addKey = [](NKikimrClient::TKeyValueRequest& request, TKeyPrefix::EType type, const TPartitionId& partition) {
         auto read = request.AddCmdRead();
         TKeyPrefix key{type, partition};
         read->SetKey(key.Data(), key.Size());
@@ -700,7 +700,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     UsersInfoStorage.ConstructInPlace(DCId,
                                       TopicConverter,
-                                      Partition,
+                                      Partition.InternalPartitionId,
                                       Config,
                                       CloudId,
                                       DbId,
@@ -711,11 +711,11 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
-                                                                     Partition,
+                                                                     Partition.InternalPartitionId,
                                                                      Config.GetYdbDatabasePath()));
     } else {
         PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(),
-                                                                     Partition));
+                                                                     Partition.InternalPartitionId));
     }
 
     UsersInfoStorage->Init(Tablet, SelfId(), ctx);
@@ -759,7 +759,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     WriteBufferIsFullCounter.SetCounter(
         NPersQueue::GetCounters(counters, "writingTime", TopicConverter),
             {{"host", DCId},
-            {"Partition", ToString<ui32>(Partition)}},
+            {"Partition", ToString<ui32>(Partition.InternalPartitionId)}},
             {"sensor", "BufferFullTime" + suffix, true});
 
     auto subGroup = GetServiceCounters(counters, "pqproxy|writeTimeLag");
@@ -990,7 +990,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {
     return !diskIsOk;
 }
 
-static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition,
+static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition,
                          TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     auto read = request->Record.AddCmdReadRange();
@@ -1003,7 +1003,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 par
     }
     range->SetFrom(from.Data(), from.Size());
 
-    TKeyPrefix to(c, partition + 1);
+    TKeyPrefix to(c, partition.NextInternalPartitionId());
     range->SetTo(to.Data(), to.Size());
 
     if(includeData)
@@ -1015,18 +1015,18 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 par
         TKeyPrefix from(TKeyPrefix::TypeTmpData, partition);
         range->SetFrom(from.Data(), from.Size());
 
-        TKeyPrefix to(TKeyPrefix::TypeTmpData, partition + 1);
+        TKeyPrefix to(TKeyPrefix::TypeTmpData, partition.NextInternalPartitionId());
         range->SetTo(to.Data(), to.Size());
     }
 
     ctx.Send(dst, request.Release());
 }
 
-void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeInfo, true, key, key == "");
 }
 
-void RequestDataRange(const TActorContext& ctx, const TActorId& dst, ui32 partition, const TString& key) {
+void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key) {
     RequestRange(ctx, dst, partition, TKeyPrefix::TypeData, false, key);
 }
 

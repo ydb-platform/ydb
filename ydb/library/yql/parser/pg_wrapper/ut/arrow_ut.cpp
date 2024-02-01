@@ -66,15 +66,14 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     TArenaMemoryContext arena;
  
     arrow::DoubleBuilder builder;
-    builder.Append(1.1);
-    builder.Append(31.37);
-    builder.AppendNull();
-    builder.Append(-1.337);
-    builder.Append(0.0);
-    builder.Append(1.234111);
+    ARROW_OK(builder.Append(1.1));
+    ARROW_OK(builder.Append(31.37));
+    ARROW_OK(builder.AppendNull());
+    ARROW_OK(builder.Append(-1.337));
+    ARROW_OK(builder.Append(0.0));
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgConvertNumeric<double>(array);
     
@@ -98,12 +97,12 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale1) {
         "12345.0", "-12345.0", nullptr
     };
 
-    builder.Append(arrow::Decimal128::FromString("12345.0").ValueOrDie());
-    builder.Append(arrow::Decimal128::FromString("-12345.0").ValueOrDie());
-    builder.AppendNull();
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("12345.0").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-12345.0").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
@@ -123,12 +122,12 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale2) {
         "123.45", "-123.45", nullptr
     };
 
-    builder.Append(arrow::Decimal128::FromString("123.45").ValueOrDie());
-    builder.Append(arrow::Decimal128::FromString("-123.45").ValueOrDie());
-    builder.AppendNull();
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("123.45").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-123.45").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
@@ -148,12 +147,12 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale3) {
         "0.123", "-0.123", nullptr
     };
 
-    builder.Append(arrow::Decimal128::FromString("0.123").ValueOrDie());
-    builder.Append(arrow::Decimal128::FromString("-0.123").ValueOrDie());
-    builder.AppendNull();
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("0.123").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-0.123").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
@@ -173,12 +172,12 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale5) {
         "12.34567", "-12.34567", nullptr
     };
 
-    builder.Append(arrow::Decimal128::FromReal(12.34567, precision, scale).ValueOrDie());
-    builder.Append(arrow::Decimal128::FromReal(-12.34567, precision, scale).ValueOrDie());
-    builder.AppendNull();
+    ARROW_OK(builder.Append(arrow::Decimal128::FromReal(12.34567, precision, scale).ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromReal(-12.34567, precision, scale).ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgDecimal128ConvertNumeric(array, precision, scale);
 
@@ -190,15 +189,14 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     TArenaMemoryContext arena;
  
     arrow::Int64Builder builder;
-
-    builder.Append(11);
-    builder.Append(3137);
-    builder.AppendNull();
-    builder.Append(-1337);
-    builder.Append(0);
+    ARROW_OK(builder.Append(11));
+    ARROW_OK(builder.Append(3137));
+    ARROW_OK(builder.AppendNull());
+    ARROW_OK(builder.Append(-1337));
+    ARROW_OK(builder.Append(0));
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     auto result = PgConvertNumeric<i64>(array);
     const auto& data = result->data();
@@ -215,15 +213,15 @@ Y_UNIT_TEST(PgConvertDate32Date) {
     TArenaMemoryContext arena;
 
     arrow::Date32Builder builder;
-    builder.Append(10227);
-    builder.AppendNull();
-    builder.Append(11323);
-    builder.Append(10227);
-    builder.Append(10958);
-    builder.Append(11688);
+    ARROW_OK(builder.Append(10227));
+    ARROW_OK(builder.AppendNull());
+    ARROW_OK(builder.Append(11323));
+    ARROW_OK(builder.Append(10227));
+    ARROW_OK(builder.Append(10958));
+    ARROW_OK(builder.Append(11688));
 
     std::shared_ptr<arrow::Array> array;
-    builder.Finish(&array);
+    ARROW_OK(builder.Finish(&array));
 
     NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
     NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);

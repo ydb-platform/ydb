@@ -2204,7 +2204,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto rows = batchStats->GetColumnByName("Rows");
                     auto bytes = batchStats->GetColumnByName("BlobRangeSize");
                     auto rawBytes = batchStats->GetColumnByName("RawBytes");
-                    auto internalColumnIds = batchStats->GetColumnByName("InternalColumnId");
+                    auto internalColumnIds = batchStats->GetColumnByName("InternalEntityId");
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 

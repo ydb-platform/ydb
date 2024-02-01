@@ -1,32 +1,31 @@
 GO_LIBRARY()
-
-SRCS(
-    doc.go
-)
-
-IF (OS_LINUX)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
-        syslog.go
-        syslog_unix.go
+		doc.go
+		syslog.go
+		syslog_unix.go
     )
-
-    GO_TEST_SRCS(syslog_test.go)
-
-    GO_XTEST_SRCS(example_test.go)
-ENDIF()
-
-IF (OS_DARWIN)
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
     SRCS(
-        syslog.go
-        syslog_unix.go
+		doc.go
+		syslog.go
+		syslog_unix.go
     )
-
-    GO_TEST_SRCS(syslog_test.go)
-
-    GO_XTEST_SRCS(example_test.go)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		doc.go
+		syslog.go
+		syslog_unix.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		doc.go
+		syslog.go
+		syslog_unix.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		doc.go
+    )
 ENDIF()
-
 END()
-
-RECURSE(
-)

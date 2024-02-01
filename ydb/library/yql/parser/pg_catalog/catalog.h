@@ -33,6 +33,7 @@ enum class EOperKind {
 struct TOperDesc {
     ui32 OperId = 0;
     TString Name;
+    TString Descr;
     EOperKind Kind = EOperKind::Binary;
     ui32 LeftType = 0;
     ui32 RightType = 0;
@@ -50,6 +51,7 @@ struct TProcDesc {
     ui32 ProcId = 0;
     TString Name;
     TString Src;
+    TString Descr;
     TVector<ui32> ArgTypes;
     ui32 ResultType = 0;
     bool IsStrict = true;
@@ -81,6 +83,7 @@ constexpr char InvalidCategory = '\0';
 struct TTypeDesc {
     ui32 TypeId = 0;
     ui32 ArrayTypeId = 0;
+    TString Descr;
     TString Name;
     ui32 ElementTypeId = 0;
     bool PassByValue = false;
@@ -155,6 +158,24 @@ struct TAggregateDesc {
     TString InitValue;
 };
 
+enum class EAmType {
+    Table = 't',
+    Index = 'i'
+};
+
+struct TAmDesc {
+    ui32 Oid = 0;
+    TString Descr;
+    TString AmName;
+    EAmType AmType = EAmType::Index;
+};
+
+struct TNamespaceDesc {
+    ui32 Oid = 0;
+    TString Name;
+    TString Descr;
+};
+
 enum class EOpClassMethod {
     Btree,
     Hash
@@ -206,6 +227,7 @@ struct TConversionDesc {
     ui32 ConversionId = 0;
     TString From;
     TString To;
+    TString Descr;
     ui32 ProcId = 0;
 };
 
@@ -222,6 +244,16 @@ const TTypeDesc& LookupType(ui32 typeId);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc);
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded);
 void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
+
+const TAmDesc& LookupAm(ui32 oid);
+void EnumAm(std::function<void(ui32, const TAmDesc&)> f);
+
+void EnumConversions(std::function<void(const TConversionDesc&)> f);
+
+const TNamespaceDesc& LookupNamespace(ui32 oid);
+void EnumNamespace(std::function<void(ui32, const TNamespaceDesc&)> f);
+
+void EnumOperators(std::function<void(const TOperDesc&)> f);
 
 bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);
@@ -254,6 +286,51 @@ inline bool IsArrayType(const TTypeDesc& typeDesc) noexcept {
     return typeDesc.ArrayTypeId == typeDesc.TypeId;
 }
 
+enum class ERelKind : char {
+    Relation = 'r',
+    View = 'v'
+};
+struct TTableInfoKey {
+    TString Schema;
+    TString Name;
+
+    bool operator==(const TTableInfoKey& other) const {
+        return Schema == other.Schema && Name == other.Name;
+    }
+
+    size_t Hash() const {
+        auto stringHasher = THash<TString>();
+        return CombineHashes(stringHasher(Schema), stringHasher(Name));
+    }
+};
+
+constexpr ui32 TypeRelationOid = 1247;
+constexpr ui32 DatabaseRelationOid = 1262;
+constexpr ui32 TableSpaceRelationOid = 1213;
+constexpr ui32 SharedDescriptionRelationOid = 2396;
+constexpr ui32 TriggerRelationOid = 2620;
+constexpr ui32 InheritsRelationOid = 2611;
+constexpr ui32 DescriptionRelationOid = 2609;
+constexpr ui32 AccessMethodRelationOid = 2601;
+constexpr ui32 NamespaceRelationOid = 2615;
+constexpr ui32 AuthMemRelationOid = 1261;
+constexpr ui32 RelationRelationOid = 1259;
+
+struct TTableInfo : public TTableInfoKey {
+    ERelKind Kind;
+    ui32 Oid;
+};
+
+struct TColumnInfo {
+    TString Schema;
+    TString TableName;
+    TString Name;
+    TString UdtType;
+};
+
+const TVector<TTableInfo>& GetStaticTables();
+const THashMap<TTableInfoKey, TVector<TColumnInfo>>& GetStaticColumns();
+
 }
 
 template <>
@@ -265,3 +342,10 @@ template <>
 inline void Out<NYql::NPg::ECoercionCode>(IOutputStream& o, NYql::NPg::ECoercionCode coercionCode) {
     o.Write(static_cast<std::underlying_type<NYql::NPg::ECoercionCode>::type>(coercionCode));
 }
+
+template <>
+struct THash<NYql::NPg::TTableInfoKey> {
+    size_t operator ()(const NYql::NPg::TTableInfoKey& val) const {
+        return val.Hash();
+    }
+};

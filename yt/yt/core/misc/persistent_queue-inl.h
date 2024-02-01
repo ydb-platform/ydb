@@ -44,18 +44,6 @@ const T& TPersistentQueueIterator<T, ChunkSize>::operator*() const
 }
 
 template <class T, size_t ChunkSize>
-bool TPersistentQueueIterator<T, ChunkSize>::operator==(const TPersistentQueueIterator& other) const
-{
-    return CurrentChunk_ == other.CurrentChunk_ && CurrentIndex_ == other.CurrentIndex_;
-}
-
-template <class T, size_t ChunkSize>
-bool TPersistentQueueIterator<T, ChunkSize>::operator!=(const TPersistentQueueIterator& other) const
-{
-    return !(*this == other);
-}
-
-template <class T, size_t ChunkSize>
 TPersistentQueueIterator<T, ChunkSize>::TPersistentQueueIterator(
     TChunkPtr chunk,
     size_t index)

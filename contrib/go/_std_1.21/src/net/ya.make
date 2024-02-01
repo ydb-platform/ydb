@@ -49,48 +49,6 @@ SRCS(
     unixsock_posix.go
 )
 
-GO_TEST_SRCS(
-    conn_test.go
-    dial_test.go
-    dnsclient_test.go
-    dnsname_test.go
-    error_posix_test.go
-    error_test.go
-    external_test.go
-    file_test.go
-    hosts_test.go
-    interface_test.go
-    ip_test.go
-    iprawsock_test.go
-    ipsock_test.go
-    listen_test.go
-    lookup_test.go
-    mac_test.go
-    main_conf_test.go
-    main_posix_test.go
-    main_test.go
-    mockserver_test.go
-    net_test.go
-    packetconn_test.go
-    parse_test.go
-    platform_test.go
-    port_test.go
-    protoconn_test.go
-    rawconn_test.go
-    resolverdialfunc_test.go
-    sendfile_test.go
-    server_test.go
-    tcpsock_test.go
-    timeout_test.go
-    udpsock_test.go
-    writev_test.go
-)
-
-GO_XTEST_SRCS(
-    example_test.go
-    pipe_test.go
-)
-
 IF (OS_LINUX)
     SRCS(
         dnsconfig_unix.go
@@ -113,31 +71,6 @@ IF (OS_LINUX)
         writev_unix.go
     )
 
-    GO_TEST_SRCS(
-        addrselect_test.go
-        cgo_unix_test.go
-        conf_test.go
-        dial_unix_test.go
-        dnsclient_unix_test.go
-        dnsconfig_unix_test.go
-        error_unix_test.go
-        file_unix_test.go
-        interface_linux_test.go
-        interface_unix_test.go
-        main_cloexec_test.go
-        main_unix_test.go
-        mptcpsock_linux_test.go
-        nss_test.go
-        rawconn_unix_test.go
-        sendfile_linux_test.go
-        sock_linux_test.go
-        splice_test.go
-        tcpsock_unix_test.go
-        unixsock_linux_test.go
-        unixsock_readmsg_test.go
-        unixsock_test.go
-        write_unix_test.go
-    )
 ENDIF()
 
 IF (OS_LINUX AND CGO_ENABLED)
@@ -186,25 +119,6 @@ IF (OS_DARWIN)
         writev_unix.go
     )
 
-    GO_TEST_SRCS(
-        addrselect_test.go
-        cgo_unix_test.go
-        conf_test.go
-        dial_unix_test.go
-        dnsclient_unix_test.go
-        dnsconfig_unix_test.go
-        error_unix_test.go
-        file_unix_test.go
-        interface_bsd_test.go
-        interface_unix_test.go
-        main_unix_test.go
-        nss_test.go
-        rawconn_unix_test.go
-        tcpsock_unix_test.go
-        unixsock_readmsg_test.go
-        unixsock_test.go
-        write_unix_test.go
-    )
 ENDIF()
 
 IF (OS_DARWIN AND CGO_ENABLED)
@@ -230,14 +144,6 @@ IF (OS_WINDOWS)
         unixsock_readmsg_other.go
     )
 
-    GO_TEST_SRCS(
-        error_windows_test.go
-        lookup_windows_test.go
-        main_windows_test.go
-        net_windows_test.go
-        rawconn_windows_test.go
-        unixsock_windows_test.go
-    )
 ENDIF()
 
 END()

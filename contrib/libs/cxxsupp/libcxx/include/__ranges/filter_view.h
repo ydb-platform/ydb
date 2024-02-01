@@ -120,6 +120,7 @@ namespace ranges {
   template<input_range _View, indirect_unary_predicate<iterator_t<_View>> _Pred>
     requires view<_View> && is_object_v<_Pred>
   class filter_view<_View, _Pred>::__iterator : public __filter_iterator_category<_View> {
+
   public:
     _LIBCPP_NO_UNIQUE_ADDRESS iterator_t<_View> __current_ = iterator_t<_View>();
     _LIBCPP_NO_UNIQUE_ADDRESS filter_view* __parent_ = nullptr;
@@ -224,8 +225,8 @@ namespace ranges {
     _LIBCPP_HIDE_FROM_ABI
     constexpr sentinel_t<_View> base() const { return __end_; }
 
-    _LIBCPP_HIDE_FROM_ABI
-    friend constexpr bool operator==(__iterator const& __x, __sentinel const& __y) {
+    _LIBCPP_HIDE_FROM_ABI friend constexpr bool
+    operator==(__iterator const& __x, __sentinel const& __y) {
       return __x.__current_ == __y.__end_;
     }
   };

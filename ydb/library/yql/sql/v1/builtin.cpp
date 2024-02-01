@@ -405,6 +405,9 @@ public:
             case NUdf::EDataSlot::TzDate:
                 value = ToString(out.Get<ui16>());
                 break;
+            case NUdf::EDataSlot::Date32:
+                value = ToString(out.Get<i32>());
+                break;
             case NUdf::EDataSlot::Datetime:
             case NUdf::EDataSlot::TzDatetime:
                 value = ToString(out.Get<ui32>());
@@ -1225,7 +1228,8 @@ TString NormalizeTypeString(const TString& str) {
 }
 
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
-    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
+    "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber",
+    "Date32"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
         static std::array<TString, 2> numToName = {{"first", "second"}};

@@ -25,7 +25,7 @@ concept CSerializableByTraits = TSerializationTraits<T>::IsSerializable;
     template <> \
     struct ::NYT::NYTree::TSerializationTraits<Type> \
     { \
-        static constexpr bool IsSerializable = true; \
+        [[maybe_unused]] static constexpr bool IsSerializable = true; \
         using TSerializer = SerializerType; \
     }; \
 

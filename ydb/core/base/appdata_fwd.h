@@ -31,7 +31,7 @@ namespace NKikimrSharedCache {
 
 namespace NKikimrProto {
     class TKeyConfig;
-    class TAuthConfig;    
+    class TAuthConfig;
 
     namespace NFolderService {
         class TFolderServiceConfig;
@@ -60,6 +60,7 @@ namespace NKikimrConfig {
     class TBootstrap;
     class TAwsCompatibilityConfig;
     class TS3ProxyResolverConfig;
+    class TBackgroundCleaningConfig;
 }
 
 namespace NKikimrNetClassifier {
@@ -101,10 +102,6 @@ namespace NYdb {
 }
 
 namespace NKikimr {
-
-namespace NExternalSource {
-    struct IExternalSourceFactory;
-}
 
 namespace NScheme {
     class TTypeRegistry;
@@ -152,8 +149,6 @@ struct TAppData {
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
     const TFormatFactory* FormatFactory = nullptr;
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
-    TIntrusivePtr<NExternalSource::IExternalSourceFactory> ExternalSourceFactory = nullptr;
-    
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
@@ -210,6 +205,7 @@ struct TAppData {
     std::unique_ptr<NKikimrConfig::TAwsCompatibilityConfig> AwsCompatibilityConfigPtr;
     std::unique_ptr<NKikimrConfig::TS3ProxyResolverConfig> S3ProxyResolverConfigPtr;
     std::unique_ptr<NKikimrSharedCache::TSharedCacheConfig> SharedCacheConfigPtr;
+    std::unique_ptr<NKikimrConfig::TBackgroundCleaningConfig> BackgroundCleaningConfigPtr;
 
     NKikimrStream::TStreamingConfig& StreamingConfig;
     NKikimrPQ::TPQConfig& PQConfig;
@@ -232,6 +228,7 @@ struct TAppData {
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
     NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
+    NKikimrConfig::TBackgroundCleaningConfig& BackgroundCleaningConfig;
     bool EnforceUserTokenRequirement = false;
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
     bool EnableKqpSpilling = false;

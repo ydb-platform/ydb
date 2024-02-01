@@ -1,5 +1,0 @@
-quotas:
-  - billing.cloudBindings.count
-  - billing.trackerBindings.count
-  - billing.datasphereCommunityBindings.count
-  - billing.budgets.count

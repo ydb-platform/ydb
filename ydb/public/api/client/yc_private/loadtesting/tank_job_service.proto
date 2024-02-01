@@ -4,27 +4,25 @@ package yandex.cloud.priv.loadtesting.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/api/operation.proto";
-import "yandex/cloud/priv/billing/v1/light_metric.proto";
-import "yandex/cloud/priv/operation/operation.proto";
-import "yandex/cloud/priv/loadtesting/v1/tank_job.proto";
-import "yandex/cloud/priv/loadtesting/v1/storage.proto";
-import "yandex/cloud/priv/loadtesting/v1/report/table/request.proto";
-import "yandex/cloud/priv/loadtesting/v1/report/table/response.proto";
-import "yandex/cloud/priv/loadtesting/v1/job/tags/interface.proto";
-import "yandex/cloud/priv/loadtesting/v1/job/interface.proto";
-import "yandex/cloud/priv/loadtesting/v1/job/tags/tag.proto";
-import "yandex/cloud/priv/loadtesting/v1/job/monitoring/report.proto";
-import "yandex/cloud/priv/dynamicform/v1/dynamicform.proto";
-import "yandex/cloud/priv/loadtesting/v1/common/chart.proto";
-import "yandex/cloud/priv/loadtesting/v1/common/timestamp_range.proto";
-import "yandex/cloud/priv/loadtesting/v1/comparison/comparison.proto";
-import "yandex/cloud/priv/loadtesting/v1/comparison/request.proto";
-import "yandex/cloud/priv/loadtesting/v1/comparison/monitoring.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/tank_job.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/storage.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/report/table/request.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/report/table/response.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/job/tags/interface.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/job/interface.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/job/monitoring/report.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/common/chart.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/common/timestamp_range.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/comparison.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/request.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/monitoring.proto";
 
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
 option java_outer_classname = "PTJS";
 
 
@@ -63,8 +61,6 @@ service TankJobService {
     };
   };
 
-
-  rpc GetCreateFormV2(FormRequest) returns (dynamicform.v1.Item);
   rpc GetConfig (GetConfigRequest) returns (GetConfigResponse);
   rpc GetDynformPayload (job.GetDynformPayloadRequest) returns (job.GetDynformPayloadResponse);
   rpc ValidateConfig (ValidateConfigRequest) returns (ValidateConfigResponse);
@@ -85,10 +81,6 @@ service TankJobService {
   rpc GetMonitoringHosts (job.GetMonitoringHostsRequest) returns (job.GetMonitoringHostsResponse);
   rpc CompareMonitoringInfo(comparison.ComparisonMonitoringInfoRequest) returns (comparison.ComparisonMonitoringInfo);
   rpc CompareMonitoringData(comparison.ComparisonMonitoringDataRequest) returns (comparison.ComparisonMonitoringData);
-
-  rpc SimulateBillingMetrics (SimulateBillingMetricsRequest) returns (SimulateBillingMetricsResponse);
-  rpc SimulateBillingMetricsMulti (SimulateBillingMetricsMultiRequest) returns (SimulateBillingMetricsResponse);
-  rpc SimulateBillingMetricsCreated(SimulateBillingMetricsCreatedRequest) returns (SimulateBillingMetricsResponse);
 
   rpc ReportInfo(ReportInfoRequest) returns (ReportInfoResponse);
   rpc ReportCharts(ReportChartsRequest) returns (ReportChartsResponse);
@@ -435,31 +427,4 @@ message ComparisonReportChartsRequest {
 
 message ComparisonReportChartsResponse {
   repeated common.Chart charts = 1;
-}
-
-message SimulateBillingMetricsRequest {
-  CreateTankJobRequest create_request = 1 [(yandex.cloud.priv.required) = true];
-  int64 duration = 2;
-}
-
-message SimulateBillingMetricsMultiRequest {
-  CreateMultiJobRequest create_request = 1 [(yandex.cloud.priv.required) = true];
-  int64 duration = 2;
-}
-
-message SimulateBillingMetricsCreatedRequest {
-  string id = 1;
-}
-
-message SimulateBillingMetricsResponse {
-  enum DurationVariant {
-    DURATION_VARIANT_UNSPECIFIED = 0;
-    DURATION_VARIANT_ESTIMATED = 1;
-    DURATION_VARIANT_REQUEST = 2;
-    DURATION_VARIANT_TEST = 3;
-  }
-
-  repeated billing.v1.LightMetric metrics = 1;
-  repeated billing.v1.LightMetric additional_metrics = 2;
-  DurationVariant duration_variant = 3;
 }

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.regression;
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/regression;regression";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/regression;regression";
 
 message TitleWidget {
     enum TitleSize {

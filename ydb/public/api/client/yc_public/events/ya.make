@@ -8,6 +8,8 @@ EXCLUDE_TAGS(GO_PROTO)
 
 GRPC()
 SRCS(
+    backup.proto
+    database.proto
     options.proto
     common.proto
     yq.proto

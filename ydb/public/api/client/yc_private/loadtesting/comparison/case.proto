@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.comparison;
 
-import "yandex/cloud/priv/loadtesting/v1/comparison/chart.proto";
-import "yandex/cloud/priv/loadtesting/v1/comparison/table.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/chart.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/comparison/table.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/comparison;comparison";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/comparison;comparison";
 option java_outer_classname = "LtV1ComparisonCase";
 
 message CaseCharts {

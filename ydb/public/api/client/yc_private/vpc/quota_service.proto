@@ -3,9 +3,9 @@ syntax = "proto3";
 package yandex.cloud.priv.vpc.v1;
 
 import "google/protobuf/empty.proto";
-import "yandex/cloud/priv/quota/quota.proto";
+import "contrib/ydb/public/api/client/yc_private/quota/quota.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
 option java_outer_classname = "PQS";
 
 service QuotaService {

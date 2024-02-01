@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.node;
 
-import "yandex/cloud/priv/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
 option java_outer_classname = "PVNPCS";
 
-import "yandex/cloud/priv/vpc/v1/inner/port_state.proto";
+import "contrib/ydb/public/api/client/yc_private/vpc/v1/inner/port_state.proto";
 
 // PortControllerService implements interface to allow manipulate with port states.
 service PortControllerService {

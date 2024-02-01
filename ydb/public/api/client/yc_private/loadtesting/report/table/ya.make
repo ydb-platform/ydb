@@ -19,7 +19,7 @@ USE_COMMON_GOOGLE_APIS(
 
 PEERDIR(
     contrib/ydb/public/api/client/yc_private/common
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table/tables
+    contrib/ydb/public/api/client/yc_private/loadtesting/report/table/tables
 )
 END()
 

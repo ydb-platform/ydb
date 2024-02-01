@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.job.tags;
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/job/tags;tags";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/job/tags;tags";
 option java_outer_classname = "LtV1JobTagsTag";
 
 message Tag {

@@ -4,13 +4,13 @@ package yandex.cloud.priv.loadtesting.v1;
 
 import "google/protobuf/field_mask.proto";
 
-import "yandex/cloud/api/operation.proto";
-import "yandex/cloud/priv/operation/operation.proto";
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/priv/loadtesting/v1/regression/dashboard.proto";
+import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/regression/dashboard.proto";
 
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
 
 service RegressionDashboardService {
     rpc Get (GetRegressionDashboardRequest) returns (regression.Dashboard);

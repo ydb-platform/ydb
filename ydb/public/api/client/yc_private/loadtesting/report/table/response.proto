@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.report.table;
 
-import "yandex/cloud/priv/loadtesting/v1/report/table/tables/codes.proto";
-import "yandex/cloud/priv/loadtesting/v1/report/table/tables/quantiles.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/report/table/tables/codes.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/report/table/tables/quantiles.proto";
 
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table;table";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/report/table;table";
 option java_outer_classname = "PRTRES";
 
 message GetReportTablesResponse {

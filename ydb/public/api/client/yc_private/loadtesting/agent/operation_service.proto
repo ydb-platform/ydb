@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.agent.v1;
 
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/priv/operation/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/agent;agent";
 
 
 service OperationService {

@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.node;
 
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/priv/vpc/v1/inner/node_registry.proto";
-import "yandex/cloud/priv/vpc/v1/node/vrouter_slot.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/vpc/v1/inner/node_registry.proto";
+import "contrib/ydb/public/api/client/yc_private/vpc/v1/node/vrouter_slot.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
 option java_outer_classname = "PVNVSS";
 
 // VRouterSlotService just implements interface to allow the bootstrapper manipulate with slots,

@@ -3,15 +3,14 @@ syntax = "proto3";
 package yandex.cloud.priv.loadtesting.v1;
 
 import "google/protobuf/field_mask.proto";
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/api/operation.proto";
-import "yandex/cloud/priv/billing/v1/light_metric.proto";
-import "yandex/cloud/priv/compute/v1/instance_service.proto";
-import "yandex/cloud/priv/loadtesting/v1/tank_instance.proto";
-import "yandex/cloud/priv/operation/operation.proto";
-import "yandex/cloud/priv/sensitive.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/compute/instance_service.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/tank_instance.proto";
+import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/sensitive.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1;loadtesting";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting;loadtesting";
 option java_outer_classname = "PTIS";
 
 service TankInstanceService {
@@ -59,7 +58,6 @@ service TankInstanceService {
     };
   };
   rpc ListOperations (ListTankInstancesOperationsRequest) returns (ListTankInstancesOperationsResponse);
-  rpc SimulateBillingMetrics (CreateTankInstanceRequest) returns (billing.v1.ConsoleLightMetricsListResponse);
 }
 
 message GetTankInstanceRequest {

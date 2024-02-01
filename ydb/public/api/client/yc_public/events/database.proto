@@ -1,0 +1,425 @@
+syntax = "proto3";
+
+package yandex.cloud.events.ydb;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/events/common.proto";
+import "yandex/cloud/validation.proto";
+import "yandex/cloud/ydb/v1/database.proto";
+import "yandex/cloud/ydb/v1/backup.proto";
+import "yandex/cloud/events/options.proto";
+import "google/rpc/status.proto";
+import "google/protobuf/field_mask.proto";
+
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/events/ydb;ydb";
+option java_package = "yandex.cloud.api.events.ydb";
+
+message CreateDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+    yandex.cloud.ydb.v1.Database.Status status = 5;
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+
+    string location_id = 17 [(required) = true];
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+    bool deletion_protection = 19;
+  }
+
+  message RequestParameters {
+    string folder_id = 1;
+
+    string name = 2;
+
+    string resource_preset_id = 3;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 4;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 5;
+    string network_id = 6;
+    repeated string subnet_ids = 7;
+
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 8;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 9;
+    }
+
+    bool assign_public_ips = 10;
+    string location_id = 11;
+    map<string, string> labels = 12;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 13;
+    bool deletion_protection = 14;
+  }
+}
+
+message BackupDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  google.rpc.Status error = 7;
+  Response response = 8 [(required) = true];
+  RequestParameters request_parameters = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true];
+    string database_name = 2 [(required) = true];
+    string backup_id = 3 [(required) = true, (resource_path) = {resource_type: "ydb.backup"}];
+    google.protobuf.Timestamp created_at = 4 [(required) = true];
+    yandex.cloud.ydb.v1.BackupSettings backup_settings = 5;
+    string backup_name = 6 [(resource_name) = {resource_type: "ydb.backup"}];
+    google.protobuf.Timestamp started_at = 7;
+    google.protobuf.Timestamp completed_at = 8;
+    yandex.cloud.ydb.v1.Backup.Status status = 9;
+    yandex.cloud.ydb.v1.Backup.Type type = 10;
+    int64 size = 11;
+  }
+
+  message RequestParameters {
+    string database_id = 1;
+    yandex.cloud.ydb.v1.BackupSettings backup_settings = 2;
+  }
+}
+
+message RestoreBackup {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  google.rpc.Status error = 7;
+  Response response = 8 [(required) = true];
+  RequestParameters request_parameters = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true];
+    string database_name = 2 [(required) = true];
+    string backup_id = 3 [(required) = true, (resource_path) = {resource_type: "ydb.backup"}];
+    string target_path = 4 [(required) = true];
+    repeated string paths_to_restore = 5;
+    string backup_name = 6 [(resource_name) = {resource_type: "ydb.backup"}];
+    google.protobuf.Timestamp started_at = 7;
+    google.protobuf.Timestamp completed_at = 8;
+    yandex.cloud.ydb.v1.Backup.Status status = 9;
+    yandex.cloud.ydb.v1.Backup.Type type = 10;
+    int64 size = 11;
+  }
+
+  message RequestParameters {
+    string database_id = 1 [(required) = true];
+    string backup_id = 2 [(required) = true];
+    repeated string paths_to_restore = 3;
+    string target_path = 4;
+  }
+}
+
+message StartDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+
+    string location_id = 5 [(required) = true];
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+    yandex.cloud.ydb.v1.Database.Status status = 15;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+  }
+
+  message RequestParameters {
+    string database_id = 1 [(required) = true];
+  }
+}
+
+message MoveDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+
+    string location_id = 5 [(required) = true];
+
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+    yandex.cloud.ydb.v1.Database.Status status = 15;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+    bool deletion_protection = 19;
+  }
+
+  message RequestParameters {
+    string database_id = 1 [(required) = true];
+    string destination_folder_id = 2 [(required) = true];
+  }
+}
+
+message StopDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+
+    string location_id = 5 [(required) = true];
+
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+    yandex.cloud.ydb.v1.Database.Status status = 15;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+    bool deletion_protection = 19;
+  }
+
+  message RequestParameters {
+    string database_id = 1 [(required) = true];
+  }
+}
+
+message UpdateDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+
+    string location_id = 5 [(required) = true];
+
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+    yandex.cloud.ydb.v1.Database.Status status = 15;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+    bool deletion_protection = 19;
+  }
+
+
+  message RequestParameters {
+    string folder_id = 1;
+
+    string name = 2;
+
+    string resource_preset_id = 3;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 4;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 5;
+    string network_id = 6;
+    repeated string subnet_ids = 7;
+
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 8;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 9;
+    }
+
+    bool assign_public_ips = 10;
+    string location_id = 11;
+    map<string, string> labels = 12;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 13;
+    google.protobuf.FieldMask update_mask = 14;
+
+    string database_id = 15;
+    bool deletion_protection = 16;
+  }
+}
+
+message DeleteDatabase {
+  option (include) = true;
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4 [(required) = true];
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7 [(required) = true];
+  google.rpc.Status error = 8;
+  Response response = 9 [(required) = true];
+
+  message EventDetails {
+    string database_id = 1 [(required) = true, (resource_path) = {resource_type: "ydb.database"}];
+    string database_name = 2 [(required) = true, (resource_name) = {resource_type: "ydb.database"}];
+    oneof database_type {
+      yandex.cloud.ydb.v1.DedicatedDatabase dedicated_database = 3;
+      yandex.cloud.ydb.v1.ServerlessDatabase serverless_database = 4;
+    }
+
+    string location_id = 5 [(required) = true];
+
+    string endpoint = 6;
+
+    string resource_preset_id = 7;
+
+    yandex.cloud.ydb.v1.StorageConfig storage_config = 8;
+    yandex.cloud.ydb.v1.ScalePolicy scale_policy = 9;
+
+    string network_id = 10;
+    repeated string subnet_ids = 11;
+
+    bool assign_public_ips = 12;
+    string document_api_endpoint = 13;
+
+    string kinesis_api_endpoint = 14;
+    yandex.cloud.ydb.v1.Database.Status status = 15;
+    yandex.cloud.ydb.v1.BackupConfig backup_config = 18;
+    bool deletion_protection = 19;
+  }
+
+  message RequestParameters {
+    string database_id = 1 [(required) = true];
+  }
+}

@@ -32,19 +32,17 @@ USE_COMMON_GOOGLE_APIS(
 PEERDIR(
     contrib/ydb/public/api/client/yc_public/api
     contrib/ydb/public/api/client/yc_private/common
-    contrib/ydb/public/api/client/yc_private/billing/v1
-    contrib/ydb/public/api/client/yc_private/compute/v1
-    contrib/ydb/public/api/client/yc_private/dynamicform/v1
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/common
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/comparison
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/job
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/job/monitoring
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/job/tags
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/moverload
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/regression
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/report
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/chart
-    contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table
+    contrib/ydb/public/api/client/yc_private/compute
+    contrib/ydb/public/api/client/yc_private/loadtesting/common
+    contrib/ydb/public/api/client/yc_private/loadtesting/comparison
+    contrib/ydb/public/api/client/yc_private/loadtesting/job
+    contrib/ydb/public/api/client/yc_private/loadtesting/job/monitoring
+    contrib/ydb/public/api/client/yc_private/loadtesting/job/tags
+    contrib/ydb/public/api/client/yc_private/loadtesting/moverload
+    contrib/ydb/public/api/client/yc_private/loadtesting/regression
+    contrib/ydb/public/api/client/yc_private/loadtesting/report
+    contrib/ydb/public/api/client/yc_private/loadtesting/report/chart
+    contrib/ydb/public/api/client/yc_private/loadtesting/report/table
     contrib/ydb/public/api/client/yc_private/operation
 )
 END()

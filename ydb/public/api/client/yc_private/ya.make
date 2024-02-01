@@ -4,6 +4,7 @@ RECURSE(
     compute
     iam
     kms
+    loadtesting
     microcosm
     oauth
     operation
@@ -12,5 +13,6 @@ RECURSE(
     reference
     resourcemanager
     servicecontrol
+    vpc
     ydb
 )

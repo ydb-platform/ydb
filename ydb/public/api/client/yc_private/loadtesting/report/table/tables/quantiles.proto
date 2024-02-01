@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.report.table.tables;
 
-import "yandex/cloud/priv/loadtesting/v1/common/quantiles.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/common/quantiles.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/report/table/tables;tables";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/report/table/tables;tables";
 option java_outer_classname = "PRTTQ";
 
 message Quantiles {

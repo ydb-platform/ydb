@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.v1.job;
 
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/priv/loadtesting/v1/job/tags/tag.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/loadtesting/job/tags/tag.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/v1/job;job";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/job;job";
 option java_outer_classname = "LtV1JobInterface";
 
 message LinkTagsRequest {

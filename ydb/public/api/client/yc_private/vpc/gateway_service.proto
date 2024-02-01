@@ -3,12 +3,12 @@ syntax = "proto3";
 package yandex.cloud.priv.vpc.v1;
 
 import "google/protobuf/field_mask.proto";
-import "yandex/cloud/api/operation.proto";
-import "yandex/cloud/priv/validation.proto";
-import "yandex/cloud/priv/operation/operation.proto";
-import "yandex/cloud/priv/vpc/v1/gateway.proto";
+import "contrib/ydb/public/api/client/yc_public/api/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/validation.proto";
+import "contrib/ydb/public/api/client/yc_private/operation/operation.proto";
+import "contrib/ydb/public/api/client/yc_private/vpc/v1/gateway.proto";
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
 option java_outer_classname = "PVGS";
 
 service GatewayService {

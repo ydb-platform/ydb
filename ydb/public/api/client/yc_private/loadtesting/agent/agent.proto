@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.loadtesting.agent.v1;
 
-option go_package = "a.yandex-team.ru/contrib/ydb/public/api/client/yc_private/loadtesting/agent/v1;agent";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/loadtesting/agent;agent";
 
 message AgentInstance {
     string id = 1;

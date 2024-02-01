@@ -8,7 +8,7 @@ import "ydb/public/api/client/yc_private/common/validation.proto";
 import "ydb/public/api/client/yc_private/common/sensitive.proto";
 import "ydb/public/api/client/yc_private/oauth/claims.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/oauth/v1;oauth";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/oauth;oauth";
 option java_outer_classname = "LoginHistory";
 
 service LoginHistoryService {

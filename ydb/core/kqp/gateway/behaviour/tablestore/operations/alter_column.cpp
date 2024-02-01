@@ -29,7 +29,7 @@ void TAlterColumnOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTable
     auto* column = schemaData.AddAlterColumns();
     column->SetName(ColumnName);
     if (!!Serializer) {
-        Serializer->SerializeToProto(*column->MutableSerializer());
+        Serializer.SerializeToProto(*column->MutableSerializer());
     }
     *column->MutableDictionaryEncoding() = DictionaryEncodingDiff.SerializeToProto();
 }

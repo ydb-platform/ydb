@@ -2,7 +2,7 @@
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
-#include <ydb/core/formats/arrow/serializer/arrow.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NKikimr::NSchemeShard {
 

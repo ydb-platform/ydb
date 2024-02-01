@@ -1,4 +1,4 @@
-#include "arrow.h"
+#include "native.h"
 #include "stream.h"
 #include "parsing.h"
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
@@ -15,7 +15,7 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TArrowSerializer::DoDeserialize(const TString& data) const {
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
@@ -39,7 +39,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TArrowSerializer::DoDeseriali
     return batch;
 }
 
-TString TArrowSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     TString result;
     {
         arrow::io::MockOutputStream mock;
@@ -57,7 +57,7 @@ TString TArrowSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBat
     return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TArrowSerializer::DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
@@ -80,7 +80,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TArrowSerializer::DoDeseriali
     return batch;
 }
 
-TString TArrowSerializer::DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     arrow::ipc::IpcPayload payload;
     // Build payload. Compression if set up performed here.
     TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
@@ -102,7 +102,7 @@ TString TArrowSerializer::DoSerializePayload(const std::shared_ptr<arrow::Record
     return str;
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TArrowSerializer::BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const {
+NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const {
     auto codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType));
     if (!codec) {
         return std::shared_ptr<arrow::util::Codec>();
@@ -119,7 +119,7 @@ NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TArrowSerializer::Buil
     return codecPtr;
 }
 
-NKikimr::TConclusionStatus TArrowSerializer::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
+NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
     std::optional<arrow::Compression::type> codec;
     std::optional<int> level;
     {
@@ -142,7 +142,7 @@ NKikimr::TConclusionStatus TArrowSerializer::DoDeserializeFromRequest(NYql::TFea
             level = levelLocal;
         }
     }
-    auto codecPtrStatus = BuildCodec(codec.value_or(Options.codec->compression_type()), level.value_or(arrow::util::kUseDefaultCompressionLevel));
+    auto codecPtrStatus = BuildCodec(codec.value_or(Options.codec->compression_type()), level);
     if (!codecPtrStatus) {
         return codecPtrStatus.GetError();
     }
@@ -150,7 +150,7 @@ NKikimr::TConclusionStatus TArrowSerializer::DoDeserializeFromRequest(NYql::TFea
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TArrowSerializer::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) {
+NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) {
     if (!proto.HasArrowCompression()) {
         return TConclusionStatus::Fail("no arrow serializer data in proto");
     }
@@ -177,7 +177,7 @@ NKikimr::TConclusionStatus TArrowSerializer::DoDeserializeFromProto(const NKikim
     return TConclusionStatus::Success();
 }
 
-void TArrowSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
+void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
     proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
     proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
 }

@@ -12,7 +12,7 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
-class TArrowSerializer: public ISerializer {
+class TNativeSerializer: public ISerializer {
 public:
     static TString GetClassNameStatic() {
         return "ARROW_SERIALIZER";
@@ -21,7 +21,7 @@ private:
     arrow::ipc::IpcWriteOptions Options;
 
     TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
-    static const inline TFactory::TRegistrator<TArrowSerializer> Registrator = TFactory::TRegistrator<TArrowSerializer>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
 protected:
     virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
     virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
@@ -55,14 +55,14 @@ public:
         return options;
     }
 
-    TArrowSerializer(const arrow::Compression::type compressionType) {
+    TNativeSerializer(const arrow::Compression::type compressionType) {
         Options.use_threads = false;
         auto r = arrow::util::Codec::Create(compressionType);
         AFL_VERIFY(r.ok());
         Options.codec = std::move(*r);
     }
 
-    TArrowSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
+    TNativeSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
         : Options(options) {
         Options.use_threads = false;
 

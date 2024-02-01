@@ -10,7 +10,7 @@ PEERDIR(
 
 SRCS(
     abstract.cpp
-    GLOBAL arrow.cpp
+    GLOBAL native.cpp
     stream.cpp
     parsing.cpp
 )

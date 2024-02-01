@@ -3792,6 +3792,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 2);
                 }
             }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
         }
         const ui64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;
         const ui64 bytesUnpack = bytesUnpack1PK - bytesPK1;

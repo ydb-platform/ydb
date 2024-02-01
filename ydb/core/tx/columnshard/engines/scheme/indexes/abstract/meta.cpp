@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/formats/arrow/serializer/arrow.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 namespace NKikimr::NOlap::NIndexes {
@@ -33,7 +33,7 @@ std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {
-    Serializer = std::make_shared<NArrow::NSerialization::TArrowSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
+    Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
     return true;
 }
 
@@ -41,7 +41,7 @@ TIndexByColumns::TIndexByColumns(const ui32 indexId, const TString& indexName, c
     : TBase(indexId, indexName)
     , ColumnIds(columnIds)
 {
-    Serializer = std::make_shared<NArrow::NSerialization::TArrowSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
+    Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 }
 
 NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {

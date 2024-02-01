@@ -1,12 +1,12 @@
 #include "abstract.h"
-#include "arrow.h"
+#include "native.h"
 namespace NKikimr::NArrow::NSerialization {
 
 NKikimr::TConclusionStatus TSerializerContainer::DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto) {
     NKikimrSchemeOp::TOlapColumn::TSerializer serializerProto;
-    serializerProto.SetClassName(NArrow::NSerialization::TArrowSerializer::GetClassNameStatic());
+    serializerProto.SetClassName(NArrow::NSerialization::TNativeSerializer::GetClassNameStatic());
     *serializerProto.MutableArrowCompression() = proto;
-    AFL_VERIFY(Initialize(NArrow::NSerialization::TArrowSerializer::GetClassNameStatic()));
+    AFL_VERIFY(Initialize(NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()));
     return GetObjectPtr()->DeserializeFromProto(serializerProto);
 }
 
@@ -19,6 +19,10 @@ NKikimr::TConclusionStatus TSerializerContainer::DeserializeFromRequest(NYql::TF
         return TConclusionStatus::Fail("dont know anything about class_name=" + *className);
     }
     return TBase::GetObjectPtr()->DeserializeFromRequest(features);
+}
+
+std::shared_ptr<NKikimr::NArrow::NSerialization::ISerializer> TSerializerContainer::GetDefaultSerializer() {
+    return std::make_shared<TNativeSerializer>();
 }
 
 }

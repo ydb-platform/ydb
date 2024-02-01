@@ -96,6 +96,8 @@ public:
     }
     using TBase::DeserializeFromProto;
 
+    static std::shared_ptr<ISerializer> GetDefaultSerializer();
+
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
 
     TConclusionStatus DeserializeFromRequest(NYql::TFeaturesExtractor& features);

@@ -507,14 +507,20 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
                         
-                        for (const auto& [groupId, unlimitedLoaded] : unlimitedEnv.Loaded) {
+                        TSet<TGroupId> groupIds;
+                        for (const auto &c : {limitedEnv.Loaded, unlimitedEnv.Loaded}) {
+                            for (const auto &g : c) {
+                                groupIds.insert(g.first);
+                            }
+                        }
+                        for (auto groupId : groupIds) {
                             ui64 size = 0;
                             TSet<TPageId> expected, loaded;
-                            TVector<TPageId> unlimitedLoadedList(unlimitedLoaded.begin(), unlimitedLoaded.end());
+                            TVector<TPageId> unlimitedLoaded(unlimitedEnv.Loaded[groupId].begin(), unlimitedEnv.Loaded[groupId].end());
                             if (reverse) {
-                                std::reverse(unlimitedLoadedList.begin(), unlimitedLoadedList.end());
+                                std::reverse(unlimitedLoaded.begin(), unlimitedLoaded.end());
                             }
-                            for (auto pageId : unlimitedLoadedList) {
+                            for (auto pageId : unlimitedLoaded) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
                                     if (expected || !groupId.IsMain()) {
                                         // do not count first main page

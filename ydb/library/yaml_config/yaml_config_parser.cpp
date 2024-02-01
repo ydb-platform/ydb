@@ -363,7 +363,7 @@ namespace NKikimr::NYaml {
         return species;
     }
 
-    void PrepareStaticGroup(NJson::TJsonValue& json) {
+    void PrepareStaticGroup(NJson::TJsonValue& json, bool clear) {
         if (!json.Has("blob_storage_config")) {
             return;
         }
@@ -486,17 +486,21 @@ namespace NKikimr::NYaml {
                                 pdisksServiceSet.AppendValue(pdiskInfo);
                             }
 
-                            if (vdiskLocation.Has("path")) {
-                                vdiskLocation.EraseValue("path");
+                            if (clear) {
+                                if (vdiskLocation.Has("path")) {
+                                    vdiskLocation.EraseValue("path");
+                                }
+
+                                if (vdiskLocation.Has("pdisk_category")) {
+                                    vdiskLocation.EraseValue("pdisk_category");
+                                }
+
+                                if (vdiskLocation.Has("pdisk_config")) {
+                                    vdiskLocation.EraseValue("pdisk_config");
+                                }
+
                             }
 
-                            if (vdiskLocation.Has("pdisk_category")) {
-                                vdiskLocation.EraseValue("pdisk_category");
-                            }
-
-                            if (vdiskLocation.Has("pdisk_config")) {
-                                vdiskLocation.EraseValue("pdisk_config");
-                            }
 
                             if (shouldFillVdisks) {
 
@@ -752,13 +756,8 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareSingleNodeCase(NJson::TJsonValue& json) {
-        bool isSingleNode = json.Has("hosts") && (json["hosts"].GetArraySafe().size() == 1);
-        if (!isSingleNode) {
-            return;
-        }
-
-        const TString erasureSpecies = "none";
+    void PreprocessSingleNodeCase(NJson::TJsonValue& json) {
+        const TString erasureName = "none";
         const auto& drive = json["host_configs"][0]["drive"];
         const TString& diskType = drive[0]["type"].GetStringSafe();
         const TString& diskPath = drive[0]["path"].GetStringSafe();
@@ -766,7 +765,7 @@ namespace NKikimr::NYaml {
         diskTypeLower.to_lower();
 
         if (!json.Has("static_erasure")) {
-            json["static_erasure"] = erasureSpecies;
+            json["static_erasure"] = erasureName;
         }
 
         if (!json.Has("domains_config")) {
@@ -784,7 +783,7 @@ namespace NKikimr::NYaml {
                             {"kind", diskTypeLower},
                             {"pool_config", NJson::TJsonMap{
                                 {"box_id", 1},
-                                {"erasure_species", erasureSpecies},
+                                {"erasure_species", erasureName},
                                 {"kind", diskTypeLower},
                                 {"pdisk_filter", NJson::TJsonArray{
                                     NJson::TJsonMap{
@@ -821,7 +820,7 @@ namespace NKikimr::NYaml {
                 {"service_set", NJson::TJsonMap{
                     {"groups", { NJson::TJsonArray{
                         NJson::TJsonMap{
-                            {"erasure_species", erasureSpecies},
+                            {"erasure_species", erasureName},
                             {"rings", NJson::TJsonArray{
                                 NJson::TJsonMap{
                                     {"fail_domains", NJson::TJsonArray{
@@ -845,7 +844,7 @@ namespace NKikimr::NYaml {
 
         if (!json.Has("channel_profile_config")) {
             const NJson::TJsonMap channel {
-                {"erasure_species", erasureSpecies},
+                {"erasure_species", erasureName},
                 {"pdisk_category", 1},
                 {"storage_pool_kind", diskTypeLower}
             };
@@ -864,7 +863,122 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void PrepareHosts(NJson::TJsonValue& json) {
+    void PreprocessClusterCase(NJson::TJsonValue& json) {
+        TMaybe<TString> erasureName, defaultDiskType, defaultDiskTypeLower;
+        if (json.Has("erasure")) {
+            erasureName = GetStringSafe(json, "erasure");
+        }
+
+        if (json.Has("default_disk_type")) {
+            defaultDiskType = GetStringSafe(json, "default_disk_type");
+            defaultDiskTypeLower = *defaultDiskType.Get();
+            defaultDiskTypeLower.Get()->to_lower();
+        }
+
+        if (erasureName && !json.Has("static_erasure")) {
+            json["static_erasure"] = erasureName.GetRef();
+        }
+
+        if (json.Has("domains_config")) {
+            auto& domainsConfig = json["domains_config"];
+            if (domainsConfig.Has("domain")) {
+                for (auto& domain : domainsConfig["domain"].GetArraySafe()) {
+                    if (domain.Has("storage_pool_types")) {
+                        for (auto& storagePoolType : domain["storage_pool_types"].GetArraySafe()) {
+                            if (defaultDiskTypeLower && !storagePoolType.Has("kind")) {
+                                storagePoolType["kind"] = defaultDiskTypeLower.GetRef();
+                            }
+                            if (storagePoolType.Has("pool_config")) {
+                                auto& poolConfig = storagePoolType["pool_config"];
+                                if (erasureName && !poolConfig.Has("erasure_species")) {
+                                    poolConfig["erasure_species"] = erasureName.GetRef();
+                                }
+                                if (defaultDiskTypeLower && !poolConfig.Has("kind")) {
+                                    poolConfig["kind"] = defaultDiskTypeLower.GetRef();
+                                }
+                                if (defaultDiskType && !poolConfig.Has("pdisk_filter")) {
+                                    poolConfig["pdisk_filter"] = NJson::TJsonArray{
+                                        NJson::TJsonMap{
+                                            {"property", NJson::TJsonArray{
+                                                NJson::TJsonMap{
+                                                    {"type", defaultDiskType.GetRef()}
+                                                }
+                                            }}
+                                        }
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (json.Has("blob_storage_config")) {
+            auto& blobStorageConfig = json["blob_storage_config"];
+            if (blobStorageConfig.Has("service_set")) {
+                auto& serviceSet = blobStorageConfig["service_set"];
+                if (serviceSet.Has("groups")) {
+                    for (auto& group : serviceSet["groups"].GetArraySafe()) {
+                        if (erasureName && !group.Has("erasure_species")) {
+                            group["erasure_species"] = erasureName.GetRef();
+                        }
+                        if (group.Has("rings")) {
+                            for (auto& ring : group["rings"].GetArraySafe()) {
+                                if (ring.Has("fail_domains")) {
+                                    for (auto& failDomain : ring["fail_domains"].GetArraySafe()) {
+                                        if (failDomain.Has("vdisk_locations")) {
+                                            for (auto& vdiskLocation : failDomain["vdisk_locations"].GetArraySafe()) {
+                                                if (defaultDiskType && !vdiskLocation.Has("pdisk_category")) {
+                                                    vdiskLocation["pdisk_category"] = defaultDiskType.GetRef();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (json.Has("channel_profile_config")) {
+            auto& channelProfileConfig = json["channel_profile_config"];
+            if (channelProfileConfig.Has("profile")) {
+                for (auto& profile : channelProfileConfig["profile"].GetArraySafe()) {
+                    if (profile.Has("channel")) {
+                        for (auto& channel : profile["channel"].GetArraySafe()) {
+                            if (erasureName && !channel.Has("erasure_species")) {
+                                channel["erasure_species"] = erasureName.GetRef();
+                            }
+                            if (defaultDiskTypeLower && !channel.Has("storage_pool_kind")) {
+                                channel["storage_pool_kind"] = defaultDiskTypeLower.GetRef();
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (erasureName && defaultDiskTypeLower) {
+            const auto& channel = NJson::TJsonMap{
+                {"erasure_species", erasureName.GetRef()},
+                {"pdisk_category", 1},
+                {"storage_pool_kind", defaultDiskTypeLower.GetRef()}
+            };
+            json["channel_profile_config"] = NJson::TJsonMap{
+                {"profile", NJson::TJsonArray{
+                    NJson::TJsonMap{
+                        {"channel", NJson::TJsonArray{
+                            channel, channel, channel
+                        }},
+                        {"profile_id", 0}
+                    }
+                }}
+            };
+        }
+    }
+
+    void PreprocessHosts(NJson::TJsonValue& json) {
         if (!json.Has("hosts")) {
             return;
         }
@@ -901,11 +1015,15 @@ namespace NKikimr::NYaml {
 
         // Patch disk types
         if (json.Has("host_configs")) {
+            TString defaultDiskType = "SSD";
+            if (json.Has("default_disk_type")) {
+                defaultDiskType = GetStringSafe(json, "default_disk_type");
+            }
             for(auto& hostConfig : json["host_configs"].GetArraySafe()) {
                 int sectorMapIndex = 0;
                 for(auto& drive : hostConfig["drive"].GetArraySafe()) {
                     if (!drive.Has("type")) {
-                        drive["type"] = "SSD";
+                        drive["type"] = defaultDiskType;
                     }
                     if (GetStringSafe(drive, "type") == "RAM") {
                         ++sectorMapIndex;
@@ -916,6 +1034,17 @@ namespace NKikimr::NYaml {
                     }
                 }
             }
+        }
+
+    }
+
+    void Preprocess(NJson::TJsonValue& json) {
+        bool isSingleNode = json.Has("hosts") && (json["hosts"].GetArraySafe().size() == 1);
+        PreprocessHosts(json);
+        if (isSingleNode) {
+            PreprocessSingleNodeCase(json);
+        } else {
+            PreprocessClusterCase(json);
         }
     }
 
@@ -979,6 +1108,8 @@ namespace NKikimr::NYaml {
 
     void ClearFields(NJson::TJsonValue& json){
         json.EraseValue("system_tablets");
+        json.EraseValue("default_disk_type");
+        json.EraseValue("erasure");
         json.EraseValue("static_erasure");
         json.EraseValue("hosts");
         json.EraseValue("host_configs");
@@ -1065,11 +1196,10 @@ namespace NKikimr::NYaml {
     }
 
     void TransformConfig(NJson::TJsonValue& json, bool relaxed, bool clear) {
-        PrepareHosts(json);
-        PrepareSingleNodeCase(json);
+        Preprocess(json);
         PrepareNameserviceConfig(json);
         PrepareActorSystemConfig(json);
-        PrepareStaticGroup(json);
+        PrepareStaticGroup(json, clear);
         PrepareBlobStorageConfig(json);
         PrepareIcConfig(json);
         PrepareLogConfig(json);
@@ -1085,8 +1215,7 @@ namespace NKikimr::NYaml {
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue json = Yaml2Json(yamlNode, true);
-        PrepareHosts(json);
-        PrepareSingleNodeCase(json);
+        Preprocess(json);
 
         Y_ENSURE_BT(json.Has("hosts") && json["hosts"].IsArray(), "Specify hosts list to use blobstorage init command");
         Y_ENSURE_BT(json["host_configs"].IsArray(), "Specify host_configs to use blobstorage init command");

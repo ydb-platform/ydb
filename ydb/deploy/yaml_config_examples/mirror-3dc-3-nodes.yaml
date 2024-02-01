@@ -1,18 +1,15 @@
 # YDB configuration options and their values
 # are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
 
-# static erasure is the parameter that
+# erasure is the parameter that
 # describes the fault tolerance mode of the
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-static_erasure: mirror-3-dc
+erasure: mirror-3-dc
 host_configs: # the list of available host configurations in the cluster.
 - drive:
-  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
-    type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.                                       # kind of the disk: available kinds are SSD, NVME, HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-    type: SSD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-    type: SSD
   host_config_id: 1
 hosts:
 - host: ydb-node-zone-a.local       # storage node DNS name
@@ -43,21 +40,13 @@ domains_config:
   domain:
   - name: Root
     storage_pool_types:
-    - kind: ssd
-      pool_config:
+    - pool_config:
         box_id: 1
-        # fault tolerance mode name - none, block-4-2, or mirror-3-dc..
-        # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-        erasure_species: mirror-3-dc
-        kind: ssd
         geometry:
           realm_level_begin: 10
           realm_level_end: 20
           domain_level_begin: 10
           domain_level_end: 256
-        pdisk_filter:
-        - property:
-          - type: SSD  # device type to match host_configs.drive.type
         vdisk_kind: Default
   state_storage:
   - ring:
@@ -68,60 +57,37 @@ blob_storage_config:         # configuration of static blobstorage group.
                              # YDB uses this group to store system tablets' data, like SchemeShard
   service_set:
     groups:
-    - erasure_species: mirror-3-dc # fault tolerance mode name for the static group
-      rings:          # in mirror-3-dc must have exactly 3 rings or availability zones
+    - rings:          # in mirror-3-dc must have exactly 3 rings or availability zones
       - fail_domains:  # first record: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
           - node_id: ydb-node-zone-a.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: ydb-node-zone-a.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_02
         - vdisk_locations:
           - node_id: ydb-node-zone-a.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       - fail_domains: # second ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
           - node_id: ydb-node-zone-b.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: ydb-node-zone-b.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_02
         - vdisk_locations:
           - node_id: ydb-node-zone-b.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       - fail_domains: # third ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
           - node_id: ydb-node-zone-c.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: ydb-node-zone-c.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_02
         - vdisk_locations:
           - node_id: ydb-node-zone-c.local
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-channel_profile_config:
-  profile:
-  - channel:
-    - erasure_species: mirror-3-dc
-      pdisk_category: 0
-      storage_pool_kind: ssd
-    - erasure_species: mirror-3-dc
-      pdisk_category: 0
-      storage_pool_kind: ssd
-    - erasure_species: mirror-3-dc
-      pdisk_category: 0
-      storage_pool_kind: ssd
-    profile_id: 0
 interconnect_config:
     start_tcp: true
     encryption_mode: OPTIONAL

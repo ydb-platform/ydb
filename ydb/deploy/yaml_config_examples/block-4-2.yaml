@@ -4,13 +4,11 @@
 # static erasure is the parameter that
 # describes the fault tolerance mode of the
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-static_erasure: block-4-2
+erasure: block-4-2
 host_configs: # the list of available host configurations in the cluster.
 - drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01   # path of the first disk in the host configration.
-    type: SSD                                      # kind of the disk: available kinds are SSD, NVME or HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-    type: SSD
   host_config_id: 1                                # the unique id of the host config
 hosts:
 - host: ydb-node-zone-a-1.local   # storage node DNS name
@@ -74,16 +72,8 @@ domains_config:
   # in a cluster with domains_config.domain.name parameter set to Root would be equal to /Root/db1/table1
   - name: Root
     storage_pool_types:
-    - kind: ssd
-      pool_config:
+    - pool_config:
         box_id: 1
-        # fault tolerance mode name - none, block-4-2, or mirror-3-dc. 
-        # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-        erasure_species: block-4-2
-        kind: ssd
-        pdisk_filter:
-        - property:
-          - type: SSD # device type to match host_configs.drive.type
         vdisk_kind: Default
   state_storage:
   - ring:
@@ -94,54 +84,32 @@ blob_storage_config:    # configuration of static blobstorage group.
                         # YDB uses this group to store system tablets' data, like SchemeShard
   service_set:
     groups:
-    - erasure_species: block-4-2  # fault tolerance mode name for the static group
-      rings:           # in block-4-2 must have exactly 1 ring or availability zone.
+    - rings:           # in block-4-2 must have exactly 1 ring or availability zone.
       - fail_domains:
         - vdisk_locations:    # fail domains of the static group describe where each vdisk of the static group should be located.
           - node_id: "ydb-node-zone-a-1.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-2.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-3.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-4.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-5.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-6.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-7.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
         - vdisk_locations:
           - node_id: "ydb-node-zone-a-8.local"
-            pdisk_category: SSD
             path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-channel_profile_config:
-  profile:
-  - channel:
-    - erasure_species: block-4-2
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    - erasure_species: block-4-2
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    - erasure_species: block-4-2
-      pdisk_category: 1
-      storage_pool_kind: ssd
-    profile_id: 0
 interconnect_config:
     start_tcp: true
     encryption_mode: OPTIONAL

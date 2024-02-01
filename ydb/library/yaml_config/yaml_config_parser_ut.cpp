@@ -1,5 +1,6 @@
 #include "yaml_config_parser.h"
 
+#include <ydb/core/erasure/erasure.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -78,5 +79,182 @@ hosts:
         UNIT_ASSERT(transformedCfg["domains_config"]["state_storage"].IsArray());
         UNIT_ASSERT(transformedCfg["blob_storage_config"].IsMap());
         UNIT_ASSERT(transformedCfg["channel_profile_config"].IsMap());
+    }
+
+    Y_UNIT_TEST(ClusterCase) {
+      TString str = R"(
+erasure: mirror-3-dc
+default_disk_type: NVME
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+  host_config_id: 1
+hosts:
+- host: ydb-node-zone-a-1.local
+  host_config_id: 1
+  walle_location:
+    body: 1
+    data_center: 'zone-a'
+    rack: '1'
+- host: ydb-node-zone-a-2.local
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-a'
+    rack: '2'
+- host: ydb-node-zone-a-3.local
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-a'
+    rack: '3'
+
+- host: ydb-node-zone-b-1.local
+  host_config_id: 1
+  walle_location:
+    body: 4
+    data_center: 'zone-b'
+    rack: '4'
+- host: ydb-node-zone-b-2.local
+  host_config_id: 1
+  walle_location:
+    body: 5
+    data_center: 'zone-b'
+    rack: '5'
+- host: ydb-node-zone-b-3.local
+  host_config_id: 1
+  walle_location:
+    body: 6
+    data_center: 'zone-b'
+    rack: '6'
+
+- host: ydb-node-zone-c-1.local
+  host_config_id: 1
+  walle_location:
+    body: 7
+    data_center: 'zone-c'
+    rack: '7'
+- host: ydb-node-zone-c-2.local
+  host_config_id: 1
+  walle_location:
+    body: 8
+    data_center: 'zone-c'
+    rack: '8'
+- host: ydb-node-zone-c-3.local
+  host_config_id: 1
+  walle_location:
+    body: 9
+    data_center: 'zone-c'
+    rack: '9'
+
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - pool_config:
+        box_id: 1
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      nto_select: 9
+    ssid: 1
+blob_storage_config:
+  service_set:
+    groups:
+    - rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-1.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-2.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-a-3.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-1.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-2.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-b-3.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-1.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-2.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - vdisk_locations:
+          - node_id: "ydb-node-zone-c-3.local"
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+channel_profile_config:
+  profile:
+  - channel:
+    - pdisk_category: 1
+    - pdisk_category: 1
+    - pdisk_category: 1
+    profile_id: 0
+interconnect_config:
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+grpc_config:
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+
+)";
+        auto originalCfg = NYaml::Yaml2Json(YAML::Load(str), true);
+        auto transformedCfg = originalCfg;
+        NYaml::TransformConfig(transformedCfg, true, false);
+        const auto& storagePoolTypes = transformedCfg["domains_config"]["domain"][0]["storage_pool_types"][0];
+        const auto& serviceSet = transformedCfg["blob_storage_config"]["service_set"];
+        const auto& group = serviceSet["groups"][0];
+        const auto& channels = transformedCfg["channel_profile_config"]["profile"][0]["channel"];
+        const TString& erasure = transformedCfg["erasure"].GetStringSafe();
+        const TString& diskType = transformedCfg["default_disk_type"].GetStringSafe();
+        TString diskTypeLower(diskType);
+        diskTypeLower.to_lower();
+
+        UNIT_ASSERT_VALUES_EQUAL(transformedCfg["static_erasure"], erasure);
+        UNIT_ASSERT_VALUES_EQUAL(transformedCfg["host_configs"][0]["drive"][0]["type"], "NVME");
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["kind"], diskTypeLower);
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["pool_config"]["kind"], diskTypeLower);
+        UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["pool_config"]["pdisk_filter"][0]["property"][0]["type"], diskType);
+        UNIT_ASSERT_VALUES_EQUAL(group["erasure_species"], TErasureType::ErasureMirror3dc);
+        for (const auto& pdisk : serviceSet["pdisks"].GetArraySafe()) {
+          UNIT_ASSERT_VALUES_EQUAL(pdisk["pdisk_category"].GetUIntegerSafe(), 2 /* NVME */);
+        }
+        for (const auto& ring : group["rings"].GetArraySafe()) {
+          for (const auto& failDomain : ring["fail_domains"].GetArraySafe()) {
+            for (const auto& vdiskLocation : failDomain["vdisk_locations"].GetArraySafe()) {
+              UNIT_ASSERT_VALUES_EQUAL(vdiskLocation["pdisk_category"], diskType);
+            }
+          }
+        }
+        for (const auto& channel : channels.GetArraySafe()) {
+          UNIT_ASSERT_VALUES_EQUAL(channel["erasure_species"], erasure);
+          UNIT_ASSERT_VALUES_EQUAL(channel["pdisk_category"], 1);
+          UNIT_ASSERT_VALUES_EQUAL(channel["storage_pool_kind"], diskTypeLower);
+        }
+
+        // Check empty channel_profile_config
+        originalCfg.EraseValue("channel_profile_config");
+        NYaml::TransformConfig(originalCfg, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(originalCfg["channel_profile_config"]["profile"][0]["profile_id"], 0);
+        for (const auto& channel : originalCfg["channel_profile_config"]["profile"][0]["channel"].GetArraySafe()) {
+          UNIT_ASSERT_VALUES_EQUAL(channel["erasure_species"], erasure);
+          UNIT_ASSERT_VALUES_EQUAL(channel["pdisk_category"], 1);
+          UNIT_ASSERT_VALUES_EQUAL(channel["storage_pool_kind"], diskTypeLower);
+        }
     }
 }

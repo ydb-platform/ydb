@@ -27,6 +27,9 @@ on:
       checkout_ref:
         required: false
         type: string
+      ninja_target:
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       runner_label:
@@ -53,6 +56,9 @@ on:
       checkout_ref:
         required: false
         type: string
+      ninja_target:
+        required: false
+        type: string
 
 jobs:
   main:
@@ -70,6 +76,7 @@ jobs:
         sanitizer: ${{ inputs.sanitizer }}
         ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
         extra_compile_flags: ${{ inputs.extra_compile_flags }}
+        ninja_target: ${{ inputs.ninja_target }}
     - name: Run tests
       uses: ./.github/actions/test
       with:

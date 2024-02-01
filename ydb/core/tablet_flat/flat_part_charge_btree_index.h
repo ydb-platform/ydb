@@ -12,6 +12,7 @@ class TChargeBTreeIndex : public ICharge {
     using TRecIdx = NPage::TRecIdx;
     using TGroupId = NPage::TGroupId;
     using TChild = TBtreeIndexNode::TChild;
+    using TShortChild = TBtreeIndexNode::TShortChild;
 
     struct TChildState {
         TPageId PageId;
@@ -220,7 +221,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -234,7 +235,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroups(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -415,7 +416,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -429,13 +430,13 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoPrechargeGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
 
 private:
-    bool DoPrechargeGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
@@ -444,14 +445,14 @@ private:
             }
 
             for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
+                ready &= DoGroup(groupId, beginRowId, endRowId, bytesLimit);
             }
         }
 
         return ready;
     }
 
-    bool DoPrechargeGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
         if (chargeGroups && beginRowId < endRowId) {
@@ -460,7 +461,7 @@ private:
             }
 
             for (auto groupId : Groups) {
-                ready &= DoPrechargeGroup(groupId, beginRowId, endRowId, bytesLimit);
+                ready &= DoGroupReverse(groupId, beginRowId, endRowId, bytesLimit);
             }
         }
 
@@ -468,7 +469,7 @@ private:
     }
 
 private:
-    bool DoPrechargeGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
+    bool DoGroup(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
         bool ready = true;
 
         const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
@@ -500,6 +501,75 @@ private:
                             return;
                         }
                     }
+                }
+            }
+        };
+
+        const auto tryHandleNode = [&](TChildState child) -> bool {
+            return TryLoadNode(child, nextLevel);
+        };
+
+        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+            return HasDataPage(child.PageId, groupId);
+        };
+
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+            } else {
+                iterateLevel(tryHandleNode);
+            }
+            level.swap(nextLevel);
+            nextLevel.clear();
+        }
+
+        if (!ready) { // some index pages are missing, do not continue
+            return ready;
+        }
+
+        if (meta.LevelCount == 0) {
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+        } else {
+            iterateLevel(tryHandleDataPage);
+        }
+
+        return ready;
+    }
+
+    bool DoGroupReverse(TGroupId groupId, TRowId beginRowId, TRowId endRowId, ui64 bytesLimit) const noexcept {
+        bool ready = true;
+
+        const auto& meta = groupId.IsHistoric() ? Part->IndexPages.BTreeHistoric[groupId.Index] : Part->IndexPages.BTreeGroups[groupId.Index];
+
+        // level's nodes is in reverse order
+        TVector<TNodeState> level, nextLevel(::Reserve(3));
+
+        const auto iterateLevel = [&](const auto& tryHandleChild) {
+            const TShortChild* lastChild = nullptr;
+            for (const auto &node : level) {
+                TRecIdx from = 0, to = node.GetChildrenCount();
+                if (node.BeginRowId < beginRowId) {
+                    from = node.Seek(beginRowId);
+                }
+                if (node.EndRowId > endRowId) {
+                    to = node.Seek(endRowId - 1) + 1;
+                }
+                for (TRecIdx posExt = to; posExt > from; posExt--) {
+                    auto child = node.GetShortChildRef(posExt - 1);
+                    auto prevChild = posExt - 1 ? node.GetShortChildRef(posExt - 2) : nullptr;
+                    TRowId beginRowId = prevChild ? prevChild->RowCount : node.BeginRowId;
+                    TRowId endRowId = child->RowCount;
+                    if (bytesLimit) {
+                        if (!lastChild) {
+                            lastChild = child;
+                        } else {
+                            ui64 bytes = lastChild->DataSize - child->DataSize;
+                            if (LimitExceeded(bytes, bytesLimit)) {
+                                return;
+                            }
+                        }
+                    }
+                    ready &= tryHandleChild(TChildState(child->PageId, beginRowId, endRowId));
                 }
             }
         };

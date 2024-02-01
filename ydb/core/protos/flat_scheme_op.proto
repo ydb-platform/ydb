@@ -397,14 +397,24 @@ message TDictionaryEncodingSettings {
 }
 
 message TCompressionOptions {
-    optional EColumnCodec CompressionCodec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
-    optional int32 CompressionLevel = 3; // Use default compression level if not set (0 != not set)
+    optional EColumnCodec Codec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
+    optional int32 Level = 3; // Use default compression level if not set (0 != not set)
+}
+
+message TOlapColumn {
+
+    message TSerializer {
+        optional string ClassName = 1;
+        oneof Implementation {
+            TCompressionOptions ArrowCompression = 40;
+        }
+    }
 }
 
 message TOlapColumnDiff {
     optional string Name = 1;
-    optional TCompressionOptions Compression = 2;
     optional TDictionaryEncodingSettings DictionaryEncoding = 4;
+    optional TOlapColumn.TSerializer Serializer = 5;
 }
 
 message TOlapColumnDescription {
@@ -419,8 +429,9 @@ message TOlapColumnDescription {
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
 
-    optional TCompressionOptions Compression = 8;
+    optional TCompressionOptions Compression = 8[deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
+    optional TOlapColumn.TSerializer Serializer = 10;
 }
 
 message TRequestedBloomFilter {

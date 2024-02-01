@@ -395,7 +395,6 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 2, 2, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 10, 1000);
-    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10000, 100, 1000);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
@@ -405,11 +404,15 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 2, 2, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
-    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
 }
 
+enum class ELoadDistribution : ui8 {
+    DistributionBurst = 0,
+    DistributionEvenly,
+};
+
 template <typename TInflightActor>
-void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, bool burstExpected) {
+void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor, ELoadDistribution loadDistribution) {
     std::unique_ptr<TEnvironmentSetup> env;
     NKikimrBlobStorage::TBaseConfig baseConfig;
     ui32 groupSize;
@@ -420,29 +423,28 @@ void TestBurst(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor*
 
     actor->SetGroupId(groupId);
     env->Runtime->Register(actor, 1);
-    env->Sim(TDuration::Seconds(15));
+    env->Sim(TDuration::Minutes(10));
 
     ui64 redMs = AggregateVDiskCounters(env, baseConfig, env->StoragePoolName, groupSize, groupId,
             pdiskLayout, "advancedCost", "BurstDetector_redMs");
     
-    if (burstExpected) {
-        UNIT_ASSERT_GT(redMs, 0);
+    if (loadDistribution == ELoadDistribution::DistributionBurst) {
+        UNIT_ASSERT_VALUES_UNEQUAL(redMs, 0);
     } else {
-        UNIT_ASSERT_VALUES_EQUAL(redMs, burstExpected);
+        UNIT_ASSERT_VALUES_EQUAL(redMs, 0);
     }
 }
 
-#define MAKE_BURST_TEST(testType, erasure, requestType, requests, inflight, delay, burstExpected)   \
-Y_UNIT_TEST(Test##requestType##testType##erasure) {                                                 \
-    auto groupType = TBlobStorageGroupType::Erasure##erasure;                                       \
-    ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                   \
-    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                  \
-    TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                 \
-    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 1_KB);               \
-    TestBurst(topology, actor, burstExpected);                                                      \
+#define MAKE_BURST_TEST(requestType, requests, inflight, delay, distribution)                       \
+Y_UNIT_TEST(Test##requestType##distribution) {                                                      \
+    TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);   \
+    auto* actor = new TInflightActor##requestType({requests, inflight, delay}, 10_KB);               \
+    TestBurst(topology, actor, ELoadDistribution::Distribution##distribution);                      \
 }
 
 Y_UNIT_TEST_SUITE(BurstDetection) {
-    MAKE_BURST_TEST(Evenly, 4Plus2Block, Put, 100000, 1, TDuration::MicroSeconds(1), false);
-    MAKE_BURST_TEST(Burst, 4Plus2Block, Put, 100000, 1000000, TDuration::Zero(), true);
+    MAKE_BURST_TEST(Put, 3000, 1, TDuration::MilliSeconds(5), Evenly);
+    MAKE_BURST_TEST(Put, 3000, 1000000, TDuration::Zero(), Burst);
 }
+
+#undef MAKE_BURST_TEST

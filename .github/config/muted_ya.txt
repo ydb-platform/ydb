@@ -1,7 +1,6 @@
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/pdisk/ut TSectorMap.*
-ydb/core/blobstorage/ut_blobstorage CostMetricsGetBlock4Plus2.TestGet4Plus2BlockRequests10000Inflight1BlobSize1000
 ydb/core/blobstorage/ut_blobstorage Defragmentation.DoesItWork
 ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.*
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test

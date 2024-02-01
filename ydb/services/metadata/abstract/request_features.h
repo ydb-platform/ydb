@@ -39,16 +39,7 @@ public:
         }
     }
 
-    std::optional<TString> Extract(const TString& paramName) {
-        auto it = Features.find(paramName);
-        if (it == Features.end()) {
-            return {};
-        } else {
-            const TString result = it->second;
-            Features.erase(it);
-            return result;
-        }
-    }
+    std::optional<TString> Extract(const TString& paramName);
 
 };
 }

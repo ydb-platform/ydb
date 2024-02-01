@@ -2,6 +2,7 @@ PROTO_LIBRARY()
 
 PEERDIR(
     ydb/public/api/client/yc_public/common
+    ydb/public/api/client/yc_public/ydb
 )
 
 EXCLUDE_TAGS(GO_PROTO)

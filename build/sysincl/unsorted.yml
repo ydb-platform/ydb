@@ -390,23 +390,6 @@
   - perl.h
   - XSUB.h
   #endif
-  #if defined(_darwin_)
-  - AEObjects.h
-  - AEPackObject.h
-  - AERegistry.h
-  - AppleEvents.h
-  - Files.h
-  - Gestalt.h
-  - ImageCompression.h
-  - Palettes.h
-  - PictUtils.h
-  - Processes.h
-  - QDOffscreen.h
-  - QuickDraw.h
-  - TextUtils.h
-  - Types.h
-  - sys/_types/_mbstate_t.h
-  #endif
   #if defined(_OS2_)
   - os2.h
   #endif

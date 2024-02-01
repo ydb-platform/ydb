@@ -17,7 +17,7 @@ namespace NKikimr::NYaml {
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
 
-    void TransformConfig(NJson::TJsonValue& config, bool relaxed = false);
+    void TransformConfig(NJson::TJsonValue& config, bool relaxed = false, bool clear = true);
 
     void Parse(const TString& data, NKikimrConfig::TAppConfig& config);
 }

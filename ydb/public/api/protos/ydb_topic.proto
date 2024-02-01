@@ -796,14 +796,70 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
+enum AutoScalingStrategy {
+    // Automaticaly scaling disabled
+    DISABLED = 0;
+    // The automaticaly scaling may increase and decrease the number of partitions
+    AUTO = 1;
+    // The automaticaly scaling may only increase the number of partitions
+    INCREASE_ONLY = 2;
+}
+
+message AutoScalingSettings {
+    // Strategy of auto scaling
+    AutoScalingStrategy strategy = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be automatically splitted.
+    // Zero value means default - 90.
+    int32 split_partition_write_speed_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // automatically splitted.
+    // Zero value means default - 300.
+    int32 split_threshold_time_seconds = 3;
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be automatically merged.
+    // Zero value means default - 30.
+    int32 merge_partition_write_speed_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The time of not reaching the threshold value in seconds, after which the partition will be
+    // automatically merged.
+    // Zero value means default - 86400.
+    int32 merge_threshold_time_seconds = 3;
+}
+
+message AlterAutoScalingSettings {
+    // Strategy of auto scaling
+    optional AutoScalingStrategy strategy = 1;
+    // The threshold value of the write speed to the partition as a percentage, when exceeded,
+    // the partition will be automatically splitted.
+    // Zero value means default - 90.
+    optional int32 set_split_partition_write_speed_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The time of exceeding the threshold value in seconds, after which the partition will be
+    // automatically splitted.
+    // Zero value means default - 300.
+    optional int32 set_split_threshold_time_seconds = 3;
+    // The threshold value of the write speed to the partition as a percentage, if it is not reached,
+    // the partition will be automatically merged.
+    // Zero value means default - 30.
+    int32 set_merge_partition_write_speed_threshold_percent = 2 [(Ydb.value) = ">= 0"];
+    // The time of not reaching the threshold value in seconds, after which the partition will be
+    // automatically merged.
+    // Zero value means default - 86400.
+    int32 set_merge_threshold_time_seconds = 3;
+}
+
 // Partitioning settings for topic.
 message PartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
     int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Maximum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Settings for auto sacling the partition number
+    AutoScalingSettings auto_scaling_settings = 4;
 }
 
 // Partitioning settings for topic.
@@ -811,9 +867,14 @@ message AlterPartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
     optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Maximum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    optional int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
     optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    // Settings for auto sacling the partition number
+    AlterAutoScalingSettings alter_auto_scaling_settings = 4;
 }
 
 // Metering mode specifies the method used to determine consumption of resources by the topic.

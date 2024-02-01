@@ -93,10 +93,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs);
-bool operator !=(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs);
-
 bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs);
-bool operator !=(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

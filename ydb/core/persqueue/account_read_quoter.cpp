@@ -29,7 +29,7 @@ TAccountReadQuoter::TAccountReadQuoter(
     TActorId recepient,
     ui64 tabletId,
     const NPersQueue::TTopicConverterPtr& topicConverter,
-    ui32 partition,
+    const TPartitionId& partition,
     const TString& user,
     const TTabletCountersBase& counters
 )

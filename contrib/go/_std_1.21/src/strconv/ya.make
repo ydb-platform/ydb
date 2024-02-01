@@ -1,42 +1,5 @@
 GO_LIBRARY()
-IF (FALSE)
-    MESSAGE(FATAL this shall never happen)
-
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		atob.go
-		atoc.go
-		atof.go
-		atoi.go
-		bytealg.go
-		ctoa.go
-		decimal.go
-		doc.go
-		eisel_lemire.go
-		ftoa.go
-		ftoaryu.go
-		isprint.go
-		itoa.go
-		quote.go
-    )
-ELSEIF (OS_LINUX AND ARCH_ARM64)
-    SRCS(
-		atob.go
-		atoc.go
-		atof.go
-		atoi.go
-		bytealg.go
-		ctoa.go
-		decimal.go
-		doc.go
-		eisel_lemire.go
-		ftoa.go
-		ftoaryu.go
-		isprint.go
-		itoa.go
-		quote.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
 		atob.go
 		atoc.go
@@ -70,7 +33,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64)
 		itoa.go
 		quote.go
     )
-ELSEIF (OS_DARWIN AND ARCH_ARM64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		atob.go
 		atoc.go
@@ -87,7 +50,7 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64)
 		itoa.go
 		quote.go
     )
-ELSEIF (OS_DARWIN AND ARCH_AARCH64)
+ELSEIF (OS_LINUX AND ARCH_X86_64)
     SRCS(
 		atob.go
 		atoc.go
@@ -105,40 +68,6 @@ ELSEIF (OS_DARWIN AND ARCH_AARCH64)
 		quote.go
     )
 ELSEIF (OS_WINDOWS AND ARCH_X86_64)
-    SRCS(
-		atob.go
-		atoc.go
-		atof.go
-		atoi.go
-		bytealg.go
-		ctoa.go
-		decimal.go
-		doc.go
-		eisel_lemire.go
-		ftoa.go
-		ftoaryu.go
-		isprint.go
-		itoa.go
-		quote.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_ARM64)
-    SRCS(
-		atob.go
-		atoc.go
-		atof.go
-		atoi.go
-		bytealg.go
-		ctoa.go
-		decimal.go
-		doc.go
-		eisel_lemire.go
-		ftoa.go
-		ftoaryu.go
-		isprint.go
-		itoa.go
-		quote.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_AARCH64)
     SRCS(
 		atob.go
 		atoc.go

@@ -29,7 +29,6 @@ namespace NTaskRunnerActor {
 ITaskRunnerActorFactory::TPtr CreateTaskRunnerActorFactory(
     const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
     const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
     TWorkerRuntimeData* runtimeData = nullptr);
 
 } // namespace NTaskRunnerActor

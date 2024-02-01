@@ -37,18 +37,6 @@ SRCS(
     weak.go
 )
 
-GO_TEST_SRCS(legacy_export_test.go)
-
-GO_XTEST_SRCS(
-    enum_test.go
-    extension_test.go
-    lazy_test.go
-    legacy_aberrant_test.go
-    legacy_file_test.go
-    legacy_test.go
-    message_reflect_test.go
-)
-
 END()
 
 RECURSE(

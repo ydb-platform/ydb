@@ -43,6 +43,59 @@ public:
     {
         return inputTransformInfo.Buffer.Get();
     }
+protected:
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
+        CA_LOG_D("Save state");
+        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
+        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
+        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
+        data.SetBlob(this->TaskRunner->Save());
+
+        for (auto& [inputIndex, source] : this->SourcesMap) {
+            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
+            NDqProto::TSourceState& sourceState = *state.AddSources();
+            source.AsyncInput->SaveState(checkpoint, sourceState);
+            sourceState.SetInputIndex(inputIndex);
+        }
+    }
+
+    void DoLoadRunnerState(TString&& blob) override {
+        TMaybe<TString> error = Nothing();
+        try {
+            this->TaskRunner->Load(blob);
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        this->Checkpoints->AfterStateLoading(error);
+    }
+
+    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
+        this->TaskRunner = taskRunner;
+    }
+
+    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
+        YQL_ENSURE(this->TaskRunner);
+
+        auto guard = TBase::BindAllocator();
+        auto* alloc = guard.GetMutex();
+        alloc->SetLimit(this->MemoryQuota->GetMkqlMemoryLimit());
+
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+
+        TDqTaskRunnerMemoryLimits limits;
+        limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
+        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+
+        this->TaskRunner->Prepare(this->Task, limits, execCtx);
+
+        TBase::FillIoMaps(
+                this->TaskRunner->GetHolderFactory(),
+                this->TaskRunner->GetTypeEnv(),
+                this->TaskRunner->GetSecureParams(),
+                this->TaskRunner->GetTaskParams(),
+                this->TaskRunner->GetReadRanges());
+    }
 };
 
 } //namespace NYql::NDq

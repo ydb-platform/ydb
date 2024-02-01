@@ -391,9 +391,6 @@ TString ToString(const TVersionedObjectId& id);
 //! Compares TVersionedNodeId s for equality.
 bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
-//! Compares TVersionedNodeId s for inequality.
-bool operator != (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
-
 //! Compares TVersionedNodeId s for "less than".
 bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 

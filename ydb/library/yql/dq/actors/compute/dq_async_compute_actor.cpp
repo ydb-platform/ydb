@@ -113,7 +113,7 @@ public:
             }
         }
         std::tie(TaskRunnerActor, actor) = TaskRunnerActorFactory->Create(
-            this, GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
+            this, TBase::GetAllocatorPtr(), GetTxId(), Task.GetId(), std::move(inputWithDisabledCheckpointing), InitMemoryQuota());
         TaskRunnerActorId = RegisterWithSameMailbox(actor);
 
         TDqTaskRunnerMemoryLimits limits;
@@ -459,18 +459,6 @@ private:
         YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelId);
 
         return inputChannel->FreeSpace;
-    }
-
-    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() override {
-        return TypeEnv->BindAllocator();
-    }
-
-    std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() override {
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard;
-        if (TypeEnv) {
-            guard.emplace(TypeEnv->BindAllocator());
-        }
-        return guard;
     }
 
     void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {

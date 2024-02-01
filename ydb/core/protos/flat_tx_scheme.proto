@@ -408,3 +408,6 @@ message TEvFindTabletSubDomainPathIdResult {
     optional uint64 SchemeShardId = 3; // OwnerId of the subdomain
     optional uint64 SubDomainPathId = 4; // LocalPathId of the subdomain
 }
+
+message TEvOwnerActorAck {
+}

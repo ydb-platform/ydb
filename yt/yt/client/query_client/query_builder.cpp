@@ -61,6 +61,11 @@ void TQueryBuilder::AddGroupByExpression(TString expression, TString alias)
     });
 }
 
+void TQueryBuilder::AddHavingConjunct(TString expression)
+{
+    HavingConjuncts_.push_back(std::move(expression));
+}
+
 void TQueryBuilder::AddOrderByExpression(TString expression)
 {
     OrderByEntries_.push_back(TOrderByEntry{
@@ -112,14 +117,22 @@ TString TQueryBuilder::Build()
         parts.push_back(JoinSeq(" AND ", Parenthesize(WhereConjuncts_)));
     }
 
-    if (!OrderByEntries_.empty()) {
-        parts.push_back("ORDER BY");
-        parts.push_back(JoinSeq(", ", OrderByEntries_));
-    }
-
     if (!GroupByEntries_.empty()) {
         parts.push_back("GROUP BY");
         parts.push_back(JoinSeq(", ", GroupByEntries_));
+    }
+
+    if (!HavingConjuncts_.empty()) {
+        if (GroupByEntries_.empty()) {
+            THROW_ERROR_EXCEPTION("Having without group by is not valid");
+        }
+        parts.push_back("HAVING");
+        parts.push_back(JoinSeq(" AND ", Parenthesize(HavingConjuncts_)));
+    }
+
+    if (!OrderByEntries_.empty()) {
+        parts.push_back("ORDER BY");
+        parts.push_back(JoinSeq(", ", OrderByEntries_));
     }
 
     if (Limit_) {

@@ -60,7 +60,7 @@ protected:
     }
     virtual bool DoExecute() override {
         if (MergingContext->IsExclusiveInterval()) {
-            ResultBatch = Sources.begin()->second->GetStageData().GetBatch();
+            ResultBatch = Sources.begin()->second->GetStageResult().GetBatch();
             if (ResultBatch && ResultBatch->num_rows()) {
                 LastPK = Sources.begin()->second->GetLastPK();
                 ResultBatch = NArrow::ExtractColumnsValidate(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
@@ -81,8 +81,8 @@ protected:
         }
         std::shared_ptr<NIndexedReader::TMergePartialStream> merger = Context->BuildMerger();
         for (auto&& [_, i] : Sources) {
-            if (auto rb = i->GetStageData().GetBatch()) {
-                merger->AddSource(rb, i->GetStageData().GetNotAppliedFilter());
+            if (auto rb = i->GetStageResult().GetBatch()) {
+                merger->AddSource(rb, i->GetStageResult().GetNotAppliedFilter());
             }
         }
         AFL_VERIFY(merger->GetSourcesCount() <= Sources.size());

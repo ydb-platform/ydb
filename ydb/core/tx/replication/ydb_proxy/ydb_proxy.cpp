@@ -10,6 +10,7 @@
 #include <ydb/core/base/appdata.h>
 
 #include <util/generic/hash_set.h>
+#include <util/string/join.h>
 
 #include <memory>
 #include <mutex>
@@ -21,6 +22,20 @@ using namespace NYdb;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
+
+void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
+    out << "{"
+        << " Offset: " << Offset
+        << " Data: " << Data.size() << "b"
+        << " Codec: " << Codec
+    << " }";
+}
+
+void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " Messages [" << JoinSeq(",", Messages) << "]"
+    << " }";
+}
 
 template <typename TDerived>
 class TBaseProxyActor: public TActor<TDerived> {
@@ -464,4 +479,12 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const T
     return new TYdbProxy(endpoint, database, credentials);
 }
 
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
+    return x.Out(o);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {
+    return x.Out(o);
 }

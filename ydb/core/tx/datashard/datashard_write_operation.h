@@ -103,10 +103,6 @@ public:
         UserDb.SetVolatileTxId(txId);
     }
 
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
-        UserDb.CommitChanges(tableId, lockId, writeVersion);
-    }
-
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const {
         return UserDb.GetCollectedChanges();
     }

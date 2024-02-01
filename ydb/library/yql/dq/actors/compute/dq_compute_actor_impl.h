@@ -477,7 +477,7 @@ protected:
         }
 
         {
-            auto guard = MaybeBindAllocator(); // Source/Sink could destroy mkql values inside PassAway, which requires allocator to be bound
+            auto guard = BindAllocator(); // Source/Sink could destroy mkql values inside PassAway, which requires allocator to be bound
 
             for (auto& [_, source] : SourcesMap) {
                 if (source.Actor) {
@@ -741,22 +741,6 @@ protected:
         return true;
     }
 
-    void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
-        CA_LOG_D("Save state");
-        NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
-        mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
-        data.SetBlob(TaskRunner->Save());
-
-        for (auto& [inputIndex, source] : SourcesMap) {
-            YQL_ENSURE(source.AsyncInput, "Source[" << inputIndex << "] is not created");
-            NDqProto::TSourceState& sourceState = *state.AddSources();
-            source.AsyncInput->SaveState(checkpoint, sourceState);
-            sourceState.SetInputIndex(inputIndex);
-        }
-    }
-
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         CA_LOG_D("Commit state");
         for (auto& [inputIndex, source] : SourcesMap) {
@@ -810,15 +794,7 @@ protected:
         }
     }
 
-    virtual void DoLoadRunnerState(TString&& blob) {
-        TMaybe<TString> error = Nothing();
-        try {
-            TaskRunner->Load(blob);
-        } catch (const std::exception& e) {
-            error = e.what();
-        }
-        Checkpoints->AfterStateLoading(error);
-    }
+    virtual void DoLoadRunnerState(TString&& blob) = 0;
 
     void LoadState(NDqProto::TComputeActorState&& state) override {
         CA_LOG_D("Load state");
@@ -1087,12 +1063,8 @@ protected:
         TerminateSources(TIssues({TIssue(message)}), success);
     }
 
-    virtual TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
-        return TaskRunner->BindAllocator();
-    }
-
-    virtual std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() {
-        return TaskRunner->BindAllocator();
+    TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
+        return Guard(GetAllocator());
     }
 
     virtual bool SayHelloOnBootstrap() {
@@ -1299,6 +1271,9 @@ protected:
     }
 
 protected:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> GetAllocatorPtr() {
+        return Alloc;
+    }
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() {
         return *Alloc.get();
     }
@@ -1461,32 +1436,6 @@ public:
     }
 
 protected:
-    void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
-        TaskRunner = taskRunner;
-    }
-
-    void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx) {
-        YQL_ENSURE(TaskRunner);
-
-        auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());
-        auto* alloc = guard.GetMutex();
-
-        MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
-
-        TDqTaskRunnerMemoryLimits limits;
-        limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
-        limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-
-        TaskRunner->Prepare(Task, limits, execCtx);
-
-        FillIoMaps(
-            TaskRunner->GetHolderFactory(),
-            TaskRunner->GetTypeEnv(),
-            TaskRunner->GetSecureParams(),
-            TaskRunner->GetTaskParams(),
-            TaskRunner->GetReadRanges());
-    }
-
     void FillIoMaps(
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -1526,7 +1475,7 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .TaskCounters = TaskCounters,
-                        .Alloc = TaskRunner ? Alloc : nullptr,
+                        .Alloc = Alloc,
                         .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),

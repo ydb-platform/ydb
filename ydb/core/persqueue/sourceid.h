@@ -92,7 +92,7 @@ public:
     void DeregisterSourceId(const TString& sourceId);
 
     void LoadSourceIdInfo(const TString& key, const TString& data, TInstant now);
-    bool DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, ui32 partition, const NKikimrPQ::TPartitionConfig& config);
+    bool DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, const TPartitionId& partition, const NKikimrPQ::TPartitionConfig& config);
 
     void RegisterSourceIdOwner(const TString& sourceId, const TStringBuf& ownerCookie);
     void MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo>& owners);
@@ -130,7 +130,7 @@ public:
     void DeregisterSourceId(const TString& sourceId);
     void Clear();
 
-    void FillRequest(TEvKeyValue::TEvRequest* request, ui32 partition);
+    void FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition);
     static void FillKeyAndData(ESourceIdFormat format, const TString& sourceId, const TSourceIdInfo& sourceIdInfo, TKeyPrefix& key, TBuffer& data);
 
 private:

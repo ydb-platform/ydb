@@ -36,7 +36,8 @@ private:
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;
 
-    std::shared_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedData> StageData;
+    std::unique_ptr<TFetchedResult> StageResult;
 
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
@@ -51,7 +52,16 @@ protected:
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
 public:
+    const TFetchedResult& GetStageResult() const {
+        AFL_VERIFY(!!StageResult);
+        return *StageResult;
+    }
+
     void SetIsReady();
+
+    void Finalize() {
+        StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
+    }
 
     bool IsEmptyData() const {
         return GetStageData().IsEmpty();

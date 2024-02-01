@@ -38,9 +38,9 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
-        , FuncRegistry(funcRegistry)
+        , Alloc(alloc)
         , Parent(parent)
         , Factory(factory)
         , TxId(txId)
@@ -48,12 +48,6 @@ public:
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
     { 
-        Alloc = std::make_unique<NKikimr::NMiniKQL::TScopedAlloc>(
-            __LOCATION__,
-            NKikimr::TAlignedPagePoolCounters(),
-            FuncRegistry.SupportsSizedAllocators(),
-            false
-        );
     }
 
     ~TLocalTaskRunnerActor()
@@ -471,8 +465,7 @@ private:
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {
         return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
     }
-    const NKikimr::NMiniKQL::IFunctionRegistry& FuncRegistry;
-    std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
@@ -487,19 +480,19 @@ private:
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
-    TLocalTaskRunnerActorFactory(const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const TTaskRunnerFactory& factory)
+    TLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory)
         : Factory(factory)
-        , FuncRegistry(funcRegistry)
     { }
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints,
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
     {
-        auto* actor = new TLocalTaskRunnerActor(parent, Factory, FuncRegistry, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
+        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)
@@ -507,12 +500,11 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
     }
 
     TTaskRunnerFactory Factory;
-    const NKikimr::NMiniKQL::IFunctionRegistry& FuncRegistry;
 };
 
-ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const TTaskRunnerFactory& factory)
+ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory)
 {
-    return ITaskRunnerActorFactory::TPtr(new TLocalTaskRunnerActorFactory(funcRegistry, factory));
+    return ITaskRunnerActorFactory::TPtr(new TLocalTaskRunnerActorFactory(factory));
 }
 
 } // namespace NTaskRunnerActor

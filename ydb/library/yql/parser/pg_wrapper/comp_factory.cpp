@@ -127,7 +127,8 @@ void MkqlAllocSetFree(MemoryContext context, void* pointer) {
         auto header = ((TMkqlPAllocHeader*)pointer) - 1;
         // remove this block from list
         header->U.Entry.Unlink();
-        MKQLFreeWithSize(header, header->Size, EMemorySubPool::Default);
+        auto fullSize = header->Size + sizeof(TMkqlPAllocHeader);
+        MKQLFreeWithSize(header, fullSize, EMemorySubPool::Default);
     }
 }
 
@@ -183,6 +184,20 @@ const MemoryContextMethods MkqlMethods = {
     ,MkqlAllocSetCheck
 #endif
 };
+
+Datum MakeArrayOfText(const TVector<TString>& arr) {
+    TVector<Datum> elems(arr.size());
+    for (size_t i = 0; i < elems.size(); ++i) {
+        elems[i] = (Datum)MakeVar(arr[i]);
+    }
+
+    auto ret = construct_array(elems.data(), (int)arr.size(), TEXTOID, -1, false, 'i');
+    for (size_t i = 0; i < elems.size(); ++i) {
+        pfree((void*)elems[i]);
+    }
+
+    return (Datum)ret;
+}
 
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;
@@ -358,6 +373,53 @@ public:
                 };
 
                 ApplyFillers(AllPgTablesFillers, Y_ARRAY_SIZE(AllPgTablesFillers), PgTablesFillers_);
+            } else if (Table_ == "pg_roles") {
+                static const std::pair<const char*, TPgRolesFiller> AllPgRolesFillers[] = {
+                    {"rolname", []() { return PointerDatumToPod((Datum)MakeFixedString("postgres", NAMEDATALEN)); }},
+                    {"oid", []() { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"rolbypassrls", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolsuper", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolinherit", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreaterole", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcreatedb", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolcanlogin", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolreplication", []() { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"rolconnlimit", []() { return ScalarDatumToPod(Int32GetDatum(-1)); }},
+                    {"rolvaliduntil", []() { return NUdf::TUnboxedValuePod(); }},
+                    {"rolconfig", []() { return PointerDatumToPod(MakeArrayOfText({
+                        "search_path=public",
+                        "default_transaction_isolation=serializable",
+                        "standard_conforming_strings=on",
+                    })); }},
+                };
+
+                ApplyFillers(AllPgRolesFillers, Y_ARRAY_SIZE(AllPgRolesFillers), PgRolesFillers_);
+            } else if (Table_ == "pg_stat_database") {
+                static const std::pair<const char*, TPgDatabaseStatFiller> AllPgDatabaseStatFillers[] = {
+                    {"datid", [](ui32 index) { return ScalarDatumToPod(ObjectIdGetDatum(index ? 3 : 0)); }},
+                    {"blks_hit", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"blks_read", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"tup_deleted", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"tup_fetched", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"tup_inserted", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"tup_returned", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"tup_updated", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"xact_commit", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                    {"xact_rollback", [](ui32) { return ScalarDatumToPod(Int64GetDatum(0)); }},
+                };
+
+                ApplyFillers(AllPgDatabaseStatFillers, Y_ARRAY_SIZE(AllPgDatabaseStatFillers), PgDatabaseStatFillers_);
+            } else if (Table_ == "pg_class") {
+                static const std::pair<const char*, TPgClassFiller> AllPgClassFillers[] = {
+                    {"oid", [](const NPg::TTableInfo& desc, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                    {"relispartition", [](const NPg::TTableInfo&, ui32) { return ScalarDatumToPod(BoolGetDatum(false)); }},
+                    {"relkind", [](const NPg::TTableInfo& desc, ui32) { return ScalarDatumToPod(CharGetDatum(desc.Kind)); }},
+                    {"relname", [](const NPg::TTableInfo& desc, ui32) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"relnamespace", [](const NPg::TTableInfo&, ui32 namespaceOid) { return ScalarDatumToPod(ObjectIdGetDatum(namespaceOid)); }},
+                    {"relowner", [](const NPg::TTableInfo&, ui32) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                };
+
+                ApplyFillers(AllPgClassFillers, Y_ARRAY_SIZE(AllPgClassFillers), PgClassFillers_);
             }
         } else {
             if (Table_ == "tables") {
@@ -388,6 +450,10 @@ public:
             if (auto pos = ItemType_->FindMemberIndex(name)) {
                 fillers[*pos] = func;
             }
+        }
+
+        for (const auto& f : fillers) {
+            Y_ENSURE(f);
         }
     }
 
@@ -559,6 +625,40 @@ public:
 
                     rows.emplace_back(row);
                 }
+            } else if (Table_ == "pg_roles") {
+                NUdf::TUnboxedValue* items;
+                auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgRolesFillers_.size(), items);
+                for (ui32 i = 0; i < PgRolesFillers_.size(); ++i) {
+                    items[i] = PgRolesFillers_[i]();
+                }
+
+                rows.emplace_back(row);
+            } else if (Table_ == "pg_stat_database") {
+                for (ui32 index = 0; index <= 1; ++index) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgDatabaseStatFillers_.size(), items);
+                    for (ui32 i = 0; i < PgDatabaseStatFillers_.size(); ++i) {
+                        items[i] = PgDatabaseStatFillers_[i](index);
+                    }
+
+                    rows.emplace_back(row);
+                }
+            } else if (Table_ == "pg_class") {
+                const auto& tables = NPg::GetStaticTables();
+                THashMap<TString, ui32> namespaces;
+                NPg::EnumNamespace([&](ui32 oid, const NPg::TNamespaceDesc& desc) {
+                    namespaces[desc.Name] = oid;
+                });
+
+                for (const auto& t : tables) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgClassFillers_.size(), items);
+                    for (ui32 i = 0; i < PgClassFillers_.size(); ++i) {
+                        items[i] = PgClassFillers_[i](t, namespaces[t.Schema]);
+                    }
+
+                    rows.emplace_back(row);
+                }
             }
         } else {
             if (Table_ == "tables") {
@@ -613,6 +713,10 @@ private:
     TVector<TPgNamespaceFiller> PgNamespaceFillers_;
     using TPgAmFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAmDesc&);
     TVector<TPgAmFiller> PgAmFillers_;
+    using TPgRolesFiller = NUdf::TUnboxedValuePod(*)();
+    TVector<TPgRolesFiller> PgRolesFillers_;
+    using TPgDatabaseStatFiller = NUdf::TUnboxedValuePod(*)(ui32 index);
+    TVector<TPgDatabaseStatFiller> PgDatabaseStatFillers_;
 
     struct TDescriptionDesc {
         ui32 Objoid = 0;
@@ -630,6 +734,9 @@ private:
 
     using TColumnsFiller = NUdf::TUnboxedValuePod(*)(const NPg::TColumnInfo&);
     TVector<TColumnsFiller> ColumnsFillers_;
+
+    using TPgClassFiller = NUdf::TUnboxedValuePod(*)(const NPg::TTableInfo&, ui32 namespaceOid);
+    TVector<TPgClassFiller> PgClassFillers_;
 };
 
 class TFunctionCallInfo {

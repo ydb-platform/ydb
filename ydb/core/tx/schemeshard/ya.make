@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_auditsettings
+    ut_background_cleaning
     ut_backup
     ut_base
     ut_base_reboots
@@ -55,6 +56,7 @@ LIBRARY()
 SRCS(
     defs.h
     schemeshard.cpp
+    schemeshard__background_cleaning.cpp
     schemeshard__borrowed_compaction.cpp
     schemeshard__compaction.cpp
     schemeshard__clean_pathes.cpp
@@ -80,6 +82,8 @@ SRCS(
     schemeshard__operation_memory_changes.cpp
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_alter_bsv.cpp
+    schemeshard__operation_alter_external_data_source.cpp
+    schemeshard__operation_alter_external_table.cpp
     schemeshard__operation_alter_extsubdomain.cpp
     schemeshard__operation_alter_fs.cpp
     schemeshard__operation_alter_index.cpp
@@ -94,6 +98,8 @@ SRCS(
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
+    schemeshard__operation_common_external_data_source.cpp
+    schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_table.cpp

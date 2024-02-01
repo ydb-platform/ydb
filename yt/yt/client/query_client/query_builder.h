@@ -28,6 +28,8 @@ public:
     void AddGroupByExpression(TString expression);
     void AddGroupByExpression(TString expression, TString alias);
 
+    void AddHavingConjunct(TString expression);
+
     void AddOrderByExpression(TString expression);
     void AddOrderByExpression(TString expression, std::optional<EOrderByDirection> direction);
 
@@ -57,6 +59,7 @@ private:
     std::vector<TString> WhereConjuncts_;
     std::vector<TOrderByEntry> OrderByEntries_;
     std::vector<TEntryWithAlias> GroupByEntries_;
+    std::vector<TString> HavingConjuncts_;
     std::optional<i64> Limit_;
 
 private:

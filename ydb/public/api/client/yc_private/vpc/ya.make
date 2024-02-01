@@ -36,7 +36,6 @@ PEERDIR(
     ydb/public/api/client/yc_private/iam
     ydb/public/api/client/yc_private/operation
     ydb/public/api/client/yc_private/quota
-    ydb/public/api/client/yc_private/reference
 )
 END()
 

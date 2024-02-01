@@ -74,6 +74,4 @@ jobs:
           body: |
             ### Embedded UI Refresh
 
-            Embedded UI
-            [${{ env.TAG_NAME }}](https://github.com/${{ env.REPOSITORY }}/releases/tag/${{ env.TAG_NAME }})
-            ([CHANGELOG.md](https://github.com/${{ env.REPOSITORY }}/blob/${{ env.TAG_NAME }}/CHANGELOG.md)).
+            Embedded UI [${{ env.TAG_NAME }}](https://github.com/${{ env.REPOSITORY }}/releases/tag/${{ env.TAG_NAME }}) ([CHANGELOG.md](https://github.com/${{ env.REPOSITORY }}/blob/${{ env.TAG_NAME }}/CHANGELOG.md)).

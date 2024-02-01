@@ -20,7 +20,7 @@ PEERDIR(
     ydb/public/api/client/yc_common/api
     ydb/public/api/client/yc_private/common
     ydb/public/api/client/yc_private/operation
-    ydb/public/api/client/yc_private/vpc/v1
+    ydb/public/api/client/yc_private/vpc
 )
 END()
 

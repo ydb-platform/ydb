@@ -4,9 +4,9 @@ package yandex.cloud.priv.vpc.v1.vrouter;
 
 import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/vrouter/routing_instance.proto";
+import "ydb/public/api/client/yc_private/vpc/vrouter/routing_instance.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/vrouter;vrouter";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/vrouter;vrouter";
 option java_outer_classname = "PVRRIS";
 
 service RoutingInstanceService {

@@ -45,13 +45,13 @@ PEERDIR(
     ydb/public/api/client/yc_common/api
     ydb/public/api/client/yc_common/api/tools
     ydb/public/api/client/yc_private/common
-    ydb/public/api/client/yc_private/billing/v1
-    ydb/public/api/client/yc_private/compute/v1
-    ydb/public/api/client/yc_private/loadbalancer/v1
+    ydb/public/api/client/yc_private/billing
+    ydb/public/api/client/yc_private/compute
+    ydb/public/api/client/yc_private/loadbalancer
     ydb/public/api/client/yc_private/operation
     ydb/public/api/client/yc_private/quota
-    ydb/public/api/client/yc_private/servicecontrol/v1
-    ydb/public/api/client/yc_private/vpc/v1
+    ydb/public/api/client/yc_private/servicecontrol
+    ydb/public/api/client/yc_private/vpc
 )
 END()
 

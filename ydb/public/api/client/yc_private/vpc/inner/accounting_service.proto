@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.inner;
 
-import "ydb/public/api/client/yc_private/vpc/v1/inner/accounting.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/accounting.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
 option java_outer_classname = "PACS";
 
 service AccountingService {

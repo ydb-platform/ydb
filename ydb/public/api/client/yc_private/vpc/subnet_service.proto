@@ -5,26 +5,26 @@ package yandex.cloud.priv.vpc.v1;
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
 import "ydb/public/api/client/yc_common/api/operation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/subnet.proto";
+import "ydb/public/api/client/yc_private/vpc/subnet.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
 import "ydb/public/api/client/yc_private/reference/reference.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
 option java_outer_classname = "PSS";
 
 service SubnetService {
 
   rpc Get (GetSubnetRequest) returns (Subnet) {
-    option (google.api.http) = { get: "/compute/v1/subnets/{subnet_id}" };
+    option (google.api.http) = { get: "/compute/subnets/{subnet_id}" };
   }
 
   rpc List (ListSubnetsRequest) returns (ListSubnetsResponse) {
-    option (google.api.http) = { get: "/compute/v1/subnets" };
+    option (google.api.http) = { get: "/compute/subnets" };
   }
 
   rpc Create (CreateSubnetRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/subnets" body: "*" };
+    option (google.api.http) = { post: "/compute/subnets" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateSubnetMetadata"
       response: "Subnet"
@@ -32,7 +32,7 @@ service SubnetService {
   }
 
   rpc Update (UpdateSubnetRequest) returns (operation.Operation) {
-    option (google.api.http) = {patch: "/compute/v1/subnets/{subnet_id}" body: "*"};
+    option (google.api.http) = {patch: "/compute/subnets/{subnet_id}" body: "*"};
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateSubnetMetadata"
       response: "Subnet"
@@ -40,7 +40,7 @@ service SubnetService {
   }
 
   rpc AddCidrBlocks (AddSubnetCidrBlocksRequest) returns (operation.Operation) {
-    option (google.api.http) = {post: "/compute/v1/subnets/{subnet_id}/add-cidr-blocks" body: "*"};
+    option (google.api.http) = {post: "/compute/subnets/{subnet_id}/add-cidr-blocks" body: "*"};
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateSubnetMetadata"
       response: "Subnet"
@@ -48,7 +48,7 @@ service SubnetService {
   }
 
   rpc RemoveCidrBlocks (RemoveSubnetCidrBlocksRequest) returns (operation.Operation) {
-    option (google.api.http) = {post: "/compute/v1/subnets/{subnet_id}/delete-cidr-blocks" body: "*"};
+    option (google.api.http) = {post: "/compute/subnets/{subnet_id}/delete-cidr-blocks" body: "*"};
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateSubnetMetadata"
       response: "Subnet"
@@ -63,7 +63,7 @@ service SubnetService {
   }
 
   rpc Delete (DeleteSubnetRequest) returns (operation.Operation) {
-    option (google.api.http) = {delete: "/compute/v1/subnets/{subnet_id}"};
+    option (google.api.http) = {delete: "/compute/subnets/{subnet_id}"};
     option (yandex.cloud.api.operation) = {
       metadata: "DeleteSubnetMetadata"
       response: "google.protobuf.Empty"
@@ -71,11 +71,11 @@ service SubnetService {
   }
 
   rpc ListOperations (ListSubnetOperationsRequest) returns (ListSubnetOperationsResponse) {
-    option (google.api.http) = { get: "/compute/v1/subnets/{subnet_id}/operations" };
+    option (google.api.http) = { get: "/compute/subnets/{subnet_id}/operations" };
   }
 
   rpc Move (MoveSubnetRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/subnets/{subnet_id}/move" body: "*" };
+    option (google.api.http) = { post: "/compute/subnets/{subnet_id}/move" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "MoveSubnetMetadata"
       response: "Subnet"

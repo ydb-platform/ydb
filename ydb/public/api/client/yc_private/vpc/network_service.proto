@@ -7,28 +7,28 @@ import "google/protobuf/field_mask.proto";
 import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/network.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/subnet.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/security_group.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/route_table.proto";
+import "ydb/public/api/client/yc_private/vpc/network.proto";
+import "ydb/public/api/client/yc_private/vpc/subnet.proto";
+import "ydb/public/api/client/yc_private/vpc/security_group.proto";
+import "ydb/public/api/client/yc_private/vpc/route_table.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 import "ydb/public/api/client/yc_private/reference/reference.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
 option java_outer_classname = "PES";
 
 service NetworkService {
 
   rpc Get (GetNetworkRequest) returns (Network) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}" };
   }
 
   rpc List (ListNetworksRequest) returns (ListNetworksResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks" };
+    option (google.api.http) = { get: "/compute/networks" };
   }
 
   rpc Create (CreateNetworkRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks" body: "*" };
+    option (google.api.http) = { post: "/compute/networks" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateNetworkMetadata"
       response: "Network"
@@ -36,7 +36,7 @@ service NetworkService {
   }
 
   rpc Update (UpdateNetworkRequest) returns (operation.Operation) {
-    option (google.api.http) = { patch: "/compute/v1/networks/{network_id}" body: "*" };
+    option (google.api.http) = { patch: "/compute/networks/{network_id}" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateNetworkMetadata"
       response: "Network"
@@ -44,7 +44,7 @@ service NetworkService {
   }
 
   rpc Delete (DeleteNetworkRequest) returns (operation.Operation) {
-    option (google.api.http) = { delete: "/compute/v1/networks/{network_id}" };
+    option (google.api.http) = { delete: "/compute/networks/{network_id}" };
     option (yandex.cloud.api.operation) = {
       metadata: "DeleteNetworkMetadata"
       response: "google.protobuf.Empty"
@@ -52,23 +52,23 @@ service NetworkService {
   }
 
   rpc ListSubnets (ListNetworkSubnetsRequest) returns (ListNetworkSubnetsResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/subnets" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}/subnets" };
   }
 
   rpc ListSecurityGroups (ListNetworkSecurityGroupsRequest) returns (ListNetworkSecurityGroupsResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/security_groups" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}/security_groups" };
   }
 
   rpc ListRouteTables (ListNetworkRouteTablesRequest) returns (ListNetworkRouteTablesResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/route_tables" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}/route_tables" };
   }
 
   rpc ListOperations (ListNetworkOperationsRequest) returns (ListNetworkOperationsResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/operations" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}/operations" };
   }
 
   rpc CreateDefaultNetwork (CreateDefaultNetworkRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/defaultNetwork" body: "*" };
+    option (google.api.http) = { post: "/compute/defaultNetwork" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateDefaultNetworkMetadata"
       response: "google.protobuf.Empty"
@@ -77,7 +77,7 @@ service NetworkService {
   }
 
   rpc CreateNetworkSystemRouteTable (CreateNetworkSystemRouteTableRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/systemRouteTable" };
+    option (google.api.http) = { post: "/compute/networks/{network_id}/systemRouteTable" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateNetworkSystemRouteTableMetadata"
       response: "google.protobuf.Empty"
@@ -86,7 +86,7 @@ service NetworkService {
   }
 
   rpc Move (MoveNetworkRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/move" body: "*" };
+    option (google.api.http) = { post: "/compute/networks/{network_id}/move" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "MoveNetworkMetadata"
       response: "Network"
@@ -94,7 +94,7 @@ service NetworkService {
   }
 
   rpc CreateDefaultSecurityGroup (CreateDefaultSecurityGroupRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/defaultSecurityGroup" body: "*" };
+    option (google.api.http) = { post: "/compute/networks/{network_id}/defaultSecurityGroup" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateDefaultSecurityGroupMetadata"
       response: "google.protobuf.Empty"
@@ -102,7 +102,7 @@ service NetworkService {
   }
 
   rpc DeleteDefaultSecurityGroup (DeleteDefaultSecurityGroupRequest) returns (operation.Operation) {
-    option (google.api.http) = { delete: "/compute/v1/networks/{network_id}/defaultSecurityGroup" };
+    option (google.api.http) = { delete: "/compute/networks/{network_id}/defaultSecurityGroup" };
     option (yandex.cloud.api.operation) = {
       metadata: "DeleteDefaultSecurityGroupMetadata"
       response: "google.protobuf.Empty"

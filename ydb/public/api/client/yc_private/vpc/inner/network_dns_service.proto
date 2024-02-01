@@ -7,17 +7,17 @@ import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
 option java_outer_classname = "PNDS";
 
 service NetworkDnsService {
 
   rpc ListDnsRecords (NetworkListDnsRecordsRequest) returns (NetworkListDnsRecordsResponse) {
-    option (google.api.http) = { get: "/compute/v1/networks/{network_id}/dnsRecords" };
+    option (google.api.http) = { get: "/compute/networks/{network_id}/dnsRecords" };
   }
 
   rpc SetDnsRecord (NetworkSetDnsRecordRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/setDnsRecord" body: "*" };
+    option (google.api.http) = { post: "/compute/networks/{network_id}/setDnsRecord" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "NetworkSetDnsRecordMetadata"
       response: "google.protobuf.Empty"
@@ -25,7 +25,7 @@ service NetworkDnsService {
   }
 
   rpc DeleteDnsRecord (NetworkDeleteDnsRecordRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/networks/{network_id}/deleteDnsRecord" body: "*" };
+    option (google.api.http) = { post: "/compute/networks/{network_id}/deleteDnsRecord" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "NetworkDeleteDnsRecordMetadata"
       response: "google.protobuf.Empty"

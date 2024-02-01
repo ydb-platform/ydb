@@ -4,14 +4,14 @@ package yandex.cloud.priv.vpc.v1.inner;
 
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/network.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/subnet.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/route_table.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/security_group.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/address.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/gateway.proto";
+import "ydb/public/api/client/yc_private/vpc/network.proto";
+import "ydb/public/api/client/yc_private/vpc/subnet.proto";
+import "ydb/public/api/client/yc_private/vpc/route_table.proto";
+import "ydb/public/api/client/yc_private/vpc/security_group.proto";
+import "ydb/public/api/client/yc_private/vpc/address.proto";
+import "ydb/public/api/client/yc_private/vpc/gateway.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
 
 option java_outer_classname = "PVCS";
 

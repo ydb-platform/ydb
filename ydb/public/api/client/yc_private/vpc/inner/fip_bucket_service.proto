@@ -5,25 +5,25 @@ package yandex.cloud.priv.vpc.v1.inner;
 import "google/api/annotations.proto";
 import "google/protobuf/field_mask.proto";
 import "ydb/public/api/client/yc_common/api/operation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/inner/fip_bucket.proto";
+import "ydb/public/api/client/yc_private/vpc/inner/fip_bucket.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/inner;vpcinnerpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/inner;vpcinnerpb";
 option java_outer_classname = "PFBS";
 
 service FipBucketService {
 
   rpc Get (GetFipBucketRequest) returns (FipBucket) {
-    option (google.api.http) = { get: "/compute/v1/fipBuckets/{bucket_id}" };
+    option (google.api.http) = { get: "/compute/fipBuckets/{bucket_id}" };
   }
 
   rpc List (ListFipBucketsRequest) returns (ListFipBucketsResponse) {
-    option (google.api.http) = { get: "/compute/v1/fipBuckets" };
+    option (google.api.http) = { get: "/compute/fipBuckets" };
   }
 
   rpc Create (CreateFipBucketRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/fipBuckets" body: "*" };
+    option (google.api.http) = { post: "/compute/fipBuckets" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateFipBucketMetadata"
       response: "FipBucket"
@@ -31,7 +31,7 @@ service FipBucketService {
   }
 
   rpc Update (UpdateFipBucketRequest) returns (operation.Operation) {
-    option (google.api.http) = { patch: "/compute/v1/fipBuckets/{bucket_id}" body: "*" };
+    option (google.api.http) = { patch: "/compute/fipBuckets/{bucket_id}" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateFipBucketMetadata"
       response: "FipBucket"
@@ -39,7 +39,7 @@ service FipBucketService {
   }
 
   rpc Resize (ResizeFipBucketRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}" body: "*" };
+    option (google.api.http) = { post: "/compute/fipBuckets/{bucket_id}" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "ResizeFipBucketMetadata"
       response: "FipBucket"
@@ -47,7 +47,7 @@ service FipBucketService {
   }
 
   rpc Delete (DeleteFipBucketRequest) returns (operation.Operation) {
-    option (google.api.http) = { delete: "/compute/v1/fipBuckets/{bucket_id}" };
+    option (google.api.http) = { delete: "/compute/fipBuckets/{bucket_id}" };
     option (yandex.cloud.api.operation) = {
       metadata: "DeleteFipBucketMetadata"
       response: "google.protobuf.Empty"
@@ -55,7 +55,7 @@ service FipBucketService {
   }
 
   rpc AddCidrs (AddFipBucketCidrsRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}/add-cidrs" body: "*" };
+    option (google.api.http) = { post: "/compute/fipBuckets/{bucket_id}/add-cidrs" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "AddFipBucketCidrsMetadata"
       response: "FipBucket"
@@ -63,7 +63,7 @@ service FipBucketService {
   }
 
   rpc RemoveCidrs (RemoveFipBucketCidrsRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/fipBuckets/{bucket_id}/delete-cidrs" body: "*" };
+    option (google.api.http) = { post: "/compute/fipBuckets/{bucket_id}/delete-cidrs" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "RemoveFipBucketCidrsMetadata"
       response: "FipBucket"

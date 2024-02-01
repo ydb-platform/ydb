@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package yandex.cloud.priv.vpc.v1.node;
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1/node;vpcnodepb";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/node;vpcnodepb";
 option java_outer_classname = "PVNPD";
 
 enum PortDeviceRole {

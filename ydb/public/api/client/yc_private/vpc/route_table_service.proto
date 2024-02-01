@@ -7,24 +7,24 @@ import "google/protobuf/field_mask.proto";
 import "ydb/public/api/client/yc_common/api/operation.proto";
 import "ydb/public/api/client/yc_common/api/tools/options.proto";
 import "ydb/public/api/client/yc_private/common/validation.proto";
-import "ydb/public/api/client/yc_private/vpc/v1/route_table.proto";
+import "ydb/public/api/client/yc_private/vpc/route_table.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
 option java_outer_classname = "PSRSS";
 
 service RouteTableService {
 
   rpc Get (GetRouteTableRequest) returns (RouteTable) {
-    option (google.api.http) = { get: "/compute/v1/routeTables/{route_table_id}" };
+    option (google.api.http) = { get: "/compute/routeTables/{route_table_id}" };
   }
 
   rpc List (ListRouteTablesRequest) returns (ListRouteTablesResponse) {
-    option (google.api.http) = { get: "/compute/v1/routeTables" };
+    option (google.api.http) = { get: "/compute/routeTables" };
   }
 
   rpc Create (CreateRouteTableRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/routeTables" body: "*" };
+    option (google.api.http) = { post: "/compute/routeTables" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "CreateRouteTableMetadata"
       response: "RouteTable"
@@ -32,7 +32,7 @@ service RouteTableService {
   }
 
   rpc Update (UpdateRouteTableRequest) returns (operation.Operation) {
-    option (google.api.http) = { patch: "/compute/v1/routeTables/{route_table_id}" body: "*" };
+    option (google.api.http) = { patch: "/compute/routeTables/{route_table_id}" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateRouteTableMetadata"
       response: "RouteTable"
@@ -40,7 +40,7 @@ service RouteTableService {
   }
 
   rpc Delete (DeleteRouteTableRequest) returns (operation.Operation) {
-    option (google.api.http) = { delete: "/compute/v1/routeTables/{route_table_id}" };
+    option (google.api.http) = { delete: "/compute/routeTables/{route_table_id}" };
     option (yandex.cloud.api.operation) = {
       metadata: "DeleteRouteTableMetadata"
       response: "google.protobuf.Empty"
@@ -48,7 +48,7 @@ service RouteTableService {
   }
 
   rpc UpdateStaticRoutes (UpdateStaticRoutesRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/routeTables/{route_table_id}/updateStaticRoutes" body: "*" };
+    option (google.api.http) = { post: "/compute/routeTables/{route_table_id}/updateStaticRoutes" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "UpdateStaticRoutesMetadata"
       response: "RouteTable"
@@ -57,11 +57,11 @@ service RouteTableService {
   }
 
   rpc ListOperations (ListRouteTableOperationsRequest) returns (ListRouteTableOperationsResponse) {
-    option (google.api.http) = { get: "/compute/v1/routeTables/{route_table_id}/operations" };
+    option (google.api.http) = { get: "/compute/routeTables/{route_table_id}/operations" };
   }
 
   rpc Move (MoveRouteTableRequest) returns (operation.Operation) {
-    option (google.api.http) = { post: "/compute/v1/routeTables/{route_table_id}/move" body: "*" };
+    option (google.api.http) = { post: "/compute/routeTables/{route_table_id}/move" body: "*" };
     option (yandex.cloud.api.operation) = {
       metadata: "MoveRouteTableMetadata"
       response: "RouteTable"

@@ -5,12 +5,12 @@ package yandex.cloud.priv.vpc.v1;
 import "google/api/annotations.proto";
 import "ydb/public/api/client/yc_private/operation/operation.proto";
 
-option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc/v1;vpc";
+option go_package = "github.com/ydb-platform/ydb/ydb/public/api/client/yc_private/vpc;vpc";
 option java_outer_classname = "POS";
 
 service OperationService {
   rpc Get (GetOperationRequest) returns (operation.Operation) {
-    option (google.api.http) = {get: "/compute/v1/operations/{operation_id}"};
+    option (google.api.http) = {get: "/compute/operations/{operation_id}"};
   }
 }
 

@@ -22,7 +22,7 @@ USE_COMMON_GOOGLE_APIS(
 
 PEERDIR(
     ydb/public/api/client/yc_private/common
-    ydb/public/api/client/yc_private/vpc/v1/inner
+    ydb/public/api/client/yc_private/vpc/inner
 )
 END()
 

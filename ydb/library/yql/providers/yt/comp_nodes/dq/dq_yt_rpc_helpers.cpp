@@ -4,6 +4,57 @@
 
 namespace NYql::NDqs {
 
+NYT::NTableClient::TUnversionedOwningRow ConvertRow(const TVector<NYT::TNode>& parts) {
+    NYT::NTableClient::TUnversionedOwningRowBuilder builder;
+    int id = 0;
+    for (const auto& e: parts) {
+        try {
+            switch (e.GetType()) {
+                #define XX(type,  otherType) \
+                case NYT::TNode::EType::type: \
+                    builder.AddValue(NYT::NTableClient::MakeUnversioned ## otherType ## Value(e.As ## type(), id)); \
+                    break;
+                XX(Int64, Int64)
+                XX(Uint64, Uint64)
+                XX(Double, Double)
+                XX(Bool, Boolean)
+                XX(String, String)
+                #undef XX
+                default:
+                    THROW_ERROR_EXCEPTION("Key cannot contain %Qlv values",
+                        e.GetType());
+            }
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION("Error deserializing key component #%v", id)
+                << ex;
+        }
+        ++id;
+    }
+    return builder.FinishRow();
+}
+
+template<typename TOld, typename TNew>
+void Convert(const TOld& old, TNew& newVal) {
+    if (old.Offset_) {
+        newVal.SetOffset(*old.Offset_);
+    }
+
+    if (old.TabletIndex_) {
+        newVal.SetTabletIndex(*old.TabletIndex_);
+    }
+
+    if (old.RowIndex_) {
+        newVal.SetRowIndex(*old.RowIndex_);
+    }
+
+    if (old.KeyBound_) {
+        auto rel = old.KeyBound_->Relation();
+        bool inclusive = NYT::ERelation::GreaterOrEqual == rel || NYT::ERelation::LessOrEqual == rel;
+        bool isUpper = NYT::ERelation::Less == rel || NYT::ERelation::LessOrEqual == rel;
+        newVal.KeyBound() = NYT::NTableClient::TOwningKeyBound::FromRow(ConvertRow(old.KeyBound_->Key().Parts_), inclusive, isUpper);
+    }
+}
+
 NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
     NYT::NYPath::TRichYPath tableYPath(richYPath.Path_);
     const auto& rngs = richYPath.GetRanges();
@@ -11,29 +62,8 @@ NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
         TVector<NYT::NChunkClient::TReadRange> ranges;
         for (const auto& rng: *rngs) {
             auto& range = ranges.emplace_back();
-            if (rng.LowerLimit_.Offset_) {
-                range.LowerLimit().SetOffset(*rng.LowerLimit_.Offset_);
-            }
-
-            if (rng.LowerLimit_.TabletIndex_) {
-                range.LowerLimit().SetTabletIndex(*rng.LowerLimit_.TabletIndex_);
-            }
-
-            if (rng.LowerLimit_.RowIndex_) {
-                range.LowerLimit().SetRowIndex(*rng.LowerLimit_.RowIndex_);
-            }
-
-            if (rng.UpperLimit_.Offset_) {
-                range.UpperLimit().SetOffset(*rng.UpperLimit_.Offset_);
-            }
-
-            if (rng.UpperLimit_.TabletIndex_) {
-                range.UpperLimit().SetTabletIndex(*rng.UpperLimit_.TabletIndex_);
-            }
-
-            if (rng.UpperLimit_.RowIndex_) {
-                range.UpperLimit().SetRowIndex(*rng.UpperLimit_.RowIndex_);
-            }
+            Convert(rng.LowerLimit_, range.LowerLimit());
+            Convert(rng.UpperLimit_, range.UpperLimit());
         }
         tableYPath.SetRanges(std::move(ranges));
     }

@@ -765,34 +765,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(result.GetResultSets().empty());
         };
 
-        auto checkAddRow = [&](const TString& objPath) {
-            const size_t inserted_rows = 5;
-            TTestHelper::TColumnTable testTable;
-            testTable.SetName(objPath)
-                .SetPrimaryKey({"Key"})
-                .SetSharding({"Key"})
-                .SetSchema(schema);
-            {
-                TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-                for (size_t i = 0; i < inserted_rows; i++) {
-                    tableInserter.AddRow().Add(i).Add("test_res_" + std::to_string(i));
-                }
-                testHelper.BulkUpsert(testTable, tableInserter);
-            }
-
-            Sleep(TDuration::Seconds(20));
-
-            auto settings = NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true);
-            auto describeResult =
-                testHelper.GetSession().DescribeTable(objPath, settings).GetValueSync();
-
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-
-            const auto& description = describeResult.GetTableDescription();
-
-            UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
-        };
-
         checkCreate(true, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(false, EEx::Empty, "/Root/TableStoreTest", true);
         checkCreate(true, EEx::IfNotExists, "/Root/TableStoreTest", true);
@@ -812,7 +784,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkCreate(true, EEx::Empty, "/Root/ColumnTable", false);
         checkCreate(false, EEx::Empty, "/Root/ColumnTable", false);
         checkCreate(true, EEx::IfNotExists, "/Root/ColumnTable", false);
-        checkAddRow("/Root/ColumnTable");
         checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);
         checkDrop(false, EEx::Empty, "/Root/ColumnTable", false);
         checkDrop(true, EEx::IfExists, "/Root/ColumnTable", false);

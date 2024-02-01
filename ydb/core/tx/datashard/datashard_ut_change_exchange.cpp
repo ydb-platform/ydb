@@ -19,6 +19,7 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 
@@ -722,6 +723,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const TString& root = "Root",
             const TString& tableName = "Table")
         {
+            DBGTRACE("TTestEnv::TTestEnv");
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
                 .SetDomainName(root)
@@ -1093,6 +1095,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
         {
+            DBGTRACE("Cdc::YdsRunner::Read");
             TTestYdsEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
@@ -1103,12 +1106,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // add consumer
             {
+                DBGTRACE_LOG("add consumer");
                 auto res = client.RegisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
 
             // list consumers
             {
+                DBGTRACE_LOG("list consumers");
                 auto res = client.ListStreamConsumers("/Root/Table/Stream", TListStreamConsumersSettings()
                     .MaxResults(100)).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -1119,6 +1124,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             // get shards
             TString shardId;
             {
+                DBGTRACE_LOG("get shards");
                 auto res = client.ListShards("/Root/Table/Stream", {}).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetResult().shards().size(), 1);
@@ -1128,6 +1134,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             // get iterator
             TString shardIt;
             {
+                DBGTRACE_LOG("get iterator");
                 auto res = client.GetShardIterator("/Root/Table/Stream", shardId, Ydb::DataStreams::V1::ShardIteratorType::TRIM_HORIZON).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 shardIt = res.GetResult().shard_iterator();
@@ -1135,6 +1142,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // get records
             {
+                DBGTRACE_LOG("get records");
                 auto res = client.GetRecords(shardIt).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetResult().records().size(), records.size());
@@ -1151,12 +1159,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             // remove consumer
             {
+                DBGTRACE_LOG("remove consumer");
                 auto res = client.DeregisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            DBGTRACE("Cdc::YdsRunner::Write");
             TTestYdsEnv env(tableDesc, streamDesc);
 
             auto res = env.GetClient().PutRecord("/Root/Table/Stream", {"data", "key", ""}).ExtractValueSync();
@@ -1164,6 +1174,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Drop(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            DBGTRACE("Cdc::YdsRunner::Drop");
             TTestYdsEnv env(tableDesc, streamDesc);
 
             auto res = env.GetClient().DeleteStream("/Root/Table/Stream").ExtractValueSync();
@@ -1508,6 +1519,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TRIPLET(DocApi, PqRunner, YdsRunner, TopicRunner) {
+        DBGTRACE("Cdc::DocApi");
+        DBGTRACE_LOG("");
         TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
@@ -1531,6 +1544,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }), false),
         }, false /* do not check key */);
 
+        DBGTRACE_LOG("");
         TRunner::Read(DocApiTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
             UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData, extra) VALUES (
                 1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}'), true

@@ -18,6 +18,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/lib/jwt
     ydb/public/lib/operation_id
+    ydb/library/dbgtrace
 )
 
 END()

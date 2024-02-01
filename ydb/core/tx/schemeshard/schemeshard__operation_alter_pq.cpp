@@ -5,6 +5,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -229,6 +230,7 @@ public:
             const TChannelsBindings& pqChannelsBinding,
             TOperationContext& context)
     {
+        DBGTRACE("TAlterPQ::PrepareChanges");
         TPathElement::TPtr item = path.Base();
         NIceDb::TNiceDb db(context.GetDB());
 

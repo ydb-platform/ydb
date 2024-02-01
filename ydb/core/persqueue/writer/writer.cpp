@@ -19,6 +19,7 @@
 #include <util/generic/guid.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -270,6 +271,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetOwnership
 
     void GetOwnership() {
+        DBGTRACE("TPartitionWriter::GetOwnership");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
@@ -294,6 +296,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
+        DBGTRACE("TPartitionWriter::HandleOwnership");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -317,6 +320,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetMaxSeqNo
 
     void GetMaxSeqNo() {
+        DBGTRACE("TPartitionWriter::GetMaxSeqNo");
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
@@ -336,6 +340,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        DBGTRACE("TPartitionWriter::HandleMaxSeqNo");
         auto& record = ev->Get()->Record;
 
         TString error;
@@ -779,6 +784,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        DBGTRACE("TPartitionWriter::Bootstrap");
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = {
             .RetryLimitCount = 6,
@@ -858,6 +864,7 @@ IActor* CreatePartitionWriter(const TActorId& client,
                               ui64 tabletId,
                               ui32 partitionId, 
                               const TPartitionWriterOpts& opts) {
+    DBGTRACE("CreatePartitionWriter");
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
 

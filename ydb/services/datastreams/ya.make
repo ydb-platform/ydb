@@ -23,6 +23,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/services/persqueue_v1
     ydb/services/ydb
+    ydb/library/dbgtrace
 )
 
 END()

@@ -647,3 +647,7 @@ ids {
   code: PG_NO_LOCKING_SUPPORT
   severity: S_WARNING
 }
+ids {
+    code: YQL_UNTYPED_STRING_LITERALS
+    severity: S_WARNING
+}

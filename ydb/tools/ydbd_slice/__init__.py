@@ -13,7 +13,6 @@ from urllib3.exceptions import HTTPWarning
 from ydb.tools.ydbd_slice import nodes, handlers, cluster_description
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
-
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=HTTPWarning)
 
@@ -830,7 +829,7 @@ def add_kube_install_mode(modes):
 
             manifests = kube_handlers.get_all_manifests(args.path)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_install(args.path, manifests, args.wait_ready)
+            kube_handlers.slice_install(args.path, manifests, args.wait_ready, args.dynamic_config_type)
 
             logger.info('kube-install finished')
         except RuntimeError as e:
@@ -857,6 +856,12 @@ def add_kube_install_mode(modes):
         help='Do not build docker image, just specify image name in manifests.',
         action='store_true',
     )
+    mode.add_argument(
+        '--dynamic-config-type',
+        help='Upload dynamic config with specified type',
+        choices=['both', 'proto', 'yaml', 'none'],
+        default='both',
+    )
     add_arguments_docker_build_with_remainder(mode, add_force_rebuild=True)
     mode.set_defaults(handler=_run)
 
@@ -872,7 +877,7 @@ def add_kube_update_mode(modes):
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
             kube_handlers.manifests_ydb_set_image(args.path, manifests, image)
-            kube_handlers.slice_update(args.path, manifests, args.wait_ready)
+            kube_handlers.slice_update(args.path, manifests, args.wait_ready, args.dynamic_config_type)
 
             logger.info('kube-update finished')
         except RuntimeError as e:
@@ -904,6 +909,12 @@ def add_kube_update_mode(modes):
         '--use-prebuilt-image',
         help='Do not build docker image, just specify image name in manifests.',
         action='store_true',
+    )
+    mode.add_argument(
+        '--dynamic-config-type',
+        help='Upload dynamic config with specified type',
+        choices=['both', 'proto', 'yaml', 'none'],
+        default='both',
     )
     add_arguments_docker_build_with_remainder(mode, add_force_rebuild=True)
     mode.set_defaults(handler=_run)
@@ -947,7 +958,7 @@ def add_kube_start_mode(modes):
         try:
             manifests = kube_handlers.get_all_manifests(args.path)
             manifests = kube_handlers.manifests_ydb_filter_components(args.path, manifests, args.components)
-            kube_handlers.slice_start(args.path, manifests, args.wait_ready)
+            kube_handlers.slice_start(args.path, manifests, args.wait_ready, args.dynamic_config_type)
 
             logger.info('kube-start finished')
         except RuntimeError as e:
@@ -974,6 +985,12 @@ def add_kube_start_mode(modes):
         '-w', '--wait-ready',
         help='Wait for ydb objects ready state. Default: false',
         action='store_true',
+    )
+    mode.add_argument(
+        '--dynamic-config-type',
+        help='Upload dynamic config with specified type',
+        choices=['both', 'proto', 'yaml', 'none'],
+        default='both',
     )
     mode.set_defaults(handler=_run)
 
@@ -1040,7 +1057,7 @@ def add_kube_format_mode(modes):
         logger.debug("starting kube-format cmd with args '%s'", args)
         try:
             manifests = kube_handlers.get_all_manifests(args.path)
-            kube_handlers.slice_format(args.path, manifests, args.wait_ready)
+            kube_handlers.slice_format(args.path, manifests, args.wait_ready, args.dynamic_config_type)
 
             logger.info('kube-format finished')
         except RuntimeError as e:
@@ -1062,6 +1079,12 @@ def add_kube_format_mode(modes):
         '-w', '--wait-ready',
         help='Wait for ydb objects ready state. Default: false',
         action='store_true',
+    )
+    mode.add_argument(
+        '--dynamic-config-type',
+        help='Upload dynamic config with specified type',
+        choices=['both', 'proto', 'yaml', 'none'],
+        default='both',
     )
     mode.set_defaults(handler=_run)
 

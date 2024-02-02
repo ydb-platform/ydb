@@ -57,7 +57,7 @@ YDB CLI version comprise of three numbers separated by a dot character. First nu
 
 There's no schedule for the YDB CLI minor releases, a new release comes as soon as we have some new valuable functionality. Initially, every new minor release has `0` as a patch number. If there are critical bugs found in that version, or some minor part of functionality did not catch it as planned, we can release a patch, incrementing only the patch number, like it was for `2.1.1`.
 
-In general, release cycle for YDB CLI is much simpler and shorter than for the server, producing more frequent releases.
+In general, release cycle for {{ ydb-short-name }} CLI is much simpler and shorter than for the server, producing more frequent releases.
 
 ### Release tags {#cli-tags}
 

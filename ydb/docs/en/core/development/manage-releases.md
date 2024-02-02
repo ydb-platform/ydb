@@ -32,7 +32,7 @@ A release cycle for an odd major release starts by a member of a [YDB Release te
 
 A release cycle for an even major release starts by branching from the preceding odd major version branch. The branch follows the same naming convention.
 
-All major version releases, both odd and even, go through the comprehensive testing process producing a number of minor versions. Each minor version is created by tagging a relevant commit of the release branch with a full version number. So, there can be tags `24.1.1`, `24.1.2` etc. on the `stable-24-1` branch. As soon as a minor version proves its quality, we consider it as stable, and register a Release on GitHub linked to its tag, add it to [downloads](../downloads.md#ydb-server) and [changelog](../changelog-server.md) documentation pages, etc. Thus, there can be more that one stable release for a major version.
+All major version releases, both odd and even, go through the comprehensive testing process producing a number of minor versions. Each minor version is created by tagging a relevant commit of the release branch with a full version number. So, there can be tags `24.1.1`, `24.1.2` etc. on the `stable-24-1` branch. As soon as a minor version proves its quality, we consider it as stable, and register a Release on GitHub linked to its tag, add it to [downloads](../downloads/index.md#ydb-server) and [changelog](../changelog-server.md) documentation pages, etc. Thus, there can be more that one stable release for a major version.
 
 ### Testing {#server-testing}
 

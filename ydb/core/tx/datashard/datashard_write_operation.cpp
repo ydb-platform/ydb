@@ -34,6 +34,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     if (LockTxId()) {
         UserDb.SetLockTxId(LockTxId());
         UserDb.SetLockNodeId(LockNodeId());
+        UserDb.SetIsRepeatableSnapshot(true);
     }
 
     if (Immediate())
@@ -43,10 +44,12 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
 
     LOG_TRACE_S(Ctx, NKikimrServices::TX_DATASHARD, "Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << GetRecord().ShortDebugString());
 
-    if (!ParseRecord(self->TableInfos))
-        return;
+    if (HasOperations()) {
+        if (!ParseOperations(self->TableInfos))
+            return;
 
-    SetTxKeys(RecordOperation().GetColumnIds());
+        SetTxKeys(RecordOperation().GetColumnIds());
+    }
 
     KqpSetTxLocksKeys(GetKqpLocks(), self->SysLocksTable(), KeyValidator);
     KeyValidator.GetInfo().SetLoaded();
@@ -56,7 +59,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::ParseRecord(const TDataShard::TTableInfos& tableInfos) {
+bool TValidatedWriteTx::ParseOperations(const TDataShard::TTableInfos& tableInfos) {
     if (GetRecord().GetOperations().size() != 1)
     {
         ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
@@ -194,11 +197,20 @@ void TValidatedWriteTx::SetTxKeys(const ::google::protobuf::RepeatedField<::NPro
 
 ui32 TValidatedWriteTx::ExtractKeys(bool allowErrors)
 {
+    if (!HasOperations())
+        return 0;
+
     SetTxKeys(RecordOperation().GetColumnIds());
 
     bool isValid = ReValidateKeys();
-    Y_ABORT_UNLESS(allowErrors || isValid, "Validation errors: %s", ErrStr.data());
-
+    if (allowErrors) {
+        if (!isValid) {
+            return 0;
+        }
+    } else {
+        Y_ABORT_UNLESS(isValid, "Validation errors: %s", ErrStr.data());
+    }
+    
     return KeysCount();
 }
 

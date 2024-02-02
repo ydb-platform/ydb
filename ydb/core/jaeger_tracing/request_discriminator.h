@@ -1,10 +1,8 @@
 #pragma once
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 struct TRequestDiscriminator {
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

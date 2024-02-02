@@ -9,8 +9,8 @@
 
 #include <util/generic/maybe.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
+
 class TSamplingThrottlingConfigurator {
 public:
     TSamplingThrottlingConfigurator(TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
@@ -37,5 +37,4 @@ private:
     TIntrusivePtr<IRandomProvider> RandomProvider;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

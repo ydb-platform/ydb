@@ -4,8 +4,7 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 class TThrottler {
 public:
@@ -62,5 +61,4 @@ private:
     ui64 CurrentBurst = 0;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

@@ -4,8 +4,7 @@
 
 #include <util/random/fast.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 class TSampler {
 public:
@@ -23,5 +22,4 @@ private:
     TReallyFastRng32 Rng;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

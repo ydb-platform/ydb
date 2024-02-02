@@ -7,8 +7,7 @@
 
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 class TSamplingThrottlingControl
     : public TThrRefBase
@@ -46,5 +45,4 @@ private:
     TThrottler ExternalThrottler;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

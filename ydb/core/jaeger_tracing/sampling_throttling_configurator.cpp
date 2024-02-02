@@ -7,8 +7,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetControl() {
     TSampler sampler(SamplingPPM, RandomProvider->GenRand64());
@@ -56,5 +55,4 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
     return {};
 }
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

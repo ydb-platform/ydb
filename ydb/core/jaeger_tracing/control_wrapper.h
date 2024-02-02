@@ -2,8 +2,7 @@
 
 #include "control.h"
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 class TControlWrapper {
 public:
@@ -21,5 +20,4 @@ private:
     TIntrusivePtr<TControl> Control;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

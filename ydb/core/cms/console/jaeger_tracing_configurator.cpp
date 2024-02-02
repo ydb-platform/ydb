@@ -37,8 +37,9 @@ TJaegerTracingConfigurator::TJaegerTracingConfigurator(
     const NKikimrConfig::TTracingConfig& cfg)
     : TracingConfigurator(std::move(tracingConfigurator))
 {
-    Cerr << "TJaegerTracingConfigurator: Creating with initial config " << cfg.DebugString() << Endl;
-    ApplyConfigs(cfg);
+    if (auto err = ApplyConfigs(cfg)) {
+        Cerr << "Failed to apply initial tracing configs: " << *err << Endl;
+    }
 }
 
 void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {

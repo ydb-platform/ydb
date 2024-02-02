@@ -4,8 +4,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr {
-namespace NJaegerTracing {
+namespace NKikimr::NJaegerTracing {
 
 struct TControl
     : public TThrRefBase
@@ -25,5 +24,4 @@ struct TControl
     TAtomic Value;
 };
 
-} // namespace NJaegerTracing
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

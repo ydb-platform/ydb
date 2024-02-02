@@ -141,8 +141,11 @@ COPY(
     ${ORIG_SOURCES}
     OUTPUT_INCLUDES 
     ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+    ${BINDIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+    ${BINDIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h
     ${BINDIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
     ${BINDIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+    llvm/Support/raw_ostream.h
 )
 
 PEERDIR(

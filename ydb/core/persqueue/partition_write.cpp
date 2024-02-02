@@ -503,7 +503,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //All ok
     auto now = ctx.Now();
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (IsQuotingEnabled()) {
+    if (quotingConfig.GetEnableQuoting()) {
         if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
             Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteNewSize, TopicQuotaConsumedCookie, {}));
         } else {
@@ -654,6 +654,9 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         EmplaceRequest(TWriteMsg{ev->Get()->Cookie, offset, std::move(msg)}, ctx);
         if (offset && needToChangeOffset)
             ++*offset;
+    }
+    if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota(ctx)) {
+        SetDeadlinesForWrites(ctx);
     }
     WriteInflightSize += size;
 
@@ -1387,7 +1390,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
         SetDeadlinesForWrites(ctx);
         return false;
     }
-
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty())
@@ -1431,7 +1433,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
                 << NewHead.GetNextOffset() << " " << key.ToString()
                 << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-
     AddNewWriteBlob(res, request, headCleared, ctx);
     return true;
 }
@@ -1439,7 +1440,6 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant, const
 void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
     if (QuotaDeadline == TInstant::Zero() || QuotaDeadline > ctx.Now())
         return;
-
     PQ_LOG_T("TPartition::FilterDeadlinedWrites.");
 
     std::deque<TMessage> newRequests;
@@ -1485,7 +1485,6 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     }
 
     PQ_LOG_T("TPartition::HandleWrites. Requests.size()=" << Requests.size());
-
     Become(&TThis::StateWrite);
 
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
@@ -1561,7 +1560,7 @@ void TPartition::RequestBlobQuota() {
     
     // Request quota and write blob.
     // Mirrored topics are not quoted in local dc.
-    const bool skip = !IsQuotingEnabled();
+    const bool skip = !WriteQuotaTrackerActor;
     if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*PendingWriteRequest)) {
         // Request with data. We should check before attempting to write data whether we have enough quota.
         Y_ABORT_UNLESS(!WaitingForPreviousBlobQuota());

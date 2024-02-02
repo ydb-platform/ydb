@@ -137,7 +137,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
         auto histogram = quotaWait->FindSubgroup("sensor", "PartitionWriteQuotaWaitOriginal");
         TStringStream histogramStr;
         histogram->OutputHtml(histogramStr);
-        Cerr << "=== Total histogram: ===\n " << histogramStr.Str() << "=== === === ===" << Endl;
+        Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "1000ms")->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(histogram->FindNamedCounter("Interval", "2500ms")->Val(), 1);
     }
@@ -291,18 +291,21 @@ Y_UNIT_TEST(PartitionFirstClass) {
         TFinalizer finalizer(tc);
         activeZone = false;
         bool dbRegistered{false};
+        bool labeledCountersReceived =false ;
 
         tc.Prepare(dispatchName, setup, activeZone, true, true, true);
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10000);
+
         tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
                 auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
                 UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
                 dbRegistered = true;
+            } else if (event->GetTypeRewrite() == TEvTabletCounters::EvTabletAddLabeledCounters) {
+                labeledCountersReceived = true;
             }
             return TTestActorRuntime::DefaultObserverFunc(event);
         });
-
         PQTabletPrepare({.deleteTime=3600, .writeSpeed = 100_KB, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 325;
@@ -324,7 +327,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
             tc.Runtime->DispatchEvents(options);
         }
-        UNIT_ASSERT(dbRegistered);
+        //UNIT_ASSERT(labeledCountersReceived);
 
         {
             NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};

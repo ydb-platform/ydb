@@ -35,7 +35,6 @@ public:
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
-        AddHandler(0, &TDqCnHashShuffle::Match, HNDL(BuildHashShuffleByKeyStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(BuildAggregationResultStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
@@ -192,10 +191,6 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildShuffleStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildShuffleStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
-    TMaybeNode<TExprBase> BuildHashShuffleByKeyStage(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        return DqBuildHashShuffleByKeyStage(node, ctx, *getParents());
     }
 
     template<bool IsGlobal>

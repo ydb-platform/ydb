@@ -25,15 +25,11 @@ For instance, release `23.1` comes with the new functionality switched off. It c
 
 ### Release branches and tags {#server-branches-tags}
 
-Release cycle for an odd major release starts by branching from trunk (`main`) by a member of a [YDB Release team](https://github.com/orgs/ydb-platform/teams/release). Since that moment, we freeze the feature set, working on its stabilization.
+A release cycle for an odd major release starts by a member of a [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) forking a new branch from the `main` branch. Major release branch name starts with prefix `stable-`, followed with the major version with dots replaced by dashes (for example, `stable-23-1`).
 
-Release branch name starts with the characters `stable-`, followed with the major version with dots replaced by dashes (for instance, `stable-23-4`).
+A release cycle for an even major release starts by branching from the preceding odd major version branch. The branch follows the same naming convention.
 
-Release cycle for an even major release starts by branching from the preceding odd major version branch.
-
-All major version releases, both odd and even, go through the testing cycle producing number of minor versions. Each minor version is fixed by tagging a relevant release branch with the full version number. So, there can be tags `24.1.1`, `24.1.2` etc. on the `stable-24-1` branch. As soon as a minor version proves its quality, we consider it as stable, and register a Release on GitHub linked to its tag.
-
-There can be more that one stable release for a major version.
+All major version releases, both odd and even, go through the comprehensive testing process producing a number of minor versions. Each minor version is created by tagging a relevant commit of the release branch with a full version number. So, there can be tags `24.1.1`, `24.1.2` etc. on the `stable-24-1` branch. As soon as a minor version proves its quality, we consider it as stable, and register a Release on GitHub linked to its tag, add it to [downloads](../downloads.md#ydb-server) and [changelog](../changelog-server.md) documentation pages, etc. Thus, there can be more that one stable release for a major version.
 
 ### Testing {#server-testing}
 

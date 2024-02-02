@@ -185,6 +185,7 @@
   - ApplicationServices/ApplicationServices.h
   - AudioToolbox/AudioToolbox.h
   - AVFoundation/AVFoundation.h
+  - Carbon/Carbon.h
   - CFNetwork/CFNetwork.h
   - Cocoa/Cocoa.h
   - CoreFoundation/CFArray.h
@@ -220,7 +221,11 @@
   - GLKit/GLKit.h
   - ImageCompression.h
   - IOKit/IOBSD.h
+  - IOKit/IOCFPlugIn.h
   - IOKit/IOKitLib.h
+  - IOKit/graphics/IOGraphicsLib.h
+  - IOKit/hid/IOHIDKeys.h
+  - IOKit/hid/IOHIDLib.h
   - IOKit/kext/KextManager.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPSKeys.h
@@ -230,6 +235,7 @@
   - IOKit/storage/IOBlockStorageDriver.h
   - IOKit/storage/IOMedia.h
   - IOSurface/IOSurfaceRef.h
+  - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
   - metal_stdlib
   - OpenCL/cl.h

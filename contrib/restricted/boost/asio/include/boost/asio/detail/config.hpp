@@ -2,7 +2,7 @@
 // detail/config.hpp
 // ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2018 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2019 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -120,11 +120,14 @@
 #endif // !defined(BOOST_ASIO_HAS_MOVE)
 
 // If BOOST_ASIO_MOVE_CAST isn't defined, and move support is available, define
-// BOOST_ASIO_MOVE_ARG and BOOST_ASIO_MOVE_CAST to take advantage of rvalue
-// references and perfect forwarding.
+// * BOOST_ASIO_MOVE_ARG,
+// * BOOST_ASIO_NONDEDUCED_MOVE_ARG, and
+// * BOOST_ASIO_MOVE_CAST
+// to take advantage of rvalue references and perfect forwarding.
 #if defined(BOOST_ASIO_HAS_MOVE) && !defined(BOOST_ASIO_MOVE_CAST)
 # define BOOST_ASIO_MOVE_ARG(type) type&&
 # define BOOST_ASIO_MOVE_ARG2(type1, type2) type1, type2&&
+# define BOOST_ASIO_NONDEDUCED_MOVE_ARG(type) type&
 # define BOOST_ASIO_MOVE_CAST(type) static_cast<type&&>
 # define BOOST_ASIO_MOVE_CAST2(type1, type2) static_cast<type1, type2&&>
 #endif // defined(BOOST_ASIO_HAS_MOVE) && !defined(BOOST_ASIO_MOVE_CAST)
@@ -150,6 +153,7 @@
 # else
 #  define BOOST_ASIO_MOVE_ARG(type) type
 # endif
+# define BOOST_ASIO_NONDEDUCED_MOVE_ARG(type) const type&
 # define BOOST_ASIO_MOVE_CAST(type) static_cast<const type&>
 # define BOOST_ASIO_MOVE_CAST2(type1, type2) static_cast<const type1, type2&>
 #endif // !defined(BOOST_ASIO_MOVE_CAST)
@@ -280,9 +284,9 @@
 #   endif // ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 6)) || (__GNUC__ > 4)
 #  endif // defined(__GNUC__)
 #  if defined(BOOST_ASIO_MSVC)
-#   if (_MSC_VER >= 1700)
+#   if (_MSC_VER >= 1800)
 #    define BOOST_ASIO_HAS_DECLTYPE 1
-#   endif // (_MSC_VER >= 1700)
+#   endif // (_MSC_VER >= 1800)
 #  endif // defined(BOOST_ASIO_MSVC)
 # endif // !defined(BOOST_ASIO_DISABLE_DECLTYPE)
 #endif // !defined(BOOST_ASIO_HAS_DECLTYPE)
@@ -446,7 +450,13 @@
 #    if __has_include(<atomic>)
 #     define BOOST_ASIO_HAS_STD_ATOMIC 1
 #    endif // __has_include(<atomic>)
-#   endif // (__cplusplus >= 201103)
+#   elif defined(__apple_build_version__) && defined(_LIBCPP_VERSION)
+#    if (__clang_major__ >= 10)
+#     if __has_include(<atomic>)
+#      define BOOST_ASIO_HAS_STD_ATOMIC 1
+#     endif // __has_include(<atomic>)
+#    endif // (__clang_major__ >= 10)
+#   endif /// defined(__apple_build_version__) && defined(_LIBCPP_VERSION)
 #  endif // defined(__clang__)
 #  if defined(__GNUC__)
 #   if ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 7)) || (__GNUC__ > 4)
@@ -929,15 +939,15 @@
 #  if defined(_MSC_VER) || defined(__BORLANDC__)
 #   pragma message( \
   "Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately. For example:\n"\
-  "- add -D_WIN32_WINNT=0x0501 to the compiler command line; or\n"\
-  "- add _WIN32_WINNT=0x0501 to your project's Preprocessor Definitions.\n"\
-  "Assuming _WIN32_WINNT=0x0501 (i.e. Windows XP target).")
+  "- add -D_WIN32_WINNT=0x0601 to the compiler command line; or\n"\
+  "- add _WIN32_WINNT=0x0601 to your project's Preprocessor Definitions.\n"\
+  "Assuming _WIN32_WINNT=0x0601 (i.e. Windows 7 target).")
 #  else // defined(_MSC_VER) || defined(__BORLANDC__)
 #   warning Please define _WIN32_WINNT or _WIN32_WINDOWS appropriately.
-#   warning For example, add -D_WIN32_WINNT=0x0501 to the compiler command line.
-#   warning Assuming _WIN32_WINNT=0x0501 (i.e. Windows XP target).
+#   warning For example, add -D_WIN32_WINNT=0x0601 to the compiler command line.
+#   warning Assuming _WIN32_WINNT=0x0601 (i.e. Windows 7 target).
 #  endif // defined(_MSC_VER) || defined(__BORLANDC__)
-#  define _WIN32_WINNT 0x0501
+#  define _WIN32_WINNT 0x0601
 # endif // !defined(_WIN32_WINNT) && !defined(_WIN32_WINDOWS)
 # if defined(_MSC_VER)
 #  if defined(_WIN32) && !defined(WIN32)
@@ -1008,7 +1018,8 @@
    || defined(__FreeBSD__) \
    || defined(__NetBSD__) \
    || defined(__OpenBSD__) \
-   || defined(__linux__)
+   || defined(__linux__) \
+   || defined(__HAIKU__)
 #   define BOOST_ASIO_HAS_UNISTD_H 1
 #  endif
 # endif // !defined(BOOST_ASIO_HAS_BOOST_CONFIG)
@@ -1371,33 +1382,6 @@
 # endif // defined(__linux__)
         //   || (defined(__MACH__) && defined(__APPLE__))
 #endif // !defined(BOOST_ASIO_DISABLE_SSIZE_T)
-
-// Helper macros to manage the transition away from the old services-based API.
-#if defined(BOOST_ASIO_ENABLE_OLD_SERVICES)
-# define BOOST_ASIO_SVC_TPARAM , typename Service
-# define BOOST_ASIO_SVC_TPARAM_DEF1(d1) , typename Service d1
-# define BOOST_ASIO_SVC_TPARAM_DEF2(d1, d2) , typename Service d1, d2
-# define BOOST_ASIO_SVC_TARG , Service
-# define BOOST_ASIO_SVC_T Service
-# define BOOST_ASIO_SVC_TPARAM1 , typename Service1
-# define BOOST_ASIO_SVC_TPARAM1_DEF1(d1) , typename Service1 d1
-# define BOOST_ASIO_SVC_TPARAM1_DEF2(d1, d2) , typename Service1 d1, d2
-# define BOOST_ASIO_SVC_TARG1 , Service1
-# define BOOST_ASIO_SVC_T1 Service1
-# define BOOST_ASIO_SVC_ACCESS public
-#else // defined(BOOST_ASIO_ENABLE_OLD_SERVICES)
-# define BOOST_ASIO_SVC_TPARAM
-# define BOOST_ASIO_SVC_TPARAM_DEF1(d1)
-# define BOOST_ASIO_SVC_TPARAM_DEF2(d1, d2)
-# define BOOST_ASIO_SVC_TARG
-// BOOST_ASIO_SVC_T is defined at each point of use.
-# define BOOST_ASIO_SVC_TPARAM1
-# define BOOST_ASIO_SVC_TPARAM1_DEF1(d1)
-# define BOOST_ASIO_SVC_TPARAM1_DEF2(d1, d2)
-# define BOOST_ASIO_SVC_TARG1
-// BOOST_ASIO_SVC_T1 is defined at each point of use.
-# define BOOST_ASIO_SVC_ACCESS protected
-#endif // defined(BOOST_ASIO_ENABLE_OLD_SERVICES)
 
 // Helper macros to manage transition away from error_code return values.
 #if defined(BOOST_ASIO_NO_DEPRECATED)

@@ -56,7 +56,14 @@ If testing iteration proves the quality of a minor release, the [YDB Release tea
 
 ### Release numbers and schedule {#cli-versioning}
 
-YDB CLI version comprise of three numbers separated by a dot character. First number is a major version (currently `2`), second is the minor, and the third is a patch number. For instance, `2.8.0` is the 2nd major, 8th minor, without patches.
+{{ ydb-short-name }} CLI version consists of three numbers separated by dots:
+
+1. Major release ordinal number (currently, `2`)
+2. Minor release ordinal number for a given major release
+3. Patch number
+
+For example, `2.8.0` is the 2nd major release, 8th minor, without additional patches.
+{{ ydb-short-name }} CLI version comprise of three numbers separated by a dot character. First number is a major version (currently `2`), second is the minor, and the third is a patch number. For instance, `2.8.0` is the 2nd major, 8th minor, without patches.
 
 There's no schedule for the YDB CLI minor releases, a new release comes as soon as we have some new valuable functionality. Initially, every new minor release has `0` as a patch number. If there are critical bugs found in that version, or some minor part of functionality did not catch it as planned, we can release a patch, incrementing only the patch number, like it was for `2.1.1`.
 

@@ -32,7 +32,7 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
 // returns true if usedFields contains subset of fields
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap,
-                    bool allowDependsOn = true);
+                    bool allowDependsOn = true, bool allowTrivial = false);
 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,

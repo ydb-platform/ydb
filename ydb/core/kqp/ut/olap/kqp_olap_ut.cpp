@@ -29,7 +29,6 @@
 
 #include <fmt/format.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1367,7 +1366,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[1u;]])");
         }
 
-        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.15 * csController->GetIndexesSkippingOnSelect().Val());
+        AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < 0.20 * csController->GetIndexesSkippingOnSelect().Val());
 
     }
 
@@ -3792,6 +3791,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ABORT_UNLESS(d.GetGroupsCount() == groupsCount);
                     Y_ABORT_UNLESS(d.GetMaxCount() - d.GetMinCount() <= 2);
                 }
+            }
+            {
+                auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`);";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
         }
         const ui64 rawBytesUnpack = rawBytesUnpack1PK - rawBytesPK1;

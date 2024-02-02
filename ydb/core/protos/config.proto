@@ -1257,7 +1257,7 @@ message TImmediateControlsConfig {
                 optional uint64 MaxBurst = 2 [(ControlOptions) = {
                     Description: "Maximum burst of traced events",
                     MinValue: 0,
-                    MaxValue: 300, 
+                    MaxValue: 300,
                     DefaultValue: 0,
                 }];
             }
@@ -1603,6 +1603,17 @@ message TBackgroundCleaningConfig {
     optional TRetrySettings RetrySettings = 5;
 }
 
+message TGraphConfig {
+    message TAggregationSettings {
+        optional uint64 PeriodToStartSeconds = 1;
+        optional uint64 SampleSizeSeconds = 2;
+        optional uint64 MinimumStepSeconds = 3;
+    }
+    optional string BackendType = 1;
+    optional uint64 AggregateCheckPeriodSeconds = 5;
+    repeated TAggregationSettings AggregationSettings = 10;
+}
+
 message TTracingConfig {
     message TAuthConfig {
         message TTvm {
@@ -1758,6 +1769,7 @@ message TAppConfig {
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
+    optional TGraphConfig GraphConfig = 50;
     optional NFq.NConfig.TConfig FederatedQueryConfig = 58;
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;

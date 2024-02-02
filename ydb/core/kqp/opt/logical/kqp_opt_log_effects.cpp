@@ -16,6 +16,7 @@ TExprBase KqpDeleteOverLookup(const TExprBase& node, TExprContext& ctx, const TK
     auto deleteRows = node.Cast<TKqlDeleteRows>();
 
     TMaybeNode<TKqlLookupTableBase> lookup;
+    TMaybeNode<TKqlReadTable> read;
     TMaybeNode<TCoSkipNullMembers> skipNulMembers;
 
     if (deleteRows.Input().Maybe<TKqlLookupTableBase>()) {
@@ -23,36 +24,79 @@ TExprBase KqpDeleteOverLookup(const TExprBase& node, TExprContext& ctx, const TK
     } else if (deleteRows.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlLookupTableBase>()) {
         skipNulMembers = deleteRows.Input().Cast<TCoSkipNullMembers>();
         lookup = skipNulMembers.Input().Cast<TKqlLookupTableBase>();
+    } else if (deleteRows.Input().Maybe<TKqlReadTable>()) {
+        read = deleteRows.Input().Cast<TKqlReadTable>();
     } else {
         return node;
     }
 
-    YQL_ENSURE(lookup);
-    if (deleteRows.Table().Raw() != lookup.Cast().Table().Raw()) {
-        return node;
-    }
-
-    auto lookupKeysType = lookup.Cast().LookupKeys().Ref().GetTypeAnn();
-    auto lookupKeyType = lookupKeysType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    YQL_ENSURE(lookupKeyType);
-
-    // Only consider complete PK lookups
+    TMaybeNode<TExprBase> deleteInput;
     const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, deleteRows.Table().Path());
-    if (lookupKeyType->GetSize() != tableDesc.Metadata->KeyColumnNames.size()) {
-        return node;
-    }
+    if (lookup) {
+        if (deleteRows.Table().Raw() != lookup.Cast().Table().Raw()) {
+            return node;
+        }
 
-    TExprBase deleteInput = lookup.Cast().LookupKeys();
-    if (skipNulMembers) {
-        deleteInput = Build<TCoSkipNullMembers>(ctx, skipNulMembers.Cast().Pos())
-            .Input(deleteInput)
-            .Members(skipNulMembers.Cast().Members())
+        auto lookupKeysType = lookup.Cast().LookupKeys().Ref().GetTypeAnn();
+        auto lookupKeyType = lookupKeysType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        YQL_ENSURE(lookupKeyType);
+
+        // Only consider complete PK lookups
+        if (lookupKeyType->GetSize() != tableDesc.Metadata->KeyColumnNames.size()) {
+            return node;
+        }
+
+        deleteInput = lookup.Cast().LookupKeys();
+        if (skipNulMembers) {
+            deleteInput = Build<TCoSkipNullMembers>(ctx, skipNulMembers.Cast().Pos())
+                .Input(deleteInput.Cast())
+                .Members(skipNulMembers.Cast().Members())
+                .Done();
+        }
+    } else if (read) {
+        if (deleteRows.Table().Raw() != read.Cast().Table().Raw()) {
+            return node;
+        }
+
+        const auto& rangeFrom = read.Cast().Range().From();
+        const auto& rangeTo = read.Cast().Range().To();
+
+        if (!rangeFrom.Maybe<TKqlKeyInc>() || !rangeTo.Maybe<TKqlKeyInc>()) {
+            return node;
+        }
+
+        if (rangeFrom.Raw() != rangeTo.Raw()) {
+            return node;
+        }
+
+        if (rangeFrom.ArgCount() != tableDesc.Metadata->KeyColumnNames.size()) {
+            return node;
+        }
+
+        TVector<TExprBase> structMembers;
+        for (ui32 i = 0; i < rangeFrom.ArgCount(); ++i) {
+            TCoAtom columnNameAtom(ctx.NewAtom(node.Pos(), tableDesc.Metadata->KeyColumnNames[i]));
+
+            auto member = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name(columnNameAtom)
+                .Value(rangeFrom.Arg(i))
+                .Done();
+
+            structMembers.push_back(member);
+        }
+
+         deleteInput = Build<TCoAsList>(ctx, node.Pos())
+            .Add<TCoAsStruct>()
+                .Add(structMembers)
+                .Build()
             .Done();
-    }
+    } 
+
+    YQL_ENSURE(deleteInput);
 
     return Build<TKqlDeleteRows>(ctx, deleteRows.Pos())
         .Table(deleteRows.Table())
-        .Input(deleteInput)
+        .Input(deleteInput.Cast())
         .Done();
 }
 

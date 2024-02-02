@@ -1155,9 +1155,9 @@
     ],
     "test.test[join-lookupjoin_with_cache-off-Analyze]": [
         {
-            "checksum": "ae1b849ea41985583f4788f2da2e5c4c",
-            "size": 10474,
-            "uri": "https://{canondata_backend}/1937027/fb2f5e7f8384ed26549a5b12ab64879613b094df/resource.tar.gz#test.test_join-lookupjoin_with_cache-off-Analyze_/plan.txt"
+            "checksum": "0a52d2686415327ccb290e0b4fd3bb87",
+            "size": 10672,
+            "uri": "https://{canondata_backend}/1031349/8ad72b2dd458e088eb333e5553dfd99dbae9e9d7/resource.tar.gz#test.test_join-lookupjoin_with_cache-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-lookupjoin_with_cache-off-Analyze_/extracted"

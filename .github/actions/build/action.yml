@@ -11,6 +11,9 @@ inputs:
     required: false
     default: ""
     description: "extra compile flags will be added to the end of C_FLAGS and CXX_FLAGS"
+  ninja_target:
+    required: false
+    type: string
 
 runs:
   using: "composite"
@@ -59,7 +62,7 @@ runs:
       export CCACHE_SLOPPINESS=locale
       export CCACHE_MAXSIZE=50G
       cd ../build
-      ninja
+      ninja ${{ inputs.ninja_target }}
       ccache -s
       df -h
   - name: report Build failed

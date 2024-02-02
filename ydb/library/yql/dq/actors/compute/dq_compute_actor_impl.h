@@ -186,7 +186,7 @@ protected:
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
                     NKikimr::TAlignedPagePoolCounters(),
-                    FunctionRegistry->SupportsSizedAllocators(),
+                    true,
                     false
         );
         InitMonCounters(taskCounters);

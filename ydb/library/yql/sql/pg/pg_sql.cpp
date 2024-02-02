@@ -409,6 +409,7 @@ public:
                     "xmloption",                            // pg_dump
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
+                    "escape_string_warning",               // zabbix
                     NULL,
                 };
 
@@ -1773,7 +1774,7 @@ private:
             }
 
             if (cinfo.NotNull) {
-                constraints.push_back(QL(QA("not_null")));   
+                constraints.push_back(QL(QA("not_null")));
             }
 
             if (cinfo.Default) {
@@ -2091,8 +2092,8 @@ public:
                 AddError(TStringBuilder() << "VariableSetStmt, set_config doesn't support that option:" << name);
                 return nullptr;
             }
-            if (rawStr != "pg_catalog" && rawStr != "public") {
-                AddError(TStringBuilder() << "VariableSetStmt, search path supports only public and pg_catalogue, but got :" << rawStr);
+            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+                AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
             if (Settings.GUCSettings) {
@@ -2382,12 +2383,16 @@ public:
         case TRANS_STMT_COMMIT:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"))));
-            Settings.GUCSettings->Commit();
+            if (Settings.GUCSettings) {
+                Settings.GUCSettings->Commit();
+            }
             return true;
         case TRANS_STMT_ROLLBACK:
             Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
                 A("world"), QL(QL(QA("mode"), QA("rollback"))))));
-            Settings.GUCSettings->RollBack();
+            if (Settings.GUCSettings) {
+                Settings.GUCSettings->RollBack();
+            }
             return true;
         default:
             AddError(TStringBuilder() << "TransactionStmt: kind is not supported: " << (int)value->kind);
@@ -2526,7 +2531,7 @@ public:
         }
         if (schemaname == "" && Settings.GUCSettings) {
             auto search_path = Settings.GUCSettings->Get("search_path");
-            if (!search_path || *search_path == "public") {
+            if (!search_path || *search_path == "public" || search_path->empty()) {
                 return Settings.DefaultCluster;
             }
             return TString(*search_path);

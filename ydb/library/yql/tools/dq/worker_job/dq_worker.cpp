@@ -23,6 +23,8 @@
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
+#include <yt/yt/core/net/address.h>
+#include <yt/yt/core/net/config.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -30,6 +32,7 @@
 #include <util/stream/file.h>
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
+#include <util/string/type.h>
 
 using namespace NYql::NDqs;
 
@@ -187,11 +190,20 @@ namespace NYql::NDq::NWorker {
         TRangeWalker<int> portWalker(startPort, startPort+100);
         auto ports = BindInRange(portWalker);
 
+        auto forceIPv4 = IsTrue(GetEnv(TString("YT_SECURE_VAULT_") + NCommonJobVars::YT_FORCE_IPV4, ""));
+        if (forceIPv4) {
+            auto config = NYT::New<NYT::NNet::TAddressResolverConfig>();
+            config->EnableIPv4 = true;
+            config->EnableIPv6 = false;
+            NYT::NNet::TAddressResolver::Get()->Configure(config);
+        }
+
         auto [host, ip] = NYql::NDqs::GetLocalAddress(
-            coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr
+            coordinatorConfig.HasHostName() ? &coordinatorConfig.GetHostName() : nullptr,
+            forceIPv4 ? AF_INET : AF_INET6
         );
 
-        auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[1].Addr.GetPort(), host, ip);
+        auto coordinator = CreateCoordiantionHelper(coordinatorConfig, NProto::TDqConfig::TScheduler(), "worker_node", ports[forceIPv4 ? 0 : 1].Addr.GetPort(), host, ip);
         i64 cacheSize = backendConfig.HasCacheSize()
             ? backendConfig.GetCacheSize()
             : 16000000000L;
@@ -280,8 +292,8 @@ namespace NYql::NDq::NWorker {
         std::tie(setup, logSettings) = BuildActorSetup(
             nodeId,
             ip,
-            ports[1].Addr.GetPort(),
-            ports[1].Socket->Release(),
+            ports[forceIPv4 ? 0 : 1].Addr.GetPort(),
+            ports[forceIPv4 ? 0 : 1].Socket->Release(),
             {},
             dqSensors,
             [](const TIntrusivePtr<NActors::TTableNameserverSetup>& setup) {

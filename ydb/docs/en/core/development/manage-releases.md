@@ -49,7 +49,7 @@ If testing iteration proves the quality of a minor release, the [YDB Release tea
 
 {% include [corp_release_stable.md](_includes/corp_release_stable.md) %}
 
-## YDB CLI (Command-Line Interface) release cycle {#cli}
+## {{ ydb-short-name }} CLI (Command-Line Interface) release cycle {#cli}
 
 ### Release numbers and schedule {#cli-versioning}
 

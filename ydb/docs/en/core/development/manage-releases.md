@@ -1,4 +1,4 @@
-# Manage YDB releases
+# Manage {{ ydb-short-name }} releases
 
 There are two products based on the source code from the [{{ ydb-short-name }} repository](https://github.com/ydb-platform/ydb) with independent release cycles:
 

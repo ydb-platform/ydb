@@ -1,7 +1,7 @@
 #pragma once
+
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/actors/util/rope.h>
-
 
 namespace NKikimr::NMiniKQL {
 
@@ -19,7 +19,8 @@ struct ISpiller {
     ///Get + Delete
     ///Stored value may be moved to feature
     virtual std::optional<NThreading::TFuture<TRope>> Extract(TKey key) = 0;
-
 };
+
+ISpiller::TPtr MakeSpiller(std::function<void()>&& wakeUpCallback);
 
 }//namespace NKikimr::NMiniKQL

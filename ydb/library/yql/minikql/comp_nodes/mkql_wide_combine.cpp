@@ -1,17 +1,15 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
-#include <ydb/library/yql/dq/actors/spilling/compute_storage.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/utils/cast.h>
-
-#include <ydb/library/yql/dq/actors/spilling/compute_storage.h>
 #include <ydb/library/yql/minikql/computation/mkql_spiller_adapter.h>
 
 #include <util/string/cast.h>
@@ -623,10 +621,8 @@ private:
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 MKQL_ENSURE(!Spiller,"Internal logic error");
-                TStringStream spillerName;
-                spillerName << "Spiller" << this->DebugString() << "_" << static_cast<const void*>(this);
 
-                Spiller = NYql::NDq::MakeSpiller(spillerName.Str(), std::move(ctx.WakeUpCallback));
+                Spiller = MakeSpiller(std::move(ctx.WakeUpCallback));
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

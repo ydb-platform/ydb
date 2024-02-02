@@ -261,6 +261,9 @@ private:
         StoredBlobs_.erase(blobId);
     }
 
+    // It's illegal to initialize an inner actor in the actor's ctor. Because in this case ctx will not be initialized because it's initialized afger Bootstrap event.
+    // But also it's not possible to initialize inner actor in the bootstrap function because in this case Put/Get may be called before the Bootstrap -> inner worker will be uninitialized.
+    // In current implementation it's still possible to leave inner actor uninitialized that is why it's planned to split this class into Actor part + non actor part
     void InitializeIfNot() {
         if (IsInitialized_) return;
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,

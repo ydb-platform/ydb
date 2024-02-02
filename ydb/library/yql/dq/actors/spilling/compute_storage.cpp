@@ -18,46 +18,40 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-namespace {
-
-class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller {
+class TDqComputeStorage : public IDqComputeStorage {
 public:
     TDqComputeStorage(TTxId txId, const TString& spillerName, std::function<void()>&& wakeUpCallback) {
 
-        SelfActor_ = CreateDqComputeStorageActor(txId, spillerName, std::move(wakeUpCallback));
-        SelfActorId_ = TlsActivationContext->AsActorContext().Register(SelfActor_->GetActor());
-        SelfId_ = TlsActivationContext->AsActorContext().SelfID;
+        ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName, std::move(wakeUpCallback));
+        ComputeStorageActorId_ = TlsActivationContext->AsActorContext().Register(ComputeStorageActor_->GetActor());
     }
 
     ~TDqComputeStorage() {
-        TlsActivationContext->AsActorContext().Send(SelfActorId_, new TEvents::TEvPoison);
+        TlsActivationContext->AsActorContext().Send(ComputeStorageActorId_, new TEvents::TEvPoison);
     }
 
     NThreading::TFuture<TKey> Put(TRope&& blob) override {
-        return SelfActor_->Put(std::move(blob));
+        return ComputeStorageActor_->Put(std::move(blob));
     }
 
     std::optional<NThreading::TFuture<TRope>> Get(TKey key) override {
-        return SelfActor_->Get(key);
+        return ComputeStorageActor_->Get(key);
     }
 
     NThreading::TFuture<void> Delete(TKey key) override {
-        return SelfActor_->Delete(key);
+        return ComputeStorageActor_->Delete(key);
     }
 
     std::optional<NThreading::TFuture<TRope>> Extract(TKey key) override {
-        return SelfActor_->Extract(key);
+        return ComputeStorageActor_->Extract(key);
     }
 
 private:
-    IDqComputeStorageActor* SelfActor_;
-    TActorId SelfActorId_;
-    TActorId SelfId_;
+    IDqComputeStorageActor* ComputeStorageActor_;
+    TActorId ComputeStorageActorId_;
 };
 
-} // anonymous namespace
-
-NKikimr::NMiniKQL::ISpiller::TPtr MakeSpiller(const TString& spillerName, std::function<void()>&& wakeUpCallback) {
+IDqComputeStorage::TPtr MakeComputeStorage(const TString& spillerName, std::function<void()>&& wakeUpCallback) {
     return std::make_shared<TDqComputeStorage>(TTxId(), spillerName, std::move(wakeUpCallback));
 }
 

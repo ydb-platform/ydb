@@ -17,6 +17,7 @@ SRCS(
     mkql_computation_node_pack_impl.cpp
     mkql_custom_list.cpp
     mkql_validate.cpp
+    mkql_spiller.cpp
     mkql_value_builder.cpp
     mkql_computation_pattern_cache.cpp
     presort.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/minikql/arrow
+    ydb/library/actors/core
 )
 
 YQL_LAST_ABI_VERSION()

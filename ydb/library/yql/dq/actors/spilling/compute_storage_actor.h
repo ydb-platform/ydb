@@ -6,6 +6,7 @@
 
 namespace NYql::NDq {
 
+// This class will be refactored to be the Actor part of the spiller
 class IDqComputeStorageActor
 {
 public:

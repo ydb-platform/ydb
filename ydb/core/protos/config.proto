@@ -1638,9 +1638,8 @@ message TTracingConfig {
         }
 
         message TOpentelemetryBackend {
-            optional string CollectorUrl = 1;
-            optional string ServiceName = 2;
-            optional TAuthConfig AuthConfig = 3;
+            required string CollectorUrl = 1;
+            required string ServiceName = 2;
         }
 
 
@@ -1668,7 +1667,7 @@ message TTracingConfig {
         required uint32 MaxBurst = 3;
     }
 
-    optional TBackendConfig Backend = 1;
+    required TBackendConfig Backend = 1;
     repeated TSamplingScope Sampling = 2;
     repeated TExternalThrottlingScope ExternalThrottling = 3;
 }

@@ -29,9 +29,7 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
     if (config.SamplingSize() == 1) {
         const auto& samplingConfig = config.GetSampling(0);
         if (!(samplingConfig.HasFraction() && samplingConfig.HasLevel() && samplingConfig.HasMaxRatePerMinute() && samplingConfig.HasMaxBurst())) {
-            TString proto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD samplingConfig.SerializeToString(&proto);
-            return "At least one required field is missing in scope " + proto;
+            return "At least one required field is missing in scope " + samplingConfig.ShortDebugString();
         }
         const auto samplingFraction = samplingConfig.GetFraction();
 
@@ -48,9 +46,7 @@ TMaybe<TString> TSamplingThrottlingConfigurator::HandleConfigs(const NKikimrConf
     if (config.ExternalThrottlingSize()) {
         const auto& throttlingConfig = config.externalthrottling(0);
         if (!(throttlingConfig.HasMaxRatePerMinute() && throttlingConfig.HasMaxBurst())) {
-            TString proto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD throttlingConfig.SerializeToString(&proto);
-            return "At least one required field is missing in scope " + proto;
+            return "At least one required field is missing in scope " + throttlingConfig.ShortDebugString();
         }
 
         MaxExternalPerMinute.Set(throttlingConfig.GetMaxRatePerMinute());

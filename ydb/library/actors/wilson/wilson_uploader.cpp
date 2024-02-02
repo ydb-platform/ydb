@@ -71,9 +71,10 @@ namespace NWilson {
                 TStringBuf host;
                 ui16 port;
                 GetSchemeHostAndPort(CollectorUrl, scheme, host, port);
-                Y_ABORT_UNLESS(scheme == "grpc" || scheme == "grpcs", "Only grpc and grpcs schemes are supported for traces collector");
+                LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "CollectorUrl: " << CollectorUrl << ", scheme: " << scheme << ", host: " << host << ", port: " << port);
+                Y_ABORT_UNLESS(scheme == "grpc://" || scheme == "grpcs://", "Only grpc and grpcs schemes are supported for traces collector");
                 Channel = grpc::CreateChannel(TStringBuilder() << host << ":" << port,
-                    scheme == "grpcs" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
+                                              scheme == "grpcs://" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
                 LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");

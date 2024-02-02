@@ -37,6 +37,7 @@ TJaegerTracingConfigurator::TJaegerTracingConfigurator(
     const NKikimrConfig::TTracingConfig& cfg)
     : TracingConfigurator(std::move(tracingConfigurator))
 {
+    Cerr << "TJaegerTracingConfigurator: Creating with initial config " << cfg.DebugString() << Endl;
     ApplyConfigs(cfg);
 }
 
@@ -58,7 +59,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
                << rec.GetConfig().ShortDebugString());
 
     if (auto err = ApplyConfigs(rec.GetConfig().GetTracingConfig())) {
-        LOG_NOTICE_S(ctx, NKikimrServices::CMS_CONFIGS, "Failed to apply tracing configs: " << *err);
+        LOG_NOTICE_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: Failed to apply tracing configs: " << *err);
     }
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);

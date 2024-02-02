@@ -3,6 +3,11 @@
 #include <ydb/core/erasure/erasure.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+
 using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(YamlConfigParser) {
@@ -94,60 +99,33 @@ hosts:
 - host: ydb-node-zone-a-1.local
   host_config_id: 1
   location:
-    body: 1
     data_center: 'zone-a'
-    rack: '1'
 - host: ydb-node-zone-a-2.local
   host_config_id: 1
   location:
-    body: 2
     data_center: 'zone-a'
-    rack: '2'
 - host: ydb-node-zone-a-3.local
   host_config_id: 1
   location:
-    body: 3
     data_center: 'zone-a'
-    rack: '3'
-
 - host: ydb-node-zone-b-1.local
   host_config_id: 1
   location:
-    body: 4
     data_center: 'zone-b'
-    rack: '4'
 - host: ydb-node-zone-b-2.local
   host_config_id: 1
   location:
-    body: 5
     data_center: 'zone-b'
-    rack: '5'
 - host: ydb-node-zone-b-3.local
   host_config_id: 1
   location:
-    body: 6
     data_center: 'zone-b'
-    rack: '6'
-
 - host: ydb-node-zone-c-1.local
   host_config_id: 1
-  location:
-    body: 7
-    data_center: 'zone-c'
-    rack: '7'
 - host: ydb-node-zone-c-2.local
   host_config_id: 1
-  location:
-    body: 8
-    data_center: 'zone-c'
-    rack: '8'
 - host: ydb-node-zone-c-3.local
   host_config_id: 1
-  location:
-    body: 9
-    data_center: 'zone-c'
-    rack: '9'
-
 domains_config:
   domain:
   - name: Root
@@ -208,6 +186,20 @@ tls:
         auto originalCfg = NYaml::Yaml2Json(YAML::Load(str), true);
         auto transformedCfg = originalCfg;
         NYaml::TransformConfig(transformedCfg, true, false);
+
+        // Check host locations
+        std::unordered_set<ui64> bodies;
+        std::unordered_set<TString> racks;
+        const auto& hosts = transformedCfg["hosts"].GetArraySafe();
+        for (const auto& host : hosts) {
+          UNIT_ASSERT(host.Has("location"));
+          const auto& location = host["location"];
+          UNIT_ASSERT(location.Has("data_center"));
+          bodies.emplace(location["body"].GetUIntegerSafe());
+          racks.emplace(location["rack"].GetStringSafe());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(hosts.size(), bodies.size());
+        UNIT_ASSERT_VALUES_EQUAL(hosts.size(), racks.size());
 
         // Check distributed storage settings
         const auto& storagePoolTypes = transformedCfg["domains_config"]["domain"][0]["storage_pool_types"][0];

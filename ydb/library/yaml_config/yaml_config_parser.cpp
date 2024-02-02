@@ -6,6 +6,9 @@
 
 #include <library/cpp/json/writer/json.h>
 
+#include <utility>
+#include <vector>
+
 namespace NKikimr::NYaml {
 
     template<typename T>
@@ -986,6 +989,7 @@ namespace NKikimr::NYaml {
             return;
         }
         ui64 nextHostConfigID = 0;
+        ui64 nextBodyID = 0;
 
         // Find the next available host_config_id
         if (json.Has("host_configs")) {
@@ -1000,7 +1004,7 @@ namespace NKikimr::NYaml {
         }
         auto& hostConfigsArray = json["host_configs"].GetArraySafe();
 
-        // Extract inline drives into host_configs
+        // Extract inline drives into host_configs and find the next empty body ID
         for(auto& host : json["hosts"].GetArraySafe()) {
             if (host.Has("drive")) {
                 Y_ENSURE_BT(host["drive"].IsArray(),
@@ -1014,6 +1018,16 @@ namespace NKikimr::NYaml {
                 ++nextHostConfigID;
                 host.EraseValue("drive");
             }
+
+            for (const auto& key : {"location", "walle_location"}) {
+                if (host.Has(key) && host[key].Has("body")) {
+                    nextBodyID = Max(
+                        nextBodyID,
+                        GetUnsignedIntegerSafe(host[key], "body") + 1
+                    );
+                }
+            }
+
         }
 
         // Patch disk types
@@ -1039,6 +1053,28 @@ namespace NKikimr::NYaml {
             }
         }
 
+        // Fill locations
+        for(auto& host : json["hosts"].GetArraySafe()) {
+            if (host.Has("walle_location")) {
+                continue;
+            }
+            if (!host.Has("location")) {
+                host["location"] = NJson::TJsonMap{};
+            }
+            auto& location = host["location"];
+            if (!location.Has("body")) {
+                location["body"] = nextBodyID;
+                ++nextBodyID;
+            }
+            if (!location.Has("rack")) {
+                TStringStream rackName;
+                rackName << "generated-rack-" << GetUnsignedIntegerSafe(location, "body");
+                location["rack"] = rackName.Str();
+            }
+            if (!location.Has("data_center")) {
+                location["data_center"] = "default";
+            }
+        } 
     }
 
     void Preprocess(NJson::TJsonValue& json) {

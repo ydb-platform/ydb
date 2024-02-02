@@ -11,23 +11,17 @@ hosts:
   host_config_id: 1
   port: 19001
   location:
-    body: 1
     data_center: '1'
-    rack: '1'
 - host: localhost
   host_config_id: 1
   port: 19002
   location:
-    body: 2
     data_center: '2'
-    rack: '2'
 - host: localhost
   host_config_id: 1
   port: 19003
   location:
-    body: 3
     data_center: '3'
-    rack: '3'
 domains_config:
   domain:
   - name: Root

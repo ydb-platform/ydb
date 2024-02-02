@@ -5,7 +5,7 @@ There are two products based on the source code from the [{{ ydb-short-name }} r
 - [YDB server](#server)
 - [YDB command-line interface (CLI)](#cli)
 
-## YDB server release cycle {#server}
+## {{ ydb-short-name }} server release cycle {#server}
 
 ### Release numbers and schedule {#server-versioning}
 

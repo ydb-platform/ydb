@@ -1,6 +1,6 @@
 # Manage YDB releases
 
-There are two products based on the source code from the YDB repository, which have the independent release cycles:
+There are two products based on the source code from the [{{ ydb-short-name }} repository](https://github.com/ydb-platform/ydb) with independent release cycles:
 
 - [YDB server](#server)
 - [YDB command-line interface (CLI)](#cli)

@@ -40,6 +40,7 @@ struct TMemoryLimits
     std::optional<i64> TabletStatic;
     std::optional<i64> UncompressedBlockCache;
     std::optional<i64> VersionedChunkMeta;
+    std::optional<i64> Reserved;
 
     REGISTER_YSON_STRUCT(TMemoryLimits);
 
@@ -72,6 +73,36 @@ DEFINE_REFCOUNTED_TYPE(TInstanceResources)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TDefaultInstanceConfig
+    : public NYTree::TYsonStruct
+{
+    TCpuLimitsPtr CpuLimits;
+    TMemoryLimitsPtr MemoryLimits;
+
+    REGISTER_YSON_STRUCT(TDefaultInstanceConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDefaultInstanceConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TInstanceSize
+    : public NYTree::TYsonStruct
+{
+    TInstanceResourcesPtr ResourceGuarantee;
+    TDefaultInstanceConfigPtr DefaultConfig;
+
+    REGISTER_YSON_STRUCT(TInstanceSize);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TInstanceSize)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TBundleTargetConfig
     : public NYTree::TYsonStruct
 {
@@ -91,6 +122,21 @@ DEFINE_REFCOUNTED_TYPE(TBundleTargetConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TBundleConfigConstraints
+    : public NYTree::TYsonStruct
+{
+    std::vector<TInstanceSizePtr> RpcProxySizes;
+    std::vector<TInstanceSizePtr> TabletNodeSizes;
+
+    REGISTER_YSON_STRUCT(TBundleConfigConstraints);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBundleConfigConstraints)
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NProto {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,11 +150,17 @@ void FromProto(TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::T
 void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
 void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
 
-void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
-void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
+void ToProto(NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig, const TDefaultInstanceConfigPtr defaultInstanceConfig);
+void FromProto(TDefaultInstanceConfigPtr defaultInstanceConfig, const NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig);
+
+void ToProto(NBundleController::NProto::TInstanceSize* protoInstanceSize, const TInstanceSizePtr instanceSize);
+void FromProto(TInstanceSizePtr instanceSize, const NBundleController::NProto::TInstanceSize* protoInstanceSize);
 
 void ToProto(NBundleController::NProto::TBundleConfig* protoBundleConfig, const TBundleTargetConfigPtr bundleConfig);
 void FromProto(TBundleTargetConfigPtr bundleConfig, const NBundleController::NProto::TBundleConfig* protoBundleConfig);
+
+void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints, const TBundleConfigConstraintsPtr bundleConfigConstraints);
+void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints);
 
 ////////////////////////////////////////////////////////////////////////////////
 

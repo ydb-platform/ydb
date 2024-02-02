@@ -10,7 +10,6 @@ from ydb.draft import DynamicConfigClient
 logger = logging.getLogger(__name__)
 
 
-DYNCONFIG_DIR = 'dynconfig'
 DYNCONFIG_NAME= 'dynconfig.yaml'
 
 
@@ -52,7 +51,7 @@ class Client():
 
 
 def get_config_path(project_path):
-    return os.path.join(project_path, DYNCONFIG_DIR, DYNCONFIG_NAME)
+    return os.path.join(project_path, DYNCONFIG_NAME)
 
 
 def get_config_abspath(project_path):

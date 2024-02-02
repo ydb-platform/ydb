@@ -52,9 +52,6 @@ def generate_legacy_configs(project_path, preferred_pool_kind='ssd'):
 
 
 def generate_dynconfigs(project_path, namespace_name, cluster_uuid, preferred_pool_kind='ssd'):
-    dynconfigs_dir = dynconfig.DYNCONFIG_DIR
-    if not os.path.exists(dynconfigs_dir):
-        os.mkdir(dynconfigs_dir)
     generate_file(
         project_path=project_path,
         filename=dynconfig.get_config_path(project_path),

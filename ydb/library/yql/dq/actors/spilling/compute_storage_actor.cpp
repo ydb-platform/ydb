@@ -68,14 +68,7 @@ public:
 
         ui64 size = blob.size();
 
-        bool isSent = SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
-        if (!isSent) {
-            LOG_E("Can't send event for BlobId: " << NextBlobId); 
-            Error_ = "Internal error";
-
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
-            return {};
-        }
+        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
         auto it = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>())).first;
         WritingBlobsSize_ += size;
@@ -112,7 +105,7 @@ public:
 
         DeletingBlobs_.emplace(blobId, std::move(promise));
 
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
 
         return future;
     }
@@ -122,7 +115,6 @@ protected:
         InitializeIfNot();
         // Use lock to prevent race when state is changed on event processing and on Get call
         std::lock_guard lock(Mutex_);
-
         FailOnError();
 
         if (!StoredBlobs_.contains(blobId)) return std::nullopt;
@@ -130,7 +122,7 @@ protected:
         TLoadingBlobInfo loadingblobInfo = std::make_pair(removeAfterRead, NThreading::NewPromise<TRope>());
         auto it = LoadingBlobs_.emplace(blobId, std::move(loadingblobInfo)).first;
 
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
         auto& promise = it->second.second;
         return promise.GetFuture();
@@ -138,7 +130,7 @@ protected:
 
     void PassAway() override {
         InitializeIfNot();
-        SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+        Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
@@ -146,7 +138,7 @@ protected:
         InitializeIfNot();
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -177,7 +169,7 @@ private:
 
             Error_ = "Internal error";
 
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -215,7 +207,7 @@ private:
 
             Error_ = "Internal error";
 
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 

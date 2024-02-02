@@ -651,3 +651,7 @@ ids {
     code: YQL_UNTYPED_STRING_LITERALS
     severity: S_WARNING
 }
+ids {
+    code: CORE_LINEAGE_INTERNAL_ERROR
+    severity: S_WARNING
+}

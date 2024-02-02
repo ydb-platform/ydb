@@ -21,7 +21,7 @@ YDB maintains compatibility between major versions to ensure a cluster can opera
 
 Given the above compatibility target, major releases go in pairs, with odd numbers mostly adding new functionality switched off by feature flags, and even numbers enabling that functionality.
 
-For instance, release `23.1` comes with new functionality switched off, and can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, it can be further upgraded to `23.2` to leverage new functionality.
+For instance, release `23.1` comes with the new functionality switched off. It can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, you can manually toggle feature flags to test new functionality and later further upgrade it to `23.2` to fully leverage this new functionality.
 
 ### Release branches and tags {#server-branches-tags}
 

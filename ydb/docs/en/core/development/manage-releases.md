@@ -33,7 +33,7 @@ All major version releases, both odd and even, go through the comprehensive test
 
 ### Testing {#server-testing}
 
-Release testing is iterative. Each iteration starts by assigning a tag to a commit on the release branch, specifying a minor version to be tested. For instance, the minor version tag `23.3.5` marks a 5th testing iteration for the major release `23.3`.
+Release testing is iterative. Each iteration starts by assigning a tag to a commit on the release branch, specifying a minor version to be tested. For example, the minor version tag `23.3.5` marks a 5th testing iteration for the major release `23.3`.
 
 A tag can be considered as either 'candidate' or 'stable'. Initially, a first tag is assigned to the release branch right after its creation, and this tag is considered as 'candidate'.
 

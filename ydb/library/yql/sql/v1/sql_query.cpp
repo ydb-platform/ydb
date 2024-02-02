@@ -1628,7 +1628,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         "unicodeliterals",
         "disableunicodeliterals",
         "warnuntypedstringliterals",
-        "disableuntypedstringliterals",
+        "disablewarnuntypedstringliterals",
     };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";

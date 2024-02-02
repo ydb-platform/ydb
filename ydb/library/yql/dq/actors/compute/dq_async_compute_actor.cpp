@@ -789,6 +789,11 @@ private:
         return TaskRunnerStats.Get();
     }
 
+    const NYql::NDq::TDqMeteringStats* GetMeteringStats() override {
+        // TODO: support async CA
+        return nullptr;
+    }
+
     template<typename TSecond>
     TVector<ui32> GetIds(const THashMap<ui64, TSecond>& collection) {
         TVector<ui32> ids;

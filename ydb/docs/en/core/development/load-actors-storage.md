@@ -14,7 +14,7 @@ You can generate three types of load:
 
 | Parameter | Description |
 --- | ---
-| `DurationSeconds` | Load duration. The timer is started upon completing the initial data allocation. |
+| `DurationSeconds` | Load duration. The timer starts upon completion of the initial data allocation. |
 | `Tablets` | The load is generated on behalf of a tablet with the following parameters:<ul><li>`TabletId`: Tablet ID. It must be unique for each load actor across all the cluster nodes. This parameter and `TabletName` are mutually exclusive.</li><li>`TabletName`: Tablet name. If the parameter is set, tablets' IDs will be assigned automatically, tablets launched on the same node with the same name will be given the same ID, tablets launched on different nodes will be given different IDs.</li><li>`Channel`: Tablet channel.</li><li>`GroupId`: ID of the storage group to get loaded.</li><li>`Generation`: Tablet generation.</li></ul> |
 | `WriteSizes` | Size of the data to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for write requests. If this parameter is set than the value of `WriteIntervals` is ignored. |

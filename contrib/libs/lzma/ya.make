@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(5.4.0)
 
-ORIGINAL_SOURCE(https://tukaani.org/xz/xz-5.4.0.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/tukaani-project/xz/archive/v5.4.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/lzma/liblzma/api

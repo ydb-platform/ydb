@@ -2,8 +2,8 @@
 
 There are two products based on the source code from the [{{ ydb-short-name }} repository](https://github.com/ydb-platform/ydb) with independent release cycles:
 
-- [YDB server](#server)
-- [YDB command-line interface (CLI)](#cli)
+- [{{ ydb-short-name }} server](#server)
+- [{{ ydb-short-name }} command-line interface (CLI)](#cli)
 
 ## {{ ydb-short-name }} server release cycle {#server}
 

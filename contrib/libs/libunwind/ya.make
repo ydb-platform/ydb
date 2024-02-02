@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(14.0.6)
+VERSION(18.1.0-rc1)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-14.0.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-18.1.0-rc1.tar.gz)
 
 DISABLE(USE_LTO)
 
@@ -51,17 +51,12 @@ SRCS(
     src/Unwind-EHABI.cpp
     src/Unwind-seh.cpp
     src/Unwind-sjlj.c
+    src/Unwind-wasm.c
     src/UnwindLevel1-gcc-ext.c
     src/UnwindLevel1.c
     src/UnwindRegistersRestore.S
     src/UnwindRegistersSave.S
     src/libunwind.cpp
 )
-
-IF (OS_DARWIN OR OS_IOS)
-    SRCS(
-        src/Unwind_AppleExtras.cpp
-    )
-ENDIF()
 
 END()

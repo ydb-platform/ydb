@@ -805,10 +805,16 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 
     return future.Apply(
         [checkpointContext](const TFuture<NYdb::TStatus>& future) {
-            if (NYql::TIssues issues = StatusToIssues(future.GetValue())) {
-                return TCreateCheckpointResult(TString(), std::move(issues));
-            } else {
-                return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues());
+            try {    
+                if (NYql::TIssues issues = StatusToIssues(future.GetValue())) {
+                    return TCreateCheckpointResult(TString(), std::move(issues));
+                } else {
+                    return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues());
+                }
+            } catch (...) {
+                TIssues issues;
+                issues.AddIssue(CurrentExceptionMessage());
+                return TCreateCheckpointResult(TString(), issues);
             }
         });
 }
@@ -1099,7 +1105,13 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
         });
     return future.Apply(
         [result](const TFuture<TStatus>& status) {
-          return std::make_pair(std::move(result->Size), std::move(status.GetValue().GetIssues()));
+           try {    
+               return std::make_pair(std::move(result->Size), std::move(status.GetValue().GetIssues()));
+            } catch (...) {
+                TIssues issues;
+                issues.AddIssue(CurrentExceptionMessage());
+                return ICheckpointStorage::TGetTotalCheckpointsStateSizeResult(0, issues);
+            }
         });
 }
 

@@ -115,6 +115,7 @@ TFuture<TStatus> ProcessState(
                 processed[taskIndex] = true;
             }
             LoadState(context->States[taskIndex], *parser.ColumnParser("blob").GetOptionalString());
+           // throw std::runtime_error("ddddd");
         }
     } else {
         errorMessage << "Not all states exist in database";
@@ -286,6 +287,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         return MakeFuture<IStateStorage::TGetStateResult>(result);
     }
 
+    
     auto context = MakeIntrusive<TContext>(
         YdbConnection->TablePathPrefix,
         taskIds,
@@ -366,11 +368,18 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
         [context] (const TFuture<TStatus>& future) {
             TCountStatesResult countResult;
             countResult.first = context->Count;
-            const auto& status = future.GetValue();
-            if (!status.IsSuccess()) {
-                countResult.second = status.GetIssues();
+            try {    
+                const auto& status = future.GetValue();
+                if (!status.IsSuccess()) {
+                    countResult.second = status.GetIssues();
+                }
+            } catch (...) {
+                TIssues issues;
+                issues.AddIssue(CurrentExceptionMessage());
+                countResult.second = issues;
             }
             return countResult;
+           
         });
 }
 TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {

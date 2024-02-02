@@ -44,7 +44,7 @@ During a testing iteration, code from release branches undergoes an extensive te
 
 {% include [corp_release_testing.md](_includes/corp_release_testing.md) %}
 
-Based on a list of problems, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) decides if the minor release can be promoted to stable, or a new testing iteration must be started over a new minor release tag. In fact, as soon as a critical problem is discovered during testing, the developers fix it in trunk, and merge changes to the release branch right away. So, by the time when testing finishes, if there are some commits on top of a current tag on a release branch, there will be a new tag and a new testing iteration.
+Based on a list of uncovered problems, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) decides if the current minor release can be promoted to be called "stable", or a new testing iteration must be started over with a new minor release tag. In fact, as soon as a critical problem is discovered during testing, developers fix it in the `main` branch, and backport changes to the release branch right away. So, by the time testing iteration finishes, there will be a new tag and a new testing iteration if there are some new commits on top of the current tag.
 
 ### Stable release {#server-stable}
 

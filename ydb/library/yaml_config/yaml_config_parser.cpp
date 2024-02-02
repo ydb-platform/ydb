@@ -1117,6 +1117,7 @@ namespace NKikimr::NYaml {
         json.EraseValue("hosts");
         json.EraseValue("host_configs");
         json.EraseValue("storage_config_generation");
+        json.EraseValue("tls");
     }
 
     void PrepareLogConfig(NJson::TJsonValue& json) {
@@ -1135,9 +1136,45 @@ namespace NKikimr::NYaml {
             config.SetType(NJson::EJsonValueType::JSON_MAP);
         }
 
-        if (!json["interconnect_config"].Has("start_tcp")) {
-            auto& config = json["interconnect_config"];
-            config.InsertValue("start_tcp", std::move(NJson::TJsonValue(true)));
+        auto& interconnectConfig = json["interconnect_config"];
+
+        if (!interconnectConfig.Has("start_tcp")) {
+            interconnectConfig.InsertValue("start_tcp", std::move(NJson::TJsonValue(true)));
+        }
+
+        if (json.Has("tls")) {
+            const auto& tlsConfig = json["tls"];
+            if (tlsConfig.Has("cert") && !interconnectConfig.Has("path_to_certificate_file")) {
+                interconnectConfig["path_to_certificate_file"] = tlsConfig["cert"];
+            }
+            if (tlsConfig.Has("key") && !interconnectConfig.Has("path_to_private_key_file")) {
+                interconnectConfig["path_to_private_key_file"] = tlsConfig["key"];
+            }
+            if (tlsConfig.Has("ca") && !interconnectConfig.Has("path_to_ca_file")) {
+                interconnectConfig["path_to_ca_file"] = tlsConfig["ca"];
+            }
+        }
+
+        if (interconnectConfig.Has("path_to_certificate_file") &&
+            interconnectConfig.Has("path_to_private_key_file") &&
+            interconnectConfig.Has("path_to_ca_file") &&
+            !interconnectConfig.Has("encryption_mode")) {
+            interconnectConfig["encryption_mode"] = "OPTIONAL";
+        }
+    }
+
+    void PrepareGrpcConfig(NJson::TJsonValue& json) {
+        if (!json.Has("grpc_config")) {
+            json["grpc_config"] = NJson::TJsonMap{};
+        }
+        auto& grpcConfig = json["grpc_config"];
+        if (json.Has("tls")) {
+            const auto& tlsConfig = json["tls"];
+            for (const auto& key : {"cert", "key", "ca"}) {
+                if (tlsConfig.Has(key) && !grpcConfig.Has(key)) {
+                    grpcConfig[key] = tlsConfig[key];
+                }
+            }
         }
     }
 
@@ -1205,6 +1242,7 @@ namespace NKikimr::NYaml {
         PrepareStaticGroup(json, clear);
         PrepareBlobStorageConfig(json);
         PrepareIcConfig(json);
+        PrepareGrpcConfig(json);
         PrepareLogConfig(json);
         PrepareSystemTabletsInfo(json, relaxed);
         PrepareDomainsConfig(json, relaxed);

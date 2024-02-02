@@ -200,21 +200,16 @@ channel_profile_config:
     - pdisk_category: 1
     - pdisk_category: 1
     profile_id: 0
-interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
-grpc_config:
+tls:
     cert: "/opt/ydb/certs/node.crt"
     key: "/opt/ydb/certs/node.key"
     ca: "/opt/ydb/certs/ca.crt"
-
 )";
         auto originalCfg = NYaml::Yaml2Json(YAML::Load(str), true);
         auto transformedCfg = originalCfg;
         NYaml::TransformConfig(transformedCfg, true, false);
+
+        // Check distributed storage settings
         const auto& storagePoolTypes = transformedCfg["domains_config"]["domain"][0]["storage_pool_types"][0];
         const auto& serviceSet = transformedCfg["blob_storage_config"]["service_set"];
         const auto& group = serviceSet["groups"][0];
@@ -223,7 +218,6 @@ grpc_config:
         const TString& diskType = transformedCfg["default_disk_type"].GetStringSafe();
         TString diskTypeLower(diskType);
         diskTypeLower.to_lower();
-
         UNIT_ASSERT_VALUES_EQUAL(transformedCfg["static_erasure"], erasure);
         UNIT_ASSERT_VALUES_EQUAL(transformedCfg["host_configs"][0]["drive"][0]["type"], "NVME");
         UNIT_ASSERT_VALUES_EQUAL(storagePoolTypes["kind"], diskTypeLower);
@@ -247,11 +241,28 @@ grpc_config:
           UNIT_ASSERT_VALUES_EQUAL(channel["storage_pool_kind"], diskTypeLower);
         }
 
+        // Check TLS settings
+        const auto& tlsConfig = transformedCfg["tls"];
+        const auto& grpcConfig = transformedCfg["grpc_config"];
+        const auto& interconnectConfig = transformedCfg["interconnect_config"];
+        const std::vector<std::pair<TString,TString>> tlsSettings {
+          {"cert", "path_to_certificate_file"},
+          {"key", "path_to_private_key_file"},
+          {"ca", "path_to_ca_file"}
+        };
+        for (const auto& tlsSetting : tlsSettings) {
+          UNIT_ASSERT_VALUES_EQUAL(tlsConfig[tlsSetting.first], grpcConfig[tlsSetting.first]);
+          UNIT_ASSERT_VALUES_EQUAL(tlsConfig[tlsSetting.first], interconnectConfig[tlsSetting.second]);
+        }
+        UNIT_ASSERT(interconnectConfig["start_tcp"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(interconnectConfig["encryption_mode"].GetStringSafe(), "OPTIONAL");
+
         // Check empty channel_profile_config
-        originalCfg.EraseValue("channel_profile_config");
-        NYaml::TransformConfig(originalCfg, true, false);
-        UNIT_ASSERT_VALUES_EQUAL(originalCfg["channel_profile_config"]["profile"][0]["profile_id"], 0);
-        for (const auto& channel : originalCfg["channel_profile_config"]["profile"][0]["channel"].GetArraySafe()) {
+        auto cfgWithoutChannelProfile = originalCfg;
+        cfgWithoutChannelProfile.EraseValue("channel_profile_config");
+        NYaml::TransformConfig(cfgWithoutChannelProfile, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(cfgWithoutChannelProfile["channel_profile_config"]["profile"][0]["profile_id"], 0);
+        for (const auto& channel : cfgWithoutChannelProfile["channel_profile_config"]["profile"][0]["channel"].GetArraySafe()) {
           UNIT_ASSERT_VALUES_EQUAL(channel["erasure_species"], erasure);
           UNIT_ASSERT_VALUES_EQUAL(channel["pdisk_category"], 1);
           UNIT_ASSERT_VALUES_EQUAL(channel["storage_pool_kind"], diskTypeLower);

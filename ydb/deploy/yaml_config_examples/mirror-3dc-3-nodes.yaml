@@ -87,13 +87,7 @@ blob_storage_config:         # configuration of static blobstorage group.
         - vdisk_locations:
           - node_id: ydb-node-zone-c.local
             path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
-grpc_config:
+tls:
     cert: "/opt/ydb/certs/node.crt"
     key: "/opt/ydb/certs/node.key"
     ca: "/opt/ydb/certs/ca.crt"

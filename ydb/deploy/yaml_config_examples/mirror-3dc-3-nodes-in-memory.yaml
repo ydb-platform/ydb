@@ -77,3 +77,7 @@ blob_storage_config:
         - vdisk_locations:
           - node_id: "localhost:19003"
             path: SectorMap:3:64
+tls:
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"

@@ -40,7 +40,7 @@ Release testing is iterative. Each iteration starts by assigning a tag to a comm
 
 A tag can be considered to be either "candidate" or "stable". Initially, the first tag is created in the release branch right after its creation. This tag is considered as "candidate".
 
-During a testing iteration, code from release branches undergo the extensive testing including deployment on the UAT/prestable and production environments of the principal users. To perform such testing, YDB code from a GitHub release tag is imported into the corporate context of a principal user, following its policies and standards. Then it's built, deployed to the necessary environments, and tested.
+During a testing iteration, code from release branches undergoes an extensive testing including deployment on [UAT](https://en.wikipedia.org/wiki/Acceptance_testing), prestable, and production environments of companies using YDB. To perform such testing, YDB code from a GitHub release tag is imported into the corporate context of a given user, following its internal policies and standards. Then it's built, deployed to the necessary environments, and thoroughly tested.
 
 {% include [corp_release_testing.md](_includes/corp_release_testing.md) %}
 

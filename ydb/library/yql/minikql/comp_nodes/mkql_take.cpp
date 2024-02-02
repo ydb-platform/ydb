@@ -99,17 +99,17 @@ class TWideTakeWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideTa
 using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideTakeWrapper, ui64>;
 public:
      TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded, count), Flow(flow), Count(count)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count)
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (state.IsInvalid()) {
-            state = Count->GetValue(ctx);
-        }
+    void InitState(ui64 &count, TComputationContext& ctx) const {
+         count = Count->GetValue(ctx).Get<ui64>();
+    }
 
-        if (auto count = state.Get<ui64>()) {
+    EFetchResult DoCalculate(ui64 &count, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        if (count) {
             if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One == result) {
-                state = NUdf::TUnboxedValuePod(--count);
+                count--;
                 return EFetchResult::One;
             } else {
                 return result;

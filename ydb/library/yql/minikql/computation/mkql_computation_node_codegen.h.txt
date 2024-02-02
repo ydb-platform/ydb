@@ -1496,14 +1496,22 @@ class TSimpleStatefulWideFlowCodegeneratorNode
         : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState>> {
     using TBase = TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode>;
 protected:
-    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind, IComputationNode* stateInit)
-            : TBase(mutables, source, stateKind), StateInit(stateInit)
+    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind)
+            : TBase(mutables, source, stateKind)
     {}
-
+private:
+    void InitStateWrapper(NUdf::TUnboxedValue &state, TComputationContext &ctx) const {
+        static_cast<const TDerived *>(this)->InitState(*static_cast<TState *>(state.GetRawPtr()), ctx);
+    }
 public:
+
     EFetchResult DoCalculate(NUdf::TUnboxedValue &state, TComputationContext &ctx,
                              NUdf::TUnboxedValue *const *output) const {
-        return static_cast<const TDerived *>(this)->DoCalculate(state, ctx, output);
+        if (state.IsInvalid()) {
+            state = NUdf::TUnboxedValuePod();
+            InitStateWrapper(state, ctx);
+        }
+        return static_cast<const TDerived *>(this)->DoCalculate(*static_cast<TState *>(state.GetRawPtr()), ctx, output);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1522,7 +1530,13 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, StateInit, ctx, block);
+        const auto thisType = StructType::get(context)->getPointerTo();
+        const auto initFuncType = FunctionType::get(Type::getVoidTy(context), {thisType, statePtr->getType(), ctx.Ctx->getType()}, false);
+        const auto initFuncRawVal = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSimpleStatefulWideFlowCodegeneratorNode::InitStateWrapper));
+        const auto initFuncVal = CastInst::Create(Instruction::IntToPtr, initFuncRawVal, PointerType::getUnqual(initFuncType), "init_func", block);
+        const auto thisRawVal = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(this));
+        const auto thisVal = CastInst::Create(Instruction::IntToPtr, thisRawVal, thisType, "this", block);
+        CallInst::Create(initFuncType, initFuncVal, {thisVal, statePtr, ctx.Ctx}, "", block);
         const auto save = new LoadInst(valueType, statePtr, "save", block);
         state->addIncoming(save, block);
         BranchInst::Create(main, block);
@@ -1532,8 +1546,6 @@ public:
         return static_cast<const TDerived *>(this)->DoGenGetValues(ctx, statePtr, state, block);
     }
 #endif
-private:
-    IComputationNode* const StateInit;
 };
 
 }

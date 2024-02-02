@@ -54,8 +54,12 @@ public:
         return TActor<TDerived>::SelfId();
     }
 
-    void Initialize(const NActors::TActorContext& ctx) {
-        TableHelper.Initialize(ctx, SourceId);
+    [[nodiscard]] bool Initialize(const NActors::TActorContext& ctx) {
+        if (TableHelper.Initialize(ctx, SourceId)) {
+            return true;
+        }
+        TThis::ReplyError(ErrorCode::BAD_REQUEST, "Bad SourceId", ctx);
+        return false;
     }
 
     void PassAway() {

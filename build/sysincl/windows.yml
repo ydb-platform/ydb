@@ -44,6 +44,7 @@
   - dcomp.h
   - debugapi.h
   - devguid.h
+  - dinput.h
   - direct.h
   - dispex.h
   - dos.h
@@ -54,6 +55,7 @@
   - dsparse.h
   - dv.h
   - dvdmedia.h
+  - dwmapi.h
   - dwrite.h
   - dxgi.h
   - dxgi1_2.h
@@ -319,4 +321,5 @@
   - wtypes.h
   - xa.h
   - xaudio2.h
+  - xinput.h
   - xmllite.h

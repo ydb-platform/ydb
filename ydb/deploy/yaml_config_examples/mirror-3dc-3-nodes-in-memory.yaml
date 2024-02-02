@@ -1,10 +1,11 @@
 erasure: mirror-3-dc
 host_configs:
-- drive:
+- host_config_id: 1
+  drive:
   - type: RAM
   - type: RAM
   - type: RAM
-  host_config_id: 1
+
 hosts:
 - host: localhost
   host_config_id: 1

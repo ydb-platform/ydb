@@ -6,11 +6,12 @@
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
 erasure: mirror-3-dc
 host_configs: # the list of available host configurations in the cluster.
-- drive:
+- host_config_id: 1
+  drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.                                       # kind of the disk: available kinds are SSD, NVME, HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-  host_config_id: 1
+
 hosts:
 - host: ydb-node-zone-a.local       # storage node DNS name
   host_config_id: 1                 # numeric host configuration template identifier

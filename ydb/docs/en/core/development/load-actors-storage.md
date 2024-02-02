@@ -6,7 +6,7 @@ You can generate three types of load:
 
 * _Continuous_: The actor ensures the specified number of requests are run concurrently. To generate a continuous load, set a zero interval between requests (e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 0 MaxUs: 0 } }`), while keeping the `MaxInFlightWriteRequests` parameter value different from zero and the `WriteHardRateDispatcher` parameter being absent.
 * _Interval_: The actor runs requests at preset intervals. To generate an interval load, set a non-zero interval between requests, e.g., `WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 50000 MaxUs: 50000 } }` and don't set the `WriteHardRateDispatcher` parameter. Maximum number of in-flight requests is set by the `InFlightWrites` parameter. If its value is `0`, their number is unlimited.
-* _Hard rate_: The actor runs requests at certain intervals, the value of which is adjusted to maintain preset request rate per second. If the duration of the load is limited by `LoadDuration` than the request rate may differ at the moment of start and the moment of finishing the load and will alter gradually throughout all the main load cycle. To generate a load of this type, set the [parameters of hard rate load](#hardRare) (parameter `WriteHardRateDispatcher`). Note that if this parameter is set, the hard rate type of load will be launched, regardless the value of the `WriteIntervals` parameter. Maximum number of in-flight requests is set by the `InFlightWrites` parameter. If its value is `0`, their number is unlimited.
+* _Hard rate_: The actor runs requests at certain intervals, the value of which is adjusted to maintain preset request rate per second. If the duration of the load is limited by `LoadDuration` than the request rate may differ at the moment of start and the moment of finishing the load and will alter gradually throughout all the main load cycle. To generate a load of this type, set the [parameters of hard rate load](#hardRateDispatcher) (parameter `WriteHardRateDispatcher`). Note that if this parameter is set, the hard rate type of load will be launched, regardless the value of the `WriteIntervals` parameter. Maximum number of in-flight requests is set by the `InFlightWrites` parameter. If its value is `0`, their number is unlimited.
 
 ## Actor parameters {#options}
 
@@ -17,23 +17,23 @@ You can generate three types of load:
 | `DurationSeconds` | Load duration. The timer is started upon completing the initial data allocation. |
 | `Tablets` | The load is generated on behalf of a tablet with the following parameters:<ul><li>`TabletId`: Tablet ID. It must be unique for each load actor across all the cluster nodes. This parameter and `TabletName` are mutually exclusive.</li><li>`TabletName`: Tablet name. If the parameter is set, tablets' IDs will be assigned automatically, tablets launched on the same node with the same name will be given the same ID, tablets launched on different nodes will be given different IDs.</li><li>`Channel`: Tablet channel.</li><li>`GroupId`: ID of the storage group to get loaded.</li><li>`Generation`: Tablet generation.</li></ul> |
 | `WriteSizes` | Size of the data to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRate) for write requests. If this parameter is set than the value of `WriteIntervals` is ignored. |
+| `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for write requests. If this parameter is set than the value of `WriteIntervals` is ignored. |
 | `WriteIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the records loaded at intervals (in milliseconds). You can set multiple `WriteIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `MaxInFlightWriteRequests` | Maximum number of simultaneously processed write requests. |
 | `ReadSizes` | Size of the data to read. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `ReadSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRate) for read requests. If this parameter is set than the value of `ReadIntervals` is ignored. |
+| `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for read requests. If this parameter is set than the value of `ReadIntervals` is ignored. |
 | `ReadIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the queries loaded by intervals (in milliseconds). You can set multiple `ReadIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `MaxInFlightReadRequests` | Maximum number of simultaneously processed read requests. |
 | `FlushIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals (in microseconds) between the queries used to delete data written by the write requests in the main load cycle of the StorageLoad actor. You can set multiple `FlushIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. Only one flush request will be processed simultaneously. |
 | `PutHandleClass` | Class of data writes to the disk subsystem. If the `TabletLog` value is set, the write operation has the highest priority. |
 | `GetHandleClass` | Class of data reads from the disk subsystem. If the `FastRead` is set, the read operation is performed with the highest speed possible. |
-| `Initial allocation` |  Setting up the [parameters for initial data allocation](#initialAllocation). It defines the amount of data to be written before the start of the main load cycle which can later be read by read requests along with the data written in the main load cycle.  |
+| `Initial allocation` |  Setting up the [parameters for initial data allocation](#initialAllocation). It defines the amount of data to be written before the start of the main load cycle. This data can be read by read requests along with the data written in the main load cycle.  |
 
 ### Parameters of probabilistic distribution {#params}
 
 {% include [load-actors-params](../_includes/load-actors-interval.md) %}
 
-### Parameters of load with hard rate {#hardRate}
+### Parameters of load with hard rate {#hardRateDispatcher}
 
 | Parameter | Description |
 --- | ---
@@ -108,7 +108,7 @@ When viewing test results, the following value should be of most interest to you
 
 ### Read only {#readonly}
 
-Before the start of the main load cycle the `1 GB` data block of blobs with sizes between `1 MB` and `5 MB` is allocated. To avoid overloading the system with write requests the number of simultaneously processed requests is limited by the value of `5`. After completing the initial data aloocation the main cycle is launched, which consists of read requests sent with increasing rate: from `10` to `50` requests per second, the rate increase gradually for `300` seconds.
+Before the start of the main load cycle the `1 GB` data block of blobs with sizes between `1 MB` and `5 MB` is allocated. To avoid overloading the system with write requests the number of simultaneously processed requests is limited by the value of `5`. After completing the initial data aloocation the main cycle is launched, which consists of read requests sent with increasing rate: from `10` to `50` requests per second, the rate will increase gradually for `300` seconds.
 
 ```proto
 StorageLoad: {

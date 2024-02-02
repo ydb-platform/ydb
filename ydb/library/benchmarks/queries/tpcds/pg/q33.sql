@@ -55,7 +55,7 @@ where i_category in ('Books'))
   i_manufact_id
 from
  {{item}}
-where i_category in ('Books'))
+where i_category in ('Home'))
  and     ws_item_sk              = i_item_sk
  and     ws_sold_date_sk         = d_date_sk
  and     d_year                  = 1998

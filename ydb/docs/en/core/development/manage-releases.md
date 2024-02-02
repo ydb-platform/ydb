@@ -9,11 +9,14 @@ There are two products based on the source code from the [{{ ydb-short-name }} r
 
 ### Release numbers and schedule {#server-versioning}
 
-YDB server major version comprise of two numbers separated by a dot character. First number is two digits specifiying the year, and the second is the release ordinal number within that year. For instance, `23.3` is the 3rd major release for the year 2023.
+{{ ydb-short-name }} server version consists of three numbers separated by dots:
 
-As part of the YDB server development lifecycle, multiple minor versions can be released, concatenating its ordinal number to the major version after a dot. So, a full version number for YDB server looks like `23.3.5`, where `23.3` is the major version, and `5` is the minor.
+1. The last two digits of calendar year of the release
+2. Major release ordinal number in a given year
+3. Minor release ordinal number for a given major release
 
-YDB server release schedule typically includes 4 major releases for each year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. Number of minor releases is not fixed, and may vary from one major release to another.
+Thus, {{ ydb-short-name }} server major version is a combination of the first two numbers (for example, `23.3`), and the full version is a combination of all three (for example, `23.3.5`).
+{{ ydb-short-name }} server release schedule typically includes 4 major releases per year, so the release `YY.1` is the first one, and `YY.4` is the last one for a year `YY`. The number of minor releases is not fixed, and may vary from one major release to another.
 
 ### Compatibility {#server-compatibility}
 

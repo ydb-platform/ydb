@@ -71,7 +71,7 @@ In general, release cycle for {{ ydb-short-name }} CLI is much simpler and short
 
 ### Release tags {#cli-tags}
 
-Tags for YDB CLI are assigned on the trunk (`main`) branch by a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) after running tests for some revision. To distinguish from the YDB server tags, YDB CLI tags have characters `CLI_` preceding the version number, for instance [CLI_2.8.0](https://github.com/ydb-platform/ydb/tree/CLI_2.8.0).
+Tags for {{ ydb-short-name }} CLI are assigned on the `main` branch by a member of the [{{ ydb-short-name }} Release team](https://github.com/orgs/ydb-platform/teams/release) after running tests for some revision. To distinguish from the {{ ydb-short-name }} server tags, {{ ydb-short-name }} CLI tags have a `CLI_` prefix before the version number, for example [CLI_2.8.0](https://github.com/ydb-platform/ydb/tree/CLI_2.8.0).
 
 {% include [corp_cli_tags.md](_includes/corp_cli_tags.md) %}
 

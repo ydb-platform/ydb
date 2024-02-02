@@ -1469,19 +1469,12 @@ protected:
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
-        const TVector<TString>& readRanges)
+        const TVector<TString>& readRanges,
+        IRandomProvider* randomProvider
+        )
     {
-        if (TaskRunner) {
-            for (auto& [channelId, channel] : InputChannelsMap) {
-                channel.Channel = TaskRunner->GetInputChannel(channelId);
-            }
-        }
         auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
         for (auto& [inputIndex, source] : SourcesMap) {
-            if constexpr (!TDerived::HasAsyncTaskRunner) {
-                source.Buffer = TaskRunner->GetSource(inputIndex);
-                Y_ABORT_UNLESS(source.Buffer);
-            }
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
             Y_ABORT_UNLESS(inputDesc.HasSource());
@@ -1515,9 +1508,8 @@ protected:
             this->RegisterWithSameMailbox(source.Actor);
         }
         for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if constexpr (!TDerived::HasAsyncTaskRunner) {
-                transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
-                std::tie(transform.InputBuffer, transform.Buffer) = TaskRunner->GetInputTransform(inputIndex);
+            Y_ABORT_UNLESS(TaskRunner);
+                transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
                 Y_ABORT_UNLESS(AsyncIoFactory);
                 const auto& inputDesc = Task.GetInputs(inputIndex);
                 CA_LOG_D("Create transform for input " << inputIndex << " " << inputDesc.ShortDebugString());
@@ -1543,43 +1535,33 @@ protected:
                     throw yexception() << "Failed to create input transform " << inputDesc.GetTransform().GetType() << ": " << ex.what();
                 }
                 this->RegisterWithSameMailbox(transform.Actor);
-            }
-        }
-        if (TaskRunner) {
-            for (auto& [channelId, channel] : OutputChannelsMap) {
-                channel.Channel = TaskRunner->GetOutputChannel(channelId);
-            }
         }
         for (auto& [outputIndex, transform] : OutputTransformsMap) {
-            if (TaskRunner) {
-                transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
-                std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
-                Y_ABORT_UNLESS(AsyncIoFactory);
-                const auto& outputDesc = Task.GetOutputs(outputIndex);
-                CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
-                try {
-                    std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
-                        IDqAsyncIoFactory::TOutputTransformArguments {
-                            .OutputDesc = outputDesc,
-                            .OutputIndex = outputIndex,
-                            .StatsLevel = collectStatsLevel,
-                            .TxId = TxId,
-                            .TransformOutput = transform.OutputBuffer,
-                            .Callback = static_cast<TOutputTransformCallbacks*>(this),
-                            .SecureParams = secureParams,
-                            .TaskParams = taskParams,
-                            .TypeEnv = typeEnv,
-                            .HolderFactory = holderFactory,
-                            .ProgramBuilder = *transform.ProgramBuilder
-                        });
-                } catch (const std::exception& ex) {
-                    throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();
-                }
-                this->RegisterWithSameMailbox(transform.Actor);
+            transform.ProgramBuilder.ConstructInPlace(typeEnv, *FunctionRegistry);
+            Y_ABORT_UNLESS(AsyncIoFactory);
+            const auto& outputDesc = Task.GetOutputs(outputIndex);
+            CA_LOG_D("Create transform for output " << outputIndex << " " << outputDesc.ShortDebugString());
+            try {
+                std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
+                    IDqAsyncIoFactory::TOutputTransformArguments {
+                        .OutputDesc = outputDesc,
+                        .OutputIndex = outputIndex,
+                        .StatsLevel = collectStatsLevel,
+                        .TxId = TxId,
+                        .TransformOutput = transform.OutputBuffer,
+                        .Callback = static_cast<TOutputTransformCallbacks*>(this),
+                        .SecureParams = secureParams,
+                        .TaskParams = taskParams,
+                        .TypeEnv = typeEnv,
+                        .HolderFactory = holderFactory,
+                        .ProgramBuilder = *transform.ProgramBuilder
+                    });
+            } catch (const std::exception& ex) {
+                throw yexception() << "Failed to create output transform " << outputDesc.GetTransform().GetType() << ": " << ex.what();
             }
+            this->RegisterWithSameMailbox(transform.Actor);
         }
         for (auto& [outputIndex, sink] : SinksMap) {
-            if (TaskRunner) { sink.Buffer = TaskRunner->GetSink(outputIndex); }
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             Y_ABORT_UNLESS(outputDesc.HasSink());
@@ -1597,7 +1579,7 @@ protected:
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
-                        .RandomProvider = TaskRunner ? TaskRunner->GetRandomProvider() : nullptr
+                        .RandomProvider = randomProvider
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

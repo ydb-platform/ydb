@@ -754,28 +754,6 @@ public:
         }
     }
 
-    static TTabletTypes::EType GetShortTabletType(const TString& shortType) {
-        for (TTabletTypes::EType tabletType : {
-             TTabletTypes::DataShard,
-             TTabletTypes::Coordinator,
-             TTabletTypes::Mediator,
-             TTabletTypes::SchemeShard,
-             TTabletTypes::Hive,
-             TTabletTypes::KeyValue,
-             TTabletTypes::PersQueue,
-             TTabletTypes::PersQueueReadBalancer,
-             TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard,
-             TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard,
-             TTabletTypes::GraphShard}) {
-            if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
-                return tabletType;
-            }
-        }
-        return TTabletTypes::TypeInvalid;
-    }
-
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto& params(Event->Cgi());
         NIceDb::TNiceDb db(txc.DB);
@@ -858,6 +836,38 @@ public:
             }
         }
 
+        if (params.contains("DefaultTabletLimit")) {
+            auto tabletLimits = SplitString(params.Get("DefaultTabletLimit"), ";");
+            for (TStringBuf limit : tabletLimits) {
+                TStringBuf tabletType = limit.NextTok(':');
+                TTabletTypes::EType type = GetTabletTypeByShortName(TString(tabletType));
+                auto maxCount = TryFromString<ui64>(limit);
+                if (type == TTabletTypes::TypeInvalid || !maxCount) {
+                    continue;
+                }
+                ChangeRequest = true;
+                auto* protoLimit = Self->DatabaseConfig.AddDefaultTabletLimit();
+                protoLimit->SetType(type);
+                protoLimit->SetMaxCount(*maxCount);
+            }
+
+            // Get rid of duplicates & default values
+            google::protobuf::RepeatedPtrField<NKikimrConfig::THiveTabletLimit> cleanTabletLimits;
+            auto* dirtyTabletLimits = Self->DatabaseConfig.MutableDefaultTabletLimit();
+            std::unordered_set<TTabletTypes::EType> tabletTypes;
+            for (auto it = dirtyTabletLimits->rbegin(); it != dirtyTabletLimits->rend(); ++it) {
+                auto tabletType = it->GetType();
+                if (tabletTypes.contains(tabletType)) {
+                    continue;
+                }
+                tabletTypes.insert(tabletType);
+                if (it->GetMaxCount() != TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    cleanTabletLimits.Add(std::move(*it));
+                }
+            }
+            cleanTabletLimits.Swap(dirtyTabletLimits);
+        }
+
         if (ChangeRequest) {
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
@@ -866,7 +876,7 @@ public:
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
             for (TStringBuf tabletAllowedMetrics : allowedMetrics) {
                 TStringBuf tabletType = tabletAllowedMetrics.NextTok(':');
-                TTabletTypes::EType type = GetShortTabletType(TString(tabletType));
+                TTabletTypes::EType type = GetTabletTypeByShortName(TString(tabletType));
                 if (type != TTabletTypes::TypeInvalid) {
                     static const TVector<i64> metricsPos = {
                         NKikimrTabletBase::TMetrics::kCPUFieldNumber,
@@ -1144,7 +1154,7 @@ public:
              TTabletTypes::ColumnShard}) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
-                   "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";
+                   "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox' checked='' disabled='' style='width:20px;height:20px;margin:2px auto'</input></td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox'";
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetrics.end()) {
@@ -1242,6 +1252,85 @@ public:
     }
 };
 
+class TTxMonEvent_TabletAvailability : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    bool ChangeRequest = false;
+    TNodeId NodeId;
+    TNodeInfo* Node = nullptr;
+
+    TTxMonEvent_TabletAvailability(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), 0);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_AVAILABILITY; }
+
+    static TTabletTypes::EType ParseTabletType(const TString& str) {
+        auto parsed = FromStringWithDefault<ui32>(str, TTabletTypes::TypeInvalid);
+        parsed = std::min<ui32>(parsed, TTabletTypes::TypeInvalid);
+        return TTabletTypes::EType(parsed);
+    }
+
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        Node = Self->FindNode(NodeId);
+        if (Node == nullptr) {
+            return true;
+        }
+        const auto& cgi = Event->Cgi();
+        auto changeType = ParseTabletType(cgi.Get("changetype"));
+        auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
+        auto resetType = ParseTabletType(cgi.Get("resettype"));
+        if (changeType != TTabletTypes::TypeInvalid && maxCount) {
+            ChangeRequest = true;
+            db.Table<Schema::TabletAvailabilityRestrictions>().Key(NodeId, changeType).Update<Schema::TabletAvailabilityRestrictions::MaxCount>(*maxCount);
+            Node->TabletAvailabilityRestrictions[changeType] = *maxCount;
+            auto it = Node->TabletAvailability.find(changeType);
+            if (it != Node->TabletAvailability.end()) {
+                it->second.UpdateRestriction(*maxCount);
+            }
+        }
+        if (resetType != TTabletTypes::TypeInvalid) {
+            ChangeRequest = true;
+            Node->TabletAvailabilityRestrictions.erase(resetType);
+            auto it = Node->TabletAvailability.find(resetType);
+            if (it != Node->TabletAvailability.end()) {
+                it->second.RemoveRestriction();
+                if (it->second.IsSet) {
+                    db.Table<Schema::TabletAvailabilityRestrictions>()
+                      .Key(NodeId, resetType)
+                      .Update<Schema::TabletAvailabilityRestrictions::MaxCount>(TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE);
+                } else {
+                    db.Table<Schema::TabletAvailabilityRestrictions>()
+                      .Key(NodeId, resetType)
+                      .Delete();
+                }
+            }
+        }
+        if (ChangeRequest) {
+            Self->ObjectDistributions.RemoveNode(*Node);
+            Self->ObjectDistributions.AddNode(*Node);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (ChangeRequest) {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"ok\"}"));
+        } else {
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"error\"}"));
+        }
+    }
+
+};
+
+
+
 class TTxMonEvent_Landing : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -1269,76 +1358,21 @@ public:
         Y_UNUSED(ctx);
     }
 
-    //TODO: move to hive_statics.cpp as utility function
-    static TString GetTabletType(TTabletTypes::EType type) {
-        switch(type) {
-        case TTabletTypes::SchemeShard:
-            return "SS";
-        case TTabletTypes::Hive:
-            return "H";
-        case TTabletTypes::DataShard:
-            return "DS";
-        case TTabletTypes::ColumnShard:
-            return "CS";
-        case TTabletTypes::KeyValue:
-            return "KV";
-        case TTabletTypes::PersQueue:
-            return "PQ";
-        case TTabletTypes::PersQueueReadBalancer:
-            return "PQRB";
-        case TTabletTypes::Dummy:
-            return "DY";
-        case TTabletTypes::Coordinator:
-            return "C";
-        case TTabletTypes::Mediator:
-            return "M";
-        case TTabletTypes::BlockStoreVolume:
-            return "BV";
-        case TTabletTypes::BlockStorePartition:
-        case TTabletTypes::BlockStorePartition2:
-            return "BP";
-        case TTabletTypes::Kesus:
-            return "K";
-        case TTabletTypes::SysViewProcessor:
-            return "SV";
-        case TTabletTypes::FileStore:
-            return "FS";
-        case TTabletTypes::TestShard:
-            return "TS";
-        case TTabletTypes::SequenceShard:
-            return "S";
-        case TTabletTypes::ReplicationController:
-            return "RC";
-        case TTabletTypes::BlobDepot:
-            return "BD";
-        case TTabletTypes::StatisticsAggregator:
-            return "SA";
-        case TTabletTypes::GraphShard:
-            return "GS";
-        default:
-            return Sprintf("%d", (int)type);
-        }
-    }
-
     void RenderHTMLPage(IOutputStream &out) {
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
         THashMap<TTabletTypes::EType, ui32> tabletTypesToChannels;
 
         for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
                 ++runningTablets;
-                ++tabletsByNodeByType[pr.second.NodeId][GetTabletType(pr.second.Type)];
             }
             if (pr.second.IsLockedToActor()) {
                 ++runningTablets;
-                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][GetTabletType(pr.second.Type)];
             }
             for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()){
                     ++runningTablets;
-                    ++tabletsByNodeByType[sl.NodeId][GetTabletType(pr.second.Type) + "s"];
                 }
             }
             {
@@ -1373,6 +1407,8 @@ public:
         out << ".table-hover tbody tr:hover > td { background-color: #9dddf2; }";
         out << ".blinking { animation:blinkingText 0.8s infinite; }";
         out << "@keyframes blinkingText { 0% { color: #000; } 49% { color: #000; } 60% { color: transparent; } 99% { color:transparent; } 100% { color: #000; } }";
+        out <<  ".box { border: 1px solid grey; border-radius: 5px; padding-left: 2px; padding-right: 2px; display: inline-block; font: 11px Arial; cursor: pointer }";
+        out << ".disabled { text-decoration: line-through; }";
         out << "</style>";
         out << "</head>";
         out << "<body>";
@@ -1444,18 +1480,19 @@ public:
                "<th rowspan='2' style='min-width:280px'>Name</th>"
                "<th rowspan='2' style='min-width:50px'>DC</th>"
                "<th rowspan='2' style='min-width:280px'>Domain</th>"
-               "<th rowspan='2' style='min-width:120px'>Uptime</th>"
-               "<th rowspan='2'>Unknown</th>"
-               "<th rowspan='2'>Starting</th>"
-               "<th rowspan='2'>Running</th>"
-               "<th rowspan='2' style='min-width:160px'>Types</th>"
-               "<th rowspan='2' style='min-width:110px'>Usage</th>"
+               "<th rowspan='2' style='min-width:100px'>Uptime</th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-question-sign' title='Unknown state tablets' style='min-width:40px'></span></th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-time' title='Starting tablets' style='min-width:40px'></span></th>"
+               "<th rowspan='2'><span class='glyphicon glyphicon-flash' title='Running tablets' style='min-width:40px'></span></th>"
+               "<th style='min-width:240px; text-align:center'>Types</th>"
+               "<th rowspan='2'>Usage</th>"
                "<th colspan='4' style='text-align:center'>Resources</td>"
                "<th rowspan='2' style='text-align:center'>Active</th>"
                "<th rowspan='2' style='text-align:center'>Freeze</th>"
                "<th rowspan='2' style='text-align:center'>Kick</th>"
-               "<th rowspan='2' style='text-align:center'>Drain</th></tr>"
+               "<th rowspan='2' style='text-align:center'>Drain</th>"
                "<tr>"
+               "<th style='text-align:center' id='types'>" << GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit()) << "</th>"
                "<th style='min-width:70px'>cnt</th>"
                "<th style='min-width:100px'>cpu</th>"
                "<th style='min-width:100px'>mem</th>"
@@ -1737,6 +1774,7 @@ initReassignGroups();
 
 var tablets_found;
 var Nodes = {};
+var should_refresh_types = false;
 
 function queryTablets() {
     var storage_pool = $('#tablet_storage_pool').val();
@@ -1891,6 +1929,26 @@ function clearAlert() {
     $('#alert-placeholder').removeClass('glyphicon-refresh');
 }
 
+function enableType(element, node, type) {
+    $(element).css('color', 'gray');
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
+}
+
+function disableType(element, node, type) {
+    $(element).css('color', 'gray');
+    $.ajax({url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
+}
+
+function applySetting(button, name, val) {
+    $(button).css('color', 'gray');
+    if (name == "DefaultTabletLimit") {
+        should_refresh_types = true;
+    }
+    $.ajax({
+        url: document.URL + '&page=Settings&' + name + '=' + val,
+    });
+}
+
 var Empty = true;
 
 function getBalancerString(balancer) {
@@ -1910,6 +1968,10 @@ function fillDataShort(result) {
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
             $('#storageScatter').html(result.StorageScatter);
+            if (should_refresh_types) {
+                $('#types').html(result.Types);
+                should_refresh_types = false;
+            }
 
             $('#resourceTotalCounter').html(result.ResourceTotal.Counter);
             $('#resourceTotalCPU').html(result.ResourceTotal.CPU);
@@ -2166,37 +2228,78 @@ public:
         Y_UNUSED(ctx);
     }
 
+    struct TTabletsRunningInfo {
+        TNodeId NodeId;
+        TTabletTypes::EType TabletType;
+        ui64 LeaderCount = 0;
+        ui64 FollowerCount = 0;
+        ui64 MaxCount = 0;
+
+        TTabletsRunningInfo(TNodeId node, TTabletTypes::EType tabletType) : NodeId(node)
+                                                                          , TabletType(tabletType)
+        {
+        }
+
+        TString ToHTML() const {
+            auto totalCount = LeaderCount + FollowerCount;
+            TStringBuilder str;
+            if (MaxCount > 0) {
+                str << "<span class='box' ";
+            } else {
+                str << "<span class='box disabled' ";
+            }
+            if (totalCount > MaxCount) {
+                str << " style='color: red' ";
+            }
+            str << " onclick='"  << (MaxCount == 0 ? "enableType" : "disableType")
+                << "(this," << NodeId << "," << (ui32)TabletType << ")";
+            str << "'>";
+            str << GetTabletTypeShortName(TabletType);
+            str << " ";
+            str << LeaderCount;
+            if (FollowerCount > 0) {
+                str << " (" << FollowerCount << ")";
+            }
+            str << "</span>";
+            return str;
+        }
+    };
+
     void RenderJSONPage(IOutputStream &out) {
         ui64 nodes = 0;
-        ui64 tablets = 0;
+        ui64 tablets = Self->Tablets.size();
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
+        THashMap<ui32, TVector<TTabletsRunningInfo>> tabletsByNodeByType;
 
-        for (const auto& pr : Self->Tablets) {
-            if (pr.second.IsRunning()) {
-                ++runningTablets;
-                ++tabletsByNodeByType[pr.second.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
-            }
-            if (pr.second.IsLockedToActor()) {
-                ++runningTablets;
-                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
-            }
-            for (const auto& sl : pr.second.Followers) {
-                if (sl.IsRunning()) {
-                    ++runningTablets;
-                    ++tabletsByNodeByType[sl.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type) + "s"];
-                }
-                ++tablets;
-            }
-            ++tablets;
-        }
         for (const auto& pr : Self->Nodes) {
             if (pr.second.IsAlive()) {
                 ++aliveNodes;
             }
             if (!pr.second.IsUnknown()) {
                 ++nodes;
+            }
+            auto& tabletsByType = tabletsByNodeByType[pr.first];
+            tabletsByType.reserve(Self->SeenTabletTypes.size());
+            for (auto tabletType : Self->SeenTabletTypes) {
+                tabletsByType.emplace_back(pr.first, tabletType);
+                auto& current = tabletsByType.back();
+                current.MaxCount = pr.second.GetMaxCountForTabletType(tabletType);
+                auto tabletsRunningIt = pr.second.TabletsRunningByType.find(tabletType);
+                if (tabletsRunningIt == pr.second.TabletsRunningByType.end()) {
+                    continue;
+                }
+                for (const auto* tablet : tabletsRunningIt->second) {
+                    if (tablet == nullptr) {
+                        continue;
+                    }
+                    ++runningTablets;
+                    if (tablet->IsLeader()) {
+                        ++current.LeaderCount;
+                    } else {
+                        ++current.FollowerCount;
+                    }
+                }
             }
         }
 
@@ -2221,6 +2324,7 @@ public:
         jsonData["ObjectImbalance"] = GetValueWithColoredGlyph(Self->ObjectDistributions.GetMaxImbalance(), Self->GetObjectImbalanceToBalance());
         jsonData["StorageScatter"] = GetValueWithColoredGlyph(Self->StorageScatter, Self->GetMinStorageScatterToBalance());
         jsonData["WarmUp"] = Self->WarmUp;
+        jsonData["Types"] = GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit());
 
         if (Cgi.Get("nodes") == "1") {
             TVector<TNodeInfo*> nodeInfos;
@@ -2283,13 +2387,13 @@ public:
                             if (!types.empty()) {
                                 types += ' ';
                             }
-                            types += Sprintf("%s:%d", it->first.c_str(), it->second);
+                            types += it->ToHTML();
                         }
                     }
                     jsonNode["Types"] = types;
                 }
                 double nodeUsage = node.GetNodeUsage();
-                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.9f", nodeUsage), nodeUsage >= 1);
+                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
                 jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
                 jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
             }
@@ -4208,6 +4312,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Subactors") {
         return Execute(new TTxMonEvent_Subactors(ev->Sender, ev, this), ctx);
+    }
+    if (page == "TabletAvailability") {
+        return Execute(new TTxMonEvent_TabletAvailability(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

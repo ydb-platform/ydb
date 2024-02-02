@@ -409,6 +409,7 @@ public:
                     "xmloption",                            // pg_dump
                     "client_min_messages",                  // pg_dump
                     "row_security",                        // pg_dump
+                    "escape_string_warning",               // zabbix
                     NULL,
                 };
 
@@ -1773,7 +1774,7 @@ private:
             }
 
             if (cinfo.NotNull) {
-                constraints.push_back(QL(QA("not_null")));   
+                constraints.push_back(QL(QA("not_null")));
             }
 
             if (cinfo.Default) {

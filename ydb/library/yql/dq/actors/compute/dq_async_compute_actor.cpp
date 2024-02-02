@@ -471,7 +471,7 @@ private:
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges);
+        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges, nullptr);
 
         {
             // say "Hello" to executer

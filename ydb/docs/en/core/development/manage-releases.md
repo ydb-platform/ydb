@@ -38,7 +38,7 @@ All major version releases, both odd and even, go through the comprehensive test
 
 Release testing is iterative. Each iteration starts by assigning a tag to a commit on the release branch, specifying a minor version to be tested. For example, the minor version tag `23.3.5` marks a 5th testing iteration for the major release `23.3`.
 
-A tag can be considered as either 'candidate' or 'stable'. Initially, a first tag is assigned to the release branch right after its creation, and this tag is considered as 'candidate'.
+A tag can be considered to be either "candidate" or "stable". Initially, the first tag is created in the release branch right after its creation. This tag is considered as "candidate".
 
 During a testing iteration, code from release branches undergo the extensive testing including deployment on the UAT/prestable and production environments of the principal users. To perform such testing, YDB code from a GitHub release tag is imported into the corporate context of a principal user, following its policies and standards. Then it's built, deployed to the necessary environments, and tested.
 

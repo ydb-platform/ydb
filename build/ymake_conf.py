@@ -2272,6 +2272,13 @@ class Cuda(object):
         self.peerdirs = ['build/platform/cuda']
 
         self.nvcc_flags = [
+            # Compress fatbinary to reduce size of .nv_fatbin and prevent problems with linking
+            #
+            # Idea comes from many resources, one of them is https://discourse.llvm.org/t/lld-relocation-overflows-and-nv-fatbin/58889/6
+            # Some sources suggest using `-Xfatbin=-compress-all`, other suggest using `-Xcuda-fatbinary --compress-all`
+            # We will use the same flag as in nixpkgs
+            # (https://github.com/NixOS/nixpkgs/pull/220402/files#diff-a38e6c4e8421c03dc6c2a60c9a172ceb4059048b65798e5d4a400a7a4a5720ffR167)
+            "-Xfatbin=-compress-all",
             # Allow __host__, __device__ annotations in lambda declaration.
             "--expt-extended-lambda",
             # Allow host code to invoke __device__ constexpr functions and vice versa
@@ -2366,7 +2373,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '10.1'
+            return '11.4'
 
         if not self.have_cuda.value:
             return None
@@ -2398,10 +2405,6 @@ class Cuda(object):
             # do not impose any restrictions, when build not for "linux 64-bit"
             return ''
 
-        # do not include 'lto' type,
-        # because we already perform static linking
-        supported_types = ['compute', 'sm']
-
         # Equality to CUDA 11.4 is rather strict comparison
         # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
         if self.cuda_version.value == '11.4':
@@ -2410,19 +2413,15 @@ class Cuda(object):
             #   (these devices run only on arm64)
             # * drop support for '37'
             #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
-            supported_vers = ['35',
-                              '50', '52',
-                              '60', '61',
-                              '70', '75',
-                              '80', '86']
+            return ':'.join(
+                ['sm_35',
+                 'sm_50', 'sm_52',
+                 'sm_60', 'sm_61',
+                 'sm_70', 'sm_75',
+                 'sm_80', 'sm_86',
+                 'compute_86'])
         else:
-            supported_vers = []
-
-        cuda_architectures = ['{typ}_{ver}'.format(typ=typ, ver=ver)
-                              for typ in supported_types
-                              for ver in supported_vers]
-
-        return ':'.join(cuda_architectures)
+            return []
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user
@@ -2497,7 +2496,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5')
 
     def auto_cudnn_version(self):
-        return '7.6.5'
+        return '8.0.5'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

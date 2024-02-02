@@ -48,7 +48,7 @@ Based on a list of uncovered problems, the [YDB Release team](https://github.com
 
 ### Stable release {#server-stable}
 
-If testing iteration proves the quality of a minor release, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-server.md), and publishes the YDB server release on both the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads.md#ydb-server) pages, therefore declaring it as "stable".
+If testing iteration proves the quality of a minor release, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-server.md), and publishes the YDB server release on both the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads/index.md#ydb-server) pages, therefore declaring it as "stable".
 
 {% include [corp_release_stable.md](_includes/corp_release_stable.md) %}
 

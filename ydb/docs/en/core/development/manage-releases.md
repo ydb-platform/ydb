@@ -19,7 +19,7 @@ YDB server release schedule typically includes 4 major releases for each year, s
 
 {{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../administration/upgrade.md) article to learn more about the cluster upgrade procedure.
 
-Given the above compatibility target, major releases go in pairs, with odd numbers mostly adding new functionality switched off by feature flags, and even numbers enabling that functionality.
+Given the above compatibility target, major releases go in pairs: releases with odd numbers mostly add new functionality switched off by feature flags, while releases with even numbers enable that functionality.
 
 For instance, release `23.1` comes with the new functionality switched off. It can be incrementally rolled out to a cluster running `22.4`, without downtime. As soon as the whole cluster runs `23.1` nodes, you can manually toggle feature flags to test new functionality and later further upgrade it to `23.2` to fully leverage this new functionality.
 

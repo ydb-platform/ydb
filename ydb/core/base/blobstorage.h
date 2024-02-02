@@ -2407,4 +2407,19 @@ inline bool SendPutToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorag
     // TODO(alexvru): check if return status is actually needed?
 }
 
+inline bool SendPatchToGroup(const TActorContext &ctx, ui32 groupId, TTabletStorageInfo *storage,
+        THolder<TEvBlobStorage::TEvPatch> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+    auto checkGroupId = [&] {
+        const TLogoBlobID &id = event->PatchedId;
+        const ui32 expectedGroupId = storage->GroupFor(id.Channel(), id.Generation());
+        const TLogoBlobID &originalId = event->OriginalId;
+        const ui32 expectedOriginalGroupId = storage->GroupFor(originalId.Channel(), originalId.Generation());
+        return id.TabletID() == storage->TabletID && expectedGroupId != Max<ui32>() && groupId == expectedGroupId && event->OriginalGroupId == expectedOriginalGroupId;
+    };
+    Y_VERIFY_S(checkGroupId(), "groupIds# (" << event->OriginalGroupId << ',' << groupId << ") does not match actual ones LogoBlobIds# (" <<
+        event->OriginalId.ToString() << ',' << event->PatchedId.ToString() << ')');
+    return SendToBSProxy(ctx, groupId, event.Release(), cookie, std::move(traceId));
+    // TODO(alexvru): check if return status is actually needed?
+}
+
 } // NKikimr

@@ -395,6 +395,7 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 2, 2, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10000, 100, 1000);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
@@ -404,6 +405,7 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 2, 2, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
 }
 
 enum class ELoadDistribution : ui8 {

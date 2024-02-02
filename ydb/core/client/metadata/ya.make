@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme_types
     ydb/library/yql/minikql
+    ydb/library/yql/minikql/invoke_builtins/llvm14
 )
 
 YQL_LAST_ABI_VERSION()

@@ -23,7 +23,7 @@ You can generate three types of load:
 | `ReadSizes` | Size of the data to read. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `ReadSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for read requests. If this parameter is set than the value of `ReadIntervals` is ignored. |
 | `ReadIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the queries loaded by intervals (in milliseconds). You can set multiple `ReadIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| `MaxInFlightReadRequests` | Maximum number of simultaneously processed read requests. |
+| `MaxInFlightReadRequests` | The maximum number of read requests being processed simultaneously. |
 | `FlushIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals (in microseconds) between the queries used to delete data written by the write requests in the main load cycle of the StorageLoad actor. You can set multiple `FlushIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. Only one flush request will be processed simultaneously. |
 | `PutHandleClass` | Class of data writes to the disk subsystem. If the `TabletLog` value is set, the write operation has the highest priority. |
 | `GetHandleClass` | Class of data reads from the disk subsystem. If the `FastRead` is set, the read operation is performed with the highest speed possible. |

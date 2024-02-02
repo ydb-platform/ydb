@@ -459,6 +459,87 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceShouldFailIfSuchEntityAlreadyExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )",{NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
+            UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+        }
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_new_bucket"
+                Auth {
+                    None {
+                    }
+                }
+            )",{NKikimrScheme::StatusAlreadyExists});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/MyExternalDataSource");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
+            const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "ObjectStorage");
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
+            UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceExternalDataStoreShouldFailIfEntityOfAnotherTypeWithSameNameExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        ui64 txId = 100;
+
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                QueryText: "Some query"
+            )", {NKikimrScheme::StatusAccepted}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot",R"(
+                Name: "UniqueName"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/my_bucket"
+                Auth {
+                    None {
+                    }
+                }
+                ReplaceIfExists: true
+            )",{{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(ReplaceExternalDataSourceIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));

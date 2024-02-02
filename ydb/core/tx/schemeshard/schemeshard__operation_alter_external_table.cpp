@@ -348,7 +348,7 @@ public:
         /// Extract old data source end
 
         const auto oldExternalTableInfo =
-        context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
+            context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldExternalTableInfo);
         auto [externalTableInfo, maybeError] =
             NExternalTable::CreateExternalTable(externalDataSource->SourceType,

@@ -77,4 +77,4 @@ Tags for {{ ydb-short-name }} CLI are assigned on the `main` branch by a member 
 
 ### Stable release {#cli-stable}
 
-To declare a {{ ydb-short-name }} CLI tag as stable, a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-cli.md), and publishes the release on the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads.md#ydb-cli) pages.
+To declare a {{ ydb-short-name }} CLI tag as stable, a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-cli.md), and publishes the release on the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads/index.md#ydb-cli) pages.

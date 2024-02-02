@@ -115,7 +115,6 @@ TFuture<TStatus> ProcessState(
                 processed[taskIndex] = true;
             }
             LoadState(context->States[taskIndex], *parser.ColumnParser("blob").GetOptionalString());
-           // throw std::runtime_error("ddddd");
         }
     } else {
         errorMessage << "Not all states exist in database";

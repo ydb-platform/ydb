@@ -48,7 +48,7 @@ You can generate three types of load:
 | `BlobsNumber` | Total number of allocated blobs. |
 | `BlobSizes` | Size of the blobs to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `MaxWritesInFlight` | Maximum number of simultaneously processed write requests. If this parameter is not set then the number of simultaneously processed requests is not limited. |
-| `MaxWriteBytesInFlight` | Maximum number of total amount of simultaneously processed write requests' data. If this parameter is not set then the total amount of simultaneously processed write requests' data is not limited. |
+| `MaxWriteBytesInFlight` | Maximum number of total amount of simultaneously processed write requests' data. If this parameter is not set then the total amount of data being written concurrently is unlimited. |
 | `PutHandleClass` | Class of data writes to the disk subsystem. |
 | `DelayAfterCompletionSec` | The amount of time in seconds the actor will wait upon completing the initial data allocation before starting the main load cycle. If its value is `0` or not set the load will start immediately after the completion of the data allocaion. |
 

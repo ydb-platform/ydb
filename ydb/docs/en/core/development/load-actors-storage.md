@@ -19,7 +19,7 @@ You can generate three types of load:
 | `WriteSizes` | Size of the data to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for write requests. If this parameter is set than the value of `WriteIntervals` is ignored. |
 | `WriteIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the records loaded at intervals (in milliseconds). You can set multiple `WriteIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
-| `MaxInFlightWriteRequests` | Maximum number of simultaneously processed write requests. |
+| `MaxInFlightWriteRequests` | The maximum number of write requests being processed simultaneously. |
 | `ReadSizes` | Size of the data to read. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `ReadSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
 | `WriteHardRateDispatcher` | Setting up the [parameters of load with hard rate](#hardRateDispatcher) for read requests. If this parameter is set than the value of `ReadIntervals` is ignored. |
 | `ReadIntervals` | Setting up the [parameters for probabilistic distribution](#params) of intervals between the queries loaded by intervals (in milliseconds). You can set multiple `ReadIntervals` ranges, in which case a value from a specific range will be selected based on its `Weight`. |

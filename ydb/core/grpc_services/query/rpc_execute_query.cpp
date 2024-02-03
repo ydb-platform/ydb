@@ -24,6 +24,7 @@ using TEvExecuteQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteQu
 struct TProducerState {
     TMaybe<ui64> LastSeqNo;
     ui64 AckedFreeSpaceBytes = 0;
+    TActorId ActorId;
 };
 
 class TRpcFlowControlState {
@@ -244,8 +245,7 @@ private:
         const auto traceId = Request_->GetTraceId();
 
         NYql::TIssues issues;
-        NKikimrKqp::EQueryAction queryAction;
-        if (!ParseQueryAction(*req, queryAction, issues)) {
+        if (!ParseQueryAction(*req, QueryAction, issues)) {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, std::move(issues));
         }
 
@@ -274,7 +274,7 @@ private:
         cachePolicy->set_keep_in_cache(true);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
-            queryAction,
+            QueryAction,
             queryType,
             SelfId(),
             Request_,
@@ -288,7 +288,8 @@ private:
             nullptr, // operationParams
             false, // keepSession
             false, // useCancelAfter
-            syntax);
+            syntax,
+            true);
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             NYql::TIssues issues;
@@ -322,23 +323,24 @@ private:
 
         ui64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
 
-        for (auto& pair : StreamProducers_) {
-            const auto& producerId = pair.first;
-            auto& producer = pair.second;
+        for (auto& pair : StreamChannels_) {
+            const auto& channelId = pair.first;
+            auto& channel = pair.second;
 
-            if (freeSpaceBytes > 0 && producer.LastSeqNo && producer.AckedFreeSpaceBytes == 0) {
+            if (freeSpaceBytes > 0 && channel.LastSeqNo && channel.AckedFreeSpaceBytes == 0) {
                 LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                    << ", producer: " << producerId
-                    << ", seqNo: " << producer.LastSeqNo
+                    << ", channel: " << channelId
+                    << ", seqNo: " << channel.LastSeqNo
                     << ", freeSpace: " << freeSpaceBytes);
 
                 auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                resp->Record.SetSeqNo(*producer.LastSeqNo);
+                resp->Record.SetSeqNo(*channel.LastSeqNo);
                 resp->Record.SetFreeSpace(freeSpaceBytes);
+                resp->Record.SetChannelId(channelId);
 
-                ctx.Send(producerId, resp.Release());
+                ctx.Send(channel.ActorId, resp.Release());
 
-                producer.AckedFreeSpaceBytes = freeSpaceBytes;
+                channel.AckedFreeSpaceBytes = freeSpaceBytes;
             }
         }
 
@@ -358,9 +360,10 @@ private:
 
         Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
 
-        auto& producer = StreamProducers_[ev->Sender];
-        producer.LastSeqNo = ev->Get()->Record.GetSeqNo();
-        producer.AckedFreeSpaceBytes = freeSpaceBytes;
+        auto& channel = StreamChannels_[ev->Get()->Record.GetChannelId()];
+        channel.ActorId = ev->Sender;
+        channel.LastSeqNo = ev->Get()->Record.GetSeqNo();
+        channel.AckedFreeSpaceBytes = freeSpaceBytes;
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -371,8 +374,9 @@ private:
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(freeSpaceBytes);
+        resp->Record.SetChannelId(ev->Get()->Record.GetChannelId());
 
-        ctx.Send(ev->Sender, resp.Release());
+        ctx.Send(channel.ActorId, resp.Release());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
@@ -381,13 +385,29 @@ private:
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
 
         bool hasTrailingMessage = false;
- 
+
+        auto& kqpResponse = record.GetResponse();
+        if (kqpResponse.GetYdbResults().size() > 1) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                "Unexpected trailing message with multiple result sets.");
+            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
+            return;
+        }
+
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Request_->SetRuHeader(record.GetConsumedRu());
 
             auto& kqpResponse = record.GetResponse();
 
             Ydb::Query::ExecuteQueryResponsePart response;
+
+            if (QueryAction == NKikimrKqp::QUERY_ACTION_EXECUTE) {
+                for(int i = 0; i < kqpResponse.GetYdbResults().size(); i++) {
+                    hasTrailingMessage = true;
+                    response.set_result_set_index(i);
+                    response.mutable_result_set()->Swap(record.MutableResponse()->MutableYdbResults(i));
+                }
+            }
 
             AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
 
@@ -492,8 +512,9 @@ private:
 private:
     std::shared_ptr<TEvExecuteQueryRequest> Request_;
 
+    NKikimrKqp::EQueryAction QueryAction;
     TRpcFlowControlState FlowControl_;
-    TMap<TActorId, TProducerState> StreamProducers_;
+    TMap<ui64, TProducerState> StreamChannels_;
 };
 
 } // namespace

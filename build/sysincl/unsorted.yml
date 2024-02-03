@@ -268,7 +268,6 @@
   - zircon/types.h
   - zircon/process.h
   - sys/linux-syscalls.h
-  - tr1/memory
   - ompt.h
   # vvvvv ____ because in [geobase/perl/dynamic] does not work ignoring via "// Y_IGNORE"
   - geobase6/service_getter.hpp
@@ -475,10 +474,6 @@
   #endif
   #if defined(_TRASH_) && TODO
   - openssl/fips.h
-  - tr1/unordered_map
-  - tr1/unordered_set
-  - tr1/type_traits
-  - ext/atomicity.h
   - bits/c++config.h
   - bits/atomicity.h
   - gcrypt.h
@@ -512,7 +507,6 @@
   - ostream.h
   - nacl/nacl_random.h
   - jemalloc/jemalloc.h
-  - tr1/tuple
   - sys/inttypes.h
   - lockdep.h
   - memfault.h
@@ -574,7 +568,6 @@
   - bits/stl_function.h
   - bits/move.h
   - ndir.h
-  - ext/rope
   - sunmedia_types.h
   - clidef.h
   - credef.h
@@ -620,8 +613,6 @@
   - mih/testptr.h
   - sys/neutrino.h
   - cics.h
-  - tr1/cmath
-  - tr1/complex
   - tbb/scalable_allocator.h
   - libmemcached/dtrace_probes.h
   # unknown
@@ -716,7 +707,6 @@
   - screen.h
   - sureware.h
   - t_ctype.h
-  - tr1/unordered_map.hpp
   - typedefs.h
   - winmain.h
   - wintext.h
@@ -736,7 +726,6 @@
 
 - includes:
   - Aclapi.h
-  - tr1/functional
   - time64.h
   - extern.h
   #if defined(__FreeBSD__)

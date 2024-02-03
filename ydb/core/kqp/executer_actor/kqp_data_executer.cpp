@@ -130,10 +130,9 @@ public:
         const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         const bool enableOlapSink)
         : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, aggregation,
-            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::DataExecuter, "DataExecuter"
+            maximalSecretsSnapshotWaitTime, userRequestContext, TWilsonKqp::DataExecuter, "DataExecuter", streamResult
         )
         , AsyncIoFactory(std::move(asyncIoFactory))
-        , StreamResult(streamResult)
         , EnableOlapSink(enableOlapSink)
     {
         Target = creator;
@@ -347,7 +346,8 @@ private:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
-                hFunc(TEvDqCompute::TEvChannelData, HandleExecute); // from CA
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -935,7 +935,8 @@ private:
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeStats);
-                hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
+                hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
+                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -1283,41 +1284,6 @@ private:
             case TShardState::EState::Initial:
             case TShardState::EState::Preparing:
                 YQL_ENSURE(false, "Unexpected shard " << msg->TabletId << " state " << ToString(shardState->State));
-        }
-    }
-
-    void HandleExecute(TEvDqCompute::TEvChannelData::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        auto& channelData = record.GetChannelData();
-
-        TDqSerializedBatch batch;
-        batch.Proto = std::move(*record.MutableChannelData()->MutableData());
-        if (batch.Proto.HasPayloadId()) {
-            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
-        }
-
-        auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
-        YQL_ENSURE(channel.DstTask == 0);
-        auto shardId = TasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
-
-        if (Stats) {
-            Stats->ResultBytes += batch.Size();
-            Stats->ResultRows += batch.RowCount();
-        }
-
-        LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << shardId
-            << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
-            << ", finished: " << channelData.GetFinished());
-
-        ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
-        {
-            LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
-
-            auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
-            ackEv->Record.SetSeqNo(record.GetSeqNo());
-            ackEv->Record.SetChannelId(channel.Id);
-            ackEv->Record.SetFreeSpace(50_MB);
-            Send(ev->Sender, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
         }
     }
 
@@ -2417,7 +2383,6 @@ private:
 
 private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    bool StreamResult = false;
     bool EnableOlapSink = false;
 
     bool HasExternalSources = false;

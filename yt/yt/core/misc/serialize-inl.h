@@ -5,6 +5,7 @@
 #endif
 
 #include "collection_helpers.h"
+#include "maybe_inf.h"
 
 #include <library/cpp/yt/small_containers/compact_vector.h>
 #include <library/cpp/yt/small_containers/compact_flat_map.h>
@@ -301,31 +302,6 @@ Y_FORCE_INLINE TLoadContextStream* TStreamLoadContext::GetInput()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline constexpr TEntitySerializationKey::TEntitySerializationKey()
-    : Index(-1)
-{ }
-
-inline constexpr TEntitySerializationKey::TEntitySerializationKey(int index)
-    : Index(index)
-{ }
-
-inline constexpr TEntitySerializationKey::operator bool() const
-{
-    return Index != -1;
-}
-
-inline void TEntitySerializationKey::Save(TEntityStreamSaveContext& context) const
-{
-    NYT::Save(context, Index);
-}
-
-inline void TEntitySerializationKey::Load(TEntityStreamLoadContext& context)
-{
-    NYT::Load(context, Index);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 inline TEntitySerializationKey TEntityStreamSaveContext::GenerateSerializationKey()
 {
     YT_VERIFY(!ParentContext_);
@@ -390,9 +366,10 @@ T* TEntityStreamLoadContext::GetRawEntity(TEntitySerializationKey key) const
         return ParentContext_->GetRawEntity<T>(key);
     }
 
-    YT_ASSERT(key.Index >= 0);
-    YT_ASSERT(key.Index < std::ssize(RawPtrs_));
-    return static_cast<T*>(RawPtrs_[key.Index]);
+    auto index = key.Underlying();
+    YT_ASSERT(index >= 0);
+    YT_ASSERT(index < std::ssize(RawPtrs_));
+    return static_cast<T*>(RawPtrs_[index]);
 }
 
 template <class T>

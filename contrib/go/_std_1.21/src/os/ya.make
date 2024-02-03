@@ -1,5 +1,5 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64)
     SRCS(
 		dir.go
 		dir_darwin.go
@@ -38,86 +38,7 @@ IF (OS_DARWIN AND ARCH_ARM64)
 		types_unix.go
 		wait_unimp.go
     )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
-    SRCS(
-		dir.go
-		dir_darwin.go
-		endian_little.go
-		env.go
-		error.go
-		error_errno.go
-		error_posix.go
-		exec.go
-		exec_posix.go
-		exec_unix.go
-		executable.go
-		executable_darwin.go
-		file.go
-		file_open_unix.go
-		file_posix.go
-		file_unix.go
-		getwd.go
-		path.go
-		path_unix.go
-		pipe_unix.go
-		proc.go
-		rawconn.go
-		readfrom_stub.go
-		removeall_at.go
-		stat.go
-		stat_darwin.go
-		stat_unix.go
-		sticky_bsd.go
-		str.go
-		sys.go
-		sys_bsd.go
-		sys_unix.go
-		tempfile.go
-		types.go
-		types_unix.go
-		wait_unimp.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
-    SRCS(
-		dir.go
-		dir_unix.go
-		dirent_linux.go
-		endian_little.go
-		env.go
-		error.go
-		error_errno.go
-		error_posix.go
-		exec.go
-		exec_posix.go
-		exec_unix.go
-		executable.go
-		executable_procfs.go
-		file.go
-		file_open_unix.go
-		file_posix.go
-		file_unix.go
-		getwd.go
-		path.go
-		path_unix.go
-		pipe2_unix.go
-		proc.go
-		rawconn.go
-		readfrom_linux.go
-		removeall_at.go
-		stat.go
-		stat_linux.go
-		stat_unix.go
-		sticky_notbsd.go
-		str.go
-		sys.go
-		sys_linux.go
-		sys_unix.go
-		tempfile.go
-		types.go
-		types_unix.go
-		wait_waitid.go
-    )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
+ELSEIF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     SRCS(
 		dir.go
 		dir_unix.go

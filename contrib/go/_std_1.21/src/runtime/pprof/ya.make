@@ -1,47 +1,5 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_rusage.go
-		proto.go
-		proto_other.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_rusage.go
-		proto.go
-		proto_other.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
-    SRCS(
-		elf.go
-		label.go
-		map.go
-		pe.go
-		pprof.go
-		pprof_rusage.go
-		proto.go
-		proto_other.go
-		protobuf.go
-		protomem.go
-		runtime.go
-    )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     SRCS(
 		elf.go
 		label.go

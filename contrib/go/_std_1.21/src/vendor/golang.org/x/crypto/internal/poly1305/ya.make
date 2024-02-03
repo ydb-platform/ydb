@@ -1,35 +1,12 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		bits_go1.13.go
 		mac_noasm.go
 		poly1305.go
 		sum_generic.go
     )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
-    SRCS(
-		bits_go1.13.go
-		poly1305.go
-		sum_amd64.go
-		sum_amd64.s
-		sum_generic.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
-    SRCS(
-		bits_go1.13.go
-		mac_noasm.go
-		poly1305.go
-		sum_generic.go
-    )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		bits_go1.13.go
-		poly1305.go
-		sum_amd64.go
-		sum_amd64.s
-		sum_generic.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
     SRCS(
 		bits_go1.13.go
 		poly1305.go

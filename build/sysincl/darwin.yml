@@ -57,6 +57,7 @@
   - libkern/OSAtomic.h
   - libkern/OSByteOrder.h
   - libkern/OSCacheControl.h
+  - libkern/version.h
   - libproc.h
   - mach-o/dyld.h
   - mach-o/fixup-chains.h

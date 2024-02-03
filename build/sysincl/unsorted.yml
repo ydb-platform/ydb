@@ -814,10 +814,6 @@
   #if defined(_unix_) && TODO
   - sys/feature_tests.h
   #endif
-  #if defined(_darwin_)
-  - libkern/version.h
-  - System/pthread_machdep.h
-  #endif
   #if defined(_VMS_) && TODO
   - chfdef.h
   - libdef.h

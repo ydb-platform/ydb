@@ -24,7 +24,7 @@ struct TAppData;
 namespace NGRpcService {
 
 TString DatabaseFromDomain(const TAppData* appdata);
-IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> icb);
+IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig, TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> tracingControl);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
 
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {

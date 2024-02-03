@@ -1,29 +1,11 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64)
     SRCS(
 		nat.go
 		nat_arm64.s
 		nat_asm.go
     )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
-    SRCS(
-		nat.go
-		nat_amd64.s
-		nat_asm.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
-    SRCS(
-		nat.go
-		nat_arm64.s
-		nat_asm.go
-    )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
-    SRCS(
-		nat.go
-		nat_amd64.s
-		nat_asm.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
     SRCS(
 		nat.go
 		nat_amd64.s

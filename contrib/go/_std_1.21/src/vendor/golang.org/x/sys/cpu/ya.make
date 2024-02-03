@@ -12,7 +12,7 @@ IF (OS_DARWIN AND ARCH_ARM64)
 		runtime_auxv.go
 		runtime_auxv_go121.go
     )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
+ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
     SRCS(
 		byteorder.go
 		cpu.go
@@ -49,18 +49,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64)
 		cpu_x86.s
 		endian_little.go
 		hwcap_linux.go
-		parse.go
-		runtime_auxv.go
-		runtime_auxv_go121.go
-    )
-ELSEIF (OS_WINDOWS AND ARCH_X86_64)
-    SRCS(
-		byteorder.go
-		cpu.go
-		cpu_gc_x86.go
-		cpu_x86.go
-		cpu_x86.s
-		endian_little.go
 		parse.go
 		runtime_auxv.go
 		runtime_auxv_go121.go

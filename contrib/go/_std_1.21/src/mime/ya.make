@@ -1,29 +1,5 @@
 GO_LIBRARY()
-IF (OS_DARWIN AND ARCH_ARM64)
-    SRCS(
-		encodedword.go
-		grammar.go
-		mediatype.go
-		type.go
-		type_unix.go
-    )
-ELSEIF (OS_DARWIN AND ARCH_X86_64)
-    SRCS(
-		encodedword.go
-		grammar.go
-		mediatype.go
-		type.go
-		type_unix.go
-    )
-ELSEIF (OS_LINUX AND ARCH_AARCH64)
-    SRCS(
-		encodedword.go
-		grammar.go
-		mediatype.go
-		type.go
-		type_unix.go
-    )
-ELSEIF (OS_LINUX AND ARCH_X86_64)
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     SRCS(
 		encodedword.go
 		grammar.go

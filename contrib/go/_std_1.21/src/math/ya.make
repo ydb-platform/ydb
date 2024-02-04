@@ -123,11 +123,3 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND 
     )
 ENDIF()
 END()
-
-
-RECURSE(
-	big
-	bits
-	cmplx
-	rand
-)

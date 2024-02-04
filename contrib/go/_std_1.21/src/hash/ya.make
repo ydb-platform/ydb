@@ -5,12 +5,3 @@ IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_A
     )
 ENDIF()
 END()
-
-
-RECURSE(
-	adler32
-	crc32
-	crc64
-	fnv
-	maphash
-)

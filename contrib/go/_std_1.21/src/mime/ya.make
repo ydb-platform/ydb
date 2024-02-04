@@ -17,9 +17,3 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64)
     )
 ENDIF()
 END()
-
-
-RECURSE(
-	multipart
-	quotedprintable
-)

@@ -157,7 +157,6 @@
   - sysLib.h
   - taskLib.h
   - tcp.h
-  - tdep-ia64/dwarf-config.h
   - thread.h
   - thread_plan9.h
   - tickLib.h
@@ -172,10 +171,8 @@
   - vasnwprintf.h
   - vld.h
   - win32lib.h
-  - wincecompat.h
   - wprintf-parse.h
   - wsockcompat.h
-  - xdelta3-python.h
   - xml/xmlparse.h
   - xmlparse/xmlparse.h
   - xmltok/xmlparse.h
@@ -572,9 +569,6 @@
   - agg_allocator.h
   - SIOUX.h
   - sys/siginfo.h
-  #ifdef HAVE_LIBGIMLI_H
-  - libgimli.h
-  #endif
   #if MATLAB_MEX_FILE
   - mex.h
   #else
@@ -637,7 +631,6 @@
 
 - case_sensitive: false
   includes:
-  - bemapiset.h
   - cor.h
   - fusion.h
   - metahost.h
@@ -808,15 +801,8 @@
   - sys\stat.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
-  #if defined(__MINGW32__) || defined(_MSC_VER)
-  - inet_net_pton.h
-  - inet_ntop.h
-  #endif
   #if EV_USE_IOCP
   - ev_iocp.c
-  #endif
-  - zend_exceptions.h
-  #if MATLAB_MEX_FILE
   # unknown
   - GL/glx.h
   - CL/va_ext.h

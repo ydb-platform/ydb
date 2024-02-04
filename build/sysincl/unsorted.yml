@@ -614,10 +614,6 @@
   - boost/thread/detail/lock.hpp
   #endif metrika
   - xti.h
-  # libgit2 unused includes
-  - proto/timer.h
-  - mbsupport.h
-  # end of libgit2 unused includes
   - attr/xattr.h
   - fshelp.h
   - mlib_image.h

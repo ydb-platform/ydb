@@ -674,11 +674,6 @@
   - spinlock.h
   #endif
   #if CONTRIB && TODO
-  - MSTcpIP.h
-  - MacSocket.h
-  - WinIoCtl.h
-  - WinPDFCore.h
-  - Winsock2.h
   - Xm/XmAll.h
   - aep.h
   - atalla.h

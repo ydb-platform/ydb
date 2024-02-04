@@ -470,7 +470,7 @@ class ClusterDetailsProvider(object):
     @property
     def host_configs(self):
         converted_host_configs = []
-        for host_config in self.__cluster_description.get("host_configs", []):
+        for host_config in self.raw_host_configs:
             host_config_drives = host_config.get("drives", [])
             converted_host_configs.append(
                 HostConfig(
@@ -480,6 +480,10 @@ class ClusterDetailsProvider(object):
                 )
             )
         return converted_host_configs
+
+    @property
+    def raw_host_configs(self):
+        return self.__cluster_description.get("host_configs", [])
 
     @property
     def tablet_profiles(self):

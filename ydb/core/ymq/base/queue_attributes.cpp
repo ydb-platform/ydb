@@ -76,6 +76,8 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
             }
             result.Error = &NErrors::INVALID_PARAMETER_VALUE;
             break;
+        } else if (name == "FolderID") {
+            result.FolderID = value;
         } else {
             result.Error = &NErrors::INVALID_ATTRIBUTE_NAME;
             result.ErrorText = Sprintf("Unknown Attribute %s.", name.c_str());

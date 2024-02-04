@@ -31,10 +31,11 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, TTransactionContext& txc,
     ComputeTxSize();
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Add(TxSize);
 
+    UserDb.SetIsWriteTx(true);
+    
     if (LockTxId()) {
         UserDb.SetLockTxId(LockTxId());
         UserDb.SetLockNodeId(LockNodeId());
-        UserDb.SetIsRepeatableSnapshot(true);
     }
 
     if (Immediate())

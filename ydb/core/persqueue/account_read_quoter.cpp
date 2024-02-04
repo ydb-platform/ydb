@@ -26,7 +26,7 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     TActorId recepient,
     ui64 tabletId,
     const NPersQueue::TTopicConverterPtr& topicConverter,
-    ui32 partition,
+    const TPartitionId& partition,
     const TQuoterParams& params,
     ui64 quotaCreditBytes,
     const TTabletCountersBase& counters,
@@ -221,7 +221,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
     TActorId recepient,
     ui64 tabletId,
     const NPersQueue::TTopicConverterPtr& topicConverter,
-    ui32 partition,
+    const TPartitionId& partition,
     const TTabletCountersBase& counters,
     const TActorContext& ctx
 )

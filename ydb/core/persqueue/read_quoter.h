@@ -292,7 +292,7 @@ public:
     TWriteQuoter(
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
-        const TPartitionId partition,
+        const TPartitionId& partition,
         TActorId tabletActor,
         const TActorId& parent,
         ui64 tabletId,

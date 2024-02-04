@@ -120,7 +120,7 @@ protected:
     const NPersQueue::TTopicConverterPtr TopicConverter;
     THolder<TPercentileCounter> QuotaWaitCounter;
     TTabletCountersBase Counters;
-    const ui32 Partition;
+    const TPartitionId Partition;
 
 private:
     const TActorId TabletActor;

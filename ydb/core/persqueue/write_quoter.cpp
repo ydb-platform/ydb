@@ -6,7 +6,7 @@ namespace NKikimr::NPQ  {
 TWriteQuoter::TWriteQuoter(
     const NPersQueue::TTopicConverterPtr& topicConverter,
     const NKikimrPQ::TPQTabletConfig& config,
-    ui32 partition,
+    const TPartitionId& partition,
     TActorId tabletActor,
     const TActorId& parent,
     ui64 tabletId,

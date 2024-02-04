@@ -180,11 +180,6 @@
   - xmlparse/xmlparse.h
   - xmltok/xmlparse.h
   - yca/yca.h
-  - zzip-1.h
-  - zzip-2.h
-  - zzip-3.h
-  - zzip-4.h
-  - zzip-5.h
   #if CONTRIB && defined(_HAVE_LIBIDSA)
   - idsa.h
   #endif

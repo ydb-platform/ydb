@@ -496,9 +496,9 @@
     ],
     "test.test[blocks-minmax_strings--Debug]": [
         {
-            "checksum": "228cb9ea9ac90b76c19456f64f953232",
-            "size": 7621,
-            "uri": "https://{canondata_backend}/1923547/63814b1113aa44b294fe28fd8a7c507858e712bd/resource.tar.gz#test.test_blocks-minmax_strings--Debug_/opt.yql_patched"
+            "checksum": "ba5191148f3518b0c19272604b9046b1",
+            "size": 7595,
+            "uri": "https://{canondata_backend}/937458/e429c288a4c437886f47817d132007f20d3db329/resource.tar.gz#test.test_blocks-minmax_strings--Debug_/opt.yql_patched"
         }
     ],
     "test.test[blocks-minmax_strings--Plan]": [
@@ -1371,9 +1371,9 @@
     ],
     "test.test[join-mergejoin_force_align3-off-Analyze]": [
         {
-            "checksum": "723bd6134a6756d846508e4d0bcb3b53",
-            "size": 17800,
-            "uri": "https://{canondata_backend}/1777230/eebed3d4d772fb6e696615e0e1582e2361c19c05/resource.tar.gz#test.test_join-mergejoin_force_align3-off-Analyze_/plan.txt"
+            "checksum": "0ab77818758c023b9049902ac50c5791",
+            "size": 17998,
+            "uri": "https://{canondata_backend}/937458/c4452645e3437dc640f4297668664a507105b886/resource.tar.gz#test.test_join-mergejoin_force_align3-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-mergejoin_force_align3-off-Analyze_/extracted"
@@ -1580,9 +1580,9 @@
     ],
     "test.test[join-yql-14829_left-off-Analyze]": [
         {
-            "checksum": "67a44a7940c145339f2b5ecacb84ca3b",
-            "size": 14330,
-            "uri": "https://{canondata_backend}/1942671/612b8e5cf42e27086abb71abea474d6f2f73b914/resource.tar.gz#test.test_join-yql-14829_left-off-Analyze_/plan.txt"
+            "checksum": "1f1dc7ecb37035464c63122f1322675e",
+            "size": 14600,
+            "uri": "https://{canondata_backend}/937458/c4452645e3437dc640f4297668664a507105b886/resource.tar.gz#test.test_join-yql-14829_left-off-Analyze_/plan.txt"
         },
         {
             "uri": "file://test.test_join-yql-14829_left-off-Analyze_/extracted"

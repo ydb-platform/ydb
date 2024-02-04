@@ -1,7 +1,7 @@
 #include "mkql_extend.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>
+#include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
@@ -190,6 +190,7 @@ public:
         ICodegeneratorInlineWideNode::TGettersList getters(Width_);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
             getters[idx] = [idx, valueType, arrayType, arrayPtr, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
                 return new LoadInst(valueType, valuePtr, "value", block);
             };
@@ -373,10 +374,6 @@ public:
 
         TLLVMFieldsStructureState stateFields(context);
 
-        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
-        const auto statePtrType = PointerType::getUnqual(stateType);
-        const auto funcType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
-
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -436,6 +433,7 @@ public:
         ICodegeneratorInlineWideNode::TGettersList getters(Width_);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
             getters[idx] = [idx, valueType, arrayType, arrayPtr, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
+                Y_UNUSED(ctx);
                 const auto valuePtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, "value_ptr", block);
                 return new LoadInst(valueType, valuePtr, "value", block);
             };

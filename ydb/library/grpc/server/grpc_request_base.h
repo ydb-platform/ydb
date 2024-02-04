@@ -46,6 +46,11 @@ public:
         ERROR,
         CANCEL
     };
+    enum class EStreamCtrl {
+        CONT = 0,   // Continue stream
+        FINISH = 1, // Finish stream just after this reply
+    };
+
     using TAsyncFinishResult = NThreading::TFuture<EFinishStatus>;
 
     using TOnNextReply = std::function<void (size_t left)>;
@@ -65,7 +70,9 @@ public:
 
     //! Send serialised response (The request shoult be created for bytes response type)
     //! Implementation can swap ByteBuffer
-    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0) = 0;
+
+    //! ctrl - controll stream behaviour. Ignored in case of unary call
+    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) = 0;
 
     //! Send grpc UNAUTHENTICATED status
     virtual void ReplyUnauthenticated(const TString& in) = 0;

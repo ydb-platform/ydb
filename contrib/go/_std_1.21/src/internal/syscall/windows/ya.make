@@ -17,13 +17,9 @@ IF (OS_WINDOWS)
         zsyscall_windows.go
     )
 
-    GO_XTEST_SRCS(exec_windows_test.go)
 ENDIF()
 
 END()
-
-RECURSE(
-)
 
 IF (OS_WINDOWS)
     RECURSE(

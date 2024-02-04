@@ -12,8 +12,6 @@ PEERDIR(
     ydb/library/yql/sql/v1/format
 )
 
-NO_COMPILER_WARNINGS()
-
 ADDINCL(
     GLOBAL contrib/libs/antlr3_cpp_runtime/include
 )

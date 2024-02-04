@@ -505,6 +505,9 @@ namespace NFlatExecutorSetup {
 
         virtual void OnFollowersCountChanged();
 
+        virtual void OnFollowerSchemaUpdated();
+        virtual void OnFollowerDataUpdated();
+
         // create transaction?
     protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)

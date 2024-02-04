@@ -182,6 +182,14 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         return false;
     }
 
+    if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+        auto portion = GetGranulePtrVerified(pathId)->GetPortionPtr(portionId);
+        AFL_VERIFY(portion);
+        portion->AddIndex(loadContext.BuildIndexChunk());
+    })) {
+        return false;
+    };
+
     for (auto&& i : Tables) {
         i.second->OnAfterPortionsLoad();
     }

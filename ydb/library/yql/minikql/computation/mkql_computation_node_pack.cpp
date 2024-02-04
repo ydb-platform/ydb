@@ -300,6 +300,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
         case NUdf::EDataSlot::Uint16:
             return NUdf::TUnboxedValuePod(UnpackData<Fast, ui16>(buf));
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             return NUdf::TUnboxedValuePod(UnpackData<Fast, i32>(buf));
         case NUdf::EDataSlot::Uint32:
             return NUdf::TUnboxedValuePod(UnpackData<Fast, ui32>(buf));
@@ -599,6 +600,7 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
             PackData<Fast>(value.Get<ui16>(), buffer);
             break;
         case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
             PackData<Fast>(value.Get<i32>(), buffer);
             break;
         case NUdf::EDataSlot::Uint32:

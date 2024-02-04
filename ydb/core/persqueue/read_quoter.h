@@ -110,7 +110,7 @@ public:
     TPartitionQuoterBase(
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
-        ui32 partition,
+        const TPartitionId& partition,
         TActorId tabletActor,
         const TActorId& parent,
         TMaybe<TQuotaTracker>&& partitionTotalQuotaTracker,
@@ -169,7 +169,7 @@ protected:
     inline const TActorId& GetParent() const {return Parent;}
     inline const TActorId& GetTabletActor() const {return TabletActor;}
     inline ui64 GetTabletId() const {return TabletId;}
-    inline ui32 GetPartition() const {return Partition;}
+    inline const TPartitionId& GetPartition() const {return Partition;}
 
 private:
     void StartQuoting(TRequestContext& context);
@@ -211,7 +211,7 @@ private:
     TActorId Parent;
     std::deque<TRequestContext> WaitingTotalPartitionQuotaRequests;
     THashMap<ui64, TRequestContext> PendingAccountQuotaRequests;
-    const ui32 Partition;
+    const TPartitionId Partition;
     ui64 TabletId;
     ui64 MaxInflightRequests;
 
@@ -228,7 +228,7 @@ public:
         const TActorContext& ctx,
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
-        ui32 partition,
+        const TPartitionId& partition,
         TActorId tabletActor,
         const TActorId& parent,
         ui64 tabletId,
@@ -292,7 +292,7 @@ public:
     TWriteQuoter(
         const NPersQueue::TTopicConverterPtr& topicConverter,
         const NKikimrPQ::TPQTabletConfig& config,
-        ui32 partition,
+        const TPartitionId partition,
         TActorId tabletActor,
         const TActorId& parent,
         ui64 tabletId,

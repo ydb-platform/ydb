@@ -293,28 +293,19 @@ TString TBlobState::TWholeState::ToString() const {
 // TGroupDiskRequests
 //
 
-TGroupDiskRequests::TGroupDiskRequests(ui32 disks) {
-    DiskRequestsForOrderNumber.resize(disks);
-}
-
-void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet) {
-    Y_ABORT_UNLESS(diskOrderNumber < DiskRequestsForOrderNumber.size());
-    auto &requestsToSend = DiskRequestsForOrderNumber[diskOrderNumber].GetsToSend;
-    for (auto pair: intervalSet) {
-        requestsToSend.emplace_back(id, pair.first, pair.second - pair.first);
+void TGroupDiskRequests::AddGet(ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet) {
+    for (const auto& pair : intervalSet) {
+        GetsPending.emplace_back(diskOrderNumber, id, pair.first, pair.second - pair.first);
     }
 }
 
-void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift,
-        const ui32 size) {
-    Y_ABORT_UNLESS(diskOrderNumber < DiskRequestsForOrderNumber.size());
-    DiskRequestsForOrderNumber[diskOrderNumber].GetsToSend.emplace_back(id, shift, size);
+void TGroupDiskRequests::AddGet(ui32 diskOrderNumber, const TLogoBlobID &id, ui32 shift, ui32 size) {
+    GetsPending.emplace_back(diskOrderNumber, id, shift, size);
 }
 
-void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
+void TGroupDiskRequests::AddPut(ui32 diskOrderNumber, const TLogoBlobID &id, TRope buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx) {
-    Y_ABORT_UNLESS(diskOrderNumber < DiskRequestsForOrderNumber.size());
-    DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff, blobIdx);
+    PutsPending.emplace_back(diskOrderNumber, id, buffer, putReason, isHandoff, blobIdx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

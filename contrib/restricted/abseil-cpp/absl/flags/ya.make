@@ -30,7 +30,6 @@ NO_UTIL()
 
 SRCS(
     commandlineflag.cc
-    flag.cc
     internal/commandlineflag.cc
     internal/flag.cc
     internal/private_handle_accessor.cc

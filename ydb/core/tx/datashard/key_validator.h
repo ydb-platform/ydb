@@ -9,6 +9,7 @@
 namespace NKikimr::NDataShard {
 
 class TDataShard;
+class TDataShardUserDb;
 
 class TKeyValidator {
 public:
@@ -22,8 +23,17 @@ public:
     void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
     
-    bool IsValidKey(TKeyDesc& key) const;
-    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys() const;
+    struct TValidateOptions {
+        ui64 LockTxId;
+        ui64 LockNodeId;
+        bool IsRepeatableSnapshot;
+        bool IsImmediateTx;
+
+        TValidateOptions(const TDataShardUserDb& userDb);
+    };
+
+    bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;
+    std::tuple<NMiniKQL::IEngineFlat::EResult, TString> ValidateKeys(const TValidateOptions& options) const;
 
     ui64 GetTableSchemaVersion(const TTableId& tableId) const;
 

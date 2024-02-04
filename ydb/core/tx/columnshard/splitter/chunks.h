@@ -139,6 +139,12 @@ public:
         : Chunks(chunks) 
         , Loader(loader)
     {
+        Start();
+    }
+
+    void Start() {
+        CurrentChunkIndex = 0;
+        CurrentRecordIndex = 0;
         if (Chunks.size()) {
             CurrentChunk = Loader->ApplyVerifiedColumn(Chunks.front()->GetData());
         }
@@ -189,6 +195,13 @@ public:
 
     bool IsCorrect() const {
         return IsCorrectFlag;
+    }
+
+    void Start() {
+        IsCorrectFlag = true;
+        for (auto&& i : Columns) {
+            i.Start();
+        }
     }
 
     bool ReadNext() {

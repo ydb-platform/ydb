@@ -23,6 +23,8 @@ inline T Abs(T v) {
 
 template<typename TInput, typename TOutput>
 struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput>> {
+    static constexpr auto NullMode = TKernel::ENullMode::Default;
+
     static TOutput Do(TInput val)
     {
         return Abs<TInput>(val);

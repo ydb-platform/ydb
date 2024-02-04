@@ -30,7 +30,7 @@ struct TTestTraitConfig
 };
 
 class TTestTraitConfigSerializer
-    : public TExternalizedYsonStruct<TTestTraitConfig>
+    : public virtual TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TTestTraitConfig, TTestTraitConfigSerializer);
@@ -54,7 +54,7 @@ struct TTestProcessorsTraitConfig
 };
 
 class TTestProcessorsTraitConfigSerializer
-    : public TExternalizedYsonStruct<TTestProcessorsTraitConfig>
+    : public TExternalizedYsonStruct
 {
 public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
@@ -88,11 +88,96 @@ public:
     }
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestDerivedPodConfig
+    : public TTestTraitConfig
+{
+    int Field3;
+};
+
+class TTestDerivedPodConfigSerializer
+    : public TTestTraitConfigSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer, (TTestTraitConfigSerializer));
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_3", &TThat::Field3);
+    }
+};
+
+struct TTestDoubleDerivedPodConfig
+    : public TTestDerivedPodConfig
+{
+    int Field4;
+};
+
+class TTestDoubleDerivedPodConfigSerializer
+    : public TTestDerivedPodConfigSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer, (TTestDerivedPodConfigSerializer));
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_4", &TThat::Field4);
+    }
+};
+
+struct TTestDerivedSecondBase
+{
+    int Field5;
+    int Field6;
+};
+
+class TTestDerivedSecondBaseSerializer
+    : public virtual TExternalizedYsonStruct
+{
+public:
+    REGISTER_EXTERNALIZED_YSON_STRUCT(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.ExternalClassParameter("field_5", &TThat::Field5);
+        registrar.ExternalClassParameter("field_6", &TThat::Field6);
+    }
+};
+
+struct TTestDerivedTwoBasesConfig
+    : public TTestDoubleDerivedPodConfig
+    , public TTestDerivedSecondBase
+{ };
+
+class TTestDerivedTwoBasesConfigSerializer
+    : public TTestDoubleDerivedPodConfigSerializer
+    , public TTestDerivedSecondBaseSerializer
+{
+public:
+    REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
+        TTestDerivedTwoBasesConfig,
+        TTestDerivedTwoBasesConfigSerializer,
+        (TTestDoubleDerivedPodConfigSerializer)
+        (TTestDerivedSecondBaseSerializer));
+
+    static void Register(TRegistrar)
+    { }
+};
+
 } // namespace
 
 ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestTraitConfig, TTestTraitConfigSerializer);
 
 ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestProcessorsTraitConfig, TTestProcessorsTraitConfigSerializer);
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedPodConfig, TTestDerivedPodConfigSerializer);
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDoubleDerivedPodConfig, TTestDoubleDerivedPodConfigSerializer);
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedSecondBase, TTestDerivedSecondBaseSerializer);
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TTestDerivedTwoBasesConfig, TTestDerivedTwoBasesConfigSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1828,6 +1913,113 @@ TEST(TYsonStructTest, SerializableByTraitsPostPreprocessors)
     EXPECT_TRUE(TTestProcessorsTraitConfig::PostprocessorCalled);
     EXPECT_EQ(reader.Field.Field1, 37);
     EXPECT_EQ(reader.Field.Field2, 33);
+}
+
+class TDerivedFieldTester
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestDerivedPodConfig Field;
+
+    REGISTER_YSON_STRUCT_LITE(TDerivedFieldTester);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field);
+    }
+};
+
+TEST(TYsonStructTest, SerializableByTraitsDerivedFromExternalized)
+{
+    TDerivedFieldTester writer = {};
+    writer.Field = {{55, 34}, 37};
+
+    TBufferStream stream;
+
+    ::Save(&stream, writer);
+
+    TDerivedFieldTester reader = {};
+    ::Load(&stream, reader);
+    EXPECT_EQ(writer.Field.Field1, 55);
+    EXPECT_EQ(writer.Field.Field2, 34);
+    EXPECT_EQ(writer.Field.Field3, 37);
+    EXPECT_EQ(reader.Field.Field1, 55);
+    EXPECT_EQ(reader.Field.Field2, 34);
+    EXPECT_EQ(reader.Field.Field3, 37);
+}
+
+class TDoubleDerivedFieldTester
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestDoubleDerivedPodConfig Field;
+
+    REGISTER_YSON_STRUCT_LITE(TDoubleDerivedFieldTester);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field);
+    }
+};
+
+TEST(TYsonStructTest, SerializableByTraitsDoubleDerivedFromExternalized)
+{
+    TDoubleDerivedFieldTester writer = {};
+    writer.Field = {{{55, 34}, 37}, 77};
+
+    TBufferStream stream;
+
+    ::Save(&stream, writer);
+
+    TDoubleDerivedFieldTester reader = {};
+    ::Load(&stream, reader);
+    EXPECT_EQ(writer.Field.Field1, 55);
+    EXPECT_EQ(writer.Field.Field2, 34);
+    EXPECT_EQ(writer.Field.Field3, 37);
+    EXPECT_EQ(writer.Field.Field4, 77);
+    EXPECT_EQ(reader.Field.Field1, 55);
+    EXPECT_EQ(reader.Field.Field2, 34);
+    EXPECT_EQ(reader.Field.Field3, 37);
+    EXPECT_EQ(reader.Field.Field4, 77);
+}
+
+class TTwoBasesFieldTester
+    : public NYT::NYTree::TYsonStructLite
+{
+public:
+    TTestDerivedTwoBasesConfig Field;
+
+    REGISTER_YSON_STRUCT_LITE(TTwoBasesFieldTester);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("field", &TThis::Field);
+    }
+};
+
+TEST(TYsonStructTest, SerializableByTraitsDerivedFromTwoExternalizedBases)
+{
+    TTwoBasesFieldTester writer = {};
+    writer.Field = {{{{55, 34}, 37}, 77}, {7, 8}};
+
+    TBufferStream stream;
+
+    ::Save(&stream, writer);
+
+    TTwoBasesFieldTester reader = {};
+    ::Load(&stream, reader);
+    EXPECT_EQ(writer.Field.Field1, 55);
+    EXPECT_EQ(writer.Field.Field2, 34);
+    EXPECT_EQ(writer.Field.Field3, 37);
+    EXPECT_EQ(writer.Field.Field4, 77);
+    EXPECT_EQ(writer.Field.Field5, 7);
+    EXPECT_EQ(writer.Field.Field6, 8);
+    EXPECT_EQ(reader.Field.Field1, 55);
+    EXPECT_EQ(reader.Field.Field2, 34);
+    EXPECT_EQ(reader.Field.Field3, 37);
+    EXPECT_EQ(reader.Field.Field4, 77);
+    EXPECT_EQ(reader.Field.Field5, 7);
+    EXPECT_EQ(reader.Field.Field6, 8);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h> // Y_IGNORE
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
@@ -308,7 +308,6 @@ public:
         const auto width = Types_.size() + 1U;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, width);
@@ -479,7 +478,7 @@ public:
 
         ICodegeneratorInlineWideNode::TGettersList getters(width);
         for (size_t idx = 0U; idx < getters.size(); ++idx) {
-            getters[idx] = [idx, width, getType, getPtr, heightPtr, indexType, valueType, statePtrType, stateOnStack, getter = getres.second[idx < BitmapIndex_ ? idx : idx + 1U]](const TCodegenContext& ctx, BasicBlock*& block) {
+            getters[idx] = [idx, getType, getPtr, heightPtr, indexType, valueType, statePtrType, stateOnStack, getter = getres.second[idx < BitmapIndex_ ? idx : idx + 1U]](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
                 const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
                 const auto call = BasicBlock::Create(context, "call", ctx.Func);

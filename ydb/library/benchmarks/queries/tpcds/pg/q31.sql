@@ -12,7 +12,7 @@ with ss as
  where ws_sold_date_sk = d_date_sk
   and ws_bill_addr_sk=ca_address_sk
  group by ca_county,d_qoy, d_year)
- select 
+ select
         ss1.ca_county
        ,ss1.d_year
        ,ws2.web_sales/ws1.web_sales web_q1_q2_increase
@@ -28,23 +28,23 @@ with ss as
        ,ws ws3
  where
     ss1.d_qoy = 1
-    and ss1.d_year = 2000
+    and ss1.d_year = 1999
     and ss1.ca_county = ss2.ca_county
     and ss2.d_qoy = 2
-    and ss2.d_year = 2000
+    and ss2.d_year = 1999
  and ss2.ca_county = ss3.ca_county
     and ss3.d_qoy = 3
-    and ss3.d_year = 2000
+    and ss3.d_year = 1999
     and ss1.ca_county = ws1.ca_county
     and ws1.d_qoy = 1
-    and ws1.d_year = 2000
+    and ws1.d_year = 1999
     and ws1.ca_county = ws2.ca_county
     and ws2.d_qoy = 2
-    and ws2.d_year = 2000
+    and ws2.d_year = 1999
     and ws1.ca_county = ws3.ca_county
     and ws3.d_qoy = 3
-    and ws3.d_year =2000
-    and case when ws1.web_sales > 0::numeric then ws2.web_sales/ws1.web_sales else null::numeric end 
+    and ws3.d_year =1999
+    and case when ws1.web_sales > 0::numeric then ws2.web_sales/ws1.web_sales else null::numeric end
        > case when ss1.store_sales > 0::numeric then ss2.store_sales/ss1.store_sales else null::numeric end
     and case when ws2.web_sales > 0::numeric then ws3.web_sales/ws2.web_sales else null::numeric end
        > case when ss2.store_sales > 0::numeric then ss3.store_sales/ss2.store_sales else null::numeric end

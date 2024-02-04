@@ -472,7 +472,7 @@ void TDqComputeActorCheckpoints::RegisterCheckpoint(const NDqProto::TCheckpoint&
         YQL_ENSURE(PendingCheckpoint.Checkpoint->GetGeneration() == checkpoint.GetGeneration());
         YQL_ENSURE(PendingCheckpoint.Checkpoint->GetId() == checkpoint.GetId());
     }
-    LOG_PCP_D("Got checkpoint barrier from channel " << channelId);
+    LOG_PCP_T("Got checkpoint barrier from channel " << channelId);
     ComputeActor->ResumeExecution(EResumeSource::CheckpointRegister);
 }
 

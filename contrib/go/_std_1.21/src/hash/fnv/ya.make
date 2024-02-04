@@ -1,12 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    fnv.go
-)
-
-GO_TEST_SRCS(fnv_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		fnv.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		fnv.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		fnv.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		fnv.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		fnv.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

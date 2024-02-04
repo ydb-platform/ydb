@@ -9,6 +9,9 @@
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <random>
@@ -53,9 +56,13 @@ private:
     void OnActivateExecutor(const TActorContext& ctx) override;
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
+    void SubscribeForConfigChanges(const TActorContext& ctx);
 
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInit();
+
+    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
 
     void Handle(TEvStatistics::TEvConfigureAggregator::TPtr& ev);
     void Handle(TEvStatistics::TEvSchemeShardStats::TPtr& ev);
@@ -76,11 +83,13 @@ private:
     void PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value);
 
     STFUNC(StateInit) {
-        StateInitImpl(ev,SelfId());
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig)
             hFunc(TEvStatistics::TEvConfigureAggregator, Handle);
             hFunc(TEvStatistics::TEvSchemeShardStats, Handle);
             hFunc(TEvPrivate::TEvPropagate, Handle);
@@ -103,10 +112,12 @@ private:
 
     std::mt19937_64 RandomGenerator;
 
+    bool EnableStatistics = false;
+
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
 
-    TDuration PropagateInterval = TDuration::Minutes(3);
+    TDuration PropagateInterval;
     bool IsPropagateInFlight = false; // is slow propagation started
 
     std::unordered_map<TSSId, TString> BaseStats; // schemeshard id -> serialized stats for all paths

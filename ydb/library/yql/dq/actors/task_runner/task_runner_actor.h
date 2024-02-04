@@ -43,12 +43,15 @@ struct ITaskRunnerActorFactory {
 
     virtual std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints = {},
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
 };
 
+// temporary for YQL-17542
+#define Y_YQL_DQ_TASK_RUNNER_ACTOR_FACTORY_COMPATIBILITY_1
 ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory);
 
 } // namespace NTaskRunnerActor

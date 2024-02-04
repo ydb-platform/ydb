@@ -43,50 +43,48 @@ public:
     }
 
     void ProcessBlackboardRequests(TBlackboard& blackboard) {
-        for (ui32 i = 0; i < blackboard.GroupDiskRequests.DiskRequestsForOrderNumber.size(); ++i) {
-            auto& r = blackboard.GroupDiskRequests.DiskRequestsForOrderNumber[i];
-            Y_ABORT_UNLESS(i < DiskStates.size());
-            auto& disk = DiskStates[i];
-            for (auto& get : r.GetsToSend) {
-                Ctest << "orderNumber# " << i << " get Id# " << get.Id;
-                if (disk.InErrorState) {
-                    Ctest << " ERROR";
-                    blackboard.AddErrorResponse(get.Id, i);
-                } else if (auto it = disk.Blobs.find(get.Id); it == disk.Blobs.end()) {
-                    Ctest << " NODATA";
-                    blackboard.AddNoDataResponse(get.Id, i);
-                } else {
-                    std::visit(TOverloaded{
-                        [&](TNotYet&) {
-                            Ctest << " NOT_YET";
-                            blackboard.AddNotYetResponse(get.Id, i);
-                        },
-                        [&](TRope& buffer) {
-                            Ctest << " OK";
-                            size_t begin = Min<size_t>(get.Shift, buffer.size());
-                            size_t end = Min<size_t>(buffer.size(), begin + get.Size);
-                            TRope data(buffer.begin() + begin, buffer.begin() + end);
-                            blackboard.AddResponseData(get.Id, i, get.Shift, std::move(data));
-                        }
-                    }, it->second);
-                }
-                Ctest << Endl;
+        for (auto& get : blackboard.GroupDiskRequests.GetsPending) {
+            auto& disk = DiskStates[get.OrderNumber];
+            Ctest << "orderNumber# " << get.OrderNumber << " get Id# " << get.Id;
+            if (disk.InErrorState) {
+                Ctest << " ERROR";
+                blackboard.AddErrorResponse(get.Id, get.OrderNumber);
+            } else if (auto it = disk.Blobs.find(get.Id); it == disk.Blobs.end()) {
+                Ctest << " NODATA";
+                blackboard.AddNoDataResponse(get.Id, get.OrderNumber);
+            } else {
+                std::visit(TOverloaded{
+                    [&](TNotYet&) {
+                        Ctest << " NOT_YET";
+                        blackboard.AddNotYetResponse(get.Id, get.OrderNumber);
+                    },
+                    [&](TRope& buffer) {
+                        Ctest << " OK";
+                        size_t begin = Min<size_t>(get.Shift, buffer.size());
+                        size_t end = Min<size_t>(buffer.size(), begin + get.Size);
+                        TRope data(buffer.begin() + begin, buffer.begin() + end);
+                        blackboard.AddResponseData(get.Id, get.OrderNumber, get.Shift, std::move(data));
+                    }
+                }, it->second);
             }
-            r.GetsToSend.clear();
-            for (auto& put : r.PutsToSend) {
-                Ctest << "orderNumber# " << i << " put Id# " << put.Id;
-                if (disk.InErrorState) {
-                    Ctest << " ERROR";
-                    blackboard.AddErrorResponse(put.Id, i);
-                } else {
-                    Ctest << " OK";
-                    disk.Blobs[put.Id] = std::move(put.Buffer);
-                    blackboard.AddPutOkResponse(put.Id, i);
-                }
-                Ctest << Endl;
-            }
-            r.PutsToSend.clear();
+            Ctest << Endl;
         }
+        blackboard.GroupDiskRequests.GetsPending.clear();
+
+        for (auto& put : blackboard.GroupDiskRequests.PutsPending) {
+            auto& disk = DiskStates[put.OrderNumber];
+            Ctest << "orderNumber# " << put.OrderNumber << " put Id# " << put.Id;
+            if (disk.InErrorState) {
+                Ctest << " ERROR";
+                blackboard.AddErrorResponse(put.Id, put.OrderNumber);
+            } else {
+                Ctest << " OK";
+                disk.Blobs[put.Id] = std::move(put.Buffer);
+                blackboard.AddPutOkResponse(put.Id, put.OrderNumber);
+            }
+            Ctest << Endl;
+        }
+        blackboard.GroupDiskRequests.PutsPending.clear();
     }
 };
 
@@ -223,21 +221,18 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
         std::set<TOperation>& context, ui32& terminals) {
     // see which operations we can add to the stock
     const size_t stockSizeOnEntry = stock.size();
-    auto& requests = blackboard.GroupDiskRequests.DiskRequestsForOrderNumber;
-    for (ui32 i = 0; i < info.GetTotalVDisksNum(); ++i) {
-        for (auto& j = requests[i].FirstUnsentRequestIdx; j < requests[i].GetsToSend.size(); ++j) {
-            auto& get = requests[i].GetsToSend[j];
-            stock.push_back(TGetQuery{i, get.Id, get.Shift, get.Size});
-            const bool inserted = context.insert(stock.back()).second;
-            UNIT_ASSERT(inserted);
-        }
-        for (auto& j = requests[i].FirstUnsentPutIdx; j < requests[i].PutsToSend.size(); ++j) {
-            auto& put = requests[i].PutsToSend[j];
-            stock.push_back(TPutQuery{i, put.Id});
-            const bool inserted = context.insert(stock.back()).second;
-            UNIT_ASSERT(inserted);
-        }
+    for (auto& get : blackboard.GroupDiskRequests.GetsPending) {
+        stock.push_back(TGetQuery{get.OrderNumber, get.Id, get.Shift, get.Size});
+        const bool inserted = context.insert(stock.back()).second;
+        UNIT_ASSERT(inserted);
     }
+    blackboard.GroupDiskRequests.GetsPending.clear();
+    for (auto& put : blackboard.GroupDiskRequests.PutsPending) {
+        stock.push_back(TPutQuery{put.OrderNumber, put.Id});
+        const bool inserted = context.insert(stock.back()).second;
+        UNIT_ASSERT(inserted);
+    }
+    blackboard.GroupDiskRequests.PutsPending.clear();
     UNIT_ASSERT(!stock.empty());
 
     bool canIssuePuts = true;

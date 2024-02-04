@@ -50,9 +50,11 @@ public:
         return NKikimrServices::TActivity::KQP_EXECUTER_ACTOR;
     }
 
-    TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
+    TKqpSchemeExecuter(
+        TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx)
+        bool temporary, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
+        const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
         , Target(target)
@@ -62,6 +64,7 @@ public:
         , SessionId(sessionId)
         , RequestContext(std::move(ctx))
         , RequestType(requestType)
+        , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
     {
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -107,17 +110,16 @@ public:
                     }
                     tableDesc->SetName(tableDesc->GetName() + SessionId);
                     tableDesc->SetPath(tableDesc->GetPath() + SessionId);
+                    YQL_ENSURE(KqpTempTablesAgentActor != TActorId(),
+                        "Create temp table with empty KqpTempTablesAgentActor");
+                    ActorIdToProto(KqpTempTablesAgentActor, modifyScheme.MutableTempTableOwnerActorId());
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropTable: {
-                auto modifyScheme = schemeOp.GetDropTable();
-                if (Temporary) {
-                    auto* dropTable = modifyScheme.MutableDrop();
-                    dropTable->SetName(dropTable->GetName() + SessionId);
-                }
+                const auto& modifyScheme = schemeOp.GetDropTable();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -197,6 +199,36 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kModifyPermissions: {
                 const auto& modifyScheme = schemeOp.GetModifyPermissions();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateColumnTable: {
+                const auto& modifyScheme = schemeOp.GetCreateColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterColumnTable: {
+                const auto& modifyScheme = schemeOp.GetAlterColumnTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kCreateTableStore: {
+                const auto& modifyScheme = schemeOp.GetCreateTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTableStore: {
+                const auto& modifyScheme = schemeOp.GetAlterTableStore();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTableStore: {
+                const auto& modifyScheme = schemeOp.GetDropTableStore();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -580,16 +612,20 @@ private:
     ui64 SchemeShardTabletId = 0;
     TIntrusivePtr<TUserRequestContext> RequestContext;
     const TMaybe<TString> RequestType;
+    const TActorId KqpTempTablesAgentActor;
 };
 
 } // namespace
 
-IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+IActor* CreateKqpSchemeExecuter(
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool temporary, TString sessionId,
-    TIntrusivePtr<TUserRequestContext> ctx)
+    TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
 {
-    return new TKqpSchemeExecuter(phyTx, queryType, target, requestType, database, userToken, temporary, sessionId, std::move(ctx));
+    return new TKqpSchemeExecuter(
+        phyTx, queryType, target, requestType, database, userToken,
+        temporary, sessionId, std::move(ctx), kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

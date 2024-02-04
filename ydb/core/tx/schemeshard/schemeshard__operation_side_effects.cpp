@@ -53,6 +53,24 @@ void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMess
     BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
 }
 
+void  TSideEffects::UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempTablesToCreateState.find(ownerActorId);
+    if (it == TempTablesToCreateState.end()) {
+        TempTablesToCreateState[ownerActorId] = { pathId };
+    } else {
+        it->second.push_back(pathId);
+    }
+}
+
+void  TSideEffects::UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempTablesToDropState.find(ownerActorId);
+    if (it == TempTablesToDropState.end()) {
+        TempTablesToDropState[ownerActorId] = { pathId };
+    } else {
+        it->second.push_back(pathId);
+    }
+}
+
 void TSideEffects::RouteByTabletsFromOperation(TOperationId opId) {
     RelationsByTabletsFromOperation.push_back(opId);
 }
@@ -192,6 +210,9 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 
     DoWaitPublication(ss, ctx);
     DoPublishToSchemeBoard(ss, ctx);
+
+    DoUpdateTempTablesToCreateState(ss, ctx);
+    DoUpdateTempTablesToDropState(ss, ctx);
 
     DoSend(ss, ctx);
     DoBindMsg(ss, ctx);
@@ -753,6 +774,86 @@ void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
 void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
     ss->PersistShardsToDelete(db, ToDeleteShards);
+}
+
+void TSideEffects::DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActorContext &ctx) {
+    for (auto& [ownerActorId, tempTables]: TempTablesToCreateState) {
+
+        auto& tempTablesByOwner = ss->TempTablesState.TempTablesByOwner;
+        auto& nodeStates = ss->TempTablesState.NodeStates;
+
+        auto it = tempTablesByOwner.find(ownerActorId);
+
+        auto nodeId = ownerActorId.NodeId();
+
+        auto itNodeStates = nodeStates.find(nodeId);
+        if (itNodeStates == nodeStates.end()) {
+            auto& nodeState = nodeStates[nodeId];
+            nodeState.Owners.insert(ownerActorId);
+            nodeState.RetryState.CurrentDelay =
+                TDuration::MilliSeconds(ss->BackgroundCleaningRetrySettings.GetStartDelayMs());
+        } else {
+            itNodeStates->second.Owners.insert(ownerActorId);
+        }
+
+        if (it == tempTablesByOwner.end()) {
+            ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
+                new TEvSchemeShard::TEvOwnerActorAck(),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+
+            auto& currentTempTables = tempTablesByOwner[ownerActorId];
+
+            for (auto& pathId : tempTables) {
+                currentTempTables.insert(std::move(pathId));
+            }
+            continue;
+        }
+
+        for (auto& pathId : tempTables) {
+            it->second.insert(std::move(pathId));
+        }
+    }
+}
+
+void TSideEffects::DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [ownerActorId, tempTables]: TempTablesToDropState) {
+        auto& tempTablesByOwner = ss->TempTablesState.TempTablesByOwner;
+
+        auto it = tempTablesByOwner.find(ownerActorId);
+        if (it == tempTablesByOwner.end()) {
+            continue;
+        }
+
+        for (auto& pathId : tempTables) {
+            auto tempTableIt = it->second.find(std::move(pathId));
+            if (tempTableIt == it->second.end()) {
+                continue;
+            }
+
+            it->second.erase(tempTableIt);
+            ss->RemoveBackgroundCleaning(pathId);
+        }
+
+        if (it->second.empty()) {
+            tempTablesByOwner.erase(it);
+
+            auto& nodeStates = ss->TempTablesState.NodeStates;
+
+            auto nodeId = ownerActorId.NodeId();
+            auto itStates = nodeStates.find(nodeId);
+            if (itStates != nodeStates.end()) {
+                auto itOwner = itStates->second.Owners.find(ownerActorId);
+                if (itOwner != itStates->second.Owners.end()) {
+                    itStates->second.Owners.erase(itOwner);
+                }
+                if (itStates->second.Owners.empty()) {
+                    nodeStates.erase(itStates);
+                    ctx.Send(new IEventHandle(TActivationContext::InterconnectProxy(nodeId), ss->SelfId(),
+                        new TEvents::TEvUnsubscribe, 0));
+                }
+            }
+        }
+    }
 }
 
 void TSideEffects::ResumeLongOps(TSchemeShard *ss, const TActorContext &ctx) {

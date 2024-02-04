@@ -6,6 +6,7 @@
 
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/grpc_services/base/base_service.h>
+#include <ydb/core/grpc_services/service_topic.h>
 
 namespace NKikimr {
 
@@ -28,6 +29,7 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) override;
 
     NActors::TActorId SchemeCache;
+    NKikimr::NGRpcProxy::V1::IClustersCfgProvider* ClustersCfgProvider = nullptr;
 };
 
 } // namespace V1

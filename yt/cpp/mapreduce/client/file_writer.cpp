@@ -16,7 +16,8 @@ TFileWriter::TFileWriter(
     const TClientContext& context,
     const TTransactionId& transactionId,
     const TFileWriterOptions& options)
-    : RetryfulWriter_(
+    : AutoFinish_(options.AutoFinish_)
+    , RetryfulWriter_(
         std::move(clientRetryPolicy),
         std::move(transactionPinger),
         context,
@@ -29,7 +30,7 @@ TFileWriter::TFileWriter(
 
 TFileWriter::~TFileWriter()
 {
-    NDetail::FinishOrDie(this, "TFileWriter");
+    NDetail::FinishOrDie(this, AutoFinish_, "TFileWriter");
 }
 
 void TFileWriter::DoWrite(const void* buf, size_t len)

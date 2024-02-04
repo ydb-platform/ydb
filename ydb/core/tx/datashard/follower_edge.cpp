@@ -6,13 +6,24 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
     Y_ABORT_UNLESS(!IsFollower());
     Y_DEBUG_ABORT_UNLESS(IsMvccEnabled());
 
+    TRowVersion volatileUncertain = VolatileTxManager.GetMinUncertainVersion();
+
     for (auto order : TransQueue.GetPlan()) {
         // When we have planned operations we assume the first one may be used
         // for new writes, so we mark is as non-repeatable. We could skip
         // readonly operations, but there's little benefit in that, and it's
         // complicated to determine which is the first readable given we may
         // have executed some out of order.
-        return { TRowVersion(order.Step, order.TxId), false, 0 };
+        return { Min(volatileUncertain, TRowVersion(order.Step, order.TxId)), false, 0 };
+    }
+
+    if (!volatileUncertain.IsMax()) {
+        // We have some uncertainty in an unresolved volatile commit
+        // Allow followers to read from it in non-repeatable snapshot modes
+        // FIXME: when at least one write is committed at this version, it
+        // should stop being non-repeatable, and followers need to resolve
+        // other possibly out-of-order commits.
+        return { volatileUncertain, false, 0 };
     }
 
     // This is the max version where we had any writes

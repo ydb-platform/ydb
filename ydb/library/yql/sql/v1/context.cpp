@@ -94,6 +94,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 
     Scoped = MakeIntrusive<TScopedState>();
     AllScopes.push_back(Scoped);
+    Scoped->UnicodeLiterals = settings.UnicodeLiterals;
     if (settings.DefaultCluster) {
         Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster);
         auto provider = GetClusterProvider(settings.DefaultCluster);

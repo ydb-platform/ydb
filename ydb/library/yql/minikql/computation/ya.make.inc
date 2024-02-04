@@ -43,7 +43,9 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+    OUTPUT_INCLUDES 
+        ${BINDIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+        ${BINDIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
 )
 
 PROVIDES(MINIKQL_COMPUTATION)

@@ -907,6 +907,151 @@ SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ov
 <sql-statement>
 SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
 </sql-statement>
-pgrun: /home/runner/actions_runner/_work/ydb/ydb/contrib/libs/llvm12/lib/IR/LegacyPassManager.cpp:588: void llvm::PMTopLevelManager::setLastUser(ArrayRef<Pass *>, Pass *): Assertion `AnalysisPass && "Expected analysis pass to exist."' failed.
-pthread_kill at ./nptl/./nptl/pthread_kill.c:43:17
-?? at ??:0:0
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid regular expression option: "z"
+
+        	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+	^
+<sql-statement>
+-- global option meaningless for regexp_split
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- global option meaningless for regexp_split
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  regexp_split_to_table() does not support the "global" option
+
+        	-- global option meaningless for regexp_split
+	^
+<sql-statement>
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  regexp_split_to_array() does not support the "global" option
+
+        	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+	^
+<sql-statement>
+-- change NULL-display back
+\pset null ''
+</sql-statement>
+<sql-statement>
+-- E021-11 position expression
+SELECT POSITION('4' IN '1234567890') = '4' AS "4";
+</sql-statement>
+<sql-statement>
+SELECT POSITION('5' IN '1234567890') = '5' AS "5";
+</sql-statement>
+<sql-statement>
+-- T312 character overlay function
+SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS "abc45f";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS "yabadaba";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS "yabadabadoo";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS "bubba";
+</sql-statement>
+<sql-statement>
+--
+-- test LIKE
+-- Be sure to form every test as a LIKE/NOT LIKE pair.
+--
+-- simplest examples
+-- E061-04 like predicate
+SELECT 'hawkeye' LIKE 'h%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'h%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'H%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'H%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'indio%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'h%eye' AS "true";
+</sql-statement>
+VERIFY failed (2024-01-26T22:29:45.165869+0300): 
+  util/generic/ptr.h:110
+  operator->(): requirement ptr failed
+BackTrace(void**, unsigned long)+29 (0x1A8988FD)
+FormatBackTrace(IOutputStream*)+282 (0x1A899BCA)
+PrintBackTrace()+17 (0x1A899C81)
+NPrivate::InternalPanicImpl(int, char const*, char const*, int, int, int, TBasicStringBuf<char, std::__y1::char_traits<char> >, char const*, unsigned long)+1629 (0x1A9ECF8D)
+NPrivate::Panic(NPrivate::TStaticBuf const&, int, char const*, char const*, char const*, ...)+1064 (0x1A9C4A28)
+TPointerCommon<TIntrusiveConstPtr<NYql::IUdfResolver, TDefaultIntrusivePtrOps<NYql::IUdfResolver> >, NYql::IUdfResolver const>::operator->() const+764 (0x2326685C)
+NYql::NTypeAnnImpl::TExtContext::LoadUdfMetadata(TVector<NYql::IUdfResolver::TFunction*, std::__y1::allocator<NYql::IUdfResolver::TFunction*> > const&)+1109 (0x246C4715)
+NYql::NTypeAnnImpl::UdfWrapper(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+14463 (0x2477735F)
+decltype(std::declval<NYql::IGraphTransformer::TStatus (*&)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>()(std::declval<TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&>(), std::declval<TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&>(), std::declval<NYql::NTypeAnnImpl::TExtContext&>())) std::__y1::__invoke[abi:v160000]<NYql::IGraphTransformer::TStatus (*&)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&), TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&>(NYql::IGraphTransformer::TStatus (*&)(TIntrusivePtr<NYql::TExprNode, TD+269 (0x2491806D)
+NYql::IGraphTransformer::TStatus std::__y1::__invoke_void_return_wrapper<NYql::IGraphTransformer::TStatus, false>::__call<NYql::IGraphTransformer::TStatus (*&)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&), TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&>(NYql::IGraphTransformer::TStatus (*&)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&), TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+235 (0x24917E4B)
+std::__y1::__function::__alloc_func<NYql::IGraphTransformer::TStatus (*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&), std::__y1::allocator<NYql::IGraphTransformer::TStatus (*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>, NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>::operator()[abi:v160000](TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+243 (0x24917C63)
+std::__y1::__function::__func<NYql::IGraphTransformer::TStatus (*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&), std::__y1::allocator<NYql::IGraphTransformer::TStatus (*)(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>, NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)+239 (0x249153DF)
+std::__y1::__function::__value_func<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>::operator()[abi:v160000](TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&) const+515 (0x248A14B3)
+std::__y1::function<NYql::IGraphTransformer::TStatus (TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&)>::operator()(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::NTypeAnnImpl::TExtContext&) const+235 (0x2489D08B)
+NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer::ProcessCore(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> > const&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+1158 (0x24893E36)
+NYql::TCallableTransformerBase<NYql::NTypeAnnImpl::TExtCallableTypeAnnotationTransformer>::DoTransform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+2009 (0x24890B89)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+532 (0x1D92DCC4)
+??+0 (0x24C875E4)
+??+0 (0x24C8706B)
+??+0 (0x24C8515A)
+??+0 (0x24C8706B)
+??+0 (0x24C8706B)
+??+0 (0x24C8706B)
+??+0 (0x24C8706B)
+??+0 (0x24C86443)
+??+0 (0x24C8706B)
+??+0 (0x24C8515A)
+??+0 (0x24C8515A)
+??+0 (0x24C8515A)
+??+0 (0x24C8706B)
+??+0 (0x24C8515A)
+??+0 (0x24C8515A)
+??+0 (0x24C8515A)
+??+0 (0x24C8706B)
+??+0 (0x24C8706B)
+??+0 (0x24C8706B)
+??+0 (0x24C7809A)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+532 (0x1D92DCC4)
+??+0 (0x1D93CFDC)
+??+0 (0x1D93C7FD)
+??+0 (0x1D92F5BD)
+NYql::TGraphTransformerBase::Transform(TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&)+532 (0x1D92DCC4)
+NYql::AsyncTransformStepImpl(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool, bool, TBasicStringBuf<char, std::__y1::char_traits<char> > const&)+3920 (0x1D92B450)
+NYql::AsyncTransform(NYql::IGraphTransformer&, TIntrusivePtr<NYql::TExprNode, TDefaultIntrusivePtrOps<NYql::TExprNode> >&, NYql::TExprContext&, bool)+439 (0x1D92CB87)
+NYql::TProgram::AsyncTransformWithFallback(bool)+353 (0x211DCC21)
+??+0 (0x2126713F)
+??+0 (0x2126676E)
+??+0 (0x21266494)
+??+0 (0x2126232E)
+??+0 (0x21261F27)
+??+0 (0x211D8B8D)
+NYql::TProgram::RunAsync(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+6891 (0x211D7E9B)
+??+0 (0x211CFC2F)
+NYql::TProgram::Run(TBasicString<char, std::__y1::char_traits<char> > const&, IOutputStream*, IOutputStream*, IOutputStream*, bool)+1206 (0x211D6106)
+Main(int, char**)+11684 (0x1A2E8D54)
+main+630 (0x1A2EDBC6)
+??+0 (0x7F1191229D90)
+__libc_start_main+128 (0x7F1191229E40)
+??+0 (0x19FDE029)
+./nptl/pthread_kill.c:43:0 in __pthread_kill_implementation ./nptl/pthread_kill.c:78:0 in __pthread_kill_internal ./nptl/pthread_kill.c:89:0 in __GI___pthread_kill ???:0:0 in ??? 

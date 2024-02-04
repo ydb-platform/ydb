@@ -37,6 +37,7 @@ SRCS(
     config.cpp
     cost_mocks.cpp
     syscache.cpp
+    pg_utils_wrappers.cpp
 )
 
 IF (ARCH_X86_64)
@@ -49,9 +50,6 @@ IF (ARCH_X86_64)
         postgresql/src/port/pg_crc32c_sse42_choose.c
     )
 ENDIF()
-
-# DTCC-950
-NO_COMPILER_WARNINGS()
 
 INCLUDE(pg_sources.inc)
 
@@ -70,6 +68,7 @@ PEERDIR(
     ydb/library/yql/minikql/arrow
     ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/codec
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf

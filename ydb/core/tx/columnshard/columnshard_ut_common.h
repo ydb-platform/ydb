@@ -236,10 +236,10 @@ struct TTestSchema {
         }
 
         if (specials.HasCodec()) {
-            schema->MutableDefaultCompression()->SetCompressionCodec(specials.GetCodecId());
+            schema->MutableDefaultCompression()->SetCodec(specials.GetCodecId());
         }
         if (specials.CompressionLevel) {
-            schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
+            schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
         }
     }
 

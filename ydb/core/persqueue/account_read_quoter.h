@@ -77,7 +77,7 @@ public:
         TActorId recepient,
         ui64 tabletId,
         const NPersQueue::TTopicConverterPtr& topicConverter,
-        ui32 partition,
+        const TPartitionId& partition,
         const TQuoterParams& params,
         ui64 quotaCreditBytes,
         const TTabletCountersBase& counters,
@@ -155,7 +155,7 @@ public:
         TActorId recepient,
         ui64 tabletId,
         const NPersQueue::TTopicConverterPtr& topicConverter,
-        ui32 partition,
+        const TPartitionId& partition,
         const TString& user,
         const TTabletCountersBase& counters
     );
@@ -168,8 +168,6 @@ protected:
 
 private:
     TQuoterParams GetQuoterParams(const TString& user);
-
-
     const TString User;
     TString ConsumerPath;
 };
@@ -187,7 +185,7 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
 
     TAccountWriteQuoter(TActorId tabletActor, TActorId recepient, ui64 tabletId,
-            const NPersQueue::TTopicConverterPtr& topicConverter, ui32 partition,
+            const NPersQueue::TTopicConverterPtr& topicConverter, const TPartitionId& partition,
             const TTabletCountersBase& counters, const TActorContext& ctx);
 
 protected:

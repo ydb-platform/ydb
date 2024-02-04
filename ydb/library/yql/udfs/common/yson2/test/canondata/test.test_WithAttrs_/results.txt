@@ -36,6 +36,16 @@
                                         "Yson"
                                     ]
                                 ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
                             ]
                         ]
                     ]
@@ -60,7 +70,19 @@
                                 "$value" = "1"
                             }
                         ];
-                        #
+                        #;
+                        [
+                            {
+                                "$attributes" = {
+                                    "b" = {
+                                        "$type" = "int64";
+                                        "$value" = "3"
+                                    }
+                                };
+                                "$type" = "int64";
+                                "$value" = "1"
+                            }
+                        ]
                     ]
                 ]
             }

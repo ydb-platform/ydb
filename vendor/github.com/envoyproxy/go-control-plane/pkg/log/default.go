@@ -1,3 +1,4 @@
+//nolint:all
 package log
 
 // DefaultLogger is enabled when no consuming clients provide

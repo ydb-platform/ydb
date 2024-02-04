@@ -1,14 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    pem.go
-)
-
-GO_TEST_SRCS(pem_test.go)
-
-GO_XTEST_SRCS(example_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		pem.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

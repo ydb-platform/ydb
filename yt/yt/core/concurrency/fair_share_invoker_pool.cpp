@@ -122,7 +122,7 @@ IFairShareCallbackQueuePtr CreateFairShareCallbackQueue(int bucketCount)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFairShareInvokerPool
-    : public IDiagnosableInvokerPool
+    : public TDiagnosableInvokerPool
 {
 public:
     TFairShareInvokerPool(
@@ -383,7 +383,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
+TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory,

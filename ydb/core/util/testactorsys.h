@@ -147,6 +147,7 @@ class TTestActorSystem {
     std::unordered_map<TString, TActorStats> ActorStats;
     std::unordered_map<IActor*, TString> ActorName;
 
+public:
     class TEdgeActor : public TActor<TEdgeActor> {
         std::unique_ptr<IEventHandle> *HandlePtr = nullptr;
         TString Tag;

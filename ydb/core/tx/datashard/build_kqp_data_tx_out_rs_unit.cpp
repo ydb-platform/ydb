@@ -100,7 +100,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         dataTx->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
 
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-            auto result = KqpRunTransaction(ctx, op->GetTxId(), kqpLocks, useGenericReadSets, tasksRunner);
+            auto result = KqpRunTransaction(ctx, op->GetTxId(), useGenericReadSets, tasksRunner);
 
             Y_VERIFY_S(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
                 "Unexpected inconsistent reads in operation " << *op << " when preparing persistent channels");

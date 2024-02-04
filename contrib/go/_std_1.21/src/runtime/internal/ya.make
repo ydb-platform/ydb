@@ -2,7 +2,7 @@ RECURSE(
     atomic
     math
     sys
-    # wasitest # wasm not supported
+    # wasitest
 )
 
 IF (ARCH_X86_64)

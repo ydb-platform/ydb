@@ -950,6 +950,7 @@ void FillRequestBySelectRowsOptionsBase(
     } else if (defaultUdfRegistryPath) {
         request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
+    request->set_syntax_version(options.SyntaxVersion);
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
@@ -1003,6 +1004,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
+    req->set_merge_versioned_rows(options.MergeVersionedRows);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

@@ -258,7 +258,9 @@ Y_UNIT_TEST_SUITE(Secret) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
-        Tests::TServerSettings serverSettings(msgbPort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        Tests::TServerSettings serverSettings(msgbPort, authConfig);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")

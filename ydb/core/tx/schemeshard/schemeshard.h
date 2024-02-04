@@ -93,6 +93,8 @@ struct TEvSchemeShard {
         EvProcessingRequest,
         EvProcessingResponse,
 
+        EvOwnerActorAck,
+
         EvEnd
     };
 
@@ -641,6 +643,10 @@ struct TEvSchemeShard {
 
     struct TEvLoginResult : TEventPB<TEvLoginResult, NKikimrScheme::TEvLoginResult, EvLoginResult> {
         TEvLoginResult() = default;
+    };
+
+    struct TEvOwnerActorAck : TEventPB<TEvOwnerActorAck, NKikimrScheme::TEvOwnerActorAck, EvOwnerActorAck> {
+        TEvOwnerActorAck() = default;
     };
 };
 

@@ -23,6 +23,7 @@
 
 #include <util/generic/set.h>
 
+#include <variant>
 
 namespace NKikimr::NPQ {
 
@@ -100,7 +101,7 @@ private:
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
-    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie);
+    void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie, ui64 seqNo);
 
     void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime);
 
@@ -344,7 +345,7 @@ private:
     void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
     // void DestroyReadSession(const TReadSessionKey& key);
 
-    void Handle(TEvPQ::TEvSourceIdRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     TString LogPrefix() const;
     
@@ -353,7 +354,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
     }
 
-    TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
+    TPartition(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
@@ -481,8 +482,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
+            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -538,8 +538,7 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdRequest, Handle);
-            HFuncTraced(TEvPQ::TEvSourceIdResponse, SourceManager.Handle);
+            HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -576,7 +575,7 @@ private:
 private:
     ui64 TabletID;
     ui32 TabletGeneration;
-    ui32 Partition;
+    TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;
     const NKikimrPQ::TPQTabletConfig::TPartition* PartitionConfig = nullptr;
@@ -610,7 +609,6 @@ private:
 
     std::deque<TMessage> Requests;
     std::deque<TMessage> Responses;
-    std::deque<TEvPQ::TEvGetMaxSeqNoRequest::TPtr> MaxSeqNoRequests;
 
     THead Head;
     THead NewHead;
@@ -636,12 +634,22 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
+    template <class T> T& GetUserActionAndTransactionEventsFront();
+    template <class T> bool UserActionAndTransactionEventsFrontIs() const;
+
+    bool ProcessUserActionOrTransaction(TEvPQ::TEvSetClientInfo& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(const TEvPersQueue::TEvProposeTransaction& event, const TActorContext& ctx);
+    bool ProcessUserActionOrTransaction(TTransaction& tx, const TActorContext& ctx);
+
     //
     // user actions and transactions
     //
-    std::deque<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>> UserActs;
-    std::deque<TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>> ImmediateTxs;
-    std::deque<TTransaction> DistrTxs;
+    using TUserActionAndTransactionEvent =
+        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
+                     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>, // immediate transaction
+                     TSimpleSharedPtr<TTransaction>>;                       // distributed transaction or update config 
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
+    size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
     THashMap<TString, TUserInfoBase> PendingUsersInfo;
     TVector<std::pair<TActorId, std::unique_ptr<IEventBase>>> Replies;
@@ -759,6 +767,8 @@ private:
 
     TDeque<std::unique_ptr<IEventBase>> PendingEvents;
     TRowVersion LastEmittedHeartbeat;
+
+    const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 };
 
 } // namespace NKikimr::NPQ

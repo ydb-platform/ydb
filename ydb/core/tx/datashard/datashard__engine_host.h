@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "change_collector.h"
 #include "key_validator.h"
+#include "operation.h"
 
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -21,6 +22,7 @@ using NTabletFlatExecutor::TTransactionContext;
 namespace NDataShard {
 
 class TDataShard;
+class TDataShardUserDb;
 
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
 
@@ -41,14 +43,17 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
-               std::pair<ui64, ui64> stepTxId);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId);
 
     virtual ~TEngineBay();
 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
     NMiniKQL::IEngineFlat * GetEngine();
     NMiniKQL::TEngineHost * GetEngineHost() { return EngineHost.Get(); }
+
+    TDataShardUserDb& GetUserDb();
+    const TDataShardUserDb& GetUserDb() const;
+
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
@@ -86,11 +91,9 @@ public:
         EngineHost.Reset();
     }
 
-    ui64 GetStep() const { return StepTxId.first; }
-    ui64 GetTxId() const { return StepTxId.second; }
-
     TKeyValidator& GetKeyValidator() { return KeyValidator; }
     const TKeyValidator& GetKeyValidator() const { return KeyValidator; }
+    TValidationInfo& TxInfo() { return KeyValidator.GetInfo(); }
     const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
@@ -99,8 +102,6 @@ public:
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
     void SetIsRepeatableSnapshot();
-
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
@@ -117,14 +118,12 @@ public:
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
 
 private:
-    std::pair<ui64, ui64> StepTxId;
+    TStepOrder StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
     THolder<NMiniKQL::TEngineFlatSettings> EngineSettings;
     THolder<NMiniKQL::IEngineFlat> Engine;
     TKeyValidator KeyValidator;
     TEngineHostCounters EngineHostCounters;
-    ui64 LockTxId;
-    ui32 LockNodeId;
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;

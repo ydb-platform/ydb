@@ -16,6 +16,12 @@ void TSetUserPasswordCommand::Register(TRegistrar registrar)
     registrar.Parameter("current_password_sha256", &TThis::CurrentPasswordSha256_)
         .Default();
     registrar.Parameter("new_password_sha256", &TThis::NewPasswordSha256_);
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "password_is_temporary",
+        [] (TThis* command) -> bool& {
+            return command->Options.PasswordIsTemporary;
+        })
+        .Default(false);
 }
 
 void TSetUserPasswordCommand::DoExecute(ICommandContextPtr context)

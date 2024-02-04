@@ -3,7 +3,7 @@
 with my_customers as (
  select distinct c_customer_sk
         , c_current_addr_sk
- from   
+ from
         ( select cs_sold_date_sk sold_date_sk,
                  cs_bill_customer_sk customer_sk,
                  cs_item_sk item_sk
@@ -19,11 +19,11 @@ with my_customers as (
          {{customer}}
  where   sold_date_sk = d_date_sk
          and item_sk = i_item_sk
-         and i_category = 'Jewelry'
-         and i_class = 'consignment'
+         and i_category = 'Books'
+         and i_class = 'business'
          and c_customer_sk = cs_or_ws_sales.customer_sk
-         and d_moy = 3
-         and d_year = 1999
+         and d_moy = 2
+         and d_year = 2000
  )
  , my_revenue as (
  select c_customer_sk,

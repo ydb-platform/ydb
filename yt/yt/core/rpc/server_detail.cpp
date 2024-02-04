@@ -90,7 +90,11 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
 
     // COMPAT(danilalexeev): legacy RPC codecs
     if (header.has_codec()) {
+        YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
         SetResponseBodySerializedWithCompression();
+    }
+    if (header.has_format()) {
+        RequestHeader_->set_response_format(header.format());
     }
 
     if (header.has_error()) {

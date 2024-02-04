@@ -44,6 +44,8 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     lhs.set_row_count(lhs.row_count() + rhs.row_count());
     lhs.set_regular_disk_space(lhs.regular_disk_space() + rhs.regular_disk_space());
     lhs.set_erasure_disk_space(lhs.erasure_disk_space() + rhs.erasure_disk_space());
+    lhs.set_encoded_row_batch_count(lhs.encoded_row_batch_count() + rhs.encoded_row_batch_count());
+    lhs.set_encoded_columnar_batch_count(lhs.encoded_columnar_batch_count() + rhs.encoded_columnar_batch_count());
 
     if (HasInvalidDataWeight(lhs) || HasInvalidDataWeight(rhs)) {
         lhs.set_data_weight(-1);
@@ -66,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
@@ -93,11 +95,6 @@ bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs)
             lhs.unmerged_data_weight() == rhs.unmerged_data_weight());
 }
 
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs)
-{
-    return !(lhs == rhs);
-}
-
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer)
 {
     // TODO(max42): replace all Item with OptionalItem in order to expose only meaningful
@@ -114,6 +111,8 @@ void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer
         .Item("erasure_disk_space").Value(statistics.erasure_disk_space())
         .Item("unmerged_row_count").Value(statistics.unmerged_row_count())
         .Item("unmerged_data_weight").Value(statistics.unmerged_data_weight())
+        .Item("encoded_row_batch_count").Value(statistics.encoded_row_batch_count())
+        .Item("encoded_columnar_batch_count").Value(statistics.encoded_columnar_batch_count())
     .EndMap();
 }
 

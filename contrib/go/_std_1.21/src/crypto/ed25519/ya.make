@@ -1,14 +1,23 @@
 GO_LIBRARY()
-
-SRCS(
-    ed25519.go
-)
-
-GO_TEST_SRCS(ed25519_test.go)
-
-GO_XTEST_SRCS(ed25519vectors_test.go)
-
+IF (OS_DARWIN AND ARCH_ARM64)
+    SRCS(
+		ed25519.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SRCS(
+		ed25519.go
+    )
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SRCS(
+		ed25519.go
+    )
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		ed25519.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		ed25519.go
+    )
+ENDIF()
 END()
-
-RECURSE(
-)

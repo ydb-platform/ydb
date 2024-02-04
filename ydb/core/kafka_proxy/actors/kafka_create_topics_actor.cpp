@@ -151,9 +151,10 @@ public:
         Y_UNUSED(status);
     };
 
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl flag) override {
         Y_UNUSED(in);
         Y_UNUSED(status);
+        Y_UNUSED(flag);
     };
 
     void Reply(NProtoBuf::Message* resp, ui32 status = 0) override {

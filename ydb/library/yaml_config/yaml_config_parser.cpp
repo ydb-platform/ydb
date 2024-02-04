@@ -943,10 +943,12 @@ namespace NKikimr::NYaml {
         return result;
     }
 
-    void Parse(const TString& data, NKikimrConfig::TAppConfig& config) {
+    void Parse(const TString& data, NKikimrConfig::TAppConfig& config, bool needsTransforming) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
-        TransformConfig(jsonNode);
+        if (needsTransforming) {
+            TransformConfig(jsonNode);
+        }
         NProtobufJson::MergeJson2Proto(jsonNode, config, GetJsonToProtoConfig());
     }
 }

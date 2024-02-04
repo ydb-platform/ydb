@@ -17,7 +17,6 @@ struct THistogramSnapshot
     THistogramSnapshot& operator += (const THistogramSnapshot& other);
 
     bool operator == (const THistogramSnapshot& other) const;
-    bool operator != (const THistogramSnapshot& other) const;
     bool IsEmpty() const;
 };
 

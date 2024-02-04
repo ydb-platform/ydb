@@ -12,7 +12,7 @@ using namespace NOlap;
 
 namespace {
 
-class TTestInsertTableDB : public IDbWrapper {
+class TTestInsertTableDB: public IDbWrapper {
 public:
     void Insert(const TInsertedData&) override {}
     void Commit(const TInsertedData&) override {}
@@ -22,14 +22,17 @@ public:
     void EraseAborted(const TInsertedData&) override {}
 
     bool Load(TInsertTableAccessor&,
-              const TInstant&) override
-    {
+        const TInstant&) override {
         return true;
     }
 
     void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {}
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {}
     bool LoadColumns(const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
+
+    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
+    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
+    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override { return true; }
 
     void WriteCounter(ui32, ui64) override {}
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>&) override { return true; }

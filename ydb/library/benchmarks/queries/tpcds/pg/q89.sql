@@ -14,11 +14,11 @@ where ss_item_sk = i_item_sk and
       ss_sold_date_sk = d_date_sk and
       ss_store_sk = s_store_sk and
       d_year in (2000) and
-        ((i_category in ('Home','Books','Electronics') and
-          i_class in ('wallpaper','parenting','musical')
+        ((i_category in ('Home','Music','Books') and
+          i_class in ('glassware','classical','fiction')
          )
-      or (i_category in ('Shoes','Jewelry','Men') and
-          i_class in ('womens','birdal','pants') 
+      or (i_category in ('Jewelry','Sports','Women') and
+          i_class in ('semi-precious','baseball','dresses')
         ))
 group by i_category, i_class, i_brand,
          s_store_name, s_company_name, d_moy) tmp1

@@ -125,6 +125,7 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_misc.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_observer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp

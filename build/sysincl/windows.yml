@@ -303,13 +303,6 @@
   - winwlx.h
   - wnnc.h
   - wow64apiset.h
-  - wrl.h
-  - wrl/async.h
-  - wrl/client.h
-  - wrl/event.h
-  - wrl/ftm.h
-  - wrl/implements.h
-  - wrl/wrappers/corewrappers.h
   - ws2bth.h
   - ws2def.h
   - ws2ipdef.h
@@ -323,3 +316,14 @@
   - xaudio2.h
   - xinput.h
   - xmllite.h
+
+# These headers belong to UWP application development.
+- case_sensitive: false
+  includes:
+    - wrl.h
+    - wrl/async.h
+    - wrl/client.h
+    - wrl/event.h
+    - wrl/ftm.h
+    - wrl/implements.h
+    - wrl/wrappers/corewrappers.h

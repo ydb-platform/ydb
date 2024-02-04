@@ -543,10 +543,6 @@
   #endif
   - asm/page.h
   - asm/sgidefs.h
-  - wrl\client.h
-  - wrl\event.h
-  - wrl\wrappers\corewrappers.h
-  - wrl\ftm.h
   - bits/char_traits.h
   - bits/stl_algobase.h
   - bits/stl_move.h
@@ -825,11 +821,8 @@
   - mpeix/mpeixish.h
   - epocish.h
   - beos/beosish.h
-  - WinNT.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
-  - Activation.h
-  - Windows.System.Threading.h
   #if defined(__MINGW32__) || defined(_MSC_VER)
   - inet_net_pton.h
   - inet_ntop.h

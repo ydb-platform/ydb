@@ -516,9 +516,6 @@
   - ../ucrt/math.h
   - ../ucrt/signal.h
   - ../ucrt/sys/stat.h
-  #if defined (CUDA)
-  - math_constants.h
-  #endif
   #if defined(BUILDING_LIBCURL)
   - amitcp/socketbasetags.h
   - clib.h

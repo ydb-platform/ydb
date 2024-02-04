@@ -2476,7 +2476,7 @@ struct is_dynamic_buffer_v2
  * If @c BOOST_ASIO_NO_DYNAMIC_BUFFER_V1 is not defined, determines whether the
  * type satisfies the DynamicBuffer_v1 requirements. Otherwise, if @c
  * BOOST_ASIO_NO_DYNAMIC_BUFFER_V1 is defined, determines whether the type
- * satisfies the DynamicBuffer_v1 requirements.
+ * satisfies the DynamicBuffer_v2 requirements.
  */
 template <typename T>
 struct is_dynamic_buffer

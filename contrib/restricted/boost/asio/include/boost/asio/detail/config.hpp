@@ -341,7 +341,7 @@
 
 // Compliant C++11 compilers put noexcept specifiers on error_category members.
 #if !defined(BOOST_ASIO_ERROR_CATEGORY_NOEXCEPT)
-# if (BOOST_VERSION >= 105300)
+# if defined(BOOST_ASIO_HAS_BOOST_CONFIG) && (BOOST_VERSION >= 105300)
 #  define BOOST_ASIO_ERROR_CATEGORY_NOEXCEPT BOOST_NOEXCEPT
 # elif defined(__clang__)
 #  if __has_feature(__cxx_noexcept__)
@@ -508,9 +508,9 @@
 // Boost support for chrono.
 #if !defined(BOOST_ASIO_HAS_BOOST_CHRONO)
 # if !defined(BOOST_ASIO_DISABLE_BOOST_CHRONO)
-#  if (BOOST_VERSION >= 104700)
+#  if defined(BOOST_ASIO_HAS_BOOST_CONFIG) && (BOOST_VERSION >= 104700)
 #   define BOOST_ASIO_HAS_BOOST_CHRONO 1
-#  endif // (BOOST_VERSION >= 104700)
+#  endif // defined(BOOST_ASIO_HAS_BOOST_CONFIG) && (BOOST_VERSION >= 104700)
 # endif // !defined(BOOST_ASIO_DISABLE_BOOST_CHRONO)
 #endif // !defined(BOOST_ASIO_HAS_BOOST_CHRONO)
 
@@ -1239,6 +1239,8 @@
 #   define BOOST_ASIO_HAS_THREADS 1
 #  elif defined(__APPLE__)
 #   define BOOST_ASIO_HAS_THREADS 1
+#  elif defined(__HAIKU__)
+#   define BOOST_ASIO_HAS_THREADS 1
 #  elif defined(_POSIX_THREADS) && (_POSIX_THREADS + 0 >= 0)
 #   define BOOST_ASIO_HAS_THREADS 1
 #  elif defined(_PTHREADS)
@@ -1253,6 +1255,8 @@
 #  if defined(BOOST_ASIO_HAS_BOOST_CONFIG) && defined(BOOST_HAS_PTHREADS)
 #   define BOOST_ASIO_HAS_PTHREADS 1
 #  elif defined(_POSIX_THREADS) && (_POSIX_THREADS + 0 >= 0)
+#   define BOOST_ASIO_HAS_PTHREADS 1
+#  elif defined(__HAIKU__)
 #   define BOOST_ASIO_HAS_PTHREADS 1
 #  endif // defined(BOOST_ASIO_HAS_BOOST_CONFIG) && defined(BOOST_HAS_PTHREADS)
 # endif // defined(BOOST_ASIO_HAS_THREADS)
@@ -1434,11 +1438,11 @@
 #  endif // defined(BOOST_ASIO_MSVC)
 # endif // !defined(BOOST_ASIO_DISABLE_CO_AWAIT)
 # if defined(__clang__)
-#  if (__cpp_coroutines >= 201703)
+#  if (__cplusplus >= 201703) && (__cpp_coroutines >= 201703)
 #   if __has_include(<coroutine>)
 #    define BOOST_ASIO_HAS_CO_AWAIT 1
 #   endif // __has_include(<coroutine>)
-#  endif // (__cpp_coroutines >= 201703)
+#  endif // (__cplusplus >= 201703) && (__cpp_coroutines >= 201703)
 # endif // defined(__clang__)
 #endif // !defined(BOOST_ASIO_HAS_CO_AWAIT)
 

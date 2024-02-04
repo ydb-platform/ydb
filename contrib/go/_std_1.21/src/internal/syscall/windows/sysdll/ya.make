@@ -1,14 +1,7 @@
 GO_LIBRARY()
-
-BUILD_ONLY_IF(
-    WARNING
-    OS_WINDOWS
-)
-
-IF (OS_WINDOWS)
+IF (OS_WINDOWS AND ARCH_X86_64)
     SRCS(
-        sysdll.go
+		sysdll.go
     )
 ENDIF()
-
 END()

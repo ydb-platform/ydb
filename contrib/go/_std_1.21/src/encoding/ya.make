@@ -5,18 +5,3 @@ IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_A
     )
 ENDIF()
 END()
-
-
-RECURSE(
-	ascii85
-	asn1
-	base32
-	base64
-	binary
-	csv
-	gob
-	hex
-	json
-	pem
-	xml
-)

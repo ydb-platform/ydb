@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <optional>
+
 #include <google/protobuf/message.h>
 
 #include <util/generic/algorithm.h>
@@ -13,11 +15,20 @@
 
 
 namespace NKikimr::NYaml {
+    struct TTransformContext {
+        bool DisableBuiltinSecurity;
+        bool ExplicitEmptyDefaultGroups;
+        bool ExplicitEmptyDefaultAccess;
+    };
+
     NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot);
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
 
-    void TransformConfig(NJson::TJsonValue& config, bool relaxed = false);
+    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx);
 
-    void Parse(const TString& data, NKikimrConfig::TAppConfig& config);
+    void TransformJsonConfig(NJson::TJsonValue& config, bool relaxed = false);
+    void TransformProtoConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed = false);
+
+    NKikimrConfig::TAppConfig Parse(const TString& data);
 }

@@ -17,6 +17,11 @@
 #include <ydb/public/sdk/cpp/client/ydb_discovery/discovery.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+
 extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
@@ -39,11 +44,39 @@ struct TCallContext {
 
 #define CALL_CTX() TCallContext{__FILE__, __LINE__}
 
+
+template<typename T>
+bool ParsePBFromString(const TString &content, T *pb, bool allowUnknown = false) {
+    if (!allowUnknown) {
+        return ::google::protobuf::TextFormat::ParseFromString(content, pb);
+    }
+
+    ::google::protobuf::TextFormat::Parser parser;
+    parser.AllowUnknownField(true);
+    return parser.ParseFromString(content, pb);
+}
+
+class IErrorCollector {
+public:
+    virtual ~IErrorCollector() {}
+    virtual void Fatal(TString error) = 0;
+};
+
+class TDefaultErrorCollector
+    : public IErrorCollector
+{
+public:
+    void Fatal(TString error) override {
+        Cerr << error << Endl;
+    }
+};
+
 class IProtoConfigFileProvider {
 public:
     virtual ~IProtoConfigFileProvider() {}
     virtual void AddConfigFile(TString optName, TString description) = 0;
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) const = 0;
+    virtual TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const = 0;
 };
 
 class TDefaultProtoConfigFileProvider
@@ -51,6 +84,24 @@ class TDefaultProtoConfigFileProvider
 {
 private:
     TMap<TString, TString> Opts;
+
+    static bool IsFileExists(const fs::path& p) {
+        std::error_code ec;
+        return fs::exists(p, ec) && !ec;
+    }
+
+    static bool IsFileReadable(const fs::path& p) {
+        std::error_code ec; // For noexcept overload usage.
+        auto perms = fs::status(p, ec).permissions();
+        if ((perms & fs::perms::owner_read) != fs::perms::none &&
+            (perms & fs::perms::group_read) != fs::perms::none &&
+            (perms & fs::perms::others_read) != fs::perms::none
+            )
+        {
+            return true;
+        }
+        return false;
+    }
 public:
     void AddConfigFile(TString optName, TString description) override {
         Opts.emplace(optName, description);
@@ -60,6 +111,20 @@ public:
         for (const auto& [opt, desc] : Opts) {
             opts.AddLongOption(opt, desc).OptionalArgument("PATH");
         }
+    }
+
+    TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
+        fs::path filePath(path.c_str());
+        if (!IsFileExists(filePath)) {
+            errorCollector.Fatal(Sprintf("File %s doesn't exists", path.c_str()));
+            return {};
+        }
+        if (!IsFileReadable(filePath)) {
+            errorCollector.Fatal(Sprintf("File %s isn't readable", path.c_str()));
+            return {};
+        }
+        TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
+        return fileInput->ReadAll();
     }
 };
 
@@ -132,6 +197,8 @@ struct TConfigRefs {
     NKikimrConfig::TAppConfig& AppConfig;
     IConfigUpdateTracer& Tracer;
     TClientCommand::TConfig& Config;
+    IErrorCollector& ErrorCollector;
+    IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
 
 template <class TProto>
@@ -152,6 +219,8 @@ auto MutableConfigPart(
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
     IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
     TClientCommand::TConfig& config = refs.Config;
+    auto& errorCollector = refs.ErrorCollector;
+    auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     if ((refs.AppConfig.*hasConfig)()) {
         return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
@@ -159,9 +228,20 @@ auto MutableConfigPart(
 
     if (optname && config.ParseResult->Has(optname)) {
         auto *res = (refs.AppConfig.*mutableConfig)();
-        const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res);
-        Y_ABORT_UNLESS(success);
+
+        TString path = config.ParseResult->Get(optname);
+        const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
+        /*
+         * FIXME: if (ErrorCollector.HasFatal()) { return; }
+         */
+        const bool result = ParsePBFromString(protoString, res);
+        if (!result) {
+            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            return nullptr;
+        }
+
         TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromFile);
+
         return res;
     } else if ((refs.BaseConfig.*hasConfig)()) {
         auto* res = (refs.AppConfig.*mutableConfig)();
@@ -184,11 +264,23 @@ auto MutableConfigPartMerge(
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
     IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
     TClientCommand::TConfig& config = refs.Config;
+    auto& errorCollector = refs.ErrorCollector;
+    auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
     if (config.ParseResult->Has(optname)) {
         typename std::remove_reference<decltype(*(refs.AppConfig.*mutableConfig)())>::type cfg;
-        bool success = ParsePBFromFile(config.ParseResult->Get(optname), &cfg);
-        Y_ABORT_UNLESS(success);
+
+        TString path = config.ParseResult->Get(optname);
+        const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
+        /*
+         * FIXME: if (ErrorCollector.HasFatal()) { return; }
+         */
+        const bool result = ParsePBFromString(protoString, &cfg);
+        if (!result) {
+            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            return nullptr;
+        }
+
         auto *res = (refs.AppConfig.*mutableConfig)();
         res->MergeFrom(cfg);
         TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartMergeFromFile);
@@ -196,6 +288,63 @@ auto MutableConfigPartMerge(
     }
 
     return nullptr;
+}
+
+void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out) {
+    for (const TString& path : configFiles) {
+        NKikimrConfig::TAppConfig parsedConfig;
+        const TString protoString = protoConfigFileProvider.GetProtoFromFile(path, errorCollector);
+        /*
+         * FIXME: if (ErrorCollector.HasFatal()) { return; }
+         */
+        const bool result = ParsePBFromString(protoString, &parsedConfig);
+        if (!result) {
+            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            return;
+        }
+        out.MergeFrom(parsedConfig);
+    }
+}
+
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, TCallContext callCtx) {
+    if (!yamlConfigFile) {
+        return;
+    }
+
+    IConfigUpdateTracer* ConfigUpdateTracer = &refs.Tracer;
+    IErrorCollector& errorCollector = refs.ErrorCollector;
+    IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
+
+    const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
+    /*
+     * FIXME: if (ErrorCollector.HasFatal()) { return; }
+     */
+    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfigString); // FIXME
+    /*
+     * FIXME: if (ErrorCollector.HasFatal()) { return; }
+     */
+    const google::protobuf::Descriptor* descriptor = refs.AppConfig.GetDescriptor();
+    const google::protobuf::Reflection* reflection = refs.AppConfig.GetReflection();
+    for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
+        const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
+        if (!fieldDescriptor) {
+            continue;
+        }
+
+        if (fieldDescriptor->is_repeated()) {
+            continue;
+        }
+
+        if (reflection->HasField(refs.AppConfig, fieldDescriptor)) {
+            // field is already set in app config
+            continue;
+        }
+
+        if (reflection->HasField(parsedConfig, fieldDescriptor)) {
+            reflection->SwapFields(&refs.AppConfig, &parsedConfig, {fieldDescriptor});
+            TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
+        }
+    }
 }
 
 constexpr auto NODE_KIND_YDB = "ydb";
@@ -209,6 +358,7 @@ public:
         , RunConfig(AppConfig)
         , Factories(std::move(factories))
     {
+        ErrorCollector = std::make_unique<TDefaultErrorCollector>();
         ProtoConfigFileProvider = std::make_unique<TDefaultProtoConfigFileProvider>();
         AddProtoConfigOptions(*ProtoConfigFileProvider);
         ConfigUpdateTracer = std::make_unique<TDefaultConfigUpdateTracer>();
@@ -276,6 +426,7 @@ protected:
     TString PathToInterconnectCaFile;
     TString YamlConfigFile;
 
+    std::unique_ptr<IErrorCollector> ErrorCollector;
     std::unique_ptr<IProtoConfigFileProvider> ProtoConfigFileProvider;
     std::unique_ptr<IConfigUpdateTracer> ConfigUpdateTracer;
 
@@ -417,12 +568,23 @@ protected:
         label->SetValue(value);
     }
 
+    void InitMemLog(NKikimrConfig::TMemoryLogConfig& mem) {
+        if (mem.HasLogBufferSize() && mem.GetLogBufferSize() > 0) {
+            if (mem.HasLogGrainSize() && mem.GetLogGrainSize() > 0) {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize(), mem.GetLogGrainSize());
+            } else {
+                TMemoryLog::CreateMemoryLogBuffer(mem.GetLogBufferSize());
+            }
+            MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
+        }
+    }
+
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
         using TCfg = NKikimrConfig::TAppConfig;
 
-        TConfigRefs refs{BaseConfig, AppConfig, *ConfigUpdateTracer, config};
+        TConfigRefs refs{BaseConfig, AppConfig, *ConfigUpdateTracer, config, *ErrorCollector, *ProtoConfigFileProvider};
 
         auto option = [&](const char* optname, auto tag, TCallContext ctx) {
             return MutableConfigPart(refs, optname, tag, ctx);
@@ -433,28 +595,40 @@ protected:
         };
 
         option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
-        LoadBootstrapConfig(config);
-        LoadYamlConfig(CALL_CTX());
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
+        LoadBootstrapConfig(*ProtoConfigFileProvider, *ErrorCollector, config.ParseResult->GetFreeArgs(), BaseConfig);
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
+        LoadYamlConfig(refs, YamlConfigFile, CALL_CTX());
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
         optionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
 
         // start memorylog as soon as possible
         if (auto mem = option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, CALL_CTX())) {
-            if (mem->HasLogBufferSize() && mem->GetLogBufferSize() > 0) {
-                if (mem->HasLogGrainSize() && mem->GetLogGrainSize() > 0) {
-                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize(), mem->GetLogGrainSize());
-                } else {
-                    TMemoryLog::CreateMemoryLogBuffer(mem->GetLogBufferSize());
-                }
-                MemLogWriteNullTerm("Memory_log_has_been_started_YAHOO_");
-            }
+            InitMemLog(*mem);
         }
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
 
         option("naming-file", TCfg::TNameserviceConfigFieldTag{}, CALL_CTX());
+        /*
+         * FIXME: if (ErrorCollector->HasFatal()) { return; }
+         */
 
         if (config.ParseResult->Has("node")) {
             if (NodeIdValue == "static") {
-                if (!AppConfig.HasNameserviceConfig() || !InterconnectPort)
+                if (!AppConfig.HasNameserviceConfig() || !InterconnectPort) {
                     ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
+                }
                 try {
                     NodeId = FindStaticNodeId();
                 } catch(TSystemError& e) {
@@ -466,8 +640,9 @@ protected:
                 }
                 Cout << "Determined node ID: " << NodeId << Endl;
             } else {
-                if (!TryFromString(NodeIdValue, NodeId))
+                if (!TryFromString(NodeIdValue, NodeId)) {
                     ythrow yexception() << "wrong '--node' value (should be NUM, 'static')";
+                }
             }
         }
 
@@ -524,7 +699,7 @@ protected:
             }
         }
 
-        LoadYamlConfig(CALL_CTX());
+        LoadYamlConfig(refs, YamlConfigFile, CALL_CTX());
 
         option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
         if (!AppConfig.HasActorSystemConfig()) {
@@ -904,47 +1079,6 @@ protected:
         RunConfig.ClusterName = AppConfig.GetNameserviceConfig().GetClusterUUID();
     }
 
-    inline void LoadYamlConfig(TCallContext callCtx) {
-        auto yamlConfig = TFileInput(YamlConfigFile);
-        NKikimrConfig::TAppConfig parsedConfig;
-        NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
-        const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
-        const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
-        for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
-            const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-            if (!fieldDescriptor) {
-                continue;
-            }
-
-            if (fieldDescriptor->is_repeated()) {
-                continue;
-            }
-
-            if (reflection->HasField(AppConfig, fieldDescriptor)) {
-                // field is already set in app config
-                continue;
-            }
-
-            if (reflection->HasField(parsedConfig, fieldDescriptor)) {
-                reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
-                TRACE_CONFIG_CHANGE(callCtx, fieldIdx, ReplaceConfigWithConsoleProto);
-            }
-        }
-    }
-
-    inline bool LoadBootstrapConfig(TConfig& config) {
-        bool res = false;
-        for (const TString& path : config.ParseResult->GetFreeArgs()) {
-            NKikimrConfig::TAppConfig parsedConfig;
-            const bool result = ParsePBFromFile(path, &parsedConfig);
-            Y_ABORT_UNLESS(result);
-            BaseConfig.MergeFrom(parsedConfig);
-            res = true;
-        }
-
-        return res;
-    }
-
     TString DeduceNodeDomain() {
         if (NodeDomain) {
             return NodeDomain;
@@ -954,11 +1088,13 @@ protected:
         }
         if (AppConfig.GetTenantPoolConfig().SlotsSize() == 1) {
             auto &slot = AppConfig.GetTenantPoolConfig().GetSlots(0);
-            if (slot.GetDomainName())
+            if (slot.GetDomainName()) {
                 return slot.GetDomainName();
+            }
             auto &tenantName = slot.GetTenantName();
-            if (IsStartWithSlash(tenantName))
+            if (IsStartWithSlash(tenantName)) {
                 return ToString(ExtractDomain(tenantName));
+            }
         }
         return "";
     }

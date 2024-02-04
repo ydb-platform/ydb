@@ -24,8 +24,10 @@ NKikimrConfig::TAppConfig YamlToProto(
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
+    NYaml::TTransformContext ctx;
     if (preTransform) {
-        NKikimr::NYaml::TransformConfig(json, true);
+        ExtractExtraFields(json, ctx);
+        NKikimr::NYaml::TransformJsonConfig(json, true);
     }
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
@@ -39,6 +41,10 @@ NKikimrConfig::TAppConfig YamlToProto(
     c.UnknownFieldsCollector = std::move(unknownFieldsCollector);
 
     NProtobufJson::MergeJson2Proto(json, yamlProtoConfig, c);
+
+    if (preTransform) {
+        NKikimr::NYaml::TransformProtoConfig(ctx, yamlProtoConfig);
+    }
 
     return yamlProtoConfig;
 }
@@ -95,9 +101,11 @@ void ResolveAndParseYamlConfig(
     NJson::TJsonValue json;
     Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
 
-    NKikimr::NYaml::TransformConfig(json, true);
-
+    NYaml::TTransformContext ctx;
+    ExtractExtraFields(json, ctx);
+    NKikimr::NYaml::TransformJsonConfig(json, true);
     NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig().SetAllowUnknownFields(true));
+    NKikimr::NYaml::TransformProtoConfig(ctx, appConfig);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

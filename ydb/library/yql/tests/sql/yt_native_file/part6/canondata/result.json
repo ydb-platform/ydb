@@ -338,6 +338,27 @@
             "uri": "https://{canondata_backend}/1936997/a879c594903fb53f2cbc586abd0c0e9fac5dd32a/resource.tar.gz#test.test_ansi_idents-struct_access-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Debug]": [
+        {
+            "checksum": "8205c71567a0a1c0bca8f254335b6eb3",
+            "size": 736,
+            "uri": "https://{canondata_backend}/1925842/918ca459c1dad876e9ddd43d7265c31c8860d714/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925842/918ca459c1dad876e9ddd43d7265c31c8860d714/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[bigdate-bitcast_interval64-default.txt-Results]": [
+        {
+            "checksum": "471a1b91231b29b03425beeebb0538f3",
+            "size": 2718,
+            "uri": "https://{canondata_backend}/1925842/918ca459c1dad876e9ddd43d7265c31c8860d714/resource.tar.gz#test.test_bigdate-bitcast_interval64-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[bigdate-input_date32-default.txt-Debug]": [
         {
             "checksum": "8e07467c0bdb81d7be3aad7624459808",
@@ -354,9 +375,9 @@
     ],
     "test.test[bigdate-input_date32-default.txt-Results]": [
         {
-            "checksum": "d304bb86e6465aac7c9bbbd559492cdc",
-            "size": 19686,
-            "uri": "https://{canondata_backend}/1775059/97f4df37c96c03d696d11405856b5a626322c84c/resource.tar.gz#test.test_bigdate-input_date32-default.txt-Results_/results.txt"
+            "checksum": "6f28410afb1cd612406a4e9ec5ec436d",
+            "size": 20311,
+            "uri": "https://{canondata_backend}/1925842/918ca459c1dad876e9ddd43d7265c31c8860d714/resource.tar.gz#test.test_bigdate-input_date32-default.txt-Results_/results.txt"
         }
     ],
     "test.test[bigdate-output_date32-default.txt-Debug]": [

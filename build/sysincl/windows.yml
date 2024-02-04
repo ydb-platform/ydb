@@ -10,6 +10,7 @@
   - atltime.h
   - audioclient.h
   - authz.h
+  - basetsd.h
   - basetyps.h
   - bcrypt.h
   - bits.h
@@ -104,6 +105,7 @@
   - io.h
   - ioapiset.h
   - ipexport.h
+  - iphlpapi.h
   - ipifcons.h
   - iptypes.h
   - iwscapi.h
@@ -177,6 +179,7 @@
   - persist.h
   - poppack.h
   - powerbase.h
+  - powrprof.h
   - process.h
   - processenv.h
   - processsnapshot.h

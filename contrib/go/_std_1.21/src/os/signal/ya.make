@@ -1,10 +1,10 @@
 GO_LIBRARY()
-
-SRCS(
-    doc.go
-    sig.s
-    signal.go
-    signal_unix.go
-)
-
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		doc.go
+		sig.s
+		signal.go
+		signal_unix.go
+    )
+ENDIF()
 END()

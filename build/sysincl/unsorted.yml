@@ -797,13 +797,6 @@
   - net/errno.h
   - sys/mode.h
   - nwstdio.h
-  - os2ish.h
-  - vmsish.h
-  - ./plan9/plan9ish.h
-  - ./vos/vosish.h
-  - vos/vosish.h
-  - symbian/symbianish.h
-  - haiku/haikuish.h
   - nw5thread.h
   - os2thread.h
   - netware.h
@@ -816,11 +809,7 @@
   - objc/NXCType.h
   - appkit/NXCType.h
   - sfio.h
-  - vmesa/vmesaish.h
   - sys\stat.h
-  - mpeix/mpeixish.h
-  - epocish.h
-  - beos/beosish.h
   - ../../VC/include/stdio.h
   - ../ucrt/stdio.h
   #if defined(__MINGW32__) || defined(_MSC_VER)

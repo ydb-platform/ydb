@@ -223,9 +223,6 @@
   - vcruntime_new.h
   - vcruntime_typeinfo.h
   #endif
-  - PowrProf.h
-  - BaseTsd.h
-  - iphlpapi.h
 
 - source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
   includes:
@@ -643,7 +640,6 @@
   - bemapiset.h
   - cor.h
   - fusion.h
-  - IPHlpApi.h
   - metahost.h
   #if defined(WINDOWS) && defined (_USE_MFC_)
   - afx.h

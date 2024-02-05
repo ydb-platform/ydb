@@ -17,7 +17,7 @@ class TDqComputeStorage : public NKikimr::NMiniKQL::ISpiller
 {
 public:
 
-    TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, NActors::TActorSystem* ActorSystem);
+    TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, NActors::TActorSystem* actorSystem);
 
     ~TDqComputeStorage();
 

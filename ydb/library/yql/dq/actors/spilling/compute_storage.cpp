@@ -1,25 +1,16 @@
 #include "compute_storage.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
-
-#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
-
 namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* ActorSystem)
-    :  ActorSystem_(ActorSystem)
+TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* actorSystem)
+    :  ActorSystem_(actorSystem)
 {
     TStringStream spillerName;
     spillerName << "Spiller" << "_" << static_cast<const void*>(this);
     ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback);
-    ComputeStorageActorId_ = ActorSystem->Register(ComputeStorageActor_->GetActor());
+    ComputeStorageActorId_ = ActorSystem_->Register(ComputeStorageActor_->GetActor());
 }
 
     TDqComputeStorage::~TDqComputeStorage() {

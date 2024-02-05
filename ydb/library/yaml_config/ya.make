@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/erasure
     ydb/core/protos
     ydb/library/yaml_config/public
+    ydb/library/yaml_config/new/protos
 )
 
 END()

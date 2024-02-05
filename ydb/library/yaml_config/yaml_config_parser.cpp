@@ -6,6 +6,9 @@
 
 #include <library/cpp/json/writer/json.h>
 
+#include <ydb/library/yaml_config/new/protos/message.pb.h>
+#include <library/cpp/protobuf/json/util.h>
+
 #include <charconv>
 
 namespace NKikimr::NYaml {
@@ -775,12 +778,50 @@ namespace NKikimr::NYaml {
         }
     }
 
+    TVector<TString> ListEphemeralFields() {
+        TVector<TString> result;
+
+        auto& inst = NKikimrConfig::TEphemeralInputFields::default_instance();
+        const auto* descriptor = inst.GetDescriptor();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const auto* fieldDescriptor = descriptor->field(i);
+            result.push_back(fieldDescriptor->name());
+        }
+        for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
+        }
+
+        return result;
+    }
+
+    TVector<TString> ListNonEphemeralFields() {
+        TVector<TString> result;
+
+        auto& inst = NKikimrConfig::TAppConfig::default_instance();
+        const auto* descriptor = inst.GetDescriptor();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+            const auto* fieldDescriptor = descriptor->field(i);
+            result.push_back(fieldDescriptor->name());
+        }
+        for (int i = 0; i < descriptor->reserved_name_count(); ++i) {
+            result.push_back(descriptor->reserved_name(i));
+        }
+
+        for (auto& str : result) {
+            NProtobufJson::ToSnakeCaseDense(&str);
+        }
+
+        return result;
+    }
+
     void ClearFields(NJson::TJsonValue& json){
-        json.EraseValue("system_tablets");
-        json.EraseValue("static_erasure");
-        json.EraseValue("hosts");
-        json.EraseValue("host_configs");
-        json.EraseValue("storage_config_generation");
+        for (const auto& field : ListEphemeralFields()) {
+            json.EraseValue(field);
+        }
     }
 
     void PrepareBlobStorageConfig(NJson::TJsonValue& json) {
@@ -848,6 +889,7 @@ namespace NKikimr::NYaml {
         PrepareStaticGroup(json);
         PrepareBlobStorageConfig(json);
         PrepareSystemTabletsInfo(json, relaxed);
+        PrepareDomainsConfig(json, relaxed);
         PrepareBootstrapConfig(json, relaxed);
         // remove ephemeral
         ClearFields(json);
@@ -1078,6 +1120,14 @@ namespace NKikimr::NYaml {
         NJson::TJsonValue jsonNode = Yaml2Json(yamlNode, true);
         TTransformContext ctx;
         ExtractExtraFields(jsonNode, ctx);
+
+        NJson::TJsonValue ephemeralJsonNode = jsonNode;
+        for (const auto& field : ListNonEphemeralFields()) {
+            ephemeralJsonNode.EraseValue(field);
+        }
+        NKikimrConfig::TEphemeralInputFields ephemeralConfig;
+        NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, GetJsonToProtoConfig());
+
         TransformJsonConfig(jsonNode);
 
         NKikimrConfig::TAppConfig config;

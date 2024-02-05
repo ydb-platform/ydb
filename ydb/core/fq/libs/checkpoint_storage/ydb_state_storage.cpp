@@ -363,22 +363,9 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
             });
         });
 
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            TCountStatesResult countResult;
-            countResult.first = context->Count;
-            try {    
-                const auto& status = future.GetValue();
-                if (!status.IsSuccess()) {
-                    countResult.second = status.GetIssues();
-                }
-            } catch (...) {
-                TIssues issues;
-                issues.AddIssue(CurrentExceptionMessage());
-                countResult.second = issues;
-            }
-            return countResult;
-           
+    return StatusToIssues(future).Apply(
+        [context] (const TFuture<TIssues>& future) {
+            return TCountStatesResult{context->Count, std::move(future.GetValue())};
         });
 }
 TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {

@@ -803,19 +803,11 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
             return CreateCheckpointWrapper(future, checkpointContext);
         });
 
-    return future.Apply(
-        [checkpointContext](const TFuture<NYdb::TStatus>& future) {
-            try {    
-                if (NYql::TIssues issues = StatusToIssues(future.GetValue())) {
-                    return TCreateCheckpointResult(TString(), std::move(issues));
-                } else {
-                    return TCreateCheckpointResult(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId, NYql::TIssues());
-                }
-            } catch (...) {
-                TIssues issues;
-                issues.AddIssue(CurrentExceptionMessage());
-                return TCreateCheckpointResult(TString(), issues);
-            }
+    return StatusToIssues(future).Apply(
+        [checkpointContext] (const TFuture<TIssues>& future) {
+            NYql::TIssues issues = future.GetValue();
+            TString descId  = !issues ? checkpointContext->CheckpointGraphDescriptionContext->GraphDescId : TString();
+            return TCreateCheckpointResult(descId, std::move(issues));
         });
 }
 
@@ -1103,15 +1095,10 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                         return status;
                     });
         });
-    return future.Apply(
-        [result](const TFuture<TStatus>& status) {
-           try {    
-               return std::make_pair(std::move(result->Size), std::move(status.GetValue().GetIssues()));
-            } catch (...) {
-                TIssues issues;
-                issues.AddIssue(CurrentExceptionMessage());
-                return ICheckpointStorage::TGetTotalCheckpointsStateSizeResult(0, issues);
-            }
+
+    return StatusToIssues(future).Apply(
+        [result] (const TFuture<TIssues>& future) {
+            return std::make_pair(std::move(result->Size), std::move(future.GetValue()));
         });
 }
 

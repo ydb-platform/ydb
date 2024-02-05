@@ -214,7 +214,7 @@ TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
                 return StatusToIssues(future.GetValue());
             } catch (...) {
                 TIssues issues;
-                issues.AddIssue(CurrentExceptionMessage());
+                issues.AddIssue("StatusToIssues failed with exception: " + CurrentExceptionMessage());
                 return issues;
             }
     });

@@ -330,8 +330,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
 
         joinResults.reserve(3 * bucket1->TuplesNum );
 
-        ui64 headerSize = JoinTable1->HeaderSize;
-        ui64 slotSize = headerSize;
+        ui64 slotSize = headerSize2;
 
         ui64 avgStringsSize = ( 3 * (bucket2->KeyIntVals.size() - bucket2->TuplesNum * headerSize2) ) / ( 2 * bucket2->TuplesNum + 1)  + 1;
 
@@ -417,14 +416,15 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             auto slotIt = joinSlots.begin() + slotNum * slotSize;
             while (*slotIt != 0 && slotIt != joinSlots.end())
             {
+
                 bool matchFound = false;
-                if (keysValSize <= slotSize && !JoinTable1->NumberOfKeyIColumns ) {
+                if (((keysValSize - nullsSize1) <= (slotSize - nullsSize2)) && !JoinTable1->NumberOfKeyIColumns ) {
                     if (std::equal(it1 + keyIntOffset1, it1 + keysValSize, slotIt + keyIntOffset2)) {
                         matchFound = true;
                     }
                 }
 
-                if (keysValSize > slotSize && !JoinTable1->NumberOfKeyIColumns ) {
+                if (((keysValSize - nullsSize1) > (slotSize - nullsSize2)) && !JoinTable1->NumberOfKeyIColumns ) {
                     if (std::equal(it1 + keyIntOffset1, it1 + headerSize1, slotIt + keyIntOffset2)) {
                         ui64 stringsPos = *(slotIt + headerSize2);
                         ui64 stringsSize = *(it1 + headerSize1 - 1);
@@ -434,6 +434,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                     }
                 }
 
+ 
                 if (JoinTable1->NumberOfKeyIColumns)
                 {
                     bool headerMatch = false;
@@ -481,29 +482,29 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
                         matchFound = true;
                     }
 
-                 }
-
-                    if (matchFound)
-                    {
-                        JoinTuplesIds joinIds;
-                        joinIds.id1 = tuple1Idx;
-                        joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
-                        if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
-                        {
-                            std::swap(joinIds.id1, joinIds.id2);
-                        }
-                        joinResults.emplace_back(joinIds);
-                    }
-
-                    slotIt += slotSize;
-                    if (slotIt == joinSlots.end())
-                        slotIt = joinSlots.begin();
                 }
 
+                if (matchFound)
+                {
+                    JoinTuplesIds joinIds;
+                    joinIds.id1 = tuple1Idx;
+                    joinIds.id2 = slotToIdx[(slotIt - joinSlots.begin()) / slotSize];
+                    if (JoinTable2->TableBuckets[bucket].TuplesNum > JoinTable1->TableBuckets[bucket].TuplesNum)
+                    {
+                        std::swap(joinIds.id1, joinIds.id2);
+                    }
+                    joinResults.emplace_back(joinIds);
+                }
+
+                slotIt += slotSize;
+                if (slotIt == joinSlots.end())
+                    slotIt = joinSlots.begin();
+            }
 
             it1 += keysValSize;
             tuple1Idx ++;
         }
+
         std::sort(joinResults.begin(), joinResults.end(), [](JoinTuplesIds a, JoinTuplesIds b)
         {
             if (a.id1 < b.id1) return true;

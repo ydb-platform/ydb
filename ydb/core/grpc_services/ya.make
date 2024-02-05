@@ -132,6 +132,7 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources
     ydb/services/ext_index/common
+    ydb/library/dbgtrace
 )
 
 YQL_LAST_ABI_VERSION()

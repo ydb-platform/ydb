@@ -22,6 +22,8 @@ services:
       - 8123
   fq-connector-go:
     container_name: ${USER}_connector-integration-tests-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.1.1@sha256:47e24df143aee31a83d4a4cd0acc20b4cab8c03a9c63e81a6e99cb017a31f916
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.1.2@sha256:258dd5950ec034952bd255b86b154836c426ca5536c9f36c87d14c459204eb2e
+    volumes:
+      - ./fq-connector-go/config.conf:/usr/local/etc/fq-connector-go.conf
     ports:
       - 50051

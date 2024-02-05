@@ -168,7 +168,7 @@ namespace {
                         for (auto& arg: flag.GetArgs()) {
                             args.push_back(arg);
                         }
-                        if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                        if (!ApplyFlag(pos, flag.GetName(), args, ctx, 0)) {
                             return false;
                         }
                     }
@@ -276,7 +276,7 @@ namespace {
                             return res;
                         }
 
-                        if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx)) {
+                        if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx, node->UniqueId())) {
                             return {};
                         }
 
@@ -479,7 +479,7 @@ namespace {
                     return true;
                 }
 
-                if (!PendingEvaluationFiles.insert(TString(node.Child(3)->Content())).second) {
+                if (!PendingEvaluationFiles.insert({TString(node.Child(3)->Content()), node.UniqueId()}).second) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Detected evaluation cycle for file: " << node.Child(3)->Content()));
                     return false;
                 }
@@ -490,7 +490,8 @@ namespace {
             }
         }
 
-        bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx,
+            ui64 nodeUniqueId) {
             if (!IsSettingAllowed(pos, name, ctx)) {
                 return false;
             }
@@ -504,7 +505,7 @@ namespace {
                     return false;
                 }
             } else if (name == "AddFileByUrl") {
-                if (!AddFileByUrl(pos, args, ctx)) {
+                if (!AddFileByUrl(pos, args, ctx, nodeUniqueId)) {
                     return false;
                 }
             } else if (name == "SetFileOption") {
@@ -512,7 +513,7 @@ namespace {
                     return false;
                 }
             } else if (name == "AddFolderByUrl") {
-                if (!AddFolderByUrl(pos, args, ctx)) {
+                if (!AddFolderByUrl(pos, args, ctx, nodeUniqueId)) {
                     return false;
                 }
             } else if (name == "SetPackageVersion") {
@@ -1015,13 +1016,13 @@ namespace {
             return true;
         }
 
-        bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx, ui64 nodeUniqueId) {
             if (args.size() < 2 || args.size() > 3) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
             }
 
-            PendingEvaluationFiles.erase(TString(args[0]));
+            PendingEvaluationFiles.erase({TString(args[0]),nodeUniqueId});
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -1135,13 +1136,13 @@ namespace {
             return url;
         }
 
-        bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx, ui64 nodeUniqueId) {
             if (args.size() < 2 || args.size() > 3) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
                 return false;
             }
 
-            PendingEvaluationFiles.erase(TString(args[0]));
+            PendingEvaluationFiles.erase({TString(args[0]),nodeUniqueId});
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -1238,7 +1239,7 @@ namespace {
         TString Username;
         const TAllowSettingPolicy Policy;
         TOperationStatistics Statistics;
-        THashSet<TString> PendingEvaluationFiles;
+        THashSet<std::pair<TString, ui64>> PendingEvaluationFiles;
     };
 }
 

@@ -131,7 +131,7 @@ namespace NTable {
             , Redo(*this)
             , Scheme(scheme)
         {
-            for (auto it : Scheme->Tables) {
+            for (const auto& it : Scheme->Tables) {
                 auto *mine = edges ? edges->FindPtr(it.first) : nullptr;
 
                 MakeTable(it.first, mine ? *mine : TSnapEdge{ })->SetScheme(it.second);

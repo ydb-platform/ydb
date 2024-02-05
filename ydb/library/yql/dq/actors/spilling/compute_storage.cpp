@@ -1,7 +1,5 @@
 #include "compute_storage.h"
 
-#include "compute_storage_actor.h"
-
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -13,46 +11,41 @@
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_spiller.h>
+
 
 namespace NYql::NDq {
 
 using namespace NActors;
 
-class TDqComputeStorage : public IDqComputeStorage {
-public:
-    TDqComputeStorage(TTxId txId, const TString& spillerName, std::function<void()>&& wakeUpCallback) {
+TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* ActorSystem)
+    :  ActorSystem_(ActorSystem)
+{
+    TStringStream spillerName;
+    spillerName << "Spiller" << "_" << static_cast<const void*>(this);
+    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback);
+    ComputeStorageActorId_ = ActorSystem->Register(ComputeStorageActor_->GetActor());
+}
 
-        ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName, std::move(wakeUpCallback));
-        ComputeStorageActorId_ = TlsActivationContext->AsActorContext().Register(ComputeStorageActor_->GetActor());
+    TDqComputeStorage::~TDqComputeStorage() {
+        ActorSystem_->Send(ComputeStorageActorId_, new TEvents::TEvPoison);
     }
 
-    ~TDqComputeStorage() {
-        TlsActivationContext->AsActorContext().Send(ComputeStorageActorId_, new TEvents::TEvPoison);
-    }
-
-    NThreading::TFuture<TKey> Put(TRope&& blob) override {
+    NThreading::TFuture<NKikimr::NMiniKQL::ISpiller::TKey> TDqComputeStorage::Put(TRope&& blob) {
         return ComputeStorageActor_->Put(std::move(blob));
     }
 
-    std::optional<NThreading::TFuture<TRope>> Get(TKey key) override {
+    std::optional<NThreading::TFuture<TRope>> TDqComputeStorage::Get(TKey key) {
         return ComputeStorageActor_->Get(key);
     }
 
-    NThreading::TFuture<void> Delete(TKey key) override {
+    NThreading::TFuture<void> TDqComputeStorage::Delete(TKey key) {
         return ComputeStorageActor_->Delete(key);
     }
 
-    std::optional<NThreading::TFuture<TRope>> Extract(TKey key) override {
+    std::optional<NThreading::TFuture<TRope>> TDqComputeStorage::Extract(TKey key) {
         return ComputeStorageActor_->Extract(key);
     }
 
-private:
-    IDqComputeStorageActor* ComputeStorageActor_;
-    TActorId ComputeStorageActorId_;
-};
-
-IDqComputeStorage::TPtr MakeComputeStorage(const TString& spillerName, std::function<void()>&& wakeUpCallback) {
-    return std::make_shared<TDqComputeStorage>(TTxId(), spillerName, std::move(wakeUpCallback));
-}
 
 } // namespace NYql::NDq

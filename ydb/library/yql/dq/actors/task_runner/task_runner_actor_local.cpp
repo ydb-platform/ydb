@@ -19,6 +19,8 @@
 
 #include <util/generic/queue.h>
 
+#include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -165,10 +167,11 @@ private:
                 TaskRunner->SetWatermarkIn(watermark);
             }
 
-            TaskRunner->SetWakeUpCallback([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), memlimit = ev->Get()->MemLimit, inputChannels = ev->Get()->InputChannels]() {
-                bool res = actorSystem->Send(selfId, new TEvContinueRun(THashSet<ui32>(inputChannels), memlimit));
-                (void)res;
-            });
+            std::function<void()> wakeUpCallback = [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), memlimit = ev->Get()->MemLimit, inputChannels = ev->Get()->InputChannels]() {
+                actorSystem->Send(selfId, new TEvContinueRun(THashSet<ui32>(inputChannels), memlimit));
+            };
+
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(TxId, NActors::TActivationContext::ActorSystem(), wakeUpCallback));
 
             res = TaskRunner->Run();
                 

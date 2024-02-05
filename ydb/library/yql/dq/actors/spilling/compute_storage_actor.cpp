@@ -42,7 +42,7 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()>&& wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
         : TxId_(txId),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback)
@@ -306,8 +306,8 @@ private:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()>&& wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, std::move(wakeupCallback));
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
 }
 
 } // namespace NYql::NDq

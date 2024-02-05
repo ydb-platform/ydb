@@ -420,7 +420,7 @@ private:
                         isNew ? nullptr : static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Tongue),
                         static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Throat)
                     );
-                    if (IsSwitchToSpillingModeCondition()) {
+                    if (ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                         SwitchMode(EOperatingMode::SpillState, ctx);
                         return EFetchResult::Yield;
                     }
@@ -620,9 +620,10 @@ private:
                 break;
             case EOperatingMode::SpillState: {
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
-                MKQL_ENSURE(!Spiller,"Internal logic error");
+                MKQL_ENSURE(!Spiller, "Internal logic error");
+                MKQL_ENSURE(ctx.SpillerFactory, "Internal logic error");
 
-                Spiller = MakeSpiller(std::move(ctx.WakeUpCallback));
+                Spiller = ctx.SpillerFactory->CreateSpiller();
                 SpilledBuckets.resize(SpilledBucketCount);
                 for (auto &b: SpilledBuckets) {
                     b.InitialState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeyAndStateType, 1 << 20);

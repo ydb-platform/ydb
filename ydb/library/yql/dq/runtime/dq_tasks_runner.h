@@ -395,7 +395,7 @@ public:
     virtual void SetWatermarkIn(TInstant time) = 0;
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
-    virtual void SetWakeUpCallback(std::function<void()>&& callback) = 0;
+    virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

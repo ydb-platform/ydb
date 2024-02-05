@@ -1611,7 +1611,7 @@ public:
         return Task.GetId();
     }
 
-    void SetWakeUpCallback(std::function<void()>&& ) override {
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory>) override {
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,

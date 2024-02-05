@@ -268,8 +268,8 @@ public:
         return TaskId;
     }
 
-    void SetWakeUpCallback(std::function<void()>&& callback) override {
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().WakeUpCallback = std::move(callback);
+    void SetSpillerFactory(std::shared_ptr<ISpillerFactory> spillerFactory) override {
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(spillerFactory);
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {

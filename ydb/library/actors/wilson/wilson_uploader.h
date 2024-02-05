@@ -26,9 +26,7 @@ namespace NWilson {
     }
 
     struct WilsonUploaderParams {
-        TString Host;
-        ui16 Port;
-        TString RootCA;
+        TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
 

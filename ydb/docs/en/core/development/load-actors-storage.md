@@ -34,7 +34,7 @@ You can generate three types of load:
 --- | ---
 | `TabletLog` | The highest priority of write operation. |
 | `AsyncBlob` | Used for writing SSTables and their parts. |
-| `UserData` | Used for user data that is written as separate blobs. |
+| `UserData` | Used for writing user data as separate blobs. |
 
 ### Read requests class {#readClass}
 | Class | Description |

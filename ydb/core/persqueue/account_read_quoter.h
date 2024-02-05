@@ -27,11 +27,11 @@ namespace NAccountQuoterEvents {
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, TEvPQ::EvAccountQuotaResponse> {
-        TEvResponse(TEvRequest::TPtr& request, const TDuration& waitTime)
-            : Request(request)
+        TEvResponse(TAutoPtr<TEvRequest>&& request, const TDuration& waitTime)
+            : Request(std::move(request))
             , WaitTime(waitTime)
         {}
-        TEvRequest::TPtr Request;
+        TAutoPtr<TEvRequest> Request;
         TDuration WaitTime;
     };
 

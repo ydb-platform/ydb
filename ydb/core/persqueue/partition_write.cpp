@@ -519,11 +519,18 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //All ok
     auto now = ctx.Now();
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (quotingConfig.GetEnableQuoting()) {
+    if (WriteQuotaTrackerActor) {
+        ui64 size = 0;
+
         if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteNewSize, TopicQuotaConsumedCookie, {}));
+            size = WriteNewSize;
         } else {
-            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(WriteCycleSize, TopicQuotaConsumedCookie, {}));
+            size = WriteCycleSize;
+        }
+        if (TopicQuotaConsumedCookie == 0) {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size));
+        } else {
+            Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(size, TopicQuotaConsumedCookie, {}));
         }
         TopicQuotaConsumedCookie = 0;
     }
@@ -1536,12 +1543,15 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Requests.empty()
                     || WaitingForPreviousBlobQuota()
                     || WaitingForSubDomainQuota(ctx)); //in this case all writes must be processed or no quota left
-        AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
-        BecomeIdle(ctx);
+        if (!PendingWriteRequest) {
+            AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
+            BecomeIdle(ctx);
+        }
         return;
     }
 
     WritesTotal.Inc();
+    Y_ABORT_UNLESS(!PendingWriteRequest);
     PendingWriteRequest = std::move(request);
     RequestBlobQuota();
 }
@@ -1602,6 +1612,7 @@ void TPartition::WritePendingBlob() {
 #if 1
     // PQ -> CacheProxy -> KV
     Send(BlobCache, PendingWriteRequest.Release());
+    PendingWriteRequest = nullptr;
 #else
     Send(Tablet, PendingWriteRequest.Release());
 #endif

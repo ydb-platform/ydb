@@ -672,7 +672,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
         TabletID,
         Counters
     ));
-    if (WriteQuotaTrackerActor == TActorId{}) {
+    if (WriteQuotaTrackerActor == TActorId{} && AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting()) {
         WriteQuotaTrackerActor = Register(new TWriteQuoter(
             TopicConverter,
             Config,

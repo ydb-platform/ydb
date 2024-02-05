@@ -1432,7 +1432,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
 {
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
-
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
     CreatePartition({
                     .Partition=1,
                     .Begin=0, .End=10,
@@ -1482,6 +1482,8 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     // disable write request expiration while thes wait quota
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(0);
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+    Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
 
     CreatePartition({
                     .Partition=1,
@@ -1528,7 +1530,6 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace_DisableExpiration, TPartitionFixture)
     // SudDomain quota available - second message will be processed..
     SendSubDomainStatus(false);
     SendDiskStatusResponse();
-
     event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
     UNIT_ASSERT(event != nullptr);
     UNIT_ASSERT_EQUAL(NMsgBusProxy::MSTATUS_OK, event->Response->GetStatus());

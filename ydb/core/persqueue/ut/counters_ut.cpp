@@ -119,7 +119,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     TString s{50_KB, 'c'};
     data.push_back({1, s});
     for (auto i = 0u; i < 7; i++) {
-        CmdWrite(0, "sourceid0", data, tc, false, {});
+        CmdWrite(0, "sourceid0", data, tc, false);
         data[0].first++;
     }
 

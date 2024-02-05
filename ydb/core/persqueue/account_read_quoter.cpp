@@ -148,7 +148,7 @@ void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& e
     InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
     auto waitTime = ctx.Now() - startWait;
-    TThis::Send(Recepient, new NAccountQuoterEvents::TEvResponse(ev, waitTime));
+    TThis::Send(Recepient, new NAccountQuoterEvents::TEvResponse(ev->Release(), waitTime));
 
     if (QuotaWaitCounter) {
         QuotaWaitCounter->IncFor(waitTime.MilliSeconds());

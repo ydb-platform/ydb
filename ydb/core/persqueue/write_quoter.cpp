@@ -21,13 +21,15 @@ TWriteQuoter::TWriteQuoter(
             //ToDo: discuss - 1 inflight request for write quota - ?
             1
     )
-    , QuotingEnabled(IsQuotingEnabled(AppData()->PQConfig, isLocalDc))
+    , IsLocalDC(isLocalDc)
+    , QuotingEnabled(AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting())
+    , AccountQuotingEnabled(IsQuotingEnabled(AppData()->PQConfig, isLocalDc))
 {
     UpdateQuotaConfigImpl(true, ctx);
 }
 
-void TWriteQuoter::OnAccountQuotaApproved(TRequestContext& context) {
-    CheckTotalPartitionQuota(context);
+void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
+    CheckTotalPartitionQuota(std::move(context));
 }
 
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
@@ -48,19 +50,19 @@ void TWriteQuoter::HandleWakeUpImpl() {
 }
 
 void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext& ctx) {
+    AccountQuotingEnabled = IsQuotingEnabled(AppData()->PQConfig, IsLocalDC);
     if (PartitionTotalQuotaTracker.Defined()) {
         ctx.Send(GetParent(), NReadQuoterEvents::TEvQuotaCountersUpdated::WriteCounters(PartitionTotalQuotaTracker->GetTotalSpeed()));
     }
 }
 
 THolder<TAccountQuoterHolder> TWriteQuoter::CreateAccountQuotaTracker(const TString&, const TActorContext& ctx) const {
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
-    if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
+    if (GetTabletActor() && AccountQuotingEnabled) {
         actorId = TActivationContext::Register(
             new TAccountWriteQuoter(
                 GetTabletActor(),
-                ctx.SelfID,
+                SelfId(),
                 GetTabletId(),
                 TopicConverter,
                 GetPartition(),
@@ -97,11 +99,11 @@ ui64 TWriteQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig&
 }
 
 IEventBase* TWriteQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
-    return new TEvPQ::TEvApproveWriteQuota(context.Request->Get()->Cookie, context.AccountQuotaWaitTime, ActorContext().Now() - context.PartitionQuotaWaitStart);
+    return new TEvPQ::TEvApproveWriteQuota(context.Request->Cookie, context.AccountQuotaWaitTime, ActorContext().Now() - context.PartitionQuotaWaitStart);
 };
 
-THolder<TAccountQuoterHolder>& TWriteQuoter::GetAccountQuotaTracker(TEvPQ::TEvRequestQuota::TPtr&) {
-    if (!AccountQuotaTracker && QuotingEnabled)
+THolder<TAccountQuoterHolder>& TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>&) {
+    if (!AccountQuotaTracker && AccountQuotingEnabled && QuotingEnabled)
         AccountQuotaTracker = CreateAccountQuotaTracker(TString{}, ActorContext());
     return AccountQuotaTracker;
 }

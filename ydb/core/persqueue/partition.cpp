@@ -2511,6 +2511,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     TopicQuotaRequestCookie = 0;
     TopicQuotaConsumedCookie = cookie;
     Y_ASSERT(!WaitingForPreviousBlobQuota());
+    Y_ABORT_UNLESS(PendingWriteRequest);
     WritePendingBlob();
 
     // Metrics

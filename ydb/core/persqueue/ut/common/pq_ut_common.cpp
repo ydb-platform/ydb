@@ -537,6 +537,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
 
+ 
     runtime->SetObserverFunc(
             [&](TAutoPtr<IEventHandle>& ev) {
                 if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {

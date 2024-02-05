@@ -940,9 +940,15 @@ struct TEvPQ {
               Consumer(consumer)
         {}
 
+        TEvConsumed(ui64 consumedBytes)
+            : ConsumedBytes(consumedBytes)
+            , IsOverhead(true)
+        {}
+
         ui64 ConsumedBytes;
         ui64 RequestCookie;
         TString Consumer;
+        bool IsOverhead = false;
     };
 
     struct TEvConsumerRemoved : public TEventLocal<TEvConsumerRemoved, EvConsumerRemoved> {

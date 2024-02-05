@@ -539,8 +539,12 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
-        it->second->SetStep(tx->GetStep());
-        tx->FillTxData(it->second);
+        auto baseTx = it->second;
+        Y_ABORT_UNLESS(baseTx->GetType() == TValidatedTx::EType::DataTx, "Wrong tx type in cache");
+        TValidatedDataTx::TPtr dataTx = std::dynamic_pointer_cast<TValidatedDataTx>(baseTx);
+
+        dataTx->SetStep(tx->GetStep());
+        tx->FillTxData(dataTx);
         // Remove tx from cache.
         ForgetTx(tx->GetTxId());
 
@@ -1280,13 +1284,13 @@ ui64 TPipeline::GetInactiveTxSize() const {
     return res;
 }
 
-bool TPipeline::SaveForPropose(TValidatedDataTx::TPtr tx) {
-    Y_ABORT_UNLESS(tx && tx->TxId());
+bool TPipeline::SaveForPropose(TValidatedTx::TPtr tx) {
+    Y_ABORT_UNLESS(tx && tx->GetTxId());
     if (DataTxCache.size() <= Config.LimitDataTxCache) {
-        ui64 quota = tx->GetTxSize() + tx->GetMemoryAllocated();
+        ui64 quota = tx->GetMemoryConsumption();
         if (Self->TryCaptureTxCache(quota)) {
             tx->SetTxCacheUsage(quota);
-            DataTxCache[tx->TxId()] = tx;
+            DataTxCache[tx->GetTxId()] = tx;
             return true;
         }
     }

@@ -12,7 +12,8 @@ THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(TDataShard &dataShard, TPipeli
 THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateStoreWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
+THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);

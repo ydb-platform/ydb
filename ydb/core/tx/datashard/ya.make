@@ -150,6 +150,8 @@ SRCS(
     export_iface.h
     export_scan.cpp
     finalize_build_index_unit.cpp
+    finalize_plan_write_unit.cpp
+    finalize_plan_tx_unit.cpp
     finish_propose_unit.cpp
     finish_propose_write_unit.cpp
     follower_edge.cpp
@@ -188,6 +190,7 @@ SRCS(
     store_and_send_out_rs_unit.cpp
     store_commit_writes_tx_unit.cpp
     store_data_tx_unit.cpp
+    store_write_unit.cpp
     store_distributed_erase_tx_unit.cpp
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp

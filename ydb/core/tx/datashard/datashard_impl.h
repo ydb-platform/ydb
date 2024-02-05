@@ -2562,9 +2562,7 @@ private:
     TInstant StartedKeyAccessSamplingAt;
     TInstant StopKeyAccessSamplingAt;
 
-    using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
-    
-    TTableInfos TableInfos;  // tableId -> local table info
+    TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

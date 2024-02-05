@@ -60,7 +60,7 @@ TValidatedWriteTx::~TValidatedWriteTx() {
     NActors::NMemory::TLabel<MemoryLabelValidatedDataTx>::Sub(TxSize);
 }
 
-bool TValidatedWriteTx::ParseOperations(const TDataShard::TTableInfos& tableInfos) {
+bool TValidatedWriteTx::ParseOperations(const TUserTable::TTableInfos& tableInfos) {
     if (GetRecord().GetOperations().size() != 1)
     {
         ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
@@ -491,55 +491,6 @@ void TWriteOperation::FinalizeWriteTxPlan()
     RewriteExecutionPlan(plan);
 }
 
-class TFinalizeWriteTxPlanUnit: public TExecutionUnit {
-public:
-    TFinalizeWriteTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::FinalizeWriteTxPlan, false, dataShard, pipeline)
-    {
-    }
-
-    bool IsReadyToExecute(TOperation::TPtr) const override {
-        return true;
-    }
-
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_UNUSED(txc);
-        Y_UNUSED(ctx);
-
-        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
-
-        writeOp->FinalizeWriteTxPlan();
-
-        return EExecutionStatus::Executed;
-    }
-
-    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
-        Y_UNUSED(op);
-        Y_UNUSED(ctx);
-    }
-};
-
-THolder<TExecutionUnit> CreateFinalizeWriteTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TFinalizeWriteTxPlanUnit(dataShard, pipeline));
-}
-
-void TWriteOperation::TrackMemory() const {
-    // TODO More accurate calc memory
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(GetRecord().SpaceUsed());
-}
-
-void TWriteOperation::UntrackMemory() const {
-    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(GetRecord().SpaceUsed());
-}
-
-void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
-    SetAbortedFlag();
-    WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-}
-
-void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {
-    WriteResult = std::move(writeResult);
-}
 
 void TWriteOperation::BuildExecutionPlan(bool loaded)
 {
@@ -548,7 +499,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
     TVector<EExecutionUnitKind> plan;
 
-    //if (IsImmediate()) 
+    if (IsImmediate()) 
     {
         Y_ABORT_UNLESS(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
@@ -556,10 +507,10 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    } 
+    }
     /*
     else if (HasVolatilePrepareFlag()) {
-        plan.push_back(EExecutionUnitKind::StoreDataTx);  // note: stores in memory
+        plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         Y_ABORT_UNLESS(!GetStep());
         plan.push_back(EExecutionUnitKind::WaitForPlan);
@@ -569,10 +520,11 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
-    } else {
+    */
+    else {
         if (!loaded) {
             plan.push_back(EExecutionUnitKind::CheckWrite);
-            plan.push_back(EExecutionUnitKind::StoreDataTx);
+            plan.push_back(EExecutionUnitKind::StoreWrite);
             plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         }
         if (!GetStep())
@@ -580,8 +532,25 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadTxDetails);
         plan.push_back(EExecutionUnitKind::FinalizeWriteTxPlan);
-    } */
+    }
     RewriteExecutionPlan(plan);
+}
+
+void TWriteOperation::TrackMemory() const {
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Add(Ev->GetSize());
+}
+
+void TWriteOperation::UntrackMemory() const {
+    NActors::NMemory::TLabel<MemoryLabelActiveTransactionBody>::Sub(Ev->GetSize());
+}
+
+void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
+    SetAbortedFlag();
+    WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
+}
+
+void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {
+    WriteResult = std::move(writeResult);
 }
 
 }  // NDataShard

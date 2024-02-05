@@ -140,18 +140,36 @@ public:
             // Every time we execute immediate transaction we may choose a new mvcc version
             op->MvccReadWriteVersion.reset();
         }
-        else {
-            //TODO: Prepared
-            writeOp->SetWriteResult(NEvents::TDataEvents::TEvWriteResult::BuildPrepared(DataShard.TabletID(), op->GetTxId(), {0, 0, {}}));
-            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+
+        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+
+        DataShard.ReleaseCache(*writeOp);
+
+        if (writeOp->IsTxDataReleased()) {
+            switch (Pipeline.RestoreDataTx(writeOp, txc, ctx)) {
+                case ERestoreDataStatus::Ok:
+                    break;
+
+                case ERestoreDataStatus::Restart:
+                    return EExecutionStatus::Restart;
+
+                case ERestoreDataStatus::Error:
+                    // For immediate transactions we want to translate this into a propose failure
+                    if (op->IsImmediate()) {
+                        Y_ABORT_UNLESS(!writeTx->Ready());
+                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, writeTx->GetErrStr());
+                        return EExecutionStatus::Executed;
+                    }
+
+                    // For planned transactions errors are not expected
+                    Y_ABORT("Failed to restore tx data: %s", writeTx->GetErrStr().c_str());
+            }
         }
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         ui64 tabletId = DataShard.TabletID();
-
-        const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
 
         if (op->IsImmediate() && !writeOp->ReValidateKeys()) {
             // Immediate transactions may be reordered with schema changes and become invalid

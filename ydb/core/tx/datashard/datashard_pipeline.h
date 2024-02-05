@@ -3,6 +3,7 @@
 #include "datashard.h"
 #include "datashard_trans_queue.h"
 #include "datashard_active_transaction.h"
+#include "datashard_write_operation.h"
 #include "datashard_dep_tracker.h"
 #include "datashard_user_table.h"
 #include "execution_unit.h"
@@ -108,7 +109,7 @@ public:
 
     // tx propose
 
-    bool SaveForPropose(TValidatedDataTx::TPtr tx);
+    bool SaveForPropose(TValidatedTx::TPtr tx);
     void SetProposed(ui64 txId, const TActorId& actorId);
 
     void ForgetUnproposedTx(ui64 txId);
@@ -278,6 +279,15 @@ public:
             TActiveTransaction *tx,
             TTransactionContext &txc,
             const TActorContext &ctx)
+    {
+        return tx->RestoreTxData(Self, txc, ctx);
+    }
+
+    ERestoreDataStatus RestoreDataTx(
+        TWriteOperation* tx,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    )
     {
         return tx->RestoreTxData(Self, txc, ctx);
     }
@@ -487,7 +497,7 @@ private:
     TSortedOps ActivePlannedOps;
     TSortedOps::iterator ActivePlannedOpsLogicallyCompleteEnd;
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
-    THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache;
+    THashMap<ui64, TValidatedTx::TPtr> DataTxCache;
     TMap<TStepOrder, TStackVec<THolder<IEventHandle>, 1>> DelayedAcks;
     TStepOrder LastPlannedTx;
     TStepOrder LastCompleteTx;

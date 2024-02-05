@@ -42,9 +42,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 3);"));
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 5);"));
 
-        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+        auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
-        UNIT_ASSERT_VALUES_EQUAL(table1state, "key = 0, value = 1\n"
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 1\n"
                                               "key = 2, value = 3\n"
                                               "key = 4, value = 5\n");
     }
@@ -59,9 +59,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ui64 txId = 100;
         Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
-        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+        auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
-        UNIT_ASSERT_VALUES_EQUAL(table1state, "key = 0, value = 1\n"
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 0, value = 1\n"
                                               "key = 2, value = 3\n"
                                               "key = 4, value = 5\n");
     }
@@ -77,9 +77,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ui64 txId = 100;
         Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
 
-        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+        auto tableState = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
 
-        UNIT_ASSERT_VALUES_EQUAL(table1state, "key64 = 0, key32 = 1, value64 = 2, value32 = 3, valueUtf8 = String_4\n"
+        UNIT_ASSERT_VALUES_EQUAL(tableState, "key64 = 0, key32 = 1, value64 = 2, value32 = 3, valueUtf8 = String_4\n"
                                               "key64 = 5, key32 = 6, value64 = 7, value32 = 8, valueUtf8 = String_9\n"
                                               "key64 = 10, key32 = 11, value64 = 12, value32 = 13, valueUtf8 = String_14\n");
     }
@@ -97,13 +97,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
         evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, {1}, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
-        const auto& record = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        const auto writeResult = Write(runtime, sender, shards[0], std::move(evWrite), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 
-        UNIT_ASSERT_VALUES_EQUAL(record.GetIssues().size(), 1);
-        UNIT_ASSERT(record.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetIssues().size(), 1);
+        UNIT_ASSERT(writeResult.GetIssues(0).message().Contains("Row key size of 1049601 bytes is larger than the allowed threshold 1049600"));
     }
 
-    Y_UNIT_TEST(WriteOnShard) {
+    Y_UNIT_TEST(WritePreparedOnShard) {
         auto [runtime, server, sender] = TestCreateServer();
 
         TShardedTableOptions opts;
@@ -111,11 +111,15 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         const ui32 rowCount = 3;
         ui64 txId = 100;
-        Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
-        auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+        const auto writeResult = Write(runtime, sender, shards[0], tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
-        UNIT_ASSERT_VALUES_EQUAL(table1state, "");
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
+        UNIT_ASSERT_GT(writeResult.GetMaxStep(), writeResult.GetMinStep());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shards[0]);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetDomainCoordinators().size(), 1);
     }
 }
 }

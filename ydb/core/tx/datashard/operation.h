@@ -28,6 +28,12 @@ using NTabletFlatExecutor::TTableSnapshotContext;
 
 class TDataShard;
 
+enum class ERestoreDataStatus {
+    Ok,
+    Restart,
+    Error,
+};
+
 enum class ETxOrder {
     Unknown,
     Before,
@@ -505,7 +511,35 @@ struct TExecutionProfile {
     THashMap<EExecutionUnitKind, TUnitProfile> UnitProfiles;
 };
 
-struct TOperationAllListTag {};
+class TValidatedDataTx;
+class TValidatedWriteTx;
+
+class TValidatedTx {
+public:
+    using TPtr = std::shared_ptr<TValidatedTx>;
+
+    virtual ~TValidatedTx() = default;
+
+    enum class EType { 
+        DataTx,
+        WriteTx 
+    };
+
+public:
+    virtual EType GetType() const = 0;
+    virtual ui64 GetTxId() const = 0;
+    virtual ui64 GetMemoryConsumption() const = 0;
+
+    bool IsProposed() const {
+        return GetSource() != TActorId();
+    }
+
+    YDB_ACCESSOR_DEF(TActorId, Source);
+    YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
+};
+
+struct TOperationAllListTag {
+};
 struct TOperationGlobalListTag {};
 struct TOperationDelayedReadListTag {};
 struct TOperationDelayedWriteListTag {};

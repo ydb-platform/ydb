@@ -24,6 +24,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCheckCommitWritesTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreDataTx:
         return CreateStoreDataTxUnit(dataShard, pipeline);
+    case EExecutionUnitKind::StoreWrite:
+        return CreateStoreWriteUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSchemeTx:
         return CreateStoreSchemeTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::StoreSnapshotTx:

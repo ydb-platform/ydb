@@ -4,6 +4,7 @@
 #include <ydb/core/tx/locks/locks.h>
 #include "datashard__engine_host.h"
 #include "datashard_user_db.h"
+#include "datashard_user_table.h"
 #include "operation.h"
 
 #include <ydb/core/tx/tx_processing.h>
@@ -14,13 +15,16 @@
 namespace NKikimr {
 namespace NDataShard {
 
-
-class TValidatedWriteTx: TNonCopyable {
+class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
 public:
     using TPtr = std::shared_ptr<TValidatedWriteTx>;
 
     TValidatedWriteTx(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, ui64 globalTxId, TInstant receivedAt, const TRowVersion& readVersion, const TRowVersion& writeVersion, const NEvents::TDataEvents::TEvWrite::TPtr& ev);
     ~TValidatedWriteTx();
+
+    EType GetType() const override { 
+        return EType::WriteTx; 
+    };
 
     static constexpr ui64 MaxReorderTxKeys() {
         return 100;
@@ -40,7 +44,7 @@ public:
         return GetRecord().operations(0);
     }
 
-    ui64 GetTxId() const {
+    ui64 GetTxId() const override {
         return UserDb.GetGlobalTxId();
     }
 
@@ -127,9 +131,6 @@ public:
         return UserDb.GetVolatileCommitOrdered();
     }
 
-    bool IsProposed() const {
-        return Source != TActorId();
-    }
 
     const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
         return GetRecord().locks();
@@ -138,7 +139,7 @@ public:
         return GetRecord().has_locks();
     }
 
-    bool ParseOperations(const TDataShard::TTableInfos& tableInfos);
+    bool ParseOperations(const TUserTable::TTableInfos& tableInfos);
     void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
 
     ui32 ExtractKeys(bool allowErrors);
@@ -153,6 +154,10 @@ public:
     }
 
     void ReleaseTxData();
+
+    ui64 GetMemoryConsumption() const override {
+        return GetTxSize();
+    }
 
     bool IsTxInfoLoaded() const {
         return TxInfo().Loaded;
@@ -177,8 +182,6 @@ private:
 
     const ui64 TabletId;
     const TActorContext& Ctx;
-
-    YDB_ACCESSOR_DEF(TActorId, Source);
 
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
@@ -211,19 +214,17 @@ public:
     const NEvents::TDataEvents::TEvWrite::TPtr& GetEv() const {
         return Ev;
     }
-    void SetEv(const NEvents::TDataEvents::TEvWrite::TPtr& ev) {
-        UntrackMemory();
-        Ev = ev;
-        TrackMemory();
+    TString GetTxBody() const {
+        return Ev->GetChainBuffer()->GetString();
     }
-    void ClearEv() {
+    void ClearTxBody() {
         UntrackMemory();
-        Ev.Reset();
+        Ev->ReleaseChainBuffer();
         TrackMemory();
     }
 
     void Deactivate() override {
-        ClearEv();
+        ClearTxBody();
 
         TOperation::Deactivate();
     }

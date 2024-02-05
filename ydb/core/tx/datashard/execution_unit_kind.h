@@ -13,6 +13,7 @@ enum class EExecutionUnitKind: ui32 {
     CheckRead,
     CheckWrite,
     StoreDataTx,
+    StoreWrite,
     StoreSchemeTx,
     StoreSnapshotTx,
     StoreDistributedEraseTx,

@@ -346,10 +346,14 @@ public:
         , SqlVersion(sqlVersion) {}
 
     void FillResult(TResult& prepareResult) const override {
-        if (!prepareResult.Success() && TransformCtx) {
-            if (auto exprRoot = TransformCtx->ExplainTransformerInput ? TransformCtx->ExplainTransformerInput : GetExprRoot()) {
+        if (!prepareResult.Success()) {
+            auto exprRoot = GetExprRoot();
+            if (TransformCtx && TransformCtx->ExplainTransformerInput) {
+                exprRoot = TransformCtx->ExplainTransformerInput;
+            }
+            if (exprRoot) {
                 prepareResult.PreparingQuery = std::move(QueryCtx->PreparingQuery);
-                prepareResult.PreparingQuery->MutablePhysicalQuery()->SetQueryAst(KqpExprToPrettyString(*GetExprRoot(), ExprCtx));
+                prepareResult.PreparingQuery->MutablePhysicalQuery()->SetQueryAst(KqpExprToPrettyString(*exprRoot, ExprCtx));
             }
             return;
         }

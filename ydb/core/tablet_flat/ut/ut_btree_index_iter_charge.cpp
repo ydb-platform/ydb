@@ -772,6 +772,10 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 0, .Groups = true});
     }
 
+    Y_UNIT_TEST(NoNodes_History) {
+        CheckPart({.Levels = 0, .History = true});
+    }
+
     Y_UNIT_TEST(OneNode) {
         CheckPart({.Levels = 1});
     }
@@ -780,12 +784,24 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 1, .Groups = true});
     }
 
+    Y_UNIT_TEST(OneNode_History) {
+        CheckPart({.Levels = 1, .History = true});
+    }
+
     Y_UNIT_TEST(OneNode_Slices) {
         CheckPart({.Levels = 1, .Slices = true});
     }
 
     Y_UNIT_TEST(OneNode_Groups_Slices) {
         CheckPart({.Levels = 1, .Groups = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(OneNode_History_Slices) {
+        CheckPart({.Levels = 1, .History = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_Slices) {
+        CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = true});
     }
 
     Y_UNIT_TEST(FewNodes) {

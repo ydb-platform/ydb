@@ -542,7 +542,8 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
                         ++it;
 
                     if (ssize_t(GetElementsCount(subType)) == std::distance(from, it)) {
-                        *from++ = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        *from = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        ++from;
                         it = content.erase(from, it);
                         changed = setChanged = true;
                     }

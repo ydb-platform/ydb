@@ -6,7 +6,7 @@ namespace NKikimr::NJaegerTracing {
 
 class TControlWrapper {
 public:
-    TControlWrapper(ui64 initial = 0) : Control(MakeIntrusive<TControl>(initial)) {}
+    explicit TControlWrapper(ui64 initial = 0) : Control(MakeIntrusive<TControl>(initial)) {}
 
     ui64 Get() const {
         return Control->Get();

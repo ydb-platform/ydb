@@ -1154,7 +1154,7 @@ NUdf::TUnboxedValuePod ParseDate(NUdf::TStringRef buf) {
     return NUdf::TUnboxedValuePod(value);
 }
 
-ui32 ParseDate32(ui32 pos, NUdf::TStringRef buf, i32& value) {
+bool ParseDate32(ui32& pos, NUdf::TStringRef buf, i32& value) {
     ui32 year, month, day;
     bool beforeChrist = false;
     if (pos < buf.Size()) {
@@ -1168,33 +1168,33 @@ ui32 ParseDate32(ui32 pos, NUdf::TStringRef buf, i32& value) {
     }
 
     if (!ParseNumber(pos, buf, year, 6) || pos == buf.Size() || buf.Data()[pos] != '-') {
-        return buf.Size();
+        return false;
     }
     i32 iyear = beforeChrist ? -year : year;
 
     // skip '-'
     ++pos;
     if (!ParseNumber(pos, buf, month, 2) || pos == buf.Size() || buf.Data()[pos] != '-') {
-        return buf.Size();
+        return false;
     }
 
     // skip '-'
     ++pos;
     if (!ParseNumber(pos, buf, day, 2)) {
-        return buf.Size();
+        return false;
     }
 
     if (Y_LIKELY(MakeDate32(iyear, month, day, value))) {
-        return pos;
+        return true;
     }
 
-    return buf.Size();
+    return false;
 }
 
 NUdf::TUnboxedValuePod ParseDate32(NUdf::TStringRef buf) {
     i32 value;
-    auto pos = ParseDate32(0, buf, value);
-    if (Y_LIKELY(pos == buf.Size())) {
+    ui32 pos = 0;
+    if (Y_LIKELY(ParseDate32(pos, buf, value) && pos == buf.Size())) {
         return NUdf::TUnboxedValuePod(value);
     }
     return NUdf::TUnboxedValuePod();
@@ -1238,41 +1238,41 @@ NUdf::TUnboxedValuePod ParseTzDate(NUdf::TStringRef str) {
     return out;
 }
 
-ui32 ParseTime(ui32 pos, NUdf::TStringRef buf, ui32& timeValue) {
+bool ParseTime(ui32& pos, NUdf::TStringRef buf, ui32& timeValue) {
     if (pos == buf.Size() || buf.Data()[pos] != 'T') {
-        return buf.Size();
+        return false;
     }
     ui32 hour, minute, second;
     // skip 'T'
     ++pos;
     if (!ParseNumber(pos, buf, hour, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
-        return buf.Size();
+        return false;
     }
 
     // skip ':'
     ++pos;
     if (!ParseNumber(pos, buf, minute, 2) || pos == buf.Size() || buf.Data()[pos] != ':') {
-        return buf.Size();
+        return false;
     }
 
     // skip ':'
     ++pos;
     if (!ParseNumber(pos, buf, second, 2) || pos == buf.Size()) {
-        return buf.Size();
+        return false;
     }
 
     if (!MakeTime(hour, minute, second, timeValue)) {
-        return buf.Size();
+        return false;
     }
-    return pos;
+    return true;
 }
 
-ui32 ParseTimezoneOffset(ui32 pos, NUdf::TStringRef buf, i32& offset) {
+bool ParseTimezoneOffset(ui32& pos, NUdf::TStringRef buf, i32& offset) {
     bool waiting_for_z = true;
-
     ui32 offset_hours = 0;
     ui32 offset_minutes = 0;
     bool is_offset_negative = false;
+
     if (buf.Data()[pos] == '+' || buf.Data()[pos] == '-') {
         is_offset_negative = buf.Data()[pos] == '-';
 
@@ -1282,52 +1282,51 @@ ui32 ParseTimezoneOffset(ui32 pos, NUdf::TStringRef buf, i32& offset) {
         if (!ParseNumber(pos, buf, offset_hours, 2) ||
             pos == buf.Size() || buf.Data()[pos] != ':')
         {
-            return buf.Size();
+            return false;
         }
 
         // Skip ':'
         ++pos;
 
         if (!ParseNumber(pos, buf, offset_minutes, 2) || pos != buf.Size()) {
-            return buf.Size();
+            return false;
         }
 
         waiting_for_z = false;
     }
 
-    ui32 offset_value = ((offset_hours) * 60 + offset_minutes) * 60;
-
     if (waiting_for_z) {
         if (pos == buf.Size() || buf.Data()[pos] != 'Z') {
-            return buf.Size();
+            return false;
         }
 
         // skip 'Z'
         ++pos;
     }
 
+    ui32 offset_value = ((offset_hours) * 60 + offset_minutes) * 60;
     offset = is_offset_negative ? offset_value : -offset_value;
-    return pos;
+    return true;
 }
 
 NUdf::TUnboxedValuePod ParseDatetime64(NUdf::TStringRef buf) {
     i32 date;
-    auto pos = ParseDate32(0, buf, date);
-    if (Y_UNLIKELY(pos == buf.Size())) {
+    ui32 pos = 0;
+    if (Y_UNLIKELY(!ParseDate32(pos, buf, date))) {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 time;
-    pos = ParseTime(pos, buf, time);
-    if (Y_UNLIKELY(pos == buf.Size())) {
+    if (Y_UNLIKELY(!ParseTime(pos, buf, time))) {
         return NUdf::TUnboxedValuePod();
     }
 
     i32 zoneOffset = 0;
-    pos = ParseTimezoneOffset(pos, buf, zoneOffset);
-
+    if (Y_UNLIKELY(!ParseTimezoneOffset(pos, buf, zoneOffset))) {
+        return NUdf::TUnboxedValuePod();
+    }
     if (Y_UNLIKELY(pos != buf.Size())) {
-      return NUdf::TUnboxedValuePod();
+        return NUdf::TUnboxedValuePod();
     }
     i64 value = 86400;
     value *= date;
@@ -1506,14 +1505,14 @@ NUdf::TUnboxedValuePod ParseTzDatetime(NUdf::TStringRef str) {
     return out;
 }
 
-ui32 ParseMicroseconds(ui32 pos, NUdf::TStringRef buf, ui32& microseconds) {
+bool ParseMicroseconds(ui32& pos, NUdf::TStringRef buf, ui32& microseconds) {
     if (buf.Data()[pos] == '.') {
         ui32 ms = 0;
         // Skip dot
         ++pos;
         ui32 prevPos = pos;
         if (!ParseNumber(pos, buf, ms, 6)) {
-            return buf.Size();
+            return false;
         }
 
         prevPos = pos - prevPos;
@@ -1529,31 +1528,30 @@ ui32 ParseMicroseconds(ui32 pos, NUdf::TStringRef buf, ui32& microseconds) {
             ++pos;
         }
     }
-    return pos;
+    return true;
 }
 
 NUdf::TUnboxedValuePod ParseTimestamp64(NUdf::TStringRef buf) {
     i32 date;
-    auto pos = ParseDate32(0, buf, date);
-    if (Y_UNLIKELY(pos == buf.Size())) {
+    ui32 pos = 0;
+    if (Y_UNLIKELY(!ParseDate32(pos, buf, date))) {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 time;
-    pos = ParseTime(pos, buf, time);
-    if (Y_UNLIKELY(pos == buf.Size())) {
+    if (Y_UNLIKELY(!ParseTime(pos, buf, time))) {
         return NUdf::TUnboxedValuePod();
     }
 
     ui32 microseconds = 0;
-    pos = ParseMicroseconds(pos, buf, microseconds);
-    if (Y_UNLIKELY(pos == buf.Size())) {
+    if (Y_UNLIKELY(!ParseMicroseconds(pos, buf, microseconds))) {
         return NUdf::TUnboxedValuePod();
     }
 
     i32 zoneOffset = 0;
-    pos = ParseTimezoneOffset(pos, buf, zoneOffset);
-
+    if (Y_UNLIKELY(!ParseTimezoneOffset(pos, buf, zoneOffset))) {
+        return NUdf::TUnboxedValuePod();
+    }
     if (Y_UNLIKELY(pos != buf.Size())) {
         return NUdf::TUnboxedValuePod();
     }

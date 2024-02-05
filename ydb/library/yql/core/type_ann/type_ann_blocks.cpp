@@ -116,19 +116,35 @@ IGraphTransformer::TStatus BlockExpandChunkedWrapper(const TExprNode::TPtr& inpu
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
+    if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    bool allScalars = AllOf(flowItemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
-    if (allScalars) {
-        output = input->HeadPtr();
-        return IGraphTransformer::TStatus::Repeat;
-    }
+        auto streamItemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+        bool allScalars = AllOf(streamItemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
+        if (allScalars) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
-    input->SetTypeAnn(input->Head().GetTypeAnn());
-    return IGraphTransformer::TStatus::Ok;
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    } else {
+        if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+        bool allScalars = AllOf(flowItemTypes, [](const TTypeAnnotationNode* item) { return item->GetKind() == ETypeAnnotationKind::Scalar; });
+        if (allScalars) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
 }
 
 IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

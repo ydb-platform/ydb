@@ -76,11 +76,7 @@ namespace NKikimr::NBsController {
                 if (prev.Mood != cur.Mood) {
                     // PDisk's mood has changed
                     CreatePDiskEntry(pdiskId, cur);
-                }
-            }
-
-            void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.PDiskConfig != cur.PDiskConfig) {
+                } else if (prev.PDiskConfig != cur.PDiskConfig) {
                     // PDisk's config has changed
                     NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = CreatePDiskEntry(pdiskId, cur);
                     pdisk->SetEntityStatus(NKikimrBlobStorage::RESTART);

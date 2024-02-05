@@ -58,6 +58,7 @@ public:
         if (TableHelper.Initialize(ctx, SourceId)) {
             return true;
         }
+        StartIdle();        
         TThis::ReplyError(ErrorCode::BAD_REQUEST, "Bad SourceId", ctx);
         return false;
     }

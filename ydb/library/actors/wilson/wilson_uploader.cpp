@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
 #include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
+#include <library/cpp/string_utils/url/url.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
 #include <chrono>
@@ -22,9 +23,7 @@ namespace NWilson {
         {
             static constexpr size_t WILSON_SERVICE_ID = 430;
 
-            TString Host;
-            ui16 Port;
-            TString RootCA;
+            TString CollectorUrl;
             TString ServiceName;
 
             std::shared_ptr<grpc::Channel> Channel;
@@ -54,9 +53,7 @@ namespace NWilson {
 
         public:
             TWilsonUploader(WilsonUploaderParams params)
-                : Host(std::move(params.Host))
-                , Port(std::move(params.Port))
-                , RootCA(std::move(params.RootCA))
+                : CollectorUrl(std::move(params.CollectorUrl))
                 , ServiceName(std::move(params.ServiceName))
                 , GrpcSigner(std::move(params.GrpcSigner))
             {}
@@ -70,9 +67,13 @@ namespace NWilson {
             void Bootstrap() {
                 Become(&TThis::StateFunc);
 
-                Channel = grpc::CreateChannel(TStringBuilder() << Host << ":" << Port, RootCA ? grpc::SslCredentials({
-                    .pem_root_certs = TFileInput(RootCA).ReadAll(),
-                }) : grpc::InsecureChannelCredentials());
+                TStringBuf scheme;
+                TStringBuf host;
+                ui16 port;
+                GetSchemeHostAndPort(CollectorUrl, scheme, host, port);
+                Y_ABORT_UNLESS(scheme == "grpc://" || scheme == "grpcs://", "Only grpc and grpcs schemes are supported for traces collector");
+                Channel = grpc::CreateChannel(TStringBuilder() << host << ":" << port,
+                                              scheme == "grpcs://" ? grpc::SslCredentials({}) : grpc::InsecureChannelCredentials());
                 Stub = NServiceProto::TraceService::NewStub(Channel);
 
                 LOG_INFO_S(*TlsActivationContext, WILSON_SERVICE_ID, "TWilsonUploader::Bootstrap");

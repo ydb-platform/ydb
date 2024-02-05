@@ -260,12 +260,20 @@ namespace {
                         for (size_t i = 3; i < node->ChildrenSize(); ++i) {
                             if (node->Child(i)->IsCallable("EvaluateAtom")) {
                                 hasPendingEvaluations = true;
-                                return res;
+                                break;
                             }
                             if (!EnsureAtom(*node->Child(i), ctx)) {
                                 return {};
                             }
                             args.push_back(node->Child(i)->Content());
+                        }
+
+                        if (hasPendingEvaluations) {
+                            if (!ValidateEvaluation(command, *node, ctx)) {
+                                return {};
+                            }
+
+                            return res;
                         }
 
                         if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx)) {
@@ -458,6 +466,28 @@ namespace {
                 return false;
             }
             return true;
+        }
+
+        bool ValidateEvaluation(const TStringBuf name, const TExprNode& node, TExprContext& ctx) {
+            if (name == "AddFileByUrl" || name == "AddFolderByUrl") {
+                if (node.ChildrenSize() < 4) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected at least 5 arguments, but got " << node.ChildrenSize()));
+                    return false;
+                }
+
+                if (node.Child(3)->IsCallable("EvaluateAtom")) {
+                    return true;
+                }
+
+                if (!PendingEvaluationFiles.insert(TString(node.Child(3)->Content())).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Detected evaluation cycle for file: " << node.Child(3)->Content()));
+                    return false;
+                }
+
+                return true;
+            } else {
+                return true;
+            }
         }
 
         bool ApplyFlag(const TPosition& pos, const TStringBuf name, const TVector<TStringBuf>& args, TExprContext& ctx) {
@@ -991,6 +1021,7 @@ namespace {
                 return false;
             }
 
+            PendingEvaluationFiles.erase(TString(args[0]));
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -1110,6 +1141,7 @@ namespace {
                 return false;
             }
 
+            PendingEvaluationFiles.erase(TString(args[0]));
             TStringBuf token = args.size() == 3 ? args[2] : TStringBuf();
             if (token) {
                 if (auto cred = Types.Credentials->FindCredential(token)) {
@@ -1206,6 +1238,7 @@ namespace {
         TString Username;
         const TAllowSettingPolicy Policy;
         TOperationStatistics Statistics;
+        THashSet<TString> PendingEvaluationFiles;
     };
 }
 

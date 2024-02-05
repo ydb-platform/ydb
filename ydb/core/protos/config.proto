@@ -1605,33 +1605,61 @@ message TBackgroundCleaningConfig {
 }
 
 message TTracingConfig {
-    message TAuthConfig {
-        message TTvm {
-            optional string Host = 1;
-            optional uint32 Port = 2;
+    message TBackendConfig {
+        message TAuthConfig {
+            message TTvmAuth {
+                required string Url = 1;
 
-            required uint32 SelfTvmId = 3;
-            required uint32 TracingTvmId = 4;
+                required uint32 SelfTvmId = 2;
+                required uint32 TracingTvmId = 3;
 
-            optional string DiskCacheDir = 5;
+                optional string DiskCacheDir = 4;
 
-            oneof Secret {
-                string PlainTextSecret = 6;
-                string SecretFile = 7;
-                string SecretEnvironmentVariable = 8;
+                oneof Secret {
+                    string PlainTextSecret = 5;
+                    string SecretFile = 6;
+                    string SecretEnvironmentVariable = 7;
+                }
+            }
+
+            oneof Method {
+                TTvmAuth Tvm = 1;
             }
         }
 
-        oneof Method {
-            TTvm Tvm = 1;
+        message TOpentelemetryBackend {
+            required string CollectorUrl = 1;
+            required string ServiceName = 2;
         }
+
+
+        oneof Backend {
+            TOpentelemetryBackend Opentelemetry = 1;
+        }
+        optional TAuthConfig AuthConfig = 2;
     }
 
-    optional string Host = 1;
-    optional uint32 Port = 2;
-    optional string RootCA = 3;
-    optional string ServiceName = 4;
-    optional TAuthConfig AuthConfig = 5;
+    // Only global scope for now
+    message TSelectors {
+    }
+
+    message TSamplingScope {
+        optional TSelectors Scope = 1;
+        required float Fraction = 2;
+        required uint32 Level = 3;
+        required uint32 MaxRatePerMinute = 4;
+        required uint32 MaxBurst = 5;
+    }
+
+    message TExternalThrottlingScope {
+        optional TSelectors Scope = 1;
+        required uint32 MaxRatePerMinute = 2;
+        required uint32 MaxBurst = 3;
+    }
+
+    required TBackendConfig Backend = 1;
+    repeated TSamplingScope Sampling = 2;
+    repeated TExternalThrottlingScope ExternalThrottling = 3;
 }
 
 message TFailureInjectionConfig {

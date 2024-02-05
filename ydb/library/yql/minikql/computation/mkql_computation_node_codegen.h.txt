@@ -1495,27 +1495,34 @@ template<typename TDerived, typename TState>
 class TSimpleStatefulWideFlowCodegeneratorNode
         : public TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode<TDerived, TState>> {
     using TBase = TStatefulWideFlowCodegeneratorNode<TSimpleStatefulWideFlowCodegeneratorNode>;
+
 protected:
-    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind)
-            : TBase(mutables, source, stateKind)
+    TSimpleStatefulWideFlowCodegeneratorNode(TComputationMutables& mutables, IComputationWideFlowNode* source, EValueRepresentation stateKind)
+            : TBase(mutables, source, stateKind), SourceFlow(source)
     {}
+
 private:
     void InitStateWrapper(NUdf::TUnboxedValue &state, TComputationContext &ctx) const {
-        static_cast<const TDerived *>(this)->InitState(*static_cast<TState *>(state.GetRawPtr()), ctx);
+        static_cast<const TDerived*>(this)->InitState(*static_cast<TState*>(state.GetRawPtr()), ctx);
     }
-public:
 
+public:
     EFetchResult DoCalculate(NUdf::TUnboxedValue &state, TComputationContext &ctx,
                              NUdf::TUnboxedValue *const *output) const {
         if (state.IsInvalid()) {
             state = NUdf::TUnboxedValuePod();
             InitStateWrapper(state, ctx);
         }
-        return static_cast<const TDerived *>(this)->DoCalculate(*static_cast<TState *>(state.GetRawPtr()), ctx, output);
+        TMaybe<EFetchResult> result = Nothing();
+        while (result.Empty()) {
+            result = SourceFlow->FetchValues(ctx, output);
+            static_cast<const TDerived*>(this)->DoProcess(*static_cast<TState*>(state.GetRawPtr()), ctx, result, output);
+        }
+        return result.GetRef();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext &ctx, Value *statePtr, BasicBlock *&block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1543,9 +1550,12 @@ public:
 
         block = main;
 
-        return static_cast<const TDerived *>(this)->DoGenGetValues(ctx, statePtr, state, block);
+        return static_cast<const TDerived*>(this)->DoGenGetValues(ctx, statePtr, state, block);
     }
 #endif
+
+private:
+    IComputationWideFlowNode* const SourceFlow;
 };
 
 }

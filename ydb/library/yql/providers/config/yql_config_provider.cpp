@@ -471,7 +471,7 @@ namespace {
         bool ValidateEvaluation(const TStringBuf name, const TExprNode& node, TExprContext& ctx) {
             if (name == "AddFileByUrl" || name == "AddFolderByUrl") {
                 if (node.ChildrenSize() < 4) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected at least 5 arguments, but got " << node.ChildrenSize()));
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected at least 4 arguments, but got " << node.ChildrenSize()));
                     return false;
                 }
 

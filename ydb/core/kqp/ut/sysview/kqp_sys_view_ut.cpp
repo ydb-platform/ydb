@@ -44,6 +44,52 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(Sessions) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+        const size_t sessionsCount = 50;
+        std::vector<NYdb::NQuery::TSession> sessionsSet;
+        for(ui32 i = 0; i < sessionsCount; i++) {
+            sessionsSet.emplace_back(std::move(client.GetSession().GetValueSync().GetSession()));
+        }
+
+        Cerr << kikimr.GetTestServer().GetRuntime()->GetNodeId() << Endl;
+
+        ui32 nodeId = kikimr.GetTestServer().GetRuntime()->GetNodeId();
+
+        std::sort(sessionsSet.begin(), sessionsSet.end(), [](const NYdb::NQuery::TSession& a, const NYdb::NQuery::TSession& b){
+            return a.GetId() < b.GetId();
+        });
+
+        std::vector<TString> stringParts;
+        for(ui32 i = 0; i < sessionsCount - 1; i++) {
+            stringParts.push_back(Sprintf("[[\"%s\"];[%du];[\"\"]];", sessionsSet[i].GetId().data(), nodeId));
+        }
+
+        TString otherSessions = JoinSeq("\n", stringParts);
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(R"(--!syntax_v1
+select SessionId, NodeId, QueryText from `/Root/.sys/query_sessions` order by SessionId;)", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(Sprintf(R"([
+                %s
+                [["%s"];[%du];["--!syntax_v1\nselect SessionId, NodeId, QueryText from `/Root/.sys/query_sessions` order by SessionId;"]]
+            ])", otherSessions.data(), sessionsSet.back().GetId().data(), nodeId), FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = sessionsSet.back().ExecuteQuery(Sprintf(R"(--!syntax_v1
+select SessionId, NodeId, QueryText from `/Root/.sys/query_sessions` WHERE StartsWith(SessionId, "ydb://session/3?node_id=%d");)", nodeId), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            CompareYson(Sprintf(R"([
+                %s
+                [["%s"];[%du];["--!syntax_v1\nselect SessionId, NodeId, QueryText from `/Root/.sys/query_sessions` WHERE StartsWith(SessionId, \"ydb://session/3?node_id=%d\");"]]
+            ])", otherSessions.data(), sessionsSet.back().GetId().data(), nodeId, nodeId), FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(PartitionStatsSimple) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();

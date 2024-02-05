@@ -39,7 +39,7 @@ void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActo
     for (auto& topicToPartitions: NewPartitionsToLockOnTime) {
         auto& partitions = topicToPartitions.second;
         for (auto partitionsIt = partitions.begin(); partitionsIt != partitions.end(); ) {
-            if (partitionsIt->LockOn >= ctx.Now()) {
+            if (partitionsIt->LockOn <= ctx.Now()) {
                 TopicPartitions[topicToPartitions.first].ToLock.emplace(partitionsIt->PartitionId);
                 NeedRebalance = true;
                 partitionsIt = partitions.erase(partitionsIt);

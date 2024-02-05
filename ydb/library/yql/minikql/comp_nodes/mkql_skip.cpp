@@ -127,21 +127,19 @@ public:
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
-    void InitState(ui64 &count, TComputationContext& ctx) const {
+    void InitState(ui64& count, TComputationContext& ctx) const {
         count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    EFetchResult DoCalculate(ui64 count, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (count) {
-            do if (const auto result = Flow->FetchValues(ctx, ctx.WideFields.data() + StubsIndex); EFetchResult::One != result) {
-                return result;
-            } while (--count);
+    void DoProcess(ui64& skipCount, TComputationContext& ctx, TMaybe<EFetchResult>& result, NUdf::TUnboxedValue*const* values) const {
+        if (result == EFetchResult::One && skipCount) {
+            result.Clear();
+            skipCount--;
         }
-        return Flow->FetchValues(ctx, output);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value *state, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value* state, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);

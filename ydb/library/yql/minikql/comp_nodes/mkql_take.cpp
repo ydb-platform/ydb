@@ -103,23 +103,19 @@ public:
     {}
 
     void InitState(ui64 &count, TComputationContext& ctx) const {
-         count = Count->GetValue(ctx).Get<ui64>();
+        count = Count->GetValue(ctx).Get<ui64>();
     }
 
-    EFetchResult DoCalculate(ui64 &count, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (count) {
-            if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One == result) {
-                count--;
-                return EFetchResult::One;
-            } else {
-                return result;
-            }
+    void DoProcess(ui64& takeCount, TComputationContext& ctx, TMaybe<EFetchResult>& result, NUdf::TUnboxedValue*const* values) const {
+        if (takeCount == 0) {
+            result = EFetchResult::Finish;
+        } else if (result == EFetchResult::One) {
+            takeCount--;
         }
-
-        return EFetchResult::Finish;
     }
+
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value *state, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value* state, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);

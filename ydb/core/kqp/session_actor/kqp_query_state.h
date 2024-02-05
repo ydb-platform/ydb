@@ -362,6 +362,8 @@ public:
         return RequestEv->HasTxControl();
     }
 
+    bool HasImpliedAutostartTransactions() const;
+
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestEv->GetTxControl();
     }

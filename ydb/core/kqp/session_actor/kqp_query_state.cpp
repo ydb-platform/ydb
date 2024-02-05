@@ -306,4 +306,21 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
     return true;
 }
 
+bool TKqpQueryState::HasImpliedAutostartTransactions() const {
+    if (!HasTxControl()
+        && (RequestEv->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE
+            || RequestEv->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED)
+        && (RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
+            || RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
+            || RequestEv->GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY))
+    {
+        for (const auto& transactionPtr : PreparedQuery->GetTransactions()) {
+            if (transactionPtr->GetType() == NKqpProto::TKqpPhyTx::TYPE_GENERIC) { // data transaction
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 }

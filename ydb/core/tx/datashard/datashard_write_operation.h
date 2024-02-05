@@ -40,6 +40,10 @@ public:
         return GetRecord().operations(0);
     }
 
+    ui64 GetTxId() const {
+        return UserDb.GetGlobalTxId();
+    }
+
     ui64 LockTxId() const {
         return GetRecord().locktxid();
     }
@@ -127,15 +131,22 @@ public:
         return Source != TActorId();
     }
 
-    inline const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
+    const ::NKikimrDataEvents::TKqpLocks& GetKqpLocks() const {
         return GetRecord().locks();
     }
+    bool HasKqpLocks() const {
+        return GetRecord().has_locks();
+    }
 
-    bool ParseRecord(const TDataShard::TTableInfos& tableInfos);
+    bool ParseOperations(const TDataShard::TTableInfos& tableInfos);
     void SetTxKeys(const ::google::protobuf::RepeatedField<::NProtoBuf::uint32>& columnIds);
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
+
+    ui64 HasOperations() const {
+        return GetRecord().operations().size() != 0;
+    }
 
     ui32 KeysCount() const {
         return TxInfo().WritesCount;

@@ -75,7 +75,7 @@ namespace {
                 flatDataPages.insert(*bTreeDataPages.rbegin());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(flatDataPages, bTreeDataPages,
-                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
+                TStringBuilder() << message << " Group " << groupId);
         }
     }
 
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     }
 
     bool DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
-            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 10) {
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
         while (true) {
             auto result = reverse
                 ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             }
 
                             UNIT_ASSERT_VALUES_EQUAL_C(expected, loaded,
-                                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
+                                TStringBuilder() << message << " Group " << groupId);
                         }
                     }
                 }

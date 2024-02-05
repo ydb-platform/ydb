@@ -23,17 +23,16 @@ class CalledProcessError(subprocess.CalledProcessError):
 
 
 def format_drivers(nodes):
-    cmd = "sudo find /dev/disk/by-partlabel/ -maxdepth 1 -name 'kikimr_*' " \
-          "-exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"  # noqa: W605
+    cmd = r"sudo find /dev/disk/by-partlabel/ -maxdepth 1 -name 'kikimr_*' -exec dd if=/dev/zero of={} bs=1M count=1 status=none \;"  # noqa: W605
     nodes.execute_async(cmd)
 
 
 def clear_registered_slots(nodes):
-    nodes.execute_async("sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")  # noqa: W605
+    nodes.execute_async(r"sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")  # noqa: W605
 
 
 def clear_slot(nodes, slot):
-    cmd = "sudo find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_{slot} -exec  rm -rf -- {{}} \;".format(slot=slot.slot)  # noqa: W605
+    cmd = r"sudo find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_{slot} -exec  rm -rf -- {{}} \;".format(slot=slot.slot)  # noqa: W605
     nodes.execute_async(cmd)
 
 
@@ -148,7 +147,7 @@ def get_available_slots(components, nodes, cluster_details):
     return (slots_per_domain, all_available_slots_count, )
 
 
-def deploy_slot_config_for_tenant(nodes, slot, tenant, node):
+def _deploy_slot_config_for_tenant_cmd(nodes, slot, tenant):
     slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot.slot)
     logs_dir = slot_dir + "/logs"
     slot_cfg = slot_dir + "/slot_cfg"
@@ -176,12 +175,14 @@ mon={mon}""".format(
         slot_cfg=slot_cfg,
     )
 
-    nodes.execute_async(cmd, check_retcode=False, nodes=[node])
+    return cmd
 
 
 def deploy_slot_configs(components, nodes, cluster_details):
     if 'dynamic_slots' not in components:
         return
+
+    tasks = []
 
     slots_per_domain = get_available_slots(components, nodes, cluster_details)[0]
     for domain in cluster_details.domains:
@@ -197,27 +198,17 @@ def deploy_slot_configs(components, nodes, cluster_details):
                             if (slot, node) in slots_taken:
                                 continue
                             slots_taken.add((slot, node))
-                            deploy_slot_config_for_tenant(nodes, slot, tenant, node)
+                            cmd = _deploy_slot_config_for_tenant_cmd(nodes, slot, tenant)
+                            tasks.extend(nodes._prepare_ssh_commands(cmd, nodes=[node]))
                             break
                     except IndexError:
                         logger.critical('insufficient slots allocated')
                         return
 
-
-def start_slot(nodes, slot):
-    cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
-          "    then start kikimr-multi slot={slot} tenant=dynamic mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
-          "    else systemctl start kikimr-multi@{slot}; fi\"".format(
-              slot=slot.slot,
-              mbus=slot.mbus,
-              grpc=slot.grpc,
-              mon=slot.mon,
-              ic=slot.ic
-          )
-    nodes.execute_async(cmd, check_retcode=False)
+    nodes.execute_ssh_commands(tasks, check_retcode=False)
 
 
-def start_slot_for_tenant(nodes, slot, tenant, host, node_bind=None):
+def _start_slot_for_tenant_cmd(nodes, slot, tenant, node_bind=None):
     cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
           "    then start kikimr-multi slot={slot} tenant=/{domain}/{name} mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
           "    else systemctl start kikimr-multi@{slot}; fi\"".format(
@@ -231,17 +222,7 @@ def start_slot_for_tenant(nodes, slot, tenant, host, node_bind=None):
           )
     if node_bind is not None:
         cmd += " bindnumanode={bind}".format(bind=node_bind)
-    nodes.execute_async(cmd, check_retcode=False, nodes=[host])
-
-
-def start_all_slots(nodes):
-    cmd = "find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_* " \
-          " | while read x; do " \
-          "      sudo sh -c \"if [ -x /sbin/start ]; "\
-          "          then start kikimr-multi slot=${x#/Berkanavt/kikimr_}; "\
-          "          else systemctl start kikimr-multi@${x#/Berkanavt/kikimr_}; fi\"; " \
-          "   done"
-    nodes.execute_async(cmd, check_retcode=False)
+    return cmd
 
 
 def start_static(nodes):
@@ -265,6 +246,8 @@ def start_dynamic(components, nodes, cluster_details):
 
         (slots_per_domain, all_available_slots_count,) = get_available_slots(components, nodes, cluster_details)
 
+        tasks = []
+
         for domain in cluster_details.domains:
 
             slots_taken = set()
@@ -284,18 +267,21 @@ def start_dynamic(components, nodes, cluster_details):
                                     continue
                                 slots_taken.add((slot, node))
                                 if domain.bind_slots_to_numa_nodes and numa_nodes[node] > 0:
-                                    start_slot_for_tenant(nodes, slot, tenant, host=node,
+                                    cmd = _start_slot_for_tenant_cmd(nodes, slot, tenant,
                                                           node_bind=numa_nodes_counters[node])
                                     numa_nodes_counters[node] += 1
                                     numa_nodes_counters[node] %= numa_nodes[node]
                                 else:
-                                    start_slot_for_tenant(nodes, slot, tenant, host=node)
+                                    cmd = _start_slot_for_tenant_cmd(nodes, slot, tenant)
+                                tasks.extend(nodes._prepare_ssh_commands(cmd, nodes=[node]))
                                 break
                         except IndexError:
                             logger.critical('insufficient slots allocated')
                             return
 
             logger.warning('{count} unused slots'.format(count=all_available_slots_count - len(slots_taken)))
+
+        nodes.execute_ssh_commands(tasks, check_retcode=False)
 
 
 def slice_start(components, nodes, cluster_details):
@@ -315,18 +301,10 @@ def stop_all_slots(nodes):
     nodes.execute_async(cmd, check_retcode=False)
 
 
-def stop_slot_ret(nodes, slot):
-    cmd = "sudo sh -c \"if [ -x /sbin/stop ]; "\
-          "    then stop kikimr-multi slot={slot}; "\
-          "    else systemctl stop kikimr-multi@{slot}; fi\"".format(
-              slot=slot.slot,
-          )
-    return nodes.execute_async_ret(cmd, check_retcode=False)
-
-
-def stop_slot(nodes, slot):
-    tasks = stop_slot_ret(nodes, slot)
-    nodes._check_async_execution(tasks, False)
+def _stop_slot_cmd(slot):
+    # tasks = stop_slot_ret(nodes, slot)
+    # nodes._check_async_execution(tasks, False)
+    return f""" sudo sh -c 'if [ -x /sbin/stop ]; then stop kikimr-multi slot={slot.slot}; else systemctl stop kikimr-multi@{slot.slot}; fi' """
 
 
 def stop_static(nodes):
@@ -337,10 +315,8 @@ def stop_dynamic(components, nodes, cluster_details):
     if 'dynamic_slots' in components:
         tasks = []
         for slot in cluster_details.dynamic_slots.values():
-            tasks_slot = stop_slot_ret(nodes, slot)
-            for task in tasks_slot:
-                tasks.append(task)
-        nodes._check_async_execution(tasks, False)
+            tasks.extend(nodes._prepare_ssh_commands(_stop_slot_cmd(slot)))
+        nodes.execute_ssh_commands(tasks, check_retcode=False)
 
 
 def slice_stop(components, nodes, cluster_details):

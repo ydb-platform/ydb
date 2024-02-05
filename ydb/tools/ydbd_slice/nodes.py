@@ -2,19 +2,62 @@ import os
 import sys
 import logging
 import subprocess
+import asyncio
 
 
 logger = logging.getLogger(__name__)
 
 
+async def run(cmd, check_retcode=None, report_error=None):
+    #DEBUG: logger.error(cmd)
+    assert isinstance(cmd, list)
+
+    report_error = True if report_error is None else False
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0 and report_error:
+        status_line = f'''{cmd!r} exited with {proc.returncode}'''
+        logger.critical(f'''{status_line}
+            stdout:
+            {stdout.decode()}
+            stderr:
+            {stderr.decode()}
+        ''')
+        if check_retcode:
+            sys.exit(status_line)
+
+
+async def parallel(cmds, check_retcode=None, report_error=None):
+    runs = [run(i, check_retcode=check_retcode, report_error=report_error) for i in cmds]
+    await asyncio.gather(*runs)
+
+
+def run_parallel(cmds, check_retcode=None, report_error=None):
+    asyncio.run(parallel(cmds, check_retcode=check_retcode, report_error=report_error))
+
+
+SSH_CONTROL_BASENAME = '~/.ssh/ydbd_slice-master-conn-'
+SSH_CONTROL_PATH = SSH_CONTROL_BASENAME + '%r@%h:%p'
+
 class Nodes(object):
-    def __init__(self, nodes, dry_run=False):
+    def __init__(self, nodes, hosts, dry_run=False):
         assert isinstance(nodes, list)
         assert len(nodes) > 0
         assert isinstance(nodes[0], str)
         self._nodes = nodes
+        self._hosts = hosts
         self._dry_run = bool(dry_run)
         self._logger = logger.getChild(self.__class__.__name__)
+
+        # cleanup ssh master connections left from previous runs
+        self._exit_master_connections()
 
     @property
     def nodes_list(self):
@@ -22,57 +65,49 @@ class Nodes(object):
 
     @staticmethod
     def _wrap_ssh_cmd(cmd, host):
-        return ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A', host, cmd]
+        # merge multiple lines into the single line, stripping excess whitespaces
+        cmd = ' '.join((i.strip() for i in cmd.splitlines()))
+        return ['ssh',
+            '-o', 'ControlMaster=auto', '-o', 'ControlPersist=yes', '-o', f'ControlPath={SSH_CONTROL_PATH}',
+            '-o', 'LogLevel=ERROR', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
+            '-A',
+            host,
+            cmd
+        ]
 
-    def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
+    def _exit_master_connections(self):
+        run_parallel(
+            [['ssh', '-q', '-O', 'exit', '-o', f'ControlPath={SSH_CONTROL_PATH}', i] for i in self._hosts],
+            check_retcode=False,
+            report_error=False,
+        )
+        subprocess.run(f'rm -f {SSH_CONTROL_BASENAME}*', shell=True, check=False)
+
+    def _prepare_ssh_commands(self, cmd, nodes=None, log_commands=True):
+        if nodes is None:
+            nodes = self._nodes
+        else:
+            assert isinstance(nodes, list)
+            assert len(nodes) > 0
+            assert isinstance(nodes[0], str)
+
+        if log_commands:
+            for host in nodes:
+                self._logger.info(f"{host}: execute '{cmd}'")
+
         if self._dry_run:
-            return
+            return []
 
-        assert results is None or isinstance(results, dict)
+        return [self._wrap_ssh_cmd(cmd, host) for host in nodes]
 
-        for cmd, process, host in running_jobs:
-            out, err = process.communicate()
-            retcode = process.poll()
-            if retcode != 0:
-                status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(
-                    cmd=cmd,
-                    retcode=retcode,
-                )
-                self._logger.critical(
-                    "{status_line}"
-                    "stdout is:\n"
-                    "{out}\n"
-                    "stderr is:\n"
-                    "{err}".format(
-                        status_line=status_line,
-                        out=out,
-                        err=err
-                    )
-                )
-                if check_retcode:
-                    sys.exit(status_line)
-            if results is not None:
-                results[host] = {
-                    'retcode': retcode,
-                    'stdout': out,
-                    'stderr': err
-                }
+    def execute_ssh_commands(self, prepared_ssh_commands, check_retcode=True):
+        assert isinstance(prepared_ssh_commands, list)
+        if not self._dry_run:
+            run_parallel(prepared_ssh_commands, check_retcode=check_retcode)
 
-    def execute_async_ret(self, cmd, check_retcode=True, nodes=None, results=None):
-        running_jobs = []
-        for host in (nodes if nodes is not None else self._nodes):
-            self._logger.info("execute '{cmd}' at '{host}'".format(cmd=cmd, host=host))
-            if self._dry_run:
-                continue
-
-            actual_cmd = self._wrap_ssh_cmd(cmd, host)
-            process = subprocess.Popen(actual_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            running_jobs.append((actual_cmd, process, host))
-        return running_jobs
-
-    def execute_async(self, cmd, check_retcode=True, nodes=None, results=None):
-        running_jobs = self.execute_async_ret(cmd, check_retcode, nodes, results)
-        self._check_async_execution(running_jobs, check_retcode, results)
+    def execute_async(self, cmd, check_retcode=True, nodes=None, log_commands=True):
+        prepared = self._prepare_ssh_commands(cmd, nodes=nodes, log_commands=log_commands)
+        self.execute_ssh_commands(prepared, check_retcode=check_retcode)
 
     def _copy_on_node(self, local_path, host, remote_path):
         self._logger.info(
@@ -94,27 +129,25 @@ class Nodes(object):
         assert isinstance(hosts, list)
 
         src = "{hub}:{hub_path}".format(hub=hub, hub_path=hub_path)
-        running_jobs = []
         for dst in hosts:
             self._logger.info(
                 "copy from '{src_host}:{src_path}' to host '{dst_host}:{dst_path}'".format(
                     src_host=hub,
                     src_path=hub_path,
                     dst_host=dst,
-                    dst_path=remote_path
+                    dst_path=remote_path,
                 )
             )
-            if self._dry_run:
-                continue
-            cmd = [
-                "ssh", dst, "-A", "sudo", "rsync", "-avqW", "--del", "--no-o", "--no-g",
-                "--rsh='ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l %s'" % os.getenv("USER"),
-                src, remote_path,
-            ]
-            process = subprocess.Popen(cmd)
-            running_jobs.append((cmd, process, dst))
 
-        self._check_async_execution(running_jobs)
+        if self._dry_run:
+            return
+
+        cmd = f"""sudo rsync -avqW --del --no-o --no-g
+            --rsh=\'ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l {os.getenv("USER")}\'
+            {src} {remote_path}
+        """
+
+        self.execute_async(cmd, nodes=hosts, log_commands=False)
 
     # copy local_path to remote_path for every node in nodes
     def copy(self, local_path, remote_path, directory=False, compressed_path=None):
@@ -129,7 +162,13 @@ class Nodes(object):
             original_remote_path = remote_path
             remote_path += '.zstd'
         hub = self._nodes[0]
+
+        self._logger.info(f"copy '{local_path}' to nodes:'{remote_path}', via hub {hub}")
+
         self._copy_on_node(local_path, hub, remote_path)
         self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
         if compressed_path is not None:
-            self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))
+            self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(
+                from_=remote_path,
+                to=original_remote_path,
+            ))

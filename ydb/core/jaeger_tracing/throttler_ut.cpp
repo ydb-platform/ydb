@@ -1,8 +1,8 @@
-#include "immediate_control_board_throttler.h"
+#include "throttler.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
+namespace NKikimr::NJaegerTracing {
 
 class TTimeProviderMock : public ITimeProvider {
 public:
@@ -33,8 +33,8 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
     }
 
     Y_UNIT_TEST(Simple) {
-        TControlWrapper maxPerMinute(6, 0, 180);
-        TControlWrapper maxBurst(2, 0, 180);
+        TControlWrapper maxPerMinute(6);
+        TControlWrapper maxBurst(2);
 
         auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
 
@@ -55,8 +55,8 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
     }
 
     Y_UNIT_TEST(LongIdle) {
-        TControlWrapper maxPerMinute(10, 0, 180);
-        TControlWrapper maxBurst(2, 0, 180);
+        TControlWrapper maxPerMinute(10);
+        TControlWrapper maxBurst(2);
 
         auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
 
@@ -68,8 +68,8 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
     }
 
     Y_UNIT_TEST(Overflow) {
-        TControlWrapper maxPerMinute(6'000, 0, 6'000);
-        TControlWrapper maxBurst(6'000, 0, 6'000);
+        TControlWrapper maxPerMinute(6'000);
+        TControlWrapper maxBurst(6'000);
 
         auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
 
@@ -82,18 +82,18 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
     }
 
     Y_UNIT_TEST(ChangingControls) {
-        TControlWrapper maxPerMinute(6, 0, 180);
-        TControlWrapper maxBurst(2, 0, 180);
+        TControlWrapper maxPerMinute(6);
+        TControlWrapper maxBurst(2);
 
         auto timeProvider = MakeIntrusive<TTimeProviderMock>(TInstant::Now());
 
         TThrottler throttler(maxPerMinute, maxBurst, timeProvider);
         CheckExact(throttler, 3);
 
-        maxBurst = 4;
+        maxBurst.Set(4);
         CheckExact(throttler, 2);
 
-        maxBurst = 0;
+        maxBurst.Set(0);
         CheckExact(throttler, 0);
 
         timeProvider->Advance(TDuration::Seconds(9));
@@ -101,26 +101,26 @@ Y_UNIT_TEST_SUITE(ThrottlerControlTests) {
         timeProvider->Advance(TDuration::Seconds(1));
         CheckExact(throttler, 1);
 
-        maxPerMinute = 12 * 60;
+        maxPerMinute.Set(12 * 60);
         timeProvider->Advance(TDuration::Seconds(1));
         CheckExact(throttler, 1);
 
-        maxBurst = 20;
+        maxBurst.Set(20);
 
         timeProvider->Advance(TDuration::Seconds(3));
         CheckExact(throttler, 21);
 
-        maxBurst = 0;
+        maxBurst.Set(0);
         timeProvider->Advance(TDuration::Seconds(59));
         CheckAtLeast(throttler, 1);
-        maxPerMinute = 1;
+        maxPerMinute.Set(1);
         CheckExact(throttler, 0);
         timeProvider->Advance(TDuration::Minutes(1));
         CheckExact(throttler, 1);
 
-        maxBurst = 2;
+        maxBurst.Set(2);
         CheckExact(throttler, 2);
     }
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

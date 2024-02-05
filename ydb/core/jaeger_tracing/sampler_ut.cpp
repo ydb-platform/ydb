@@ -1,8 +1,8 @@
-#include "immediate_control_board_sampler.h"
+#include "sampler.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
+namespace NKikimr::NJaegerTracing {
 
 Y_UNIT_TEST_SUITE(SamplingControlTests) {
     ui32 RunTrials(TSampler& sampler, ui32 trials) {
@@ -16,8 +16,8 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(Simple) {
-        TControlWrapper control(500'000, 0, 1'000'000);
-        TSampler sampler(control, 42);
+        TControlWrapper ppm(500'000);
+        TSampler sampler(ppm, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_GE(samples, 48'000);
@@ -25,24 +25,24 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 
     Y_UNIT_TEST(EdgeCaseLower) {
-        TControlWrapper control(0, 0, 1'000'000);
-        TSampler sampler(control, 42);
+        TControlWrapper ppm(0);
+        TSampler sampler(ppm, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_EQUAL(samples, 0);
     }
 
     Y_UNIT_TEST(EdgeCaseUpper) {
-        TControlWrapper control(1'000'000, 0, 1'000'000);
-        TSampler sampler(control, 42);
+        TControlWrapper ppm(1'000'000);
+        TSampler sampler(ppm, 42);
 
         auto samples = RunTrials(sampler, 100'000);
         UNIT_ASSERT_EQUAL(samples, 100'000);
     }
 
     Y_UNIT_TEST(ChangingControl) {
-        TControlWrapper control(250'000, 0, 1'000'000);
-        TSampler sampler(control, 42);
+        TControlWrapper ppm(250'000);
+        TSampler sampler(ppm, 42);
 
         {
             auto samples = RunTrials(sampler, 100'000);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
             UNIT_ASSERT_LE(samples, 27'000);
         }
 
-        control = 750'000;
+        ppm.Set(750'000);
         {
             auto samples = RunTrials(sampler, 100'000);
             UNIT_ASSERT_GE(samples, 73'000);
@@ -59,4 +59,4 @@ Y_UNIT_TEST_SUITE(SamplingControlTests) {
     }
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NJaegerTracing

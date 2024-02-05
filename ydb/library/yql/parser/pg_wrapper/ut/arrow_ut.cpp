@@ -185,6 +185,56 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale5) {
     checkResult<false>(expected, result, &reader, numeric_out);
 }
 
+Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 20;
+    int32_t scale = 3;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "36893488147419103.245", "-36893488147419103.245", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("36893488147419103.245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-36893488147419103.245").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}
+
+/*Y_UNIT_TEST(PgConvertNumericDecimal128BigScale6) {
+    TArenaMemoryContext arena;
+
+    int32_t precision = 24;
+    int32_t scale = 5;
+    std::shared_ptr<arrow::DataType> type(new arrow::Decimal128Type(precision, scale));
+    arrow::Decimal128Builder builder(type);
+
+    const char* expected[] = {
+        "3623458934881474191.03245", "-3623458934881474191.03245", nullptr
+    };
+
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("3623458934881474191.03245").ValueOrDie()));
+    ARROW_OK(builder.Append(arrow::Decimal128::FromString("-3623458934881474191.03245").ValueOrDie()));
+    ARROW_OK(builder.AppendNull());
+
+    std::shared_ptr<arrow::Array> array;
+    ARROW_OK(builder.Finish(&array));
+
+    auto result = PgDecimal128ConvertNumeric(array, precision, scale);
+
+    NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    checkResult<false>(expected, result, &reader, numeric_out);
+}*/
+
 Y_UNIT_TEST(PgConvertNumericInt) {
     TArenaMemoryContext arena;
  

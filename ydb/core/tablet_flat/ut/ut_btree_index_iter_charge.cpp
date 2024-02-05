@@ -131,7 +131,9 @@ namespace {
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
         for (ui32 i : xrange<ui32>(0, 40)) {
-            cook.Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
+            for (int ver = params.History ? i % 3 : 0; ver >= 0; ver--) {
+                cook.Ver({0, ui64(ver)}).Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
+            }
         }
 
         TPartEggs eggs = cook.Finish();
@@ -426,7 +428,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
-                    for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
+                    for (TRowId rowId2 : xrange<TRowId>(4, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
@@ -567,6 +569,14 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckPart({.Levels = 0, .Groups = true});
     }
 
+    Y_UNIT_TEST(NoNodes_History) {
+        CheckPart({.Levels = 0, .History = true});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups_History) {
+        CheckPart({.Levels = 0, .Groups = true, .History = true});
+    }
+
     Y_UNIT_TEST(OneNode) {
         CheckPart({.Levels = 1});
     }
@@ -575,12 +585,28 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         CheckPart({.Levels = 1, .Groups = true});
     }
 
+    Y_UNIT_TEST(OneNode_History) {
+        CheckPart({.Levels = 1, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History) {
+        CheckPart({.Levels = 1, .Groups = true, .History = true});
+    }
+
     Y_UNIT_TEST(FewNodes) {
         CheckPart({.Levels = 3});
     }
 
     Y_UNIT_TEST(FewNodes_Groups) {
         CheckPart({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History) {
+        CheckPart({.Levels = 3, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true});
     }
 }
 
@@ -766,12 +792,24 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         CheckPart({.Levels = 3, .Groups = true});
     }
 
+    Y_UNIT_TEST(FewNodes_History) {
+        CheckPart({.Levels = 3, .History = true});
+    }
+
     Y_UNIT_TEST(FewNodes_Slices) {
         CheckPart({.Levels = 3, .Slices = true});
     }
 
     Y_UNIT_TEST(FewNodes_Groups_Slices) {
         CheckPart({.Levels = 3, .Groups = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_Slices) {
+        CheckPart({.Levels = 3, .History = true, .Slices = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
+        CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = true});
     }
 }
 

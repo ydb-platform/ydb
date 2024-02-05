@@ -45,16 +45,14 @@ public:
     TChargeBTreeIndex(IPages *env, const TPart &part, TTagsRef tags, bool includeHistory)
         : Part(&part)
         , Scheme(*Part->Scheme)
-        , Env(env) 
+        , Env(env)
+        , IncludeHistory(includeHistory &&  Part->HistoricGroupsCount)
     {    
-        Y_UNUSED(includeHistory);
-
         TDynBitMap seen;
         for (TTag tag : tags) {
             if (const auto* col = Scheme.FindColumnByTag(tag)) {
                 if (col->Group != 0 && !seen.Get(col->Group)) {
-                    NPage::TGroupId groupId(col->Group);
-                    Groups.push_back(groupId);
+                    Groups.push_back(col->Group);
                     seen.Set(col->Group);
                 }
             }
@@ -68,7 +66,7 @@ public:
         Y_ABORT_UNLESS(beginRowId < endRowId);
 
         bool ready = true, overshot = true;
-        bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
+        bool hasValidRowsRange = Groups || IncludeHistory; // false value means that beginRowId, endRowId are invalid and shouldn't be used
         ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
         TRowId beginBytesLimitRowId = Max<TRowId>(); // first unloaded probably needed row
 
@@ -78,7 +76,7 @@ public:
         const TRowId sliceEndRowId = endRowId;
         if (Y_UNLIKELY(key1 && key2 && Compare(key1, key2, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
-            chargeGroups = false;
+            hasValidRowsRange = false;
         }
 
         TVector<TNodeState> level, nextLevel(::Reserve(3));
@@ -137,15 +135,15 @@ public:
 
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
-                if (chargeGroups && chargeGroupsItemsLimit) {
+                if (hasValidRowsRange && chargeGroupsItemsLimit) {
                     ui64 unloadedItems = key1Items - prevKey1Items;
                     if (unloadedItems < chargeGroupsItemsLimit) {
                         chargeGroupsItemsLimit -= unloadedItems;
                     } else {
-                        chargeGroups = false;
+                        hasValidRowsRange = false;
                     }
                 }
-                if (chargeGroups && bytesLimit) {
+                if (hasValidRowsRange && bytesLimit) {
                     beginBytesLimitRowId = Max(beginRowId, child.BeginRowId);
                 }
                 beginRowId = Max(beginRowId, child.EndRowId);
@@ -176,7 +174,7 @@ public:
                         key2PageId = key2Child.PageId;
                         endRowId = Min(endRowId, key2Child.RowCount + 1); // move endRowId - 1 to the first key > key2
                         if (key2Child.RowCount <= beginRowId) {
-                            chargeGroups = false; // key2 is before current slice
+                            hasValidRowsRange = false; // key2 is before current slice
                         }
                     }
                     return true;
@@ -190,7 +188,7 @@ public:
         };
 
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
-            if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
+            if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) {
                     auto data = NPage::TDataPage(page);
@@ -223,7 +221,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoGroups(chargeGroups, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -237,7 +235,7 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoGroups(chargeGroups, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroupsAndHistory(hasValidRowsRange, beginRowId, endRowId, beginBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
@@ -248,7 +246,7 @@ public:
         Y_ABORT_UNLESS(beginRowId < endRowId);
         
         bool ready = true, overshot = true;
-        bool chargeGroups = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
+        bool hasValidRowsRange = Groups || IncludeHistory; // false value means that beginRowId, endRowId are invalid and shouldn't be used
         ui64 chargeGroupsItemsLimit = itemsLimit; // pessimistic items limit for groups
         TRowId endBytesLimitRowId = Max<TRowId>(); // last unloaded probably needed row
 
@@ -258,7 +256,7 @@ public:
         const TRowId sliceBeginRowId = beginRowId;
         if (Y_UNLIKELY(key1 && key2 && Compare(key2, key1, keyDefaults) > 0)) {
             key2 = key1; // will not go further than key1
-            chargeGroups = false;
+            hasValidRowsRange = false;
         }
 
         // level's nodes is in reverse order
@@ -321,15 +319,15 @@ public:
 
         const auto skipUnloadedRows = [&](const TChildState& child) {
             if (child.PageId == key1PageId) {
-                if (chargeGroups && chargeGroupsItemsLimit) {
+                if (hasValidRowsRange && chargeGroupsItemsLimit) {
                     ui64 unloadedItems = key1Items - prevKey1Items;
                     if (unloadedItems < chargeGroupsItemsLimit) {
                         chargeGroupsItemsLimit -= unloadedItems;
                     } else {
-                        chargeGroups = false;
+                        hasValidRowsRange = false;
                     }
                 }
-                if (chargeGroups && bytesLimit) {
+                if (hasValidRowsRange && bytesLimit) {
                     endBytesLimitRowId = Min(endRowId, child.EndRowId);
                 }
                 endRowId = Min(endRowId, child.BeginRowId);
@@ -361,7 +359,7 @@ public:
                             auto& prevKey2Child = node.GetChild(pos - 1);
                             beginRowId = Max(beginRowId, prevKey2Child.RowCount - 1); // move beginRowId to the last key < key2
                             if (prevKey2Child.RowCount >= endRowId) {
-                                chargeGroups = false; // key2 is after current slice
+                                hasValidRowsRange = false; // key2 is after current slice
                             }
                         }                        
                     }
@@ -376,7 +374,7 @@ public:
         };
 
         const auto tryHandleDataPage = [&](TChildState child) -> bool {
-            if (chargeGroups && (child.PageId == key1PageId || child.PageId == key2PageId)) {
+            if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
                 const auto page = TryGetDataPage(child.PageId, { });
                 if (page) {
                     auto data = NPage::TDataPage(page);
@@ -419,7 +417,7 @@ public:
         }
 
         if (!ready) { // some index pages are missing, do not continue
-            ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+            ready &= DoGroupsAndHistoryReverse(hasValidRowsRange, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
             return {ready, false};
         }
 
@@ -433,16 +431,16 @@ public:
             iterateLevel(tryHandleDataPage);
         }
 
-        ready &= DoGroupsReverse(chargeGroups, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
+        ready &= DoGroupsAndHistoryReverse(hasValidRowsRange, beginRowId, endRowId, endBytesLimitRowId, chargeGroupsItemsLimit, bytesLimit); // precharge groups using the latest row bounds
 
         return {ready, overshot};
     }
 
 private:
-    bool DoGroups(bool chargeGroups, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroupsAndHistory(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId, TRowId beginBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
-        if (chargeGroups && beginRowId < endRowId) {
+        if (hasValidRowsRange && beginRowId < endRowId) {
             if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
                 endRowId = beginRowId + itemsLimit + 1;
             }
@@ -450,18 +448,21 @@ private:
                 beginBytesLimitRowId = beginRowId;
             }
 
-            for (auto groupId : Groups) {
-                ready &= DoGroup(groupId, beginRowId, endRowId, beginBytesLimitRowId, bytesLimit);
+            if (IncludeHistory) {
+                DoGroup(TGroupId(0, true), beginRowId, endRowId, 0, 0);
+            }
+            for (auto groupIndex : Groups) {
+                ready &= DoGroup(TGroupId(groupIndex), beginRowId, endRowId, beginBytesLimitRowId, bytesLimit);
             }
         }
 
         return ready;
     }
 
-    bool DoGroupsReverse(bool chargeGroups, TRowId beginRowId, TRowId endRowId, TRowId endBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
+    bool DoGroupsAndHistoryReverse(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId, TRowId endBytesLimitRowId, ui64 itemsLimit, ui64 bytesLimit) const noexcept {
         bool ready = true;
         
-        if (chargeGroups && beginRowId < endRowId) {
+        if (hasValidRowsRange && beginRowId < endRowId) {
             if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
                 beginRowId = endRowId - itemsLimit - 1;
             }
@@ -469,8 +470,11 @@ private:
                 endBytesLimitRowId = endRowId;
             }
 
-            for (auto groupId : Groups) {
-                ready &= DoGroupReverse(groupId, beginRowId, endRowId, endBytesLimitRowId, bytesLimit);
+            if (IncludeHistory) {
+                DoGroupReverse(TGroupId(0, true), beginRowId, endRowId, 0, 0);
+            }
+            for (auto groupIndex : Groups) {
+                ready &= DoGroupReverse(TGroupId(groupIndex), beginRowId, endRowId, endBytesLimitRowId, bytesLimit);
             }
         }
 
@@ -694,7 +698,8 @@ private:
     const TPart* const Part;
     const TPartScheme &Scheme;
     IPages* const Env;
-    TSmallVec<TGroupId> Groups;
+    TSmallVec<ui32> Groups;
+    bool IncludeHistory;
 };
 
 }

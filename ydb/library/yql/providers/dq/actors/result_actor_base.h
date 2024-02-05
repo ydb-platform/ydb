@@ -76,6 +76,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
 
             WriteQueue.emplace(std::move(data), messageId);
+            InflightBytes += WriteQueue.back().Size;
             if (FullResultTableEnabled && FullResultWriterID) {
                 TryWriteToFullResultTable();
             } else {
@@ -214,6 +215,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             } else {
                 WaitingAckFromFRW = false;
                 WriteQueue.clear();
+                InflightBytes = 0;
                 Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }
@@ -234,6 +236,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
             }
+            InflightBytes -= WriteQueue.back().Size;
             WriteQueue.pop();
 
             if (WriteQueue.empty()) {
@@ -356,6 +359,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                 , MessageId(messageId)
                 , SentProcessedEvent(false)
                 , IsFinal(false)
+                , Size(Data.Size())
             {
             }
 
@@ -370,6 +374,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             const TString MessageId;
             bool SentProcessedEvent = false;
             bool IsFinal = false;
+            ui64 Size = 0;
         };
 
     protected:
@@ -378,6 +383,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         TDqConfiguration::TPtr Settings;
         bool FinishCalled;
         bool EarlyFinish;
+        ui64 InflightBytes = 0;
 
     private:
         const bool FullResultTableEnabled;

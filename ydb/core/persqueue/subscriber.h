@@ -141,7 +141,7 @@ public:
 
 private:
     TSubscriberLogic Subscriber;
-    const TPartitionId& Partition;
+    const TPartitionId Partition;
     TTabletCountersBase& Counters;
     TActorId Tablet;
 };

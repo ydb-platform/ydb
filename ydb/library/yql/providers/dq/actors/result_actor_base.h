@@ -16,6 +16,63 @@
 
 namespace NYql::NDqs::NExecutionHelpers {
 
+struct TQueueItem {
+    TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
+        : Data(std::move(data))
+        , MessageId(messageId)
+        , SentProcessedEvent(false)
+        , IsFinal(false)
+        , Size(Data.Size())
+        {
+        }
+
+    static TQueueItem Final() {
+        TQueueItem item({}, "FinalMessage");
+        item.SentProcessedEvent = true;
+        item.IsFinal = true;
+        return item;
+    }
+
+    NDq::TDqSerializedBatch Data;
+    const TString MessageId;
+    bool SentProcessedEvent = false;
+    bool IsFinal = false;
+    ui64 Size = 0;
+};
+
+struct TWriteQueue {
+    TQueue<TQueueItem> Queue;
+    ui64 ByteSize = 0;
+
+    template< class... Args >
+    decltype(auto) emplace( Args&&... args) {
+        Queue.emplace(std::forward<Args>(args)...);
+        ByteSize += Queue.back().Size;
+    }
+
+    auto& front() {
+        return Queue.front();
+    }
+
+    auto& back() {
+        return Queue.back();
+    }
+
+    auto pop() {
+        ByteSize -= Queue.front().Size;
+        return Queue.pop();
+    }
+
+    auto empty() const {
+        return Queue.empty();
+    }
+
+    void clear() {
+        Queue.clear();
+        ByteSize = 0;
+    }
+};
+
     template <class TDerived>
     class TResultActorBase : public NYql::TSynchronizableRichActor<TDerived>, public NYql::TCounters {
     protected:
@@ -76,7 +133,6 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
 
             WriteQueue.emplace(std::move(data), messageId);
-            InflightBytes += WriteQueue.back().Size;
             if (FullResultTableEnabled && FullResultWriterID) {
                 TryWriteToFullResultTable();
             } else {
@@ -181,6 +237,10 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
         }
 
+        ui64 InflightBytes() {
+            return WriteQueue.ByteSize;
+        }
+
     private:
         void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
@@ -215,7 +275,6 @@ namespace NYql::NDqs::NExecutionHelpers {
             } else {
                 WaitingAckFromFRW = false;
                 WriteQueue.clear();
-                InflightBytes = 0;
                 Y_ABORT_UNLESS(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
                 TBase::Send(ExecuterID, ev->Release().Release());
             }
@@ -236,7 +295,6 @@ namespace NYql::NDqs::NExecutionHelpers {
             if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
             }
-            InflightBytes -= WriteQueue.back().Size;
             WriteQueue.pop();
 
             if (WriteQueue.empty()) {
@@ -352,44 +410,18 @@ namespace NYql::NDqs::NExecutionHelpers {
             TBase::Send(FullResultWriterID, std::move(req));
         }
 
-    private:
-        struct TQueueItem {
-            TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
-                : Data(std::move(data))
-                , MessageId(messageId)
-                , SentProcessedEvent(false)
-                , IsFinal(false)
-                , Size(Data.Size())
-            {
-            }
-
-            static TQueueItem Final() {
-                TQueueItem item({}, "FinalMessage");
-                item.SentProcessedEvent = true;
-                item.IsFinal = true;
-                return item;
-            }
-
-            NDq::TDqSerializedBatch Data;
-            const TString MessageId;
-            bool SentProcessedEvent = false;
-            bool IsFinal = false;
-            ui64 Size = 0;
-        };
-
     protected:
         const NActors::TActorId ExecuterID;
         const TString TraceId;
         TDqConfiguration::TPtr Settings;
         bool FinishCalled;
         bool EarlyFinish;
-        ui64 InflightBytes = 0;
 
     private:
         const bool FullResultTableEnabled;
         const NActors::TActorId GraphExecutionEventsId;
         const bool Discard;
-        TQueue<TQueueItem> WriteQueue;
+        TWriteQueue WriteQueue;
         ui64 SizeLimit;
         TMaybe<ui64> RowsLimit;
         ui64 Rows;

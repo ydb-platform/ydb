@@ -7,12 +7,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/generic/buffer.h>
-#include <util/generic/map.h>
-#include <util/generic/set.h>
-
 #include <ydb/library/yql/minikql/computation/mkql_spiller.h>
-
 
 namespace NYql::NDq {
 

@@ -3,14 +3,12 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/generic/size_literals.h>
 
 namespace NYql::NDq {
 

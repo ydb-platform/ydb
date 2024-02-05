@@ -158,7 +158,6 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/actors/core
     ydb/library/yql/public/issue/protos
-    ydb/library/yql/dq/actors/spilling
 )
 
 IF (ARCH_X86_64)

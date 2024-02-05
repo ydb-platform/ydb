@@ -21,6 +21,4 @@ struct ISpiller {
     virtual std::optional<NThreading::TFuture<TRope>> Extract(TKey key) = 0;
 };
 
-ISpiller::TPtr MakeSpiller(std::function<void()>&& wakeUpCallback);
-
 }//namespace NKikimr::NMiniKQL

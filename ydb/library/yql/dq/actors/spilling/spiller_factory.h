@@ -8,7 +8,8 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-class TDqSpillerFactory : public NKikimr::NMiniKQL::ISpillerFactory {
+class TDqSpillerFactory : public NKikimr::NMiniKQL::ISpillerFactory
+{
 public:
     TDqSpillerFactory(TTxId txId, TActorSystem* actorSystem, std::function<void()> wakeUpCallback) 
         : ActorSystem_(actorSystem),

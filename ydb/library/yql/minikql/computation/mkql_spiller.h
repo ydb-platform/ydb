@@ -5,7 +5,8 @@
 
 namespace NKikimr::NMiniKQL {
 
-struct ISpiller {
+struct ISpiller
+{
     using TPtr = std::shared_ptr<ISpiller>;
     virtual ~ISpiller(){}
     using TKey = ui64;

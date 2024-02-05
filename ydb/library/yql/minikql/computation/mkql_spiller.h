@@ -17,7 +17,7 @@ struct ISpiller {
     virtual std::optional<NThreading::TFuture<TRope>> Get(TKey key) = 0;
     virtual NThreading::TFuture<void> Delete(TKey) = 0;
     ///Get + Delete
-    ///Stored value may be moved to feature
+    ///Stored value may be moved to future
     virtual std::optional<NThreading::TFuture<TRope>> Extract(TKey key) = 0;
 };
 

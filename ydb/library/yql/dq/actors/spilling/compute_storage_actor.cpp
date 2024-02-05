@@ -195,8 +195,10 @@ private:
         // Use lock to prevent race when state is changed on event processing and on Put call
         std::lock_guard lock(Mutex_);
 
-        // if there was Delete request
+        // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
+        // Check if the intention was to delete and complete correct future in this case.
         if (HandleDelete(msg.BlobId, msg.Blob.Size())) {
+            WakeupCallback_();
             return;
         }
 

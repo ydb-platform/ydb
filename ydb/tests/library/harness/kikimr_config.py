@@ -160,7 +160,7 @@ class KikimrConfigGenerator(object):
             datashard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None,
-            enable_pg_compatible_expirement=False,
+            pg_compatible_expirement=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -377,7 +377,7 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             self.yaml_config["domains_config"]["security_config"]["default_user_sids"] = [default_user_sid]
 
-        if enable_pg_compatible_expirement:
+        if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
             # self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

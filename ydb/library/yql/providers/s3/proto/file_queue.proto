@@ -6,6 +6,16 @@ package NYql.NS3.FileQueue;
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
+message TEvUpdateConsumersCount {
+    uint64 ConsumersCountDelta = 1;
+    
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
+message TEvAck {
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}
+
 message TEvGetNextBatch {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }

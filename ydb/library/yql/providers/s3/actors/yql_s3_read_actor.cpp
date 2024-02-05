@@ -149,7 +149,9 @@ struct TEvS3FileQueue {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE),
 
-        EvGetNextBatch = EvBegin,
+        EvUpdateConsumersCount = EvBegin,
+        EvAck,
+        EvGetNextBatch,
         EvObjectPathBatch,
         EvObjectPathReadError,
 
@@ -157,6 +159,28 @@ struct TEvS3FileQueue {
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_FILE_QUEUE), 
                   "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_FILE_QUEUE)");
+    
+    struct TEvUpdateConsumersCount :
+        public TEventPB<TEvUpdateConsumersCount, NS3::FileQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
+        
+        TEvUpdateConsumersCount() {
+            Record.SetConsumersCountDelta(0);
+        }
+
+        explicit TEvUpdateConsumersCount(ui64 consumersCountDelta) {
+            Record.SetConsumersCountDelta(consumersCountDelta);
+        }
+    };
+
+    struct TEvAck :
+        public TEventPB<TEvAck, NS3::FileQueue::TEvAck, EvAck> {
+        
+        TEvAck() {}
+
+        explicit TEvAck(const TMessageTransportMeta& transportMeta) {
+            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+        }
+    };
 
     struct TEvGetNextBatch :
         public TEventPB<TEvGetNextBatch, NS3::FileQueue::TEvGetNextBatch, EvGetNextBatch> {
@@ -401,10 +425,10 @@ public:
             Schedule(PoisonTimeout, new TEvents::TEvPoison());
         }
         if (Directories.empty()) {
-            LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list");
+            LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list, consumersCount=" << ConsumersCount);
             Become(&TS3FileQueueActor::NoMoreDirectoriesState);
         } else {
-            LOG_I("TS3FileQueueActor", "Bootstrap there are directories to list");
+            LOG_I("TS3FileQueueActor", "Bootstrap there are directories to list, consumersCount=" << ConsumersCount);
             TryPreFetch();
             Become(&TS3FileQueueActor::ThereAreDirectoriesToListState);
         }
@@ -413,6 +437,7 @@ public:
     STATEFN(ThereAreDirectoriesToListState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatch);
                 hFunc(TEvPrivatePrivate::TEvNextListingChunkReceived, HandleNextListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
@@ -513,6 +538,7 @@ public:
     STATEFN(NoMoreDirectoriesState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(TEvents::TSystem::Poison, PassAway);
@@ -537,6 +563,7 @@ public:
     STATEFN(AnErrorOccurredState) {
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
+                hFunc(TEvS3FileQueue::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvS3FileQueue::TEvGetNextBatch, HandleGetNextBatchForErrorState);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(TEvents::TSystem::Poison, PassAway);
@@ -555,6 +582,17 @@ public:
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
         Send(ev->Sender, new TEvS3FileQueue::TEvObjectPathReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
+    }
+    
+    void HandleUpdateConsumersCount(TEvS3FileQueue::TEvUpdateConsumersCount::TPtr& ev) {
+        if (!UpdatedConsumers.contains(ev->Sender)) {
+            LOG_D(
+                "TS3FileQueueActor",
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
+            UpdatedConsumers.insert(ev->Sender);
+            ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
+        }
+        Send(ev->Sender, new TEvS3FileQueue::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }
 
     void HandleRoundRobinStageTimeout() {
@@ -765,6 +803,7 @@ private:
     bool IsRoundRobinFinishScheduled = false;
     bool HasPendingRequests = false;
     THashSet<TActorId> StartedConsumers;
+    THashSet<TActorId> UpdatedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
     const TString Url;
@@ -805,7 +844,8 @@ public:
         bool useRuntimeListing,
         TActorId fileQueueActor,
         ui64 fileQueueBatchSizeLimit,
-        ui64 fileQueueBatchObjectCountLimit)
+        ui64 fileQueueBatchObjectCountLimit,
+        ui64 fileQueueConsumersCountDelta)
         : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -828,7 +868,8 @@ public:
         , FilesRemained(rowsLimitHint)
         , UseRuntimeListing(useRuntimeListing)
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
-        , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit) {
+        , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
+        , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -845,6 +886,7 @@ public:
 
     void Bootstrap() {
         LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex);
+
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
                 TxId,
@@ -864,7 +906,11 @@ public:
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
+        if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
+            FileQueueEvents.Send(new TEvS3FileQueue::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
+        }
         SendPathBatchRequest();
+
         Become(&TS3ReadActor::StateFunc);
     }
 
@@ -963,6 +1009,7 @@ private:
         hFunc(TEvPrivate::TEvReadError, Handle);
         hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
+        hFunc(TEvS3FileQueue::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
@@ -1116,6 +1163,10 @@ private:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
     
+    void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
+        FileQueueEvents.OnEventReceived(ev);
+    }
+    
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -1196,6 +1247,7 @@ private:
     bool UseRuntimeListing;
     ui64 FileQueueBatchSizeLimit;
     ui64 FileQueueBatchObjectCountLimit;
+    ui64 FileQueueConsumersCountDelta;
     bool IsFileQueueEmpty = false;
     bool IsCurrentBatchEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2440,7 +2492,8 @@ public:
         bool useRuntimeListing,
         TActorId fileQueueActor,
         ui64 fileQueueBatchSizeLimit,
-        ui64 fileQueueBatchObjectCountLimit
+        ui64 fileQueueBatchObjectCountLimit,
+        ui64 fileQueueConsumersCountDelta
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -2463,7 +2516,8 @@ public:
         , MemoryQuotaManager(memoryQuotaManager)
         , UseRuntimeListing(useRuntimeListing)
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
-        , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit) {
+        , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
+        , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -2510,6 +2564,7 @@ public:
             TaskDownloadPaused,
             TaskChunkDownloadCount,
             DecodedChunkSizeHist);
+
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(new TS3FileQueueActor{
                 TxId,
@@ -2529,7 +2584,11 @@ public:
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
+        if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
+            FileQueueEvents.Send(new TEvS3FileQueue::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
+        }
         SendPathBatchRequest();
+
         Become(&TS3StreamReadActor::StateFunc);
         Bootstrapped = true;
     }
@@ -2782,6 +2841,7 @@ private:
         hFunc(TEvPrivate::TEvNextBlock, HandleNextBlock);
         hFunc(TEvPrivate::TEvNextRecordBatch, HandleNextRecordBatch);
         hFunc(TEvPrivate::TEvFileFinished, HandleFileFinished);
+        hFunc(TEvS3FileQueue::TEvAck, Handle);
         hFunc(TEvS3FileQueue::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3FileQueue::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
@@ -2917,6 +2977,10 @@ private:
         }
     }
     
+    void Handle(TEvS3FileQueue::TEvAck::TPtr& ev) {
+        FileQueueEvents.OnEventReceived(ev);
+    }
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
         Y_UNUSED(ev);
         FileQueueEvents.Retry();
@@ -3009,6 +3073,7 @@ private:
     bool UseRuntimeListing;
     ui64 FileQueueBatchSizeLimit;
     ui64 FileQueueBatchObjectCountLimit;
+    ui64 FileQueueConsumersCountDelta;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -3276,6 +3341,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (auto it = settings.find("fileQueueBatchObjectCountLimit"); it != settings.cend()) {
         fileQueueBatchObjectCountLimit = FromString<ui64>(it->second);
     }
+    
+    ui64 fileQueueConsumersCountDelta = 0;
+    if (readRanges.size() > 1) {
+        fileQueueConsumersCountDelta = readRanges.size() - 1;
+    }
 
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
@@ -3382,7 +3452,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint, memoryQuotaManager,
-                                                  params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit);
+                                                  params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
 
         return {actor, actor};
     } else {
@@ -3393,7 +3463,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto actor = new TS3ReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit);
+                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
         return {actor, actor};
     }
 }

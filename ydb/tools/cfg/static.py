@@ -113,14 +113,12 @@ class StaticConfigGenerator(object):
             )
         )
         self._enable_cms_config_cache = template.get("enable_cms_config_cache", enable_cms_config_cache)
-        if "tracing" in template:
-            tracing = template["tracing"]
+        if "tracing_config" in template:
+            tracing = template["tracing_config"]
             self.__tracing = (
-                tracing["host"],
-                tracing["port"],
-                tracing["root_ca"],
-                tracing["service_name"],
-                tracing.get("auth_config")
+                tracing["backend"],
+                tracing.get("sampling", []),
+                tracing.get("external_throttling", []),
             )
         else:
             self.__tracing = None
@@ -1121,37 +1119,92 @@ class StaticConfigGenerator(object):
             self.__generate_sys_txt_advanced()
 
     def __generate_tracing_txt(self):
+        def get_selectors(selectors):
+            return config_pb2.TTracingConfig.TSelectors()
+
+        def get_sampling_scope(sampling):
+            sampling_scope_pb = config_pb2.TTracingConfig.TSamplingScope()
+            selectors = sampling.get("scope")
+            if selectors is not None:
+                sampling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            sampling_scope_pb.Fraction = sampling['fraction']
+            sampling_scope_pb.Level = sampling['level']
+            sampling_scope_pb.MaxRatePerMinute = sampling['max_rate_per_minute']
+            sampling_scope_pb.MaxBurst = sampling['max_burst']
+            return sampling_scope_pb
+
+
+        def get_external_throttling(throttling):
+            throttling_scope_pb = config_pb2.TTracingConfig.TExternalThrottlingScope()
+            selectors = throttling.get("scope")
+            if selectors is not None:
+                throttling_scope_pb.Scope.CopyFrom(get_selectors(selectors))
+            throttling_scope_pb.MaxRatePerMinute = throttling_scope_pb['max_rate_per_minute']
+            throttling_scope_pb.MaxBurst = throttling_scope_pb['max_burst']
+            return throttling_scope_pb
+
+        def get_auth_config(auth):
+            auth_pb = config_pb2.TTracingConfig.TBackendConfig.TAuthConfig()
+            tvm = auth.get("tvm")
+            if tvm is not None:
+                tvm_pb = auth_pb.Tvm
+
+                if "host" in tvm:
+                    tvm_pb.Host = tvm["host"]
+                if "port" in tvm:
+                    tvm_pb.Port = tvm["port"]
+                tvm_pb.SelfTvmId = tvm["self_tvm_id"]
+                tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
+                tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+
+                if "plain_text_secret" in tvm:
+                    tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
+                elif "secret_file" in tvm:
+                    tvm_pb.SecretFile = tvm["secret_file"]
+                elif "secret_environment_variable" in tvm:
+                    tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+            return auth_pb
+
+        def get_opentelemetry(opentelemetry):
+            opentelemetry_pb = config_pb2.TTracingConfig.TBackendConfig.TOpentelemetryBackend()
+
+            opentelemetry_pb.CollectorUrl = opentelemetry["collector_url"]
+            opentelemetry_pb.ServiceName = opentelemetry["service_name"]
+
+            return opentelemetry_pb
+
+        def get_backend(backend):
+            backend_pb = config_pb2.TTracingConfig.TBackendConfig()
+
+            auth = backend.get("auth_config")
+            if auth is not None:
+                backend_pb.AuthConfig.CopyFrom(get_auth_config(auth))
+
+            opentelemetry = backend["opentelemetry"]
+            if opentelemetry is not None:
+                backend_pb.Opentelemetry.CopyFrom(get_opentelemetry(opentelemetry))
+
+            return backend_pb
+
         pb = config_pb2.TAppConfig()
         if self.__tracing:
             tracing_pb = pb.TracingConfig
             (
-                tracing_pb.Host,
-                tracing_pb.Port,
-                tracing_pb.RootCA,
-                tracing_pb.ServiceName,
-                auth_config
+                backend,
+                sampling,
+                external_throttling
             ) = self.__tracing
 
-            if auth_config:
-                auth_pb = tracing_pb.AuthConfig
-                if "tvm" in auth_config:
-                    tvm = auth_config.get("tvm")
-                    tvm_pb = auth_pb.Tvm
+            assert isinstance(sampling, list)
+            assert isinstance(external_throttling, list)
 
-                    if "host" in tvm:
-                        tvm_pb.Host = tvm["host"]
-                    if "port" in tvm:
-                        tvm_pb.Port = tvm["port"]
-                    tvm_pb.SelfTvmId = tvm["self_tvm_id"]
-                    tvm_pb.TracingTvmId = tvm["tracing_tvm_id"]
-                    tvm_pb.DiskCacheDir = tvm["disk_cache_dir"]
+            tracing_pb.Backend.CopyFrom(get_backend(backend))
 
-                    if "plain_text_secret" in tvm:
-                        tvm_pb.PlainTextSecret = tvm["plain_text_secret"]
-                    elif "secret_file" in tvm:
-                        tvm_pb.SecretFile = tvm["secret_file"]
-                    elif "secret_environment_variable" in tvm:
-                        tvm_pb.SecretEnvironmentVariable = tvm["secret_environment_variable"]
+            for sampling_scope in sampling:
+                tracing_pb.Sampling.Add().CopyFrom(get_sampling_scope(sampling))
+
+            for throttling_scope in external_throttling:
+                tracing_pb.ExternalThrottling.Add().CopyFrom(get_external_throttling(throttling_scope))
 
         self.__proto_configs["tracing.txt"] = pb
 

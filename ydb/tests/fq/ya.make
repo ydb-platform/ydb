@@ -2,6 +2,7 @@ RECURSE_FOR_TESTS(
     common
     generic
     http_api
+    kikimr
     mem_alloc
     multi_plane
     plans

@@ -74,12 +74,9 @@ SRCS(
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
-    datashard_counters.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
     datashard_locks_db.h
-    datashard_locks.h
-    datashard_locks.cpp
     datashard_split_dst.cpp
     datashard_split_src.cpp
     datashard_switch_mvcc_state.cpp
@@ -127,7 +124,7 @@ SRCS(
     datashard_repl_offsets_client.cpp
     datashard_repl_offsets_server.cpp
     datashard_subdomain_path_id.cpp
-    datashard_write_operation.cpp    
+    datashard_write_operation.cpp
     datashard_txs.h
     datashard.cpp
     datashard.h
@@ -186,7 +183,6 @@ SRCS(
     remove_locks.cpp
     range_avl_tree.cpp
     range_ops.cpp
-    range_treap.cpp
     read_iterator.h
     restore_unit.cpp
     setup_sys_locks.h
@@ -245,6 +241,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
+    ydb/core/tx/locks
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert

@@ -38,7 +38,11 @@ struct Schema : NIceDb::Schema {
         ColumnsTableId,
         CountersTableId,
         OperationsTableId,
-        IndexesTableId
+        IndexesTableId,
+        LocksTableId,
+        LockRangesTableId,
+        LockConflictsTableId,
+        LockVolatileDependenciesTableId
     };
 
     enum class ETierTables: ui32 {
@@ -303,6 +307,46 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
         using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes>;
+    };
+
+    struct Locks : Table<LocksTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct LockNodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Generation : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId>;
+        using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+    };
+
+    struct LockRanges : Table<LockRangesTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct RangeId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PathOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Flags : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Data : Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<LockId, RangeId>;
+        using TColumns = TableColumns<LockId, RangeId, PathOwnerId, LocalPathId, Flags, Data>;
+    };
+
+    struct LockConflicts : Table<LockConflictsTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ConflictId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId, ConflictId>;
+        using TColumns = TableColumns<LockId, ConflictId>;
+    };
+
+    struct LockVolatileDependencies : Table<LockVolatileDependenciesTableId> {
+        struct LockId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<LockId, TxId>;
+        using TColumns = TableColumns<LockId, TxId>;
     };
 
     using TTables = SchemaTables<

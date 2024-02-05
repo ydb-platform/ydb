@@ -1,15 +1,19 @@
 LIBRARY()
 
 SRCS(
-    tx_controller.cpp
+    locks.cpp
     locks_db.cpp
+    time_counters.cpp
+    range_treap.cpp
 )
 
+
 PEERDIR(
+    ydb/core/protos
     ydb/core/tablet_flat
-    ydb/core/tx/data_events
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+

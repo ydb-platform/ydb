@@ -4,6 +4,7 @@
 #include "columnshard_schema.h"
 #include "hooks/abstract/abstract.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/transactions/locks_db.h>
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
@@ -173,6 +174,15 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
             Self->LoadLongTxWrite(writeId, writePartId, longTxId);
 
             if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+    {
+        TMemoryProfileGuard g("TTxInit/LocksDB");
+        if (txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
+            TColumnShardLocksDb locksDb(*Self, txc);
+            if (!Self->SysLocks.Load(locksDb)) {
                 return false;
             }
         }

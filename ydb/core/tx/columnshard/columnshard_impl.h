@@ -25,7 +25,10 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/tx/locks/locks.h>
 #include <ydb/services/metadata/service.h>
+
+#include <ydb/core/tx/datashard/datashard_user_table.h>
 
 namespace NKikimr::NOlap {
 class TCleanupColumnEngineChanges;
@@ -206,10 +209,6 @@ class TColumnShard
         TabletCounters->Cumulative()[counter].Increment(num);
     }
 
-    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
-    }
-
     void ActivateTiering(const ui64 pathId, const TString& useTiering, const bool onTabletInit = false);
     void OnTieringModified();
 public:
@@ -219,6 +218,41 @@ public:
         Disk /* "disk" */,
         None /* "none" */
     };
+
+    void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
+        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
+    }
+
+    void IncCounter(NDataShard::ESimpleCounters counter, ui64 num = 1) const {
+        TabletCounters->Simple()[counter].Add(num);
+    }
+
+    // For systable
+    void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
+        TabletCounters->Cumulative()[counter].Increment(num);
+    }
+
+    void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
+        TabletCounters->Percentile()[counter].IncrementFor(num);
+    }
+
+    void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
+        TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
+    }
+
+    inline TRowVersion LastCompleteTxVersion() const {
+        return TRowVersion(LastCompletedStep, LastCompletedTxId);
+    }
+
+    ui32 Generation() const { return Executor()->Generation(); }
+
+    bool IsUserTable(const TTableId&) const {
+        return false;
+    }
+
+    const THashMap<ui64, NDataShard::TUserTable::TCPtr> &GetUserTables() const {
+        return Default<THashMap<ui64, NDataShard::TUserTable::TCPtr>>();
+    }
 
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
@@ -280,6 +314,9 @@ protected:
             break;
         }
     }
+
+public:
+    TTabletCountersBase* TabletCounters;
 
 private:
     std::unique_ptr<TTxController> ProgressTxController;
@@ -360,6 +397,8 @@ private:
     TWriteId LastWriteId = TWriteId{0};
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
+    ui64 LastCompletedStep = 0;
+    ui64 LastCompletedTxId = 0;
     ui64 LastExportNo = 0;
 
     ui64 OwnerPathId = 0;
@@ -386,7 +425,6 @@ private:
     TTablesManager TablesManager;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
-    TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
@@ -412,6 +450,7 @@ private:
     TLimits Limits;
     TCompactionLimits CompactionLimits;
     NOlap::TNormalizationController NormalizerController;
+    NDataShard::TSysLocks SysLocks;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

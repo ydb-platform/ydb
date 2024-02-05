@@ -1,9 +1,11 @@
-#include "datashard_locks.h"
-#include "datashard_impl.h"
-#include "datashard_counters.h"
+#include "locks.h"
+#include "time_counters.h"
+
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 
 #include <ydb/core/base/appdata.h>
+
+#include <ydb/core/tx/datashard/datashard_user_table.h>
 
 namespace NKikimr {
 namespace NDataShard {

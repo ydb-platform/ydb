@@ -459,6 +459,9 @@ public:
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options = {}) override;
 
+    TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(
+        const TGetQueryTrackerInfoOptions& options = {}) override;
+
     // Authentication
 
     virtual TFuture<void> SetUserPassword(

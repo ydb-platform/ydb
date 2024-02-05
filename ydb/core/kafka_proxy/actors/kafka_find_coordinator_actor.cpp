@@ -49,6 +49,11 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
         response->Coordinators.push_back(coordinator);
     }
 
+    response->ErrorCode = NONE_ERROR;
+    response->Host = host;
+    response->Port = port;
+    response->NodeId = nodeId;
+
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
 }

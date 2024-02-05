@@ -38,7 +38,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        TThis::Initialize(ctx);
+        if (!TThis::Initialize(ctx)) {
+            return;
+        }
         BoundaryPartition = ChoosePartitionSync();
 
         if (TThis::SourceId) {

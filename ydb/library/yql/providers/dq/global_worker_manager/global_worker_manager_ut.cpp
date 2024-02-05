@@ -215,7 +215,14 @@ public:
         ActorRuntime_->Initialize();
 
         for (ui32 i = 1; i < nodesNumber; i++) {
-            ActorRuntime_->GetLogSettings(i)->Mask = 0xffffffff;
+            ActorRuntime_->GetLogSettings(i)->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name
+            );
+            TString explanation;
+            auto err = ActorRuntime_->GetLogSettings(i)->SetLevel(NActors::NLog::PRI_EMERG, NKikimrServices::KQP_COMPUTE, explanation); //do not care about CA errors in this test"
+            Y_ABORT_IF(err);
         }
 
         NActors::TDispatchOptions options;
@@ -387,8 +394,7 @@ public:
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto gwmActor = MakeWorkerManagerActorID(NodeId());
         TVector<NYql::NDqProto::TDqTask> tasks(workersCount);
-        //auto allocator = CreateResourceAllocator(gwmActor, execActor, execActor, workersCount, "TraceId", new TDqConfiguration(), counters, tasks, "sync");
-        auto allocator = CreateResourceAllocator(gwmActor, execActor, execActor, workersCount, "TraceId", new TDqConfiguration(), counters);
+        auto allocator = CreateResourceAllocator(gwmActor, execActor, execActor, workersCount, "TraceId", new TDqConfiguration(), counters, tasks);
         const auto allocatorId = ActorRuntime_->Register(allocator);
         return allocatorId;
     }
@@ -403,10 +409,11 @@ public:
     THolder<TEvAllocateWorkersRequest> MakeAllocationRequest(TVector<TVector<TString>>& filesPerTask) const {
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(filesPerTask.size(), "Username");
         allocateRequest->Record.SetTraceId("TraceId");
-
+        allocateRequest->Record.SetCreateComputeActor(true);
         THashSet<TString> allFiles;
 
         for (const auto& tf : filesPerTask) {
+            *allocateRequest->Record.AddTask() = NYql::NDqProto::TDqTask{};
             Yql::DqsProto::TWorkerFilter taskFiles;
             for (const auto& f : tf) {
                 Yql::DqsProto::TFile file;

@@ -34,7 +34,8 @@ public:
         const ::Ydb::Operations::OperationParams* operationParams,
         bool keepSession = false,
         bool useCancelAfter = true,
-        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED);
+        const ::Ydb::Query::Syntax syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED,
+        bool supportsStreamTrailingResult = false);
 
     TEvQueryRequest() = default;
 
@@ -285,6 +286,10 @@ public:
         ProgressStatsPeriod = progressStatsPeriod;
     }
 
+    bool GetSupportsStreamTrailingResult() const {
+        return SupportsStreamTrailingResult;
+    }
+
     TDuration GetProgressStatsPeriod() const {
         return ProgressStatsPeriod;
     }
@@ -317,6 +322,7 @@ private:
     const ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
+    bool SupportsStreamTrailingResult = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

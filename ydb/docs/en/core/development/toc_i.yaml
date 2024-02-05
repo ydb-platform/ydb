@@ -5,6 +5,14 @@ items:
   href: build-ya.md
 - name: Core
   items:
+  - name: LocalDB
+    items:
+    - name: Persistent uncommitted changes
+      href: localdb-uncommitted-txs.md
+  - name: DataShard
+    items:
+    - name: Locks and transaction change visibility
+      href: datashard-locks-and-change-visibility.md
   - name: Testing with load actors
     items:
     - name: Overview

@@ -75,6 +75,7 @@ TAppData::TAppData(
     , BootstrapConfigPtr(new NKikimrConfig::TBootstrap())
     , AwsCompatibilityConfigPtr(new NKikimrConfig::TAwsCompatibilityConfig())
     , S3ProxyResolverConfigPtr(new NKikimrConfig::TS3ProxyResolverConfig())
+    , GraphConfigPtr(new NKikimrConfig::TGraphConfig())
     , BackgroundCleaningConfigPtr(new NKikimrConfig::TBackgroundCleaningConfig())
     , StreamingConfig(*StreamingConfigPtr.get())
     , PQConfig(*PQConfigPtr.get())
@@ -98,7 +99,9 @@ TAppData::TAppData(
     , AwsCompatibilityConfig(*AwsCompatibilityConfigPtr.get())
     , S3ProxyResolverConfig(*S3ProxyResolverConfigPtr.get())
     , BackgroundCleaningConfig(*BackgroundCleaningConfigPtr.get())
+    , GraphConfig(*GraphConfigPtr.get())
     , KikimrShouldContinue(kikimrShouldContinue)
+
 {}
 
 TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mkql_block_item.h"
+#include <ydb/library/yql/minikql/computation/mkql_block_item.h>
 #include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/codegen/codegen.h>

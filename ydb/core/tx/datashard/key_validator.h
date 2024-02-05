@@ -24,11 +24,12 @@ public:
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
     
     struct TValidateOptions {
-        ui64 LockTxId;
-        ui64 LockNodeId;
+        bool IsLockTxId;
+        bool IsLockNodeId;
         bool IsRepeatableSnapshot;
         bool IsImmediateTx;
-
+        bool IsWriteTx;
+        
         TValidateOptions(const TDataShardUserDb& userDb);
     };
 

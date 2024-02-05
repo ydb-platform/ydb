@@ -2581,9 +2581,9 @@
     ],
     "test.test[produce-native_desc_reduce_with_presort--Debug]": [
         {
-            "checksum": "4f15c54e3a1d9f2838fc83b114b169d3",
-            "size": 5065,
-            "uri": "https://{canondata_backend}/1880306/234eadcde1cd54bffae64f4516628981e02b093d/resource.tar.gz#test.test_produce-native_desc_reduce_with_presort--Debug_/opt.yql_patched"
+            "checksum": "8f7a0efe0d718bbbd304c63081d76f31",
+            "size": 5063,
+            "uri": "https://{canondata_backend}/1031349/d3a88498ca54cabc05c19bf5a97272e7679a8ab7/resource.tar.gz#test.test_produce-native_desc_reduce_with_presort--Debug_/opt.yql_patched"
         }
     ],
     "test.test[produce-native_desc_reduce_with_presort--Plan]": [

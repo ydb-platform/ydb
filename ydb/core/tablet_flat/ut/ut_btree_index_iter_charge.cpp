@@ -91,28 +91,27 @@ namespace {
         NPage::TConf conf;
         switch (params.Levels) {
         case 0:
-            if (params.Groups) {
-                conf.Group(3).PageRows = 1;
-            }
+            conf.Group(0).PageRows = 999;
             break;
         case 1:
+            conf.Group(0).PageRows = 2;
+            break;
         case 3:
             conf.Group(0).PageRows = 2;
-            if (params.Groups) {
-                for (auto i : xrange(1, 4)) {
-                    conf.Group(i).PageRows = 1;
-                }
-            }
-            if (params.Levels == 3) {
-                conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
-                if (params.Groups) {
-                    conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = 2;
-                    conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
-                }
-            }
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
             break;
         default:
             Y_Fail("Unknown levels");
+        }
+
+        if (params.Groups) {
+            conf.Group(1).PageRows = params.Levels ? 1 : 999;
+            conf.Group(2).PageRows = 3;
+            conf.Group(3).PageRows = 1;
+
+            conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = conf.Group(0).BTreeIndexNodeKeysMax;
+            conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
+            conf.Group(3).BTreeIndexNodeKeysMin = conf.Group(3).BTreeIndexNodeKeysMax = 999;
         }
 
         TLayoutCook lay;
@@ -189,9 +188,8 @@ namespace {
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
         if (params.Groups) {
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
             UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount, params.Levels);
-            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount, 1);
         }
 
@@ -426,7 +424,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void CheckChargeRowId(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
-            for (ui32 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+            for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
                     for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
@@ -446,7 +444,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     void CheckChargeKeys(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
         for (bool reverse : {false, true}) {
-            for (ui32 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+            for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                     for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                         for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
@@ -487,6 +485,66 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
+    void CheckChargeBytesLimit(const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
+        for (bool reverse : {false, true}) {
+            for (ui64 bytesLimit : xrange<ui64>(1, part.Stat.Bytes + 100, part.Stat.Bytes / 100)) {
+                for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
+                    for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
+                        TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
+
+                        TTouchEnv limitedEnv, unlimitedEnv;
+                        TChargeBTreeIndex limitedCharge(&limitedEnv, part, tags, true);
+                        TChargeBTreeIndex unlimitedCharge(&unlimitedEnv, part, tags, true);
+
+                        TStringBuilder message = TStringBuilder() << (reverse ? "ChargeBytesLimitReverse " : "ChargeBytesLimit ") << "(";
+                        for (auto c : key1) {
+                            message << c.AsValue<ui32>() << " ";
+                        }
+                        message << ") bytes " << bytesLimit;
+
+                        DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
+                        DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
+                        
+                        TSet<TGroupId> groupIds;
+                        for (const auto &c : {limitedEnv.Loaded, unlimitedEnv.Loaded}) {
+                            for (const auto &g : c) {
+                                groupIds.insert(g.first);
+                            }
+                        }
+                        for (auto groupId : groupIds) {
+                            ui64 size = 0;
+                            TSet<TPageId> expected, loaded;
+                            TVector<TPageId> unlimitedLoaded(unlimitedEnv.Loaded[groupId].begin(), unlimitedEnv.Loaded[groupId].end());
+                            if (reverse) {
+                                std::reverse(unlimitedLoaded.begin(), unlimitedLoaded.end());
+                            }
+                            for (auto pageId : unlimitedLoaded) {
+                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                                    if (expected || !groupId.IsMain()) {
+                                        // do not count first main page
+                                        size += part.GetPageSize(pageId, groupId);
+                                    }
+                                    expected.insert(pageId);
+                                    if (size > bytesLimit) {
+                                        break;
+                                    }
+                                }
+                            }
+                            for (auto pageId : limitedEnv.Loaded[groupId]) {
+                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                                    loaded.insert(pageId);
+                                }
+                            }
+
+                            UNIT_ASSERT_VALUES_EQUAL_C(expected, loaded,
+                                TStringBuilder() << message << " Group {" << groupId.Index << "," << groupId.IsHistoric() << "}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     void CheckPart(TMakePartParams params) {
         TPartEggs eggs = MakePart(params);
         const auto part = *eggs.Lone();
@@ -498,6 +556,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(part, tags, eggs.Scheme->Keys.Get());
         CheckChargeKeys(part, tags, eggs.Scheme->Keys.Get());
+        CheckChargeBytesLimit(part, tags, eggs.Scheme->Keys.Get());
     }
 
     Y_UNIT_TEST(NoNodes) {

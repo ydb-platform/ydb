@@ -89,12 +89,39 @@ protected:
 
         this->TaskRunner->Prepare(this->Task, limits, execCtx);
 
+        for (auto& [channelId, channel] : this->InputChannelsMap) {
+            channel.Channel = this->TaskRunner->GetInputChannel(channelId);
+        }
+
+        for (auto& [inputIndex, source] : this->SourcesMap) {
+            source.Buffer = this->TaskRunner->GetSource(inputIndex);
+            Y_ABORT_UNLESS(source.Buffer);
+        }
+
+        for (auto& [inputIndex, transform] : this->InputTransformsMap) {
+            std::tie(transform.InputBuffer, transform.Buffer) = this->TaskRunner->GetInputTransform(inputIndex);
+        }
+
+        for (auto& [channelId, channel] : this->OutputChannelsMap) {
+            channel.Channel = this->TaskRunner->GetOutputChannel(channelId);
+        }
+
+        for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
+            std::tie(transform.Buffer, transform.OutputBuffer) = this->TaskRunner->GetOutputTransform(outputIndex);
+        }
+
+        for (auto& [outputIndex, sink] : this->SinksMap) {
+            sink.Buffer = this->TaskRunner->GetSink(outputIndex);
+        }
+
         TBase::FillIoMaps(
-                this->TaskRunner->GetHolderFactory(),
-                this->TaskRunner->GetTypeEnv(),
-                this->TaskRunner->GetSecureParams(),
-                this->TaskRunner->GetTaskParams(),
-                this->TaskRunner->GetReadRanges());
+            this->TaskRunner->GetHolderFactory(),
+            this->TaskRunner->GetTypeEnv(),
+            this->TaskRunner->GetSecureParams(),
+            this->TaskRunner->GetTaskParams(),
+            this->TaskRunner->GetReadRanges(),
+            this->TaskRunner->GetRandomProvider()
+        );
     }
 };
 

@@ -21,9 +21,14 @@ PEERDIR(
     contrib/libs/zlib
 )
 
+IF (NOT EXPORT_CMAKE)
+    ADDINCL(
+        contrib/libs/c-ares/include
+    )
+ENDIF()
+
 ADDINCL(
     GLOBAL contrib/libs/curl/include
-    contrib/libs/c-ares/include
     contrib/libs/curl/lib
 )
 

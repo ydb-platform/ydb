@@ -1,130 +1,156 @@
 GO_LIBRARY()
-
-SRCS(
-    asan0.go
-    endian_little.go
-    msan0.go
-    net.go
-    syscall.go
-    time_nofake.go
-)
-
-IF (OS_DARWIN)
+IF (OS_DARWIN AND ARCH_ARM64)
     SRCS(
-        bpf_darwin.go
-        dirent.go
-        env_unix.go
-        exec_libc2.go
-        exec_unix.go
-        flock_darwin.go
-        forkpipe.go
-        ptrace_darwin.go
-        rlimit.go
-        rlimit_darwin.go
-        route_bsd.go
-        route_darwin.go
-        sockcmsg_unix.go
-        sockcmsg_unix_other.go
-        syscall_bsd.go
-        syscall_darwin.go
-        syscall_unix.go
-        timestruct.go
+		asan0.go
+		asm_darwin_arm64.s
+		bpf_darwin.go
+		dirent.go
+		endian_little.go
+		env_unix.go
+		exec_libc2.go
+		exec_unix.go
+		flock_darwin.go
+		forkpipe.go
+		msan0.go
+		net.go
+		ptrace_darwin.go
+		rlimit.go
+		rlimit_darwin.go
+		route_bsd.go
+		route_darwin.go
+		sockcmsg_unix.go
+		sockcmsg_unix_other.go
+		syscall.go
+		syscall_bsd.go
+		syscall_darwin.go
+		syscall_darwin_arm64.go
+		syscall_unix.go
+		time_nofake.go
+		timestruct.go
+		zerrors_darwin_arm64.go
+		zsyscall_darwin_arm64.go
+		zsyscall_darwin_arm64.s
+		zsysnum_darwin_arm64.go
+		ztypes_darwin_arm64.go
     )
-
-    IF (ARCH_ARM64)
-        SRCS(
-            asm_darwin_arm64.s
-            syscall_darwin_arm64.go
-            zerrors_darwin_arm64.go
-            zsyscall_darwin_arm64.go
-            zsyscall_darwin_arm64.s
-            zsysnum_darwin_arm64.go
-            ztypes_darwin_arm64.go
-        )
-    ENDIF()
-
-    IF (ARCH_X86_64)
-        SRCS(
-            asm_darwin_amd64.s
-            syscall_darwin_amd64.go
-            zerrors_darwin_amd64.go
-            zsyscall_darwin_amd64.go
-            zsyscall_darwin_amd64.s
-            zsysnum_darwin_amd64.go
-            ztypes_darwin_amd64.go
-        )
-    ENDIF()
-ENDIF()
-
-IF (OS_LINUX)
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
     SRCS(
-        dirent.go
-        env_unix.go
-        exec_linux.go
-        exec_unix.go
-        flock.go
-        forkpipe2.go
-        lsf_linux.go
-        netlink_linux.go
-        rlimit.go
-        rlimit_stub.go
-        setuidgid_linux.go
-        sockcmsg_linux.go
-        sockcmsg_unix.go
-        sockcmsg_unix_other.go
-        syscall_linux.go
-        syscall_linux_accept4.go
-        syscall_unix.go
-        timestruct.go
+		asan0.go
+		asm_darwin_amd64.s
+		bpf_darwin.go
+		dirent.go
+		endian_little.go
+		env_unix.go
+		exec_libc2.go
+		exec_unix.go
+		flock_darwin.go
+		forkpipe.go
+		msan0.go
+		net.go
+		ptrace_darwin.go
+		rlimit.go
+		rlimit_darwin.go
+		route_bsd.go
+		route_darwin.go
+		sockcmsg_unix.go
+		sockcmsg_unix_other.go
+		syscall.go
+		syscall_bsd.go
+		syscall_darwin.go
+		syscall_darwin_amd64.go
+		syscall_unix.go
+		time_nofake.go
+		timestruct.go
+		zerrors_darwin_amd64.go
+		zsyscall_darwin_amd64.go
+		zsyscall_darwin_amd64.s
+		zsysnum_darwin_amd64.go
+		ztypes_darwin_amd64.go
     )
-
-    IF (ARCH_ARM64)
-        SRCS(
-            asm_linux_arm64.s
-            syscall_linux_arm64.go
-            zerrors_linux_arm64.go
-            zsyscall_linux_arm64.go
-            zsysnum_linux_arm64.go
-            ztypes_linux_arm64.go
-        )
-    ENDIF()
-
-    IF (ARCH_X86_64)
-        SRCS(
-            asm_linux_amd64.s
-            syscall_linux_amd64.go
-            zerrors_linux_amd64.go
-            zsyscall_linux_amd64.go
-            zsysnum_linux_amd64.go
-            ztypes_linux_amd64.go
-        )
-    ENDIF()
-ENDIF()
-
-IF (OS_WINDOWS)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
     SRCS(
-        dll_windows.go
-        env_windows.go
-        exec_windows.go
-        security_windows.go
-        syscall_windows.go
-        types_windows.go
-        wtf8_windows.go
-        zerrors_windows.go
-        zsyscall_windows.go
+		asan0.go
+		asm_linux_arm64.s
+		dirent.go
+		endian_little.go
+		env_unix.go
+		exec_linux.go
+		exec_unix.go
+		flock.go
+		forkpipe2.go
+		lsf_linux.go
+		msan0.go
+		net.go
+		netlink_linux.go
+		rlimit.go
+		rlimit_stub.go
+		setuidgid_linux.go
+		sockcmsg_linux.go
+		sockcmsg_unix.go
+		sockcmsg_unix_other.go
+		syscall.go
+		syscall_linux.go
+		syscall_linux_accept4.go
+		syscall_linux_arm64.go
+		syscall_unix.go
+		time_nofake.go
+		timestruct.go
+		zerrors_linux_arm64.go
+		zsyscall_linux_arm64.go
+		zsysnum_linux_arm64.go
+		ztypes_linux_arm64.go
     )
-
-    IF (ARCH_ARM64)
-        SRCS(
-            types_windows_arm64.go
-        )
-    ENDIF()
-
-    IF (ARCH_X86_64)
-        SRCS(
-            types_windows_amd64.go
-        )
-    ENDIF()
+ELSEIF (OS_LINUX AND ARCH_X86_64)
+    SRCS(
+		asan0.go
+		asm_linux_amd64.s
+		dirent.go
+		endian_little.go
+		env_unix.go
+		exec_linux.go
+		exec_unix.go
+		flock.go
+		forkpipe2.go
+		lsf_linux.go
+		msan0.go
+		net.go
+		netlink_linux.go
+		rlimit.go
+		rlimit_stub.go
+		setuidgid_linux.go
+		sockcmsg_linux.go
+		sockcmsg_unix.go
+		sockcmsg_unix_other.go
+		syscall.go
+		syscall_linux.go
+		syscall_linux_accept4.go
+		syscall_linux_amd64.go
+		syscall_unix.go
+		time_nofake.go
+		timestruct.go
+		zerrors_linux_amd64.go
+		zsyscall_linux_amd64.go
+		zsysnum_linux_amd64.go
+		ztypes_linux_amd64.go
+    )
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SRCS(
+		asan0.go
+		dll_windows.go
+		endian_little.go
+		env_windows.go
+		exec_windows.go
+		msan0.go
+		net.go
+		security_windows.go
+		syscall.go
+		syscall_windows.go
+		time_nofake.go
+		types_windows.go
+		types_windows_amd64.go
+		wtf8_windows.go
+		zerrors_windows.go
+		zsyscall_windows.go
+    )
 ENDIF()
-
 END()

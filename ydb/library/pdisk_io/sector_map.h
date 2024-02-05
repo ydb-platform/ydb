@@ -114,7 +114,7 @@ public:
 
         Y_ABORT_UNLESS((ui32)diskMode < DM_COUNT);
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
-        DiskModeParams.SeekSleepMicroSeconds = DevicePerformance.at(deviceType).SeekTimeNs;
+        DiskModeParams.SeekSleepMicroSeconds = (DevicePerformance.at(deviceType).SeekTimeNs + 1000) / 1000 - 1;
         DiskModeParams.FirstSectorReadRate = DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec;
         DiskModeParams.LastSectorReadRate = DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
         DiskModeParams.FirstSectorWriteRate = DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec;

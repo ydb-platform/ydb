@@ -1635,6 +1635,7 @@ namespace NKikimr {
             if (!ev->Get()->DoNotResend) {
                 TActivationContext::Send(event.release());
             }
+            VCtx->CostTracker->CountPDiskResponse();
         }
 
         void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,

@@ -298,9 +298,9 @@
     ],
     "test.test[bigdate-bitcast_date32-default.txt-Results]": [
         {
-            "checksum": "a27ea6f1a7ae1dc4585f70e182491de6",
-            "size": 2746,
-            "uri": "https://{canondata_backend}/1925842/67ddb51f8c47085f38dff12fb538af65d4ff2b69/resource.tar.gz#test.test_bigdate-bitcast_date32-default.txt-Results_/results.txt"
+            "checksum": "09fb50c4bcace0e5bcf48fd2d81fae43",
+            "size": 2744,
+            "uri": "https://{canondata_backend}/1936273/85f8384bdd01106598f959a3c7488c06fca53880/resource.tar.gz#test.test_bigdate-bitcast_date32-default.txt-Results_/results.txt"
         }
     ],
     "test.test[bigdate-input_datetime64-default.txt-Debug]": [

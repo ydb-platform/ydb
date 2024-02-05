@@ -1,0 +1,79 @@
+syntax = "proto2";
+
+import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/config.proto";
+import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blobstorage.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
+import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/blobstorage_vdisk_config.proto";
+import "ydb/core/config/proto_options/marker.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TSystemTablets {
+    option (ConfigWithMapType) = true;
+    repeated uint64 DefaultNode = 1;
+    repeated NKikimrConfig.TBootstrap.TTablet FlatHive = 2 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet FlatBsController = 3 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet FlatSchemeshard = 4 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet Cms = 5 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet NodeBroker = 6 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet TenantSlotBroker = 7 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet Console = 8 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet FlatTxCoordinator = 9 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet TxAllocator = 10 [(ConfigAsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet TxMediator = 11 [(ConfigAsMap) = "Tablets"];
+}
+
+message THosts {
+    optional uint32 NodeId = 1;
+    optional uint32 Port = 2;
+    optional uint64 HostConfigId = 3;
+    optional string Host = 4;
+    optional string InterconnectHost = 5;
+    optional NActorsInterconnect.TNodeLocation Location = 6;
+    repeated TStaticNameserviceConfig.TEndpoint Endpoint = 7;
+    optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
+    optional string Address = 9;
+    optional string Name = 10;
+    // Drive ..?
+}
+
+// /blob_storage_config/service_set/groups/*/rings/*/fail_domains/*/vdisk_locations/*
+message TCombinedDiskInfo {
+    option (ConfigCombinedType) = true;
+    optional string NodeID = 1; // +allow string // have to copy manually
+    optional uint32 PDiskID = 2 [(ConfigCopyTo) = "TVDiskLocation", (ConfigCopyTo) = "TVDiskLocation"];
+    optional uint32 VDiskSlotID = 3 [(ConfigCopyTo) = "TVDiskLocation"];
+    optional uint64 PDiskGuid = 4 [(ConfigCopyTo) = "TVDiskLocation"];
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 101 [(ConfigCopyTo) = "TVDisk"];
+    optional NKikimrBlobStorage.TVDiskLocation VDiskLocation = 102 [(ConfigCopyTo) = "TVDisk"];
+    optional NKikimrBlobStorage.TVDiskKind.EVDiskKind VDiskKind = 103 [(ConfigCopyTo) = "TVDisk"];
+    optional bool DoDestroy = 104 [default = false, (ConfigCopyTo) = "TVDisk"];
+    optional bool DoWipe = 105 [default = false, (ConfigCopyTo) = "TVDisk"];
+    optional NKikimrBlobStorage.EEntityStatus EntityStatus = 106 [(ConfigCopyTo) = "TVDisk", (ConfigCopyTo) = "TPDisk"];
+    optional string StoragePoolName = 108 [(ConfigCopyTo) = "TVDisk"];
+    optional NKikimrBlobStorage.TNodeWardenServiceSet.TVDisk.TDonorMode DonorMode = 109 [(ConfigCopyTo) = "TVDisk"];
+    repeated NKikimrBlobStorage.TNodeWardenServiceSet.TVDisk.TDonor Donors = 110 [(ConfigCopyTo) = "TVDisk"];
+    optional bool ReadOnly = 111 [(ConfigCopyTo) = "TVDisk"];
+
+    optional string Path = 203 [(ConfigCopyTo) = "TPDisk"];
+    optional string PDiskCategory = 206; // +allow string // have to copy manually
+    optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 207 [(ConfigCopyTo) = "TPDisk"];
+    optional uint64 InMemoryForTestsBufferBytes = 210 [default = 0, (ConfigCopyTo) = "TPDisk"];
+    optional string ExpectedSerial = 211 [(ConfigCopyTo) = "TPDisk"];
+    optional NKikimrBlobStorage.TSerialManagementStage.E ManagementStage = 212 [(ConfigCopyTo) = "TPDisk"];
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColorBorder = 213 [(ConfigCopyTo) = "TPDisk"];
+}
+
+message TEphemeralInputFields {
+    optional TSystemTablets SystemTablets = 1;
+    optional string StaticErasure = 2;
+    repeated THosts Hosts = 3;
+    repeated NKikimrBlobStorage.TDefineHostConfig HostConfigs = 4;
+    reserved "StorageConfigGeneration";
+}

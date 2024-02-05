@@ -111,11 +111,11 @@ Y_DECLARE_OUT_SPEC(, NKikimrNodeBroker::TStatus::ECode, stream, value) {
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::ETransactionKind, stream, value) {
     stream << NKikimrTxDataShard::ETransactionKind_Name(value);
 }
-
+/*
 Y_DECLARE_OUT_SPEC(, NKikimrConfig::TBootstrap::ETabletType, stream, value) {
     stream << NKikimrConfig::TBootstrap::ETabletType_Name(value);
 }
-
+*/
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvProposeTransactionResult::EStatus, stream, value) {
     stream << NKikimrTxDataShard::TEvProposeTransactionResult::EStatus_Name(value);
 }

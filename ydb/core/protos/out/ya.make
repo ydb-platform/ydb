@@ -11,4 +11,6 @@ PEERDIR(
     ydb/core/protos
 )
 
+GENERATE_ENUM_SERIALIZATION(ydb/core/protos/config.pb.h)
+
 END()

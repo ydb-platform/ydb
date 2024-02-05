@@ -10,6 +10,7 @@
 #include <library/cpp/protobuf/json/util.h>
 
 #include <charconv>
+#include <span>
 
 namespace NKikimr::NYaml {
     template<typename T>
@@ -169,6 +170,110 @@ namespace NKikimr::NYaml {
         return elem;
     }
 
+    void Iterate(
+        const NJson::TJsonValue& json,
+        const std::span<TString>& pathPieces,
+        std::function<void(const std::vector<ui32>&, const NJson::TJsonValue&)> onElem,
+        std::vector<ui32>& offsets,
+        size_t offsetId = 0)
+    {
+        Y_ENSURE_BT(pathPieces.size() > 0);
+        const NJson::TJsonValue* elem = &json;
+        for (ui32 i = 0; i < pathPieces.size(); ++i) {
+            auto& piece = pathPieces[i];
+            if (elem == nullptr) { return; }
+            ui32 id{};
+            auto [ptr, ec] = std::from_chars(piece.data(), piece.data() + piece.size(), id);
+            if (ec == std::errc() && ptr == (piece.data() + piece.size())) {
+                if (!elem->GetValuePointer(id, &elem)) {
+                    return;
+                }
+                continue;
+            }
+            if (piece == "*") {
+                if (elem->IsArray()) {
+                    int j = 0;
+                    for (auto& item : elem->GetArray()) {
+                        if (offsets.size() < offsetId) {
+                            offsets.resize(offsetId);
+                        }
+                        offsets[offsetId] = j;
+                        if (i != pathPieces.size() - 1) {
+                            Iterate(item, pathPieces.subspan(i), onElem, offsets, offsetId + 1);
+                        } else {
+                            onElem(offsets, *elem);
+                        }
+                    }
+                }
+                break;
+            } else if (i != pathPieces.size() - 1) {
+                onElem(offsets, *elem);
+            }
+        }
+    }
+
+    void Iterate(const NJson::TJsonValue& json, const TString& path, std::function<void(const std::vector<ui32>&, const NJson::TJsonValue&)> onElem) {
+        Y_ENSURE_BT(path.StartsWith('/'));
+        Y_ENSURE_BT(!path.EndsWith('/'));
+        TString pathCopy = path;
+        pathCopy.erase(0, 1);
+        TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
+        std::vector<ui32> offsets;
+        Iterate(json, pathPieces, onElem, offsets);
+    }
+
+    void IterateMut(
+        NJson::TJsonValue& json,
+        const std::span<TString>& pathPieces,
+        std::function<void(const std::vector<ui32>&, NJson::TJsonValue&)> onElem,
+        std::vector<ui32>& offsets,
+        size_t offsetId = 0)
+    {
+        Y_ENSURE_BT(pathPieces.size() > 0);
+        NJson::TJsonValue* elem = &json;
+        for (ui32 i = 0; i < pathPieces.size(); ++i) {
+            auto& piece = pathPieces[i];
+            if (elem == nullptr) { return; }
+            ui32 id{};
+            auto [ptr, ec] = std::from_chars(piece.data(), piece.data() + piece.size(), id);
+            if (ec == std::errc() && ptr == (piece.data() + piece.size())) {
+                if (!elem->GetValuePointer(id, const_cast<const NJson::TJsonValue**>(&elem))) {
+                    return;
+                }
+                continue;
+            }
+            if (piece == "*") {
+                if (elem->IsArray()) {
+                    int j = 0;
+                    for (auto& item : elem->GetArraySafe()) {
+                        if (offsets.size() < offsetId) {
+                            offsets.resize(offsetId);
+                        }
+                        offsets[offsetId] = j;
+                        if (i != pathPieces.size() - 1) {
+                            IterateMut(item, pathPieces.subspan(i), onElem, offsets, offsetId + 1);
+                        } else {
+                            onElem(offsets, *elem);
+                        }
+                    }
+                }
+                break;
+            } else if (i != pathPieces.size() - 1) {
+                onElem(offsets, *elem);
+            }
+        }
+    }
+
+    void IterateMut(NJson::TJsonValue& json, const TString& path, std::function<void(const std::vector<ui32>&, NJson::TJsonValue&)> onElem) {
+        Y_ENSURE_BT(path.StartsWith('/'));
+        Y_ENSURE_BT(!path.EndsWith('/'));
+        TString pathCopy = path;
+        pathCopy.erase(0, 1);
+        TVector<TString> pathPieces = StringSplitter(pathCopy).Split('/');
+        std::vector<ui32> offsets;
+        IterateMut(json, pathPieces, onElem, offsets);
+    }
+
     std::optional<bool> GetBoolByPathOrNone(const NJson::TJsonValue& json, const TString& path) {
         if (auto* elem = Traverse(json, path); elem != nullptr && elem->IsBoolean()) {
             return elem->GetBoolean();
@@ -192,13 +297,11 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
-        // for security config
-        TString disableBuiltinSecurityPath = "/domains_config/disable_builtin_security";
-        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, disableBuiltinSecurityPath).value_or(false);
-        EraseByPath(json, disableBuiltinSecurityPath);
-        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_groups").value_or(false);
-        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_access").value_or(false);
+    void EraseMultipleByPath(NJson::TJsonValue& json, const TString& path, const TString& fieldName) {
+        IterateMut(json, path, [&fieldName](const std::vector<ui32>& ids, NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 3);
+            node.EraseValue(fieldName);
+        });
     }
 
     static NProtobufJson::TJson2ProtoConfig GetJsonToProtoConfig() {
@@ -209,6 +312,30 @@ namespace NKikimr::NYaml {
         config.MapAsObject = true;
         config.AllowUnknownFields = false;
         return config;
+    }
+
+    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
+        // for static group
+        TString combinedDiskInfoPath = "/blob_storage_config/service_set/groups/*/rings/*/fail_domains/*";
+        Iterate(json, combinedDiskInfoPath + "/vdisk_locations/*", [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 4);
+            NKikimrConfig::TCombinedDiskInfo info;
+            NProtobufJson::MergeJson2Proto(node, info, GetJsonToProtoConfig());
+            TCombinedDiskInfoKey key{
+                .Group = ids[0],
+                .Ring = ids[1],
+                .FailDomain = ids[2],
+                .VDiskLocation = ids[3],
+            };
+            ctx.CombinedDiskInfo[key] = info;
+        });
+        EraseMultipleByPath(json, combinedDiskInfoPath, "vdisk_locations");
+        // for security config
+        TString disableBuiltinSecurityPath = "/domains_config/disable_builtin_security";
+        ctx.DisableBuiltinSecurity = GetBoolByPathOrNone(json, disableBuiltinSecurityPath).value_or(false);
+        EraseByPath(json, disableBuiltinSecurityPath);
+        ctx.ExplicitEmptyDefaultGroups = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_groups").value_or(false);
+        ctx.ExplicitEmptyDefaultAccess = CheckExplicitEmptyArrayByPathOrNone(json, "/domains_config/default_access").value_or(false);
     }
 
     static NJson::TJsonValue BuildDefaultChannels(NJson::TJsonValue& json) {
@@ -415,7 +542,7 @@ namespace NKikimr::NYaml {
         return GetMapSafe(json)["system_tablets"].GetMapSafe()[toLowerType].GetArraySafe();
     }
 
-    ui32 PdiskCategoryFromString(TString& data) {
+    ui32 PdiskCategoryFromString(const TString& data) {
         if (data == "ROT") {
             return 0;
         } else if (data == "SSD") {
@@ -1108,6 +1235,540 @@ namespace NKikimr::NYaml {
         }
     }
 
+    void PrepareHosts(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        // FIXME: check explicit empty
+        if (!ephemeralConfig.HostsSize()) {
+            return;
+        }
+
+        ui32 nodeID = 0;
+        for(auto& host : *ephemeralConfig.MutableHosts()) {
+            nodeID++;
+
+            if (!host.HasNodeId()) {
+                host.SetNodeId(nodeID);
+            }
+
+            if (host.HasPort()) {
+                // default interconnect port
+                host.SetPort(19001);
+            }
+        }
+    }
+
+    void PrepareNameserviceConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (config.HasNameserviceConfig() && config.GetNameserviceConfig().NodeSize()) {
+            return;
+        }
+
+        // make expliti empty ?
+        if (!ephemeralConfig.HostsSize()) {
+            return;
+        }
+
+        auto* nsConfig = config.MutableNameserviceConfig();
+
+        for(const auto& host : ephemeralConfig.GetHosts()) {
+            auto* node = nsConfig->AddNode();
+            /* TODO: add optional reflection layout check */
+            /* or even better additional copy method generated by special annotation */
+            /* FIXME: check that destination isn't used somehow strangely */
+
+            if (host.HasNodeId()) {
+                node->SetNodeId(host.GetNodeId());
+            }
+
+            if (host.HasAddress()) {
+                node->SetAddress(host.GetAddress());
+            }
+
+            if (host.HasPort()) {
+                node->SetPort(host.GetPort());
+            }
+
+            if (host.HasHost()) {
+                node->SetHost(host.GetHost());
+            }
+
+            if (host.HasInterconnectHost()) {
+                node->SetInterconnectHost(host.GetInterconnectHost());
+            } else {
+                node->SetInterconnectHost(host.GetHost());
+            }
+
+            if (host.HasLocation()) {
+                node->MutableLocation()->CopyFrom(host.GetLocation());
+            }
+
+            if (host.EndpointSize()) {
+                for (const auto& endpoint : host.GetEndpoint()) {
+                    node->AddEndpoint()->CopyFrom(endpoint);
+                }
+            }
+
+            if (host.HasWalleLocation()) {
+                node->MutableWalleLocation()->CopyFrom(host.GetWalleLocation());
+            }
+        }
+    }
+
+    TString HostAndICPort(const NKikimrConfig::TStaticNameserviceConfig::TNode& host) {
+        TString hostname = host.GetHost();
+        ui32 interconnectPort = 19001;
+        if (host.HasPort()) {
+            interconnectPort = host.GetPort();
+        }
+
+        return TStringBuilder() << hostname << ":" << interconnectPort;
+    }
+
+    NKikimrConfig::TStaticNameserviceConfig::TNode FindNodeByString(NKikimrConfig::TAppConfig& config, const TString& data) {
+        ui32 foundCandidates = 0;
+        NKikimrConfig::TStaticNameserviceConfig::TNode result;
+
+        // TODO ensure?
+        auto& nsConfig = config.GetNameserviceConfig();
+
+        for(auto& host : nsConfig.GetNode()) {
+            if (data == host.GetHost()) {
+                result = host;
+                ++foundCandidates;
+            }
+        }
+
+        if (foundCandidates == 1) {
+            return result;
+        }
+
+        foundCandidates = 0;
+        for(auto& host : nsConfig.GetNode()) {
+            if (data == HostAndICPort(host)) {
+                result = host;
+                ++foundCandidates;
+            }
+        }
+
+        Y_ENSURE_BT(foundCandidates == 1, "Cannot find node_id for " << data);
+        return result;
+    }
+
+    ui32 FindNodeId(NKikimrConfig::TAppConfig& config, const TString& host) {
+        ui32 result = 0;
+        if (TryFromString(host, result)) {
+            return result;
+        }
+
+        auto node = FindNodeByString(config, host);
+        return node.GetNodeId();
+    }
+
+    void PrepareStaticGroup(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        Y_UNUSED(ephemeralConfig);
+        if (!config.HasBlobStorageConfig()) {
+            return;
+        }
+
+        auto* bsConfig = config.MutableBlobStorageConfig();
+        Y_ENSURE_BT(bsConfig->HasServiceSet(), "service_set field in blob_storage_config must be json map.");
+
+        auto* serviceSet = bsConfig->MutableServiceSet();
+        // FIXME: check explicit empty
+        if (!serviceSet->AvailabilityDomainsSize()) {
+            serviceSet->AddAvailabilityDomains(1);
+        }
+
+        // FIXME: check expliti empty
+        if (serviceSet->GroupsSize()) {
+            // FIXME: check explicit empty vdisks
+            bool shouldFillVdisks = !serviceSet->VDisksSize();
+
+            // FIXME: check explicit empty pdisks
+            bool shouldFillPdisks = !serviceSet->PDisksSize();
+
+            ui32 groupID = 0;
+            for(auto& group : *serviceSet->MutableGroups()) {
+                if (!group.HasGroupGeneration()) {
+                    group.SetGroupGeneration(1);
+                }
+
+                if (!group.HasGroupID()) {
+                    group.SetGroupID(groupID);
+                }
+
+                ui32 groupGeneration = group.GetGroupGeneration();
+                ui32 realGroupID = group.GetGroupID();
+                Y_ENSURE_BT(group.HasErasureSpecies(), "erasure species are not specified for group, id " << groupID);
+                // FIXME check that we still support enums as strings and vice-versa
+
+                std::unordered_map<ui32, std::unordered_set<ui32>> UniquePdiskIds;
+                std::unordered_map<ui32, std::unordered_set<ui32>> UniquePdiskGuids;
+
+                ui32 ringID = 0;
+                for(auto& ring : *group.MutableRings()) {
+
+                    ui32 failDomainID = 0;
+                    for(auto& failDomain : *ring.MutableFailDomains()) {
+                        Y_ENSURE_BT(failDomain.VDiskLocationsSize() == 1);
+
+                        ui32 vdiskLocationID = 0;
+                        for(auto& vdiskLocation : *failDomain.MutableVDiskLocations()) {
+                            TCombinedDiskInfoKey key{
+                                .Group = groupID,
+                                .Ring = ringID,
+                                .FailDomain = failDomainID,
+                                .VDiskLocation = vdiskLocationID,
+                            };
+                            Y_ENSURE_BT(ctx.CombinedDiskInfo.contains(key));
+                            auto& info = ctx.CombinedDiskInfo.at(key);
+                            Y_ENSURE_BT(info.HasNodeID());
+
+                            ui32 myNodeId = FindNodeId(config, info.GetNodeID());
+
+                            if (!info.HasVDiskSlotID()) {
+                                info.SetVDiskSlotID(0);
+                            }
+
+                            if (!info.HasPDiskGuid()) {
+                                for(ui32 pdiskGuid = 1; ; pdiskGuid++) {
+                                    if (UniquePdiskGuids[myNodeId].find(pdiskGuid) == UniquePdiskGuids[myNodeId].end()) {
+                                        info.SetPDiskGuid(pdiskGuid);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            {
+                                ui64 guid = info.GetPDiskGuid();
+                                auto [it, success] = UniquePdiskGuids[myNodeId].insert(guid);
+                                Y_ENSURE_BT(success, "pdisk guids should be unique, non-unique guid is " << guid);
+                            }
+
+                            if (!info.HasPDiskID()) {
+                                for(ui32 pdiskID = 1; ; pdiskID++) {
+                                    if (UniquePdiskIds[myNodeId].find(pdiskID) == UniquePdiskIds[myNodeId].end()) {
+                                        info.SetPDiskID(pdiskID);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            {
+                                ui64 pdiskId = info.GetPDiskID();
+                                auto [it, success] = UniquePdiskIds[myNodeId].insert(pdiskId);
+                                Y_ENSURE_BT(success, "pdisk ids should be unique, non unique pdisk_id : " << pdiskId);
+                            }
+
+                            std::optional<ui32> pDiskCategoryId;
+                            if (info.HasPDiskCategory()) {
+                                ui32 pDiskCategory = 0;
+                                if (!TryFromString(info.GetPDiskCategory(), pDiskCategory)) {
+                                    pDiskCategory = PdiskCategoryFromString(info.GetPDiskCategory());
+                                }
+
+                                pDiskCategoryId = pDiskCategory;
+                            }
+
+                            info.CopyToTVDiskLocation(vdiskLocation);
+                            vdiskLocation.SetNodeID(myNodeId);
+
+                            if (shouldFillPdisks) {
+                                auto* pdiskInfo = serviceSet->AddPDisks();
+                                info.CopyToTPDisk(*pdiskInfo);
+
+                                if (pDiskCategoryId) {
+                                    pdiskInfo->SetPDiskCategory(pDiskCategoryId.value());
+                                }
+                            }
+
+                            if (shouldFillVdisks) {
+                                auto* vdiskInfo = serviceSet->AddVDisks();
+                                info.CopyToTVDisk(*vdiskInfo);
+                                vdiskInfo->MutableVDiskLocation()->CopyFrom(vdiskLocation);
+                                auto* vdiskID = vdiskInfo->MutableVDiskID();
+                                vdiskID->SetDomain(failDomainID);
+                                vdiskID->SetRing(ringID);
+                                vdiskID->SetVDisk(0);
+                                vdiskID->SetGroupID(realGroupID);
+                                vdiskID->SetGroupGeneration(groupGeneration);
+
+                                vdiskInfo->SetVDiskKind(NKikimrBlobStorage::TVDiskKind::Default);
+                            }
+
+                            ++vdiskLocationID;
+                        }
+                        ++failDomainID;
+                    }
+                    ++ringID;
+                }
+                ++groupID;
+            }
+        }
+    }
+
+    void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (!config.HasBlobStorageConfig()) {
+            return;
+        }
+        auto* bsConfig = config.MutableBlobStorageConfig();
+
+        if (!bsConfig->HasAutoconfigSettings()) {
+            return;
+        }
+        auto* autoconfigSettings = bsConfig->MutableAutoconfigSettings();
+
+        autoconfigSettings->ClearDefineHostConfig();
+        autoconfigSettings->ClearDefineBox();
+
+        if (ephemeralConfig.HostConfigsSize()) {
+            for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+                autoconfigSettings->AddDefineHostConfig()->CopyFrom(hostConfig);
+            }
+        }
+
+        THashMap<std::tuple<TString, ui32>, ui32> hostNodeMap; // (.nameservice_config.node[].interconnect_host, .nameservice_config.node[].port) -> .nameservice_config.node[].node_id
+        Y_ENSURE_BT(config.HasNameserviceConfig());
+        const auto& nsConfig = config.GetNameserviceConfig();
+        Y_ENSURE_BT(nsConfig.NodeSize());
+        for (const auto& item : nsConfig.GetNode()) {
+            const auto key = std::make_tuple(item.GetInterconnectHost(), item.GetPort());
+            hostNodeMap[key] = item.GetNodeId();
+        }
+
+
+        if (!ephemeralConfig.HostsSize()) {
+            return;
+        }
+
+        NKikimrBlobStorage::TDefineBox* defineBox = nullptr;
+        for (const auto& host : ephemeralConfig.GetHosts()) {
+            if (host.HasHostConfigId()) {
+                if (!defineBox) {
+                    defineBox = autoconfigSettings->MutableDefineBox();
+                    defineBox->SetBoxId(1);
+                }
+
+                TString fqdn;
+                if (host.HasInterconnectHost()) {
+                    fqdn = host.GetInterconnectHost();
+                } else {
+                    fqdn = host.GetHost();
+                }
+                ui32 port = 19001;
+                if (host.HasPort()) {
+                    port = host.GetPort();
+                }
+                const auto key = std::make_tuple(fqdn, port);
+                Y_ENSURE_BT(hostNodeMap.contains(key));
+
+                auto* dbHost = defineBox->AddHost();
+                dbHost->SetHostConfigId(host.GetHostConfigId());
+                dbHost->SetEnforcedNodeId(hostNodeMap[key]);
+            }
+        }
+    }
+
+    void PrepareSystemTabletsInfo(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed)  {
+        // FIXME: check explicit empty
+        if (relaxed && (!config.HasNameserviceConfig() || !config.GetNameserviceConfig().NodeSize())) {
+            return;
+        }
+
+        auto* sysTablets = ephemeralConfig.MutableSystemTablets();
+
+        if (!sysTablets->DefaultNodeSize()) {
+            for(const auto& node: config.GetNameserviceConfig().GetNode()) {
+                Y_ENSURE_BT(node.HasNodeId(), "node_id must be specified");
+                auto nodeId = node.GetNodeId();
+                sysTablets->AddDefaultNode(nodeId);
+            }
+        }
+    }
+
+    const NProtoBuf::RepeatedPtrField<NKikimrConfig::TBootstrap::TTablet>& GetTabletIdsFor(NKikimrConfig::TEphemeralInputFields& ephemeralConfig, TString type) {
+        auto* systemTabletsConfig = ephemeralConfig.MutableSystemTablets();
+
+        if (!systemTabletsConfig->TabletsSize(type)) {
+            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {//FIXME type here is incorrect
+                auto* tablet = systemTabletsConfig->AddTablets(type);
+                NKikimrConfig::TBootstrap_ETabletType res;
+                Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(type, res), "incorrect enum");
+                tablet->SetType(res);
+            }
+        }
+
+        ui32 idx = 0;
+        for (auto& tablet : *systemTabletsConfig->MutableTablets(type)) {
+            ++idx;
+
+            auto* tabletInfo = tablet.MutableInfo();
+
+            if (!tabletInfo->HasTabletID()) {
+                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type)); //FIXME type here is incorrect
+                tabletInfo->SetTabletID(GetNextTabletID(type, idx));//FIXME type here is incorrect
+            }
+        }
+
+        return systemTabletsConfig->GetTablets(type);
+    }
+
+    void PrepareDomainsConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
+        if (relaxed && !config.HasDomainsConfig()) {
+            return;
+        }
+
+        Y_ENSURE_BT(config.HasDomainsConfig());
+        auto* domainsConfig = config.MutableDomainsConfig();
+
+        Y_ENSURE_BT(domainsConfig->DomainSize() == 1);
+
+        if (!domainsConfig->HiveConfigSize()) {
+            auto* hiveConfig = domainsConfig->AddHiveConfig();
+            hiveConfig->SetHiveUid(1);
+            hiveConfig->SetHive(72057594037968897);
+        }
+
+        for (auto& domain : *domainsConfig->MutableDomain()) {
+            Y_ENSURE_BT(domain.HasName());
+
+            if (domain.HasDomainId()) {
+                Y_ENSURE_BT(domain.GetDomainId() == 1);
+            } else {
+                domain.SetDomainId(1);
+            }
+
+            if (!domain.HasSchemeRoot()) {
+                domain.SetSchemeRoot(72057594046678944);
+            }
+
+            if (!domain.HasPlanResolution()) {
+                domain.SetPlanResolution(10);
+            }
+
+            if (!domain.HiveUidSize()) {
+                domain.AddHiveUid(1);
+            }
+
+            if (!domain.SSIdSize()) {
+                domain.AddSSId(1);
+            }
+
+            const std::vector<std::pair<TString, TString>> exps = {{"ExplicitCoordinators", "FlatTxCoordinator"}, {"ExplicitAllocators", "TxAllocator"}, {"ExplicitMediators", "TxMediator"}};
+            const auto* descriptor = domain.GetDescriptor();
+            const auto* reflection = domain.GetReflection();
+            std::vector<const NProtoBuf::FieldDescriptor *> fields;
+            reflection->ListFields(domain, &fields);
+            std::map<TString, const NProtoBuf::FieldDescriptor *> fieldsByName;
+            for (auto* field : fields) {
+                fieldsByName[field->name()] = field;
+            }
+            for (const auto& [field, type] : exps) {
+                if (relaxed && fieldsByName.contains(field)) {
+                    continue;
+                }
+                Y_ENSURE_BT(!fieldsByName.contains(field));
+
+                for (const auto& tablet : GetTabletIdsFor(ephemeralConfig, type)) {
+                    Y_ENSURE_BT(!tablet.HasInfo() && tablet.GetInfo().HasTabletID());
+                    if (auto* fieldDescriptor = descriptor->FindFieldByName(field)) {
+                        reflection->SetUInt64(&domain, fieldDescriptor, tablet.GetInfo().GetTabletID());
+                    } else {
+                        Y_ENSURE_BT(false, "unknown explicit tablet type " << field);
+                    }
+                }
+            }
+        }
+    }
+
+    static NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> BuildDefaultChannels(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        const TString& erasureName = ephemeralConfig.GetStaticErasure();
+        NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> channelsInfo;
+
+        for(ui32 channelId = 0; channelId < 3; ++channelId) {
+            auto* channelInfo = channelsInfo.Add();
+
+            channelInfo->SetChannel(channelId);
+            channelInfo->SetChannelErasureName(erasureName);
+
+            auto* history = channelInfo->AddHistory();
+
+            history->SetFromGeneration(0);
+            history->SetGroupID(0);
+        }
+
+        return channelsInfo;
+    }
+
+
+    const NProtoBuf::RepeatedPtrField<NKikimrConfig::TBootstrap::TTablet>& GetTabletsFor(NKikimrConfig::TEphemeralInputFields& ephemeralConfig, TString type) {
+        auto* systemTabletsConfig = ephemeralConfig.MutableSystemTablets();
+
+        if (!systemTabletsConfig->TabletsSize(type)) {
+            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) { //FIXME type here is incorrect
+                auto* tablet = systemTabletsConfig->AddTablets(type);
+                NKikimrConfig::TBootstrap_ETabletType res;
+                Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(type, res), "incorrect enum");
+                tablet->SetType(res);
+            }
+        }
+
+        ui32 idx = 0;
+        for (auto& tablet : *systemTabletsConfig->MutableTablets(type)) {
+            ++idx;
+
+            if (!tablet.NodeSize()) {
+                for (const auto& node : systemTabletsConfig->GetDefaultNode()) {
+                    tablet.AddNode(node);
+                }
+            }
+
+            if (!tablet.HasType()) {
+                NKikimrConfig::TBootstrap_ETabletType res;
+                Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(type, res), "incorrect enum");
+                tablet.SetType(res);
+            }
+
+            auto* tabletInfo = tablet.MutableInfo();
+
+            if (!tabletInfo->HasTabletID()) {
+                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                tabletInfo->SetTabletID(GetNextTabletID(type, idx)); //FIXME type here is incorrect
+            }
+
+            if (!tabletInfo->ChannelsSize()) {
+                tabletInfo->MutableChannels()->CopyFrom(BuildDefaultChannels(ephemeralConfig));
+            }
+        }
+
+        return systemTabletsConfig->GetTablets(type);
+    }
+
+    void PrepareBootstrapConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {
+        if (config.HasBootstrapConfig() && config.GetBootstrapConfig().TabletSize()) {
+            return;
+        }
+
+        if (relaxed && (!ephemeralConfig.HasSystemTablets() || !ephemeralConfig.HasStaticErasure())) {
+            return;
+        }
+
+        auto* bootConfig = config.MutableBootstrapConfig();
+        for(auto type : GetTabletTypes()) {
+            for(const auto& tablet : GetTabletsFor(ephemeralConfig, type)) {
+                bootConfig->AddTablet()->CopyFrom(tablet);
+            }
+        }
+    }
+
+    void TransformProtoConfig2(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed = false) {
+        PrepareHosts(ephemeralConfig);
+        PrepareNameserviceConfig(config, ephemeralConfig);
+        PrepareStaticGroup(ctx, config, ephemeralConfig);
+        PrepareBlobStorageConfig(config, ephemeralConfig);
+        PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);
+        PrepareDomainsConfig(config, ephemeralConfig, relaxed);
+        PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
+    }
+
     void TransformProtoConfig(const TTransformContext& ctx, NKikimrConfig::TAppConfig& config, bool relaxed) {
         PrepareSecurityConfig(ctx, config, relaxed);
         PrepareActorSystemConfig(config);
@@ -1128,9 +1789,11 @@ namespace NKikimr::NYaml {
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
         NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, GetJsonToProtoConfig());
 
+        NKikimrConfig::TAppConfig config;
+        TransformProtoConfig2(ctx, config, ephemeralConfig);
+
         TransformJsonConfig(jsonNode);
 
-        NKikimrConfig::TAppConfig config;
         NProtobufJson::MergeJson2Proto(jsonNode, config, GetJsonToProtoConfig());
         TransformProtoConfig(ctx, config);
         return config;

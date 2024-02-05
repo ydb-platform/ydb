@@ -5,4 +5,11 @@ option java_package = "ru.yandex.kikimr.proto";
 
 extend google.protobuf.MessageOptions {
     optional bool ConfigRoot = 81001;
+    optional bool ConfigCombinedType = 81002;
+    optional bool ConfigWithMapType = 81003;
+}
+
+extend google.protobuf.FieldOptions {
+    repeated string ConfigCopyTo = 82001;
+    repeated string ConfigAsMap = 82002;
 }

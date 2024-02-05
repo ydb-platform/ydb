@@ -40,8 +40,9 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem)
         : TxId_(txId),
+        ActorSystem_(actorSystem),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback)
     {
@@ -66,7 +67,7 @@ public:
 
         ui64 size = blob.size();
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
         auto it = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>())).first;
         WritingBlobsSize_ += size;
@@ -103,7 +104,7 @@ public:
 
         DeletingBlobs_.emplace(blobId, std::move(promise));
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
 
         return future;
     }
@@ -121,7 +122,7 @@ protected:
         TLoadingBlobInfo loadingblobInfo = std::make_pair(removeAfterRead, NThreading::NewPromise<TRope>());
         auto it = LoadingBlobs_.emplace(blobId, std::move(loadingblobInfo)).first;
 
-        Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
         auto& promise = it->second.second;
         return promise.GetFuture();
@@ -129,7 +130,7 @@ protected:
 
     void PassAway() override {
         InitializeIfNot();
-        Send(SpillingActorId_, new TEvents::TEvPoison);
+        ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
@@ -137,7 +138,7 @@ protected:
         InitializeIfNot();
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -168,7 +169,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -208,7 +209,7 @@ private:
 
             Error_ = "Internal error";
 
-            Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -270,6 +271,7 @@ private:
     protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
+    TActorSystem* ActorSystem_;
 
     TMap<IDqComputeStorageActor::TKey, TWritingBlobInfo> WritingBlobs_;
     TSet<ui64> StoredBlobs_;
@@ -299,8 +301,8 @@ private:
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, actorSystem);
 }
 
 } // namespace NYql::NDq

@@ -1,14 +1,15 @@
 #include "compute_storage.h"
 
+#include <util/generic/guid.h>
+
 namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* actorSystem) : ActorSystem_(actorSystem)
-{
+TDqComputeStorage::TDqComputeStorage(TTxId txId, std::function<void()> wakeUpCallback, TActorSystem* actorSystem) : ActorSystem_(actorSystem) {
     TStringStream spillerName;
-    spillerName << "Spiller" << "_" << static_cast<const void*>(this);
-    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback);
+    spillerName << "Spiller" << "_" << CreateGuidAsString();
+    ComputeStorageActor_ = CreateDqComputeStorageActor(txId, spillerName.Str(), wakeUpCallback, ActorSystem_);
     ComputeStorageActorId_ = ActorSystem_->Register(ComputeStorageActor_->GetActor());
 }
 

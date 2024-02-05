@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         for (bool reverse : {false, true}) {
             for (ui64 itemsLimit : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
                 for (TRowId rowId1 : xrange<TRowId>(0, part.Stat.Rows - 1)) {
-                    for (TRowId rowId2 : xrange<TRowId>(4, part.Stat.Rows - 1)) {
+                    for (TRowId rowId2 : xrange<TRowId>(rowId1, part.Stat.Rows - 1)) {
                         TTouchEnv bTreeEnv, flatEnv;
                         TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
                         TCharge flat(&flatEnv, part, tags, true);
@@ -504,8 +504,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         }
                         message << ") bytes " << bytesLimit;
 
-                        DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
+                        DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
                         
                         TSet<TGroupId> groupIds;
                         for (const auto &c : {limitedEnv.Loaded, unlimitedEnv.Loaded}) {
@@ -520,21 +520,25 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             if (reverse) {
                                 std::reverse(unlimitedLoaded.begin(), unlimitedLoaded.end());
                             }
+                            for (auto pageId : limitedEnv.Loaded[groupId]) {
+                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
+                                    loaded.insert(pageId);
+                                }
+                            }
                             for (auto pageId : unlimitedLoaded) {
                                 if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    if (expected || !groupId.IsMain()) {
+                                    if (!groupId.IsHistoric() && (expected || !groupId.IsMain())) {
                                         // do not count first main page
                                         size += part.GetPageSize(pageId, groupId);
+                                    }
+                                    if (!groupId.IsMain() && !loaded.contains(pageId)) {
+                                        // only check that we loaded consecutive pages
+                                        break;
                                     }
                                     expected.insert(pageId);
                                     if (size > bytesLimit) {
                                         break;
                                     }
-                                }
-                            }
-                            for (auto pageId : limitedEnv.Loaded[groupId]) {
-                                if (part.GetPageType(pageId, groupId) == EPage::DataPage) {
-                                    loaded.insert(pageId);
                                 }
                             }
 

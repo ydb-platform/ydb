@@ -123,6 +123,7 @@ public:
                             if (bytesLimit) {
                                 ui64 bytes = child->DataSize - levelFirstChild->DataSize;
                                 if (LimitExceeded(bytes, bytesLimit)) {
+                                    endRowId = Min(endRowId, childEndRowId);
                                     overshot = false;
                                     return;
                                 }
@@ -306,6 +307,7 @@ public:
                             if (bytesLimit) {
                                 ui64 bytes = levelPrevLastChild->DataSize - child->DataSize;
                                 if (LimitExceeded(bytes, bytesLimit)) {
+                                    beginRowId = Max(beginRowId, childEndRowId);
                                     overshot = false;
                                     return;
                                 }
@@ -444,13 +446,15 @@ private:
             if (itemsLimit && endRowId - beginRowId - 1 >= itemsLimit) {
                 endRowId = beginRowId + itemsLimit + 1;
             }
+            
             if (beginBytesLimitRowId == Max<TRowId>()) {
                 beginBytesLimitRowId = beginRowId;
+
+                if (IncludeHistory) {
+                    ready &= DoHistory(beginRowId, endRowId);
+                } // otherwise beginBytesLimitRowId is specified, so we do not know where to start charging history
             }
 
-            if (IncludeHistory) {
-                DoGroup(TGroupId(0, true), beginRowId, endRowId, 0, 0);
-            }
             for (auto groupIndex : Groups) {
                 ready &= DoGroup(TGroupId(groupIndex), beginRowId, endRowId, beginBytesLimitRowId, bytesLimit);
             }
@@ -468,11 +472,13 @@ private:
             }
             if (endBytesLimitRowId == Max<TRowId>()) {
                 endBytesLimitRowId = endRowId;
-            }
 
-            if (IncludeHistory) {
-                DoGroupReverse(TGroupId(0, true), beginRowId, endRowId, 0, 0);
-            }
+                
+                if (IncludeHistory) {
+                    ready &= DoHistory(beginRowId, endRowId);
+                }
+            } // otherwise endBytesLimitRowId is specified, so we do not know where to start charging history
+            
             for (auto groupIndex : Groups) {
                 ready &= DoGroupReverse(TGroupId(groupIndex), beginRowId, endRowId, endBytesLimitRowId, bytesLimit);
             }
@@ -610,6 +616,172 @@ private:
             ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
         } else {
             iterateLevel(tryHandleDataPage);
+        }
+
+        return ready;
+    }
+
+private:
+    bool DoHistory(TRowId keyBeginRowId, TRowId keyEndRowId) const noexcept {
+        bool ready = true;
+        bool hasValidRowsRange = bool(Groups); // false value means that beginRowId, endRowId are invalid and shouldn't be used
+
+        // Minimum key is (startRowId, max, max)
+        ui64 startStep = Max<ui64>();
+        ui64 startTxId = Max<ui64>();
+        TCell key1Cells[3] = {
+            TCell::Make(keyBeginRowId),
+            TCell::Make(startStep),
+            TCell::Make(startTxId),
+        };
+        TCells key1{ key1Cells, 3 };
+
+        // Maximum key is (endRowId, 0, 0)
+        ui64 endStep = 0;
+        ui64 endTxId = 0;
+        TCell key2Cells[3] = {
+            TCell::Make(keyEndRowId - 1),
+            TCell::Make(endStep),
+            TCell::Make(endTxId),
+        };
+        TCells key2{ key2Cells, 3 };
+
+        // Directly use the history group scheme
+        const auto& scheme = Part->Scheme->HistoryGroup;
+        Y_DEBUG_ABORT_UNLESS(scheme.ColsKeyIdx.size() == 3);
+
+        // Directly use the history key defaults with correct sort order
+        const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
+
+        const TGroupId groupId(0, true);
+        const auto& meta = Part->IndexPages.BTreeHistoric[0];
+        TRowId beginRowId = 0, endRowId = meta.RowCount;
+        
+        TVector<TNodeState> level, nextLevel(::Reserve(3));
+        TPageId key1PageId = meta.PageId, key2PageId = meta.PageId;
+
+        const auto iterateLevel = [&](const auto& tryHandleChild) {
+            // tryHandleChild may update them, copy for simplicity
+            const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
+
+            for (const auto &node : level) {
+                if (node.EndRowId <= levelBeginRowId || node.BeginRowId >= levelEndRowId) {
+                    continue;
+                }
+
+                TRecIdx from = 0, to = node.GetChildrenCount();
+                if (node.BeginRowId < levelBeginRowId) {
+                    from = node.Seek(levelBeginRowId);
+                }
+                if (node.EndRowId > levelEndRowId) {
+                    to = node.Seek(levelEndRowId - 1) + 1;
+                }
+                for (TRecIdx pos : xrange(from, to)) {
+                    auto& child = node.GetShortChild(pos);
+                    TRowId childBeginRowId = pos ? node.GetShortChild(pos - 1).RowCount : node.BeginRowId;
+                    TRowId childEndRowId = child.RowCount;
+                    ready &= tryHandleChild(TChildState(child.PageId, childBeginRowId, childEndRowId));
+                }
+            }
+        };
+
+        const auto skipUnloadedRows = [&](const TChildState& child) {
+            if (child.PageId == key1PageId) {
+                beginRowId = Max(beginRowId, child.EndRowId);
+            }
+            if (child.PageId == key2PageId) {
+                endRowId = Min(endRowId, child.BeginRowId);
+            }
+        };
+
+        const auto tryHandleNode = [&](TChildState child) -> bool {
+            if (child.PageId == key1PageId || child.PageId == key2PageId) {
+                if (TryLoadNode(child, nextLevel)) {
+                    const auto& node = nextLevel.back();
+                    if (child.PageId == key1PageId) {
+                        TRecIdx pos = node.Seek(ESeek::Lower, key1, scheme.ColsKeyIdx, keyDefaults);
+                        auto& key1Child = node.GetShortChild(pos);
+                        key1PageId = key1Child.PageId;
+                        if (pos) {
+                            beginRowId = Max(beginRowId, node.GetShortChild(pos - 1).RowCount); // move beginRowId to the first key >= key1
+                        }
+                    }
+                    if (child.PageId == key2PageId) {
+                        TRecIdx pos = node.Seek(ESeek::Lower, key2, scheme.ColsKeyIdx, keyDefaults);
+                        auto& key2Child = node.GetShortChild(pos);
+                        key2PageId = key2Child.PageId;
+                        endRowId = Min(endRowId, key2Child.RowCount); // move endRowId to the first key > key2
+                        if (Y_UNLIKELY(key2Child.RowCount <= beginRowId)) {
+                            Y_DEBUG_ABORT_UNLESS(false, "State is invalid for history");
+                            hasValidRowsRange = false; // key2 is before current slice
+                        }
+                    }
+                    return true;
+                } else {
+                    skipUnloadedRows(child);
+                    return false;
+                }
+            } else {
+                return TryLoadNode(child, nextLevel);
+            }
+        };
+
+        const auto tryHandleDataPage = [&](TChildState child) -> bool {
+            if (hasValidRowsRange && (child.PageId == key1PageId || child.PageId == key2PageId)) {
+                const auto page = TryGetDataPage(child.PageId, groupId);
+                if (page) {
+                    auto data = NPage::TDataPage(page);
+                    if (child.PageId == key1PageId) {
+                        TRowId key1RowId = data.BaseRow() + data.LookupKey(key1, scheme, ESeek::Lower, keyDefaults).Off();
+                        beginRowId = Max(beginRowId, key1RowId);
+                    }
+                    if (child.PageId == key2PageId) {
+                        TRowId key2RowId = data.BaseRow() + data.LookupKey(key2, scheme, ESeek::Upper, keyDefaults).Off();
+                        endRowId = Min(endRowId, key2RowId);
+                    }
+                    return true;
+                } else {
+                    skipUnloadedRows(child);
+                    return false;
+                }
+            } else {
+                return HasDataPage(child.PageId, groupId);
+            }
+        };
+
+        for (ui32 height = 0; height < meta.LevelCount && ready; height++) {
+            if (height == 0) {
+                ready &= tryHandleNode(TChildState(meta.PageId, 0, meta.RowCount));
+            } else {
+                iterateLevel(tryHandleNode);
+            }
+            level.swap(nextLevel);
+            nextLevel.clear();
+        }
+
+        if (!ready) { // some index pages are missing, do not continue
+            ready &= DoHistoricGroups(hasValidRowsRange, beginRowId, endRowId); // precharge historic groups using the latest row bounds
+            return ready;
+        }
+
+        if (meta.LevelCount == 0) {
+            ready &= tryHandleDataPage(TChildState(meta.PageId, 0, meta.RowCount));
+        } else {
+            iterateLevel(tryHandleDataPage);
+        }
+
+        ready &= DoHistoricGroups(hasValidRowsRange, beginRowId, endRowId); // precharge historic groups using the latest row bounds
+
+        return ready;
+    }
+
+    bool DoHistoricGroups(bool hasValidRowsRange, TRowId beginRowId, TRowId endRowId) const noexcept {
+        bool ready = true;
+        
+        if (hasValidRowsRange && beginRowId < endRowId) {
+            for (auto groupIndex : Groups) {
+                ready &= DoGroup(TGroupId(groupIndex, true), beginRowId, endRowId, 0, 0);
+            }
         }
 
         return ready;

@@ -210,8 +210,6 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
 Numeric PgDecimal128ToNumeric(arrow::Decimal128 value, int32_t precision, int32_t scale, Numeric& high_bits_mul) {
     uint64_t low_bits = value.low_bits();
     int64 high_bits = value.high_bits();
-    std::cout << high_bits << '\n';
-    std::cout << low_bits << '\n';
 
     bool error;
     Numeric res;

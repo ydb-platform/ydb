@@ -3,14 +3,12 @@
 #include "spilling.h"
 #include "spilling_file.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/generic/size_literals.h>
 
 namespace NYql::NDq {
 
@@ -42,8 +40,9 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
     // void promise that completes when block is removed
     using TDeletingBlobInfo = NThreading::TPromise<void>;
 public:
-    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback)
+    TDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem)
         : TxId_(txId),
+        ActorSystem_(actorSystem),
         SpillerName_(spillerName),
         WakeupCallback_(wakeupCallback)
     {
@@ -51,6 +50,7 @@ public:
 
     void Bootstrap() {
         Become(&TDqComputeStorageActor::WorkState);
+        IsBootstraped = true;
     }
 
     static constexpr char ActorName[] = "DQ_COMPUTE_STORAGE";
@@ -68,14 +68,7 @@ public:
 
         ui64 size = blob.size();
 
-        bool isSent = SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
-        if (!isSent) {
-            LOG_E("Can't send event for BlobId: " << NextBlobId); 
-            Error_ = "Internal error";
-
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
-            return {};
-        }
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(blob)));
 
         auto it = WritingBlobs_.emplace(NextBlobId, std::make_pair(size, NThreading::NewPromise<IDqComputeStorageActor::TKey>())).first;
         WritingBlobsSize_ += size;
@@ -112,7 +105,7 @@ public:
 
         DeletingBlobs_.emplace(blobId, std::move(promise));
 
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, true));
 
         return future;
     }
@@ -130,7 +123,7 @@ protected:
         TLoadingBlobInfo loadingblobInfo = std::make_pair(removeAfterRead, NThreading::NewPromise<TRope>());
         auto it = LoadingBlobs_.emplace(blobId, std::move(loadingblobInfo)).first;
 
-        SelfId().Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
+        ActorSystem_->Send(SpillingActorId_, new TEvDqSpilling::TEvRead(blobId, false));
 
         auto& promise = it->second.second;
         return promise.GetFuture();
@@ -138,7 +131,7 @@ protected:
 
     void PassAway() override {
         InitializeIfNot();
-        SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+        ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
         TBase::PassAway();
     }
 
@@ -146,7 +139,7 @@ protected:
         InitializeIfNot();
         if (Error_) {
             LOG_E("Error: " << *Error_);
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
         }
     }
 
@@ -177,7 +170,7 @@ private:
 
             Error_ = "Internal error";
 
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -204,8 +197,10 @@ private:
         // Use lock to prevent race when state is changed on event processing and on Put call
         std::lock_guard lock(Mutex_);
 
-        // if there was Delete request
+        // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
+        // Check if the intention was to delete and complete correct future in this case.
         if (HandleDelete(msg.BlobId, msg.Blob.Size())) {
+            WakeupCallback_();
             return;
         }
 
@@ -215,7 +210,7 @@ private:
 
             Error_ = "Internal error";
 
-            SelfId().Send(SpillingActorId_, new TEvents::TEvPoison);
+            ActorSystem_->Send(SpillingActorId_, new TEvents::TEvPoison);
             return;
         }
 
@@ -277,6 +272,7 @@ private:
     protected:
     const TTxId TxId_;
     TActorId SpillingActorId_;
+    TActorSystem* ActorSystem_;
 
     TMap<IDqComputeStorageActor::TKey, TWritingBlobInfo> WritingBlobs_;
     TSet<ui64> StoredBlobs_;
@@ -301,13 +297,14 @@ private:
 
     private:
     std::mutex Mutex_;
+    bool IsBootstraped = false;
 
 };
 
 } // anonymous namespace
 
-IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback) {
-    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback);
+IDqComputeStorageActor* CreateDqComputeStorageActor(TTxId txId, const TString& spillerName, std::function<void()> wakeupCallback, TActorSystem* actorSystem) {
+    return new TDqComputeStorageActor(txId, spillerName, wakeupCallback, actorSystem);
 }
 
 } // namespace NYql::NDq

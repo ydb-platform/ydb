@@ -337,7 +337,7 @@ public:
 
     TAsyncPrepareYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
         TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
-        TIntrusivePtr<TKqlTransformContext> transformCtx = nullptr)
+        TIntrusivePtr<TKqlTransformContext> transformCtx)
         : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
         , QueryCtx(queryCtx)
         , ExprCtx(exprCtx)
@@ -1299,7 +1299,7 @@ private:
         }
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion);
+            query.Text, sqlVersion, TransformCtx);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1388,7 +1388,7 @@ private:
         }
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion);
+            query.Text, sqlVersion, TransformCtx);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx) {

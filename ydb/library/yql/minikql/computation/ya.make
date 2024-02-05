@@ -28,7 +28,6 @@ PEERDIR(
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     ydb/library/yql/minikql/arrow
-    ydb/library/actors/core
 )
 
 YQL_LAST_ABI_VERSION()

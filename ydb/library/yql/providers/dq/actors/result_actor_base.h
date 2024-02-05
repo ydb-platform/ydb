@@ -59,6 +59,7 @@ struct TWriteQueue {
     }
 
     auto pop() {
+        YQL_ENSURE(ByteSize >= Queue.front().Size);
         ByteSize -= Queue.front().Size;
         return Queue.pop();
     }

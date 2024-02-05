@@ -4,7 +4,6 @@
 import boto3
 import logging
 import pytest
-import sys
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq

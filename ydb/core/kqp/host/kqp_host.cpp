@@ -182,6 +182,10 @@ public:
         , SqlVersion(sqlVersion) {}
 
     void FillResult(TResult& validateResult) const override {
+        if (!validateResult.Success()) {
+            return;
+        }
+
         YQL_ENSURE(SessionCtx->Query().PrepareOnly);
         validateResult.PreparedQuery.reset(SessionCtx->Query().PreparingQuery.release());
         validateResult.SqlVersion = SqlVersion;
@@ -211,6 +215,10 @@ public:
         , UseDqExplain(useDqExplain) {}
 
     void FillResult(TResult& queryResult) const override {
+        if (!queryResult.Success()) {
+            return;
+        }
+
         if (UseDqExplain) {
             TVector<const TString> plans;
             for (auto id : SessionCtx->Query().ExecutionOrder) {
@@ -253,6 +261,10 @@ public:
         , SqlVersion(sqlVersion) {}
 
     void FillResult(TResult& queryResult) const override {
+        if (!queryResult.Success()) {
+            return;
+        }
+
         for (auto& resultStr : ResultProviderConfig.CommittedResults) {
             queryResult.Results.emplace_back(
                 google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(queryResult.ProtobufArenaPtr.get()));
@@ -300,6 +312,10 @@ public:
         , ExecuteCtx(executeCtx) {}
 
     void FillResult(TResult& queryResult) const override {
+        if (!queryResult.Success()) {
+            return;
+        }
+
         YQL_ENSURE(ExecuteCtx.QueryResults.size() == 1);
         queryResult = std::move(ExecuteCtx.QueryResults[0]);
         queryResult.QueryPlan = queryResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
@@ -320,14 +336,24 @@ public:
     using TResult = IKqpHost::TQueryResult;
 
     TAsyncPrepareYqlResult(TExprNode* queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
-        TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion)
+        TIntrusivePtr<TKikimrQueryContext> queryCtx, const TKqpQueryRef& query, TMaybe<TSqlVersion> sqlVersion,
+        TIntrusivePtr<TKqlTransformContext> transformCtx = nullptr)
         : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
         , QueryCtx(queryCtx)
         , ExprCtx(exprCtx)
+        , TransformCtx(transformCtx)
         , QueryText(query.Text)
         , SqlVersion(sqlVersion) {}
 
     void FillResult(TResult& prepareResult) const override {
+        if (!prepareResult.Success() && TransformCtx) {
+            if (auto exprRoot = TransformCtx->ExplainTransformerInput ? TransformCtx->ExplainTransformerInput : GetExprRoot()) {
+                prepareResult.PreparingQuery = std::move(QueryCtx->PreparingQuery);
+                prepareResult.PreparingQuery->MutablePhysicalQuery()->SetQueryAst(KqpExprToPrettyString(*GetExprRoot(), ExprCtx));
+            }
+            return;
+        }
+
         YQL_ENSURE(QueryCtx->PrepareOnly);
         YQL_ENSURE(QueryCtx->PreparingQuery);
 
@@ -343,18 +369,10 @@ public:
         prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
     }
 
-    void FillPartialResult(TResult& prepareResult) const override {
-        YQL_ENSURE(QueryCtx->PrepareOnly);
-
-        if (auto exprRoot = GetExprRoot()) {
-            prepareResult.PreparingQuery = std::move(QueryCtx->PreparingQuery);
-            prepareResult.PreparingQuery->MutablePhysicalQuery()->SetQueryAst(KqpExprToPrettyString(*GetExprRoot(), ExprCtx));
-        }
-    }
-
 private:
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     NYql::TExprContext& ExprCtx;
+    TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TString QueryText;
     TMaybe<TSqlVersion> SqlVersion;
 };
@@ -944,6 +962,7 @@ public:
         , IsInternalCall(isInternalCall)
         , FederatedQuerySetup(federatedQuerySetup)
         , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken))
+        , Config(config)
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
         , PlanBuilder(CreatePlanBuilder(*TypesCtx))
         , FakeWorld(ExprCtx->NewWorld(TPosition()))
@@ -1338,7 +1357,7 @@ private:
         }
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(queryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-            query.Text, sqlVersion);
+            query.Text, sqlVersion, TransformCtx);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
@@ -1513,7 +1532,8 @@ private:
     }
 
     void Init(EKikimrQueryType queryType) {
-        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry);
+        TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
+        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
         ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
@@ -1646,6 +1666,7 @@ private:
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TKikimrConfiguration::TPtr Config;
 
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistryHolder;
     const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
@@ -1659,6 +1680,7 @@ private:
     TExprNode::TPtr FakeWorld;
 
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
+    TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
 

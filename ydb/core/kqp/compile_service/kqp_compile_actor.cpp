@@ -372,12 +372,16 @@ private:
         PassAway();
     }
 
-    void FillPreparedQuery(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType) {
+    void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery());
+
+        if (AstResult) {
+            KqpCompileResult->Ast = AstResult->Ast;
+        }
     }
 
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
@@ -411,11 +415,7 @@ private:
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
-            FillPreparedQuery(std::move(kqpResult.PreparingQuery), queryType);
-
-            if (AstResult) {
-                KqpCompileResult->Ast = AstResult->Ast;
-            }
+            FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
 
             auto now = TInstant::Now();
             auto duration = now - StartTime;
@@ -426,7 +426,7 @@ private:
                 << ", duration: " << duration);
         } else {
             if (kqpResult.PreparingQuery) {
-                FillPreparedQuery(std::move(kqpResult.PreparingQuery), queryType);
+                FillCompileResult(std::move(kqpResult.PreparingQuery), queryType);
             }
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"

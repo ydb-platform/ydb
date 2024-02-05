@@ -4,6 +4,7 @@
 import boto3
 import logging
 import pytest
+import sys
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 import ydb.public.api.protos.draft.fq_pb2 as fq
@@ -617,5 +618,5 @@ Pear,15'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
 
-        ast = str(client.describe_query(query_id).result.query.ast)
-        assert ast != "", "Query ast not found"
+        ast = client.describe_query(query_id).result.query.ast.data
+        assert "(\'columns \'(\'\"some_unknown_column\"))" in ast, "Invalid query ast"

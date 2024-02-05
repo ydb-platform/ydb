@@ -35,7 +35,7 @@ public:
 
         if (Status.GetValue() == NYql::IGraphTransformer::TStatus::Error) {
             TResult result = NYql::NCommon::ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues());
-            FillPartialResult(result);
+            FillResult(result);
             return result;
         }
 
@@ -84,8 +84,6 @@ public:
 
 protected:
     virtual void FillResult(TResult& result) const = 0;
-
-    virtual void FillPartialResult(TResult&) const {}
 
     NYql::TExprNode::TPtr GetExprRoot() const { return ExprRoot; }
     NYql::TExprContext& GetExprContext() const { return ExprCtx; }
@@ -248,7 +246,7 @@ public:
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<NYql::TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
-    const NMiniKQL::IFunctionRegistry& funcRegistry);
+    const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,

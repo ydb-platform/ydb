@@ -621,6 +621,19 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_OtherPart
     AssertTable(server, "A_Source_10", 0, 13);
 }
 
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeEnabled_BadSourceId_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(true);
+    AddPartition(config, 0, {}, {});
+    CreatePQTabletMock(server, 0, ETopicPartitionStatus::Active);
+
+    auto r = ChoosePartition(server, config, "base64:a***");
+
+    UNIT_ASSERT(r->Error);
+}
+
+
 Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_NewSourceId_Test) {
     NPersQueue::TTestServer server = CreateServer();
 
@@ -691,5 +704,17 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_PreferedPartition_Inactive
 
     UNIT_ASSERT(r->Error);
 }
+
+Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
+    NPersQueue::TTestServer server = CreateServer();
+
+    auto config = CreateConfig0(false);
+    AddPartition(config, 0, {}, {});
+
+    auto r = ChoosePartition(server, config, "base64:a***");
+
+    UNIT_ASSERT(r->Error);
+}
+
 
 }

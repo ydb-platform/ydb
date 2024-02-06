@@ -107,6 +107,19 @@ struct TDataEvents {
             return result;
         }
 
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+            auto entry = Record.AddTxLocks();
+            entry->SetLockId(lockId);
+            entry->SetDataShard(shard);
+            entry->SetGeneration(generation);
+            entry->SetCounter(counter);
+            entry->SetSchemeShard(ssId);
+            entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
+        }
+
         TString GetError() const {
             return TStringBuilder() << "Status: " << Record.GetStatus() << " Issues: " << Record.GetIssues();
         }

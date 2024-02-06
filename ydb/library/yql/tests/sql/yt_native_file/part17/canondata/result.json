@@ -1781,9 +1781,9 @@
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Debug]": [
         {
-            "checksum": "9556fc60b3df570c33b659d305caabb8",
-            "size": 367,
-            "uri": "https://{canondata_backend}/1773845/62fef1198b24b563ccf204edcd5c1495d1dd9b02/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql"
+            "checksum": "a068aa581599af540b9805a1308b0fce",
+            "size": 381,
+            "uri": "https://{canondata_backend}/1942525/e14ecebe3c73ff3cea3f8f45af1b1f8082626907/resource.tar.gz#test.test_pg_catalog-pg_timezone_names-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg_catalog-pg_timezone_names-default.txt-Plan]": [

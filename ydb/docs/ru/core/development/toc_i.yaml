@@ -5,6 +5,14 @@ items:
   href: build-ya.md
 - name: Ядро
   items:
+  - name: LocalDB
+    items:
+    - name: Персистентные незакомиченные изменения
+      href: localdb-uncommitted-txs.md
+  - name: DataShard
+    items:
+    - name: Локи и видимость изменений в транзакциях
+      href: datashard-locks-and-change-visibility.md
   - name: Тестирование с помощью нагружающих акторов
     items:
     - name: Обзор

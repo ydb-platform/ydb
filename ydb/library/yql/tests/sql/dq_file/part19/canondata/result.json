@@ -2319,9 +2319,9 @@
     ],
     "test.test[pg_catalog-pg_inherits-default.txt-Debug]": [
         {
-            "checksum": "156e0c70e953deb093778c2ee37a139c",
-            "size": 424,
-            "uri": "https://{canondata_backend}/1937429/82c91013a516db34237d53cdad4ae5a77a3c568b/resource.tar.gz#test.test_pg_catalog-pg_inherits-default.txt-Debug_/opt.yql_patched"
+            "checksum": "f4c505e3d555fd9f1e5326093d664136",
+            "size": 445,
+            "uri": "https://{canondata_backend}/1942525/968864b3be3864b00b0f0fb54ee97438202376c6/resource.tar.gz#test.test_pg_catalog-pg_inherits-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_inherits-default.txt-Plan]": [
@@ -2341,9 +2341,9 @@
     ],
     "test.test[pg_catalog-pg_tablespace-default.txt-Debug]": [
         {
-            "checksum": "3aa82262dbfff12cf65af8a7da410fe6",
-            "size": 483,
-            "uri": "https://{canondata_backend}/1599023/9fb10775fd57dc9adafaafe2a658f6533a20dc46/resource.tar.gz#test.test_pg_catalog-pg_tablespace-default.txt-Debug_/opt.yql_patched"
+            "checksum": "ea32ff7df4458e005d49710b076e5eac",
+            "size": 493,
+            "uri": "https://{canondata_backend}/1942525/968864b3be3864b00b0f0fb54ee97438202376c6/resource.tar.gz#test.test_pg_catalog-pg_tablespace-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_tablespace-default.txt-Plan]": [
@@ -2363,9 +2363,9 @@
     ],
     "test.test[pg_catalog-pg_type_syntax_pg-default.txt-Debug]": [
         {
-            "checksum": "140ebb3430cd36fc7e3a03ddae0074af",
-            "size": 723,
-            "uri": "https://{canondata_backend}/1599023/9fb10775fd57dc9adafaafe2a658f6533a20dc46/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_pg-default.txt-Debug_/opt.yql_patched"
+            "checksum": "2a6a57755c2a514ac83a9373bf58a955",
+            "size": 719,
+            "uri": "https://{canondata_backend}/1942525/968864b3be3864b00b0f0fb54ee97438202376c6/resource.tar.gz#test.test_pg_catalog-pg_type_syntax_pg-default.txt-Debug_/opt.yql_patched"
         }
     ],
     "test.test[pg_catalog-pg_type_syntax_pg-default.txt-Plan]": [

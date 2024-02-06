@@ -2348,9 +2348,9 @@
     ],
     "test.test[pg_catalog-pg_class-default.txt-Debug]": [
         {
-            "checksum": "8c6db8487a72e41529660d0b7308784a",
-            "size": 491,
-            "uri": "https://{canondata_backend}/1936842/eeab348a87df8efaf5aeed3d4029ae81b7a664e9/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Debug_/opt.yql"
+            "checksum": "8e660c2dbe4b1e83c85d09143063eead",
+            "size": 6921,
+            "uri": "https://{canondata_backend}/1942415/c18f121f6de38891a163c4b458ad04a5b1877a14/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg_catalog-pg_class-default.txt-Plan]": [
@@ -2362,9 +2362,9 @@
     ],
     "test.test[pg_catalog-pg_class-default.txt-Results]": [
         {
-            "checksum": "21efd805d77c26298a4ad9b043f89501",
-            "size": 7117,
-            "uri": "https://{canondata_backend}/1936842/eeab348a87df8efaf5aeed3d4029ae81b7a664e9/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Results_/results.txt"
+            "checksum": "f5b250e1b54be8e83d762f88c09c058d",
+            "size": 4184,
+            "uri": "https://{canondata_backend}/1942415/c18f121f6de38891a163c4b458ad04a5b1877a14/resource.tar.gz#test.test_pg_catalog-pg_class-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg_catalog-pg_description_pg_syntax-default.txt-Debug]": [
@@ -2390,9 +2390,9 @@
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Debug]": [
         {
-            "checksum": "e983e9f6127c869fa931803e046a636b",
-            "size": 371,
-            "uri": "https://{canondata_backend}/1784117/6c74bc79d1e176324c55e10f093a69211469bf8f/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Debug_/opt.yql"
+            "checksum": "bae2eca772747fb22959fb64ebdf7c72",
+            "size": 379,
+            "uri": "https://{canondata_backend}/1923547/3041808677fee90aa4b134f4c651a990f1b76610/resource.tar.gz#test.test_pg_catalog-pg_timezone_abbrevs-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg_catalog-pg_timezone_abbrevs-default.txt-Plan]": [
